@@ -1873,7 +1873,7 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
   );
 }
 
-function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote }: any) {
+function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote, includeSystem = true }: any) {
   const [filter, setFilter] = useState<"all" | "note" | "task">("all");
   const [search, setSearch] = useState("");
   const TABS: { id: "all" | "note" | "task"; label: string }[] = [
@@ -1898,31 +1898,27 @@ function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSav
       {filter === "note" && (
         <InlineNoteForm contactId={contactId} userId={userId} onSaved={onSaved} />
       )}
-      {filter === "task" && (
-        <div className="border border-border rounded-lg p-3 bg-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarea</span>
-            <TaskDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
-              trigger={
-                <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors">
-                  <Plus className="h-3.5 w-3.5" />Crear tarea
-                </button>
-              } />
-          </div>
+      {/* Barra: buscador (izq) + acción contextual (der) */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
         </div>
-      )}
-
-      {/* Buscar actividades */}
-      <div className="relative">
-        <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
+        {filter === "task" && (
+          <TaskDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
+            trigger={
+              <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30">
+                <Plus className="h-3.5 w-3.5" />Crear tarea
+              </Button>
+            } />
+        )}
       </div>
 
       <Timeline
         notes={filter === "task" ? [] : notes}
         tasks={filter === "note" ? [] : tasks}
         appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
-        contact={contact} search={search} includeSystem={filter === "all"}
+        contact={contact} search={search} includeSystem={includeSystem && filter === "all"}
         onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
       />
     </div>
@@ -1977,10 +1973,10 @@ function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSaved }: { 
   );
 }
 
-function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void }) {
+function NoteCard({ note, contactName, onEdited, onDelete, defaultExpanded = true }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void; defaultExpanded?: boolean }) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [pinned, setPinned] = useState<boolean>(!!note.anclado);
   const [showComments, setShowComments] = useState(false);
   const [draft, setDraft] = useState("");
@@ -2066,6 +2062,10 @@ function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contac
               <span className="text-xs text-muted-foreground/70 tabular-nums">{fmtDateTime(note.created_at)}</span>
             </div>
           </div>
+
+          {!expanded && (
+            <p className="text-sm text-muted-foreground truncate mt-0.5">{stripHtml(note.content ?? "").slice(0, 140) || "Nota"}</p>
+          )}
 
           {expanded && (
             <>
@@ -3419,6 +3419,10 @@ export function CrmDealDetail() {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [centerTab, setCenterTab] = useState("descripcion");
+  const [actSearch, setActSearch] = useState("");
+  const [allExpanded, setAllExpanded] = useState(false);
+  const [expandNonce, setExpandNonce] = useState(0);
   const loadedRef = useRef<string | undefined>(undefined);
   const skipAutoSave = useRef(true);
 
@@ -3568,10 +3572,27 @@ export function CrmDealDetail() {
     queryFn: async () => {
       const [notasRes, tareasRes] = await Promise.all([
         (supabase as any).from("crm_notas").select("id, contenido, fecha_creacion, id_usuario, anclado").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("anclado", { ascending: false }).order("fecha_creacion", { ascending: false }),
-        (supabase as any).from("crm_tareas").select("id, titulo, estatus, prioridad, fecha_vencimiento, fecha_creacion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_vencimiento", { ascending: true }),
+        (supabase as any).from("crm_tareas").select("id, titulo, tipo, estatus, prioridad, descripcion, fecha_vencimiento, fecha_recordatorio, recurrencia, id_usuario_asignado, fecha_creacion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_creacion", { ascending: false }),
       ]);
-      const notes = (notasRes.data ?? []).map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: null, anclado: n.anclado ?? false }));
-      const tasks = (tareasRes.data ?? []).map((t: any) => ({ id: t.id, title: t.titulo, status: t.estatus, priority: t.prioridad, due_date: t.fecha_vencimiento, created_at: t.fecha_creacion }));
+      const notasRows = notasRes.data ?? [];
+      const tareasRows = tareasRes.data ?? [];
+      // Resuelve nombres de usuario (autor de nota / asignado de tarea) en un solo lookup.
+      const uids = Array.from(new Set([
+        ...notasRows.map((n: any) => n.id_usuario),
+        ...tareasRows.map((t: any) => t.id_usuario_asignado),
+      ].filter(Boolean)));
+      let nameMap: Record<string, string> = {};
+      if (uids.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", uids);
+        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      const notes = notasRows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
+      const tasks = tareasRows.map((t: any) => ({
+        id: t.id, title: t.titulo, tipo: t.tipo, status: t.estatus, priority: t.prioridad,
+        descripcion: t.descripcion, due_date: t.fecha_vencimiento, reminder: t.fecha_recordatorio,
+        recurrencia: t.recurrencia, assignee: t.id_usuario_asignado ? (nameMap[t.id_usuario_asignado] ?? null) : null,
+        created_at: t.fecha_creacion,
+      }));
       return { notes, tasks };
     },
   });
@@ -3732,7 +3753,7 @@ export function CrmDealDetail() {
 
         {/* Center: pestañas */}
         <section className="col-span-6 border-r border-border h-full min-h-0 overflow-hidden">
-          <Tabs defaultValue="descripcion" className="flex flex-col h-full min-h-0">
+          <Tabs value={centerTab} onValueChange={setCenterTab} className="flex flex-col h-full min-h-0">
             <div className="border-b border-border shrink-0">
               <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
@@ -3740,33 +3761,6 @@ export function CrmDealDetail() {
               </TabsList>
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
-              {/* Información sobre el negocio (IA — placeholder) */}
-              <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Información sobre el negocio</h3>
-                  <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">IA · Próximamente</span>
-                </div>
-                <div className="rounded-lg border border-border p-3">
-                  <div className="flex items-center gap-2 text-sm font-medium"><TriangleAlert className="h-4 w-4 text-amber-500" />Riesgos</div>
-                  <p className="text-xs text-muted-foreground mt-1">Sin riesgos detectados según los datos disponibles.</p>
-                </div>
-                <div className="rounded-lg border border-border p-3">
-                  <div className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" />Metas del comprador</div>
-                  <p className="text-xs text-muted-foreground mt-1">Aún no hay metas del comprador identificadas.</p>
-                </div>
-              </div>
-
-              {/* Calificación de negocios (IA — placeholder) */}
-              <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Calificación de negocios</h3>
-                  <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">IA · Próximamente</span>
-                </div>
-                <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                  La calificación por IA de este negocio llegará en una fase posterior.
-                </div>
-              </div>
-
               {/* Aspectos destacados de los datos (real) */}
               <div className="bg-card border border-border rounded-lg p-4">
                 <h3 className="text-sm font-semibold mb-3">Aspectos destacados de los datos</h3>
@@ -3779,77 +3773,53 @@ export function CrmDealDetail() {
                   <HL label="Propietario" value={deal.propietario_nombre} />
                 </div>
               </div>
+
+              {/* Contactos asociados */}
+              <DealContactsSection contacto={deal.contacto} />
+
+              {/* Actividades recientes (colapsables, estilo HubSpot) */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h3 className="text-sm font-semibold">Actividades recientes</h3>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button onClick={() => setCenterTab("actividades")} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                      <Plus className="h-3.5 w-3.5" />Añadir actividad
+                    </button>
+                    <button onClick={() => { setAllExpanded((v) => !v); setExpandNonce((n) => n + 1); }} className="text-xs text-primary hover:underline">
+                      {allExpanded ? "Contraer todo" : "Expandir todo"}
+                    </button>
+                  </div>
+                </div>
+                <div className="relative mb-3">
+                  <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={actSearch} onChange={(e) => setActSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
+                </div>
+                {!erId ? (
+                  <p className="text-xs text-muted-foreground text-center py-6">Sin contacto asociado.</p>
+                ) : (
+                  <DealActivityFeed
+                    notes={actNotes} tasks={actTasks} search={actSearch}
+                    defaultExpanded={allExpanded} expandNonce={expandNonce}
+                    contactName={deal.contacto?.nombre ?? ""}
+                    onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote} onEdited={invalidateActivity}
+                  />
+                )}
+              </div>
             </TabsContent>
             <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
-              {/* Registrar actividad (nota / tarea) sobre el contacto asociado */}
               {!erId ? (
                 <div className="bg-card border border-border rounded-lg p-4">
                   <p className="text-xs text-muted-foreground">Asocia un contacto a este negocio para registrar notas y tareas.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Registrar actividad</h3>
-                    <TaskDialog contactId={String(erId)} owners={owners} userId={user?.id} onSaved={invalidateActivity}
-                      trigger={<Button size="sm" variant="outline" className="h-8 gap-1.5 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30"><Plus className="h-3.5 w-3.5" />Crear tarea</Button>} />
-                  </div>
-                  <InlineNoteForm contactId={String(erId)} userId={user?.id} onSaved={invalidateActivity} />
-                </div>
+                <ActivityPanel
+                  contactId={String(erId)} userId={user?.id} owners={owners ?? []}
+                  contact={{ full_name: deal.contacto?.nombre }}
+                  notes={actNotes} tasks={actTasks} includeSystem={false}
+                  onSaved={invalidateActivity}
+                  onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                />
               )}
-
-              {/* Actividades recientes (notas/tareas del contacto asociado) */}
-              <div className="bg-card border border-border rounded-lg p-4">
-                <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
-                {!erId ? (
-                  <p className="text-xs text-muted-foreground">Sin contacto asociado.</p>
-                ) : (
-                  <Timeline
-                    notes={actNotes} tasks={actTasks} appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
-                    contact={{ created_at: deal.fecha_creacion }} includeSystem={false}
-                    onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote} onEdited={invalidateActivity}
-                  />
-                )}
-              </div>
-              {/* Próximas actividades */}
-              <div className="bg-card border border-border rounded-lg p-4">
-                <h3 className="text-sm font-semibold mb-3">Próximas actividades</h3>
-                {!upcomingTasks.length ? (
-                  <p className="text-xs text-muted-foreground">Sin próximas actividades.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {upcomingTasks.map((t: any) => (
-                      <div key={t.id} className="flex items-center gap-3 group/up">
-                        <div className="h-7 w-7 shrink-0 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 flex items-center justify-center">
-                          <ClipboardList className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{t.title}</div>
-                          <div className="text-xs text-muted-foreground">Pendiente: {fmtDate(t.due_date)}</div>
-                        </div>
-                        <button onClick={() => completeTask(t.id)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 shrink-0 opacity-0 group-hover/up:opacity-100 transition-opacity">
-                          <Check className="h-3 w-3" />Completar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* Actividades ancladas */}
-              <div className="bg-card border border-border rounded-lg p-4">
-                <h3 className="text-sm font-semibold mb-3">Actividades ancladas</h3>
-                {!pinnedNotes.length ? (
-                  <p className="text-xs text-muted-foreground">Sin actividades ancladas.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {pinnedNotes.map((n: any) => (
-                      <div key={n.id} className="rounded-md border border-border p-2.5">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><StickyNote className="h-3.5 w-3.5" />Nota · {fmtDate(n.created_at)}</div>
-                        <p className="text-sm">{stripHtml(n.content ?? "").slice(0, 160) || "Nota"}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </TabsContent>
           </Tabs>
         </section>
@@ -3910,6 +3880,178 @@ export function CrmDealDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// Sección "Contactos" de la ficha del negocio (tabla estilo HubSpot).
+function DealContactsSection({ contacto }: { contacto: any | null }) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold">Contactos</h3>
+        <div className="flex items-center gap-3">
+          <button onClick={() => toast.message("Asociar más contactos llegará en una fase posterior")} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            <Plus className="h-3.5 w-3.5" />Agregar
+          </button>
+          <button className="text-muted-foreground/70 hover:text-foreground transition-colors" title="Configurar columnas"><Settings2 className="h-4 w-4" /></button>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="relative flex-1">
+          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Buscar" className="pl-8 h-8 text-sm" />
+        </div>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5"><FilterIcon className="h-3.5 w-3.5" />Filtros</Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5"><ChevronDown className="h-3.5 w-3.5" />Ordenar</Button>
+      </div>
+      {!contacto ? (
+        <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Sin contactos asociados</div>
+      ) : (
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-[11px] uppercase tracking-wide">Nombre</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wide">Correo</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-wide">Número de teléfono</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="h-7 w-7 shrink-0 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex items-center justify-center">{dealInitials(contacto.nombre)}</span>
+                    <Link to={`/admin/portal-crm/ventas/contactos/${contacto.id}`} className="text-sm text-primary hover:underline truncate">{contacto.nombre}</Link>
+                  </div>
+                </TableCell>
+                <TableCell>{contacto.email ? <a href={`mailto:${contacto.email}`} className="text-sm text-primary hover:underline">{contacto.email}</a> : <span className="text-sm text-muted-foreground">—</span>}</TableCell>
+                <TableCell>{contacto.telefono ? <a href={`tel:${contacto.telefono}`} className="text-sm text-primary hover:underline whitespace-nowrap">{contacto.telefono}</a> : <span className="text-sm text-muted-foreground">—</span>}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Feed de actividades recientes: intercala notas y tareas, agrupa por mes y las
+// pinta colapsables (la nota reusa NoteCard; la tarea usa TaskActivityCard).
+function DealActivityFeed({ notes, tasks, search, defaultExpanded, expandNonce, contactName, onCompleteTask, onDeleteTask, onDeleteNote, onEdited }: any) {
+  const q = (search ?? "").trim().toLowerCase();
+  const items = [
+    ...(notes ?? []).map((n: any) => ({ kind: "note" as const, id: n.id, ts: n.created_at, data: n, text: stripHtml(n.content ?? "") })),
+    ...(tasks ?? []).map((t: any) => ({ kind: "task" as const, id: t.id, ts: t.due_date || t.created_at, data: t, text: t.title ?? "" })),
+  ]
+    .filter((it) => !q || it.text.toLowerCase().includes(q))
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
+  if (!items.length) {
+    return <p className="text-xs text-muted-foreground text-center py-6">{q ? "Sin resultados" : "Sin actividad registrada aún"}</p>;
+  }
+
+  const groups: { key: string; items: typeof items }[] = [];
+  for (const it of items) {
+    const d = new Date(it.ts);
+    const key = isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+    let g = groups.find((x) => x.key === key);
+    if (!g) { g = { key, items: [] }; groups.push(g); }
+    g.items.push(it);
+  }
+
+  return (
+    <div className="space-y-5">
+      {groups.map((g) => (
+        <div key={g.key}>
+          <p className="text-xs font-semibold text-muted-foreground mb-2 capitalize">{g.key}</p>
+          <div className="space-y-2">
+            {g.items.map((it) => it.kind === "note" ? (
+              <NoteCard key={`n-${it.id}-${expandNonce}`} note={it.data} contactName={contactName ?? ""} defaultExpanded={defaultExpanded} onEdited={onEdited} onDelete={onDeleteNote} />
+            ) : (
+              <TaskActivityCard key={`t-${it.id}-${expandNonce}`} task={it.data} defaultExpanded={defaultExpanded} onComplete={onCompleteTask} onDelete={onDeleteTask} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Tarjeta colapsable de una tarea (equivalente a NoteCard). Expandida muestra
+// vencimiento, recordatorio, etapa, tipo, prioridad y asignado (estilo HubSpot).
+function TaskActivityCard({ task, defaultExpanded = false, onComplete, onDelete }: { task: any; defaultExpanded?: boolean; onComplete: (id: number) => void; onDelete: (id: number) => void }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const done = task.status === "completada" || task.status === "completado";
+  const fields: [string, string][] = [
+    ["Fecha de vencimiento", task.due_date ? fmtDateTime(task.due_date) : "—"],
+    ["Recordatorio", task.reminder ? fmtDateTime(task.reminder) : "Sin recordatorio"],
+    ["Etapa de la tarea", taskStatusLabel[task.status] ?? task.status ?? "—"],
+    ["Repetir", RECURRENCE_LABEL[task.recurrencia] ?? "No se repite"],
+    ["Tipo de tarea", TASK_TYPE_META[task.tipo]?.label ?? task.tipo ?? "—"],
+    ["Prioridad", TASK_PRIORITY_META[task.priority]?.label ?? task.priority ?? "—"],
+    ["Asignado a", task.assignee ?? "—"],
+  ];
+  return (
+    <div className="border border-border rounded-lg bg-card shadow-sm">
+      <div className="flex items-start gap-2 p-3">
+        <button onClick={() => setExpanded((e) => !e)} className="mt-0.5 text-muted-foreground hover:text-foreground shrink-0" aria-label={expanded ? "Colapsar" : "Expandir"}>
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm">
+              <span className="font-semibold">Tarea</span>
+              {task.assignee ? <span className="text-muted-foreground"> asignada a {task.assignee}</span> : null}
+            </span>
+            <div className="flex items-center gap-3 shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {!done && <DropdownMenuItem onClick={() => onComplete(task.id)}>Marcar completada</DropdownMenuItem>}
+                  <DropdownMenuItem onClick={() => toast.message("El historial estará disponible en una fase posterior")}>Historial</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-destructive focus:text-destructive">Eliminar</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <span className="text-xs text-muted-foreground/70 tabular-nums">{task.due_date ? fmtDateTime(task.due_date) : fmtDateTime(task.created_at)}</span>
+            </div>
+          </div>
+
+          {/* Título con estado (check) */}
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className={`h-4 w-4 shrink-0 rounded-full flex items-center justify-center ${done ? "bg-emerald-500 text-white" : "border-2 border-muted-foreground/40"}`}>
+              {done && <Check className="h-2.5 w-2.5" />}
+            </span>
+            <span className={`text-sm ${done ? "line-through text-muted-foreground" : "font-medium"}`}>{task.title}</span>
+          </div>
+
+          {expanded && (
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-3">
+                {fields.map(([l, v]) => (
+                  <div key={l}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{l}</div>
+                    <div className="text-sm mt-0.5">{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notas de la tarea</div>
+                <p className="text-sm mt-0.5">{task.descripcion || <span className="text-muted-foreground">Agregar descripción</span>}</p>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border">
+                <button onClick={() => toast.message("Los comentarios de tareas llegarán en una fase posterior")} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" />Agregar comentario
+                </button>
+                <span className="text-xs text-muted-foreground">1 asociación</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
