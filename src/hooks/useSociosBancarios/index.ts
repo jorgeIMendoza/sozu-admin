@@ -6,25 +6,28 @@ import { fetchProyectosSozuIds } from "@/hooks/usePortalSocioBancario/proyectosS
 /**
  * Admin de Socios Bancarios (solo Super Administrador).
  *
- * Modelo (M:N) — ver Ejecuciones_manuales/portal_socio_bancario_admin.md:
- *   socios_bancarios · socio_bancario_desarrollos · usuarios_socio_bancario.
+ * Modelo M:N vigente (migrations#372 + edge#163). Ver
+ * Ejecuciones_manuales/portal_socio_bancario_admin.md:
+ *   - socios_bancarios (activo boolean, creado_por, revocado_por, fecha_revocacion)
+ *   - socio_bancario_desarrollos (id_socio_bancario, id_desarrollo, activo; trigger
+ *     exige desarrollo comercializado por SOZU, tipo_entidad 5)
+ *   - Usuarios de banco viven en `usuarios` (rol 'Socio Bancario', id_socio_bancario);
+ *     su estado se DERIVA de activo + email_confirmado (no hay campo estado).
+ *   - Alta/reenvío/revocación vía edge function invite-socio-bancario-user (por correo).
  *
- * // SWAP POINT: nombres reales de tablas/columnas (confirmar con Jorge). Probe
- * graceful: si las tablas aún no existen, las consultas devuelven vacío y
- * `tablesMissing=true` para que el admin muestre un banner honesto (no rompe).
- * Sin hard-delete: baja = estado 'inactivo' + auditoría. Contraseñas: nunca —
- * el alta de usuario dispara invitación de Supabase Auth (edge function).
+ * Probe graceful: si las tablas/columnas aún no existen en el ambiente, las
+ * consultas devuelven vacío y `tablesMissing=true` (banner honesto). Sin
+ * hard-delete: baja = activo=false + auditoría. Contraseñas: nunca.
  */
 
-export type EstadoSocio = "activo" | "inactivo";
-export type EstadoUsuarioSocio = "invitado" | "activo" | "inactivo";
+const ROL_SOCIO_BANCARIO = "Socio Bancario";
 
 export interface SocioBancario {
   id: number;
   nombre: string;
   razon_social: string | null;
   rfc: string | null;
-  estado: EstadoSocio;
+  activo: boolean;
 }
 
 export interface SocioBancarioListItem extends SocioBancario {
@@ -36,17 +39,25 @@ export interface DesarrolloAsignado {
   id: number;
   id_desarrollo: number;
   nombre: string | null;
-  estado: EstadoSocio;
 }
 
+/** Estado derivado del usuario de banco (no hay columna `estado`). */
+export type EstadoUsuarioSocio = "invitado" | "activo" | "revocado";
+
 export interface UsuarioSocio {
-  id: number;
-  id_socio_bancario: number;
+  email: string;
   nombre: string | null;
-  correo: string;
   telefono: string | null;
+  activo: boolean;
+  email_confirmado: boolean;
+  auth_user_id: string | null;
   estado: EstadoUsuarioSocio;
-  ultimo_acceso: string | null;
+}
+
+export function estadoUsuario(u: { activo: boolean; email_confirmado: boolean }): EstadoUsuarioSocio {
+  if (!u.activo) return "revocado";
+  if (!u.email_confirmado) return "invitado";
+  return "activo";
 }
 
 /** Mensaje real de un error de functions.invoke (el motivo vive en error.context). */
@@ -67,6 +78,16 @@ async function extractInvokeError(error: any): Promise<string> {
   return error?.message ?? "Error desconocido";
 }
 
+/** id del rol 'Socio Bancario' (por nombre; los ids difieren por ambiente). */
+async function fetchSocioRolId(): Promise<number | null> {
+  const { data } = await (supabase as any)
+    .from("roles")
+    .select("id, nombre")
+    .ilike("nombre", ROL_SOCIO_BANCARIO)
+    .maybeSingle();
+  return (data?.id as number | undefined) ?? null;
+}
+
 // ── Lista de bancos con conteos ─────────────────────────────
 export function useSociosBancarios() {
   const query = useQuery({
@@ -75,24 +96,26 @@ export function useSociosBancarios() {
     queryFn: async (): Promise<{ items: SocioBancarioListItem[]; tablesMissing: boolean }> => {
       const { data: socios, error } = await (supabase as any)
         .from("socios_bancarios")
-        .select("id, nombre, razon_social, rfc, estado")
+        .select("id, nombre, razon_social, rfc, activo")
         .order("nombre", { ascending: true });
       if (error) return { items: [], tablesMissing: true }; // tabla ausente → banner honesto
       const list = (socios ?? []) as SocioBancario[];
       if (!list.length) return { items: [], tablesMissing: false };
 
       const ids = list.map((s) => s.id);
+      const rolId = await fetchSocioRolId();
       const [{ data: desas }, { data: usrs }] = await Promise.all([
         (supabase as any)
           .from("socio_bancario_desarrollos")
-          .select("id_socio_bancario, estado")
+          .select("id_socio_bancario, activo")
           .in("id_socio_bancario", ids)
-          .eq("estado", "activo"),
+          .eq("activo", true),
         (supabase as any)
-          .from("usuarios_socio_bancario")
-          .select("id_socio_bancario, estado")
+          .from("usuarios")
+          .select("id_socio_bancario, activo, rol_id")
           .in("id_socio_bancario", ids)
-          .eq("estado", "activo"),
+          .eq("activo", true)
+          .eq("rol_id", rolId ?? -1),
       ]);
       const countBy = (rows: any[] | null) => {
         const m = new Map<number, number>();
@@ -118,9 +141,27 @@ export function useSociosBancarios() {
   };
 }
 
+// ── Detalle de un banco ─────────────────────────────────────
+export function useSocioBancarioDetalle(id: number | null) {
+  return useQuery({
+    queryKey: ["socio-bancario-detalle", id],
+    enabled: id != null,
+    staleTime: 30_000,
+    queryFn: async (): Promise<SocioBancario | null> => {
+      const { data, error } = await (supabase as any)
+        .from("socios_bancarios")
+        .select("id, nombre, razon_social, rfc, activo")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) return null;
+      return (data as SocioBancario) ?? null;
+    },
+  });
+}
+
 /**
- * Opciones de desarrollos que SOZU comercializa (solo estos son asignables).
- * Regla dura del brief: nunca asignar un desarrollo no-SOZU.
+ * Opciones de desarrollos que SOZU comercializa (solo estos son asignables;
+ * el trigger de BD rechaza los que no). Regla dura del brief.
  */
 export function useProyectosSozuOpciones() {
   return useQuery({
@@ -139,26 +180,7 @@ export function useProyectosSozuOpciones() {
         id: p.id,
         id_desarrollo: p.id,
         nombre: (p.nombre ?? null) as string | null,
-        estado: "activo" as EstadoSocio,
       }));
-    },
-  });
-}
-
-// ── Detalle de un banco ─────────────────────────────────────
-export function useSocioBancarioDetalle(id: number | null) {
-  return useQuery({
-    queryKey: ["socio-bancario-detalle", id],
-    enabled: id != null,
-    staleTime: 30_000,
-    queryFn: async (): Promise<SocioBancario | null> => {
-      const { data, error } = await (supabase as any)
-        .from("socios_bancarios")
-        .select("id, nombre, razon_social, rfc, estado")
-        .eq("id", id)
-        .maybeSingle();
-      if (error) return null;
-      return (data as SocioBancario) ?? null;
     },
   });
 }
@@ -172,9 +194,9 @@ export function useDesarrollosAsignados(idSocio: number | null) {
     queryFn: async (): Promise<DesarrolloAsignado[]> => {
       const { data, error } = await (supabase as any)
         .from("socio_bancario_desarrollos")
-        .select("id, id_desarrollo, estado")
+        .select("id, id_desarrollo")
         .eq("id_socio_bancario", idSocio)
-        .eq("estado", "activo");
+        .eq("activo", true);
       if (error || !data?.length) return [];
       const ids = (data as any[]).map((r) => r.id_desarrollo).filter((v: any) => v != null);
       const { data: proys } = ids.length
@@ -187,26 +209,37 @@ export function useDesarrollosAsignados(idSocio: number | null) {
         id: r.id,
         id_desarrollo: r.id_desarrollo,
         nombre: nombreById.get(r.id_desarrollo) ?? null,
-        estado: r.estado as EstadoSocio,
       }));
     },
   });
 }
 
-// ── Usuarios de un banco ────────────────────────────────────
+// ── Usuarios de un banco (viven en `usuarios`, rol Socio Bancario) ──
 export function useUsuariosSocioBancario(idSocio: number | null) {
   return useQuery({
     queryKey: ["socio-bancario-usuarios", idSocio],
     enabled: idSocio != null,
     staleTime: 30_000,
     queryFn: async (): Promise<UsuarioSocio[]> => {
+      const rolId = await fetchSocioRolId();
       const { data, error } = await (supabase as any)
-        .from("usuarios_socio_bancario")
-        .select("id, id_socio_bancario, nombre, correo, telefono, estado, ultimo_acceso")
+        .from("usuarios")
+        .select("email, nombre, telefono, activo, email_confirmado, auth_user_id, rol_id")
         .eq("id_socio_bancario", idSocio)
+        .eq("rol_id", rolId ?? -1)
         .order("nombre", { ascending: true });
       if (error || !data) return [];
-      return data as UsuarioSocio[];
+      return (data as any[]).map((u) => {
+        const base = {
+          email: u.email as string,
+          nombre: (u.nombre ?? null) as string | null,
+          telefono: (u.telefono ?? null) as string | null,
+          activo: !!u.activo,
+          email_confirmado: !!u.email_confirmado,
+          auth_user_id: (u.auth_user_id ?? null) as string | null,
+        };
+        return { ...base, estado: estadoUsuario(base) };
+      });
     },
   });
 }
@@ -231,8 +264,8 @@ export function useCrearSocioBancario() {
         nombre: input.nombre.trim(),
         razon_social: input.razon_social?.trim() || null,
         rfc: input.rfc?.trim() || null,
-        estado: "activo",
-        created_by: profile?.email ?? null, // auditoría
+        activo: true,
+        creado_por: profile?.email ?? null, // auditoría
       });
       if (error) throw error;
     },
@@ -246,10 +279,10 @@ export function useToggleSocioBancario() {
   return useMutation({
     mutationFn: async ({ id, activar }: { id: number; activar: boolean }) => {
       // Soft-disable: nunca hard-delete.
-      const patch: Record<string, any> = { estado: activar ? "activo" : "inactivo" };
+      const patch: Record<string, any> = { activo: activar };
       if (!activar) {
-        patch.revoked_by = profile?.email ?? null;
-        patch.revoked_at = new Date().toISOString();
+        patch.revocado_por = profile?.email ?? null;
+        patch.fecha_revocacion = new Date().toISOString();
       }
       const { error } = await (supabase as any).from("socios_bancarios").update(patch).eq("id", id);
       if (error) throw error;
@@ -260,10 +293,10 @@ export function useToggleSocioBancario() {
 
 export function useAsignarDesarrollo() {
   const invalidate = useInvalidate();
-  const { profile } = useAuth();
   return useMutation({
     mutationFn: async ({ idSocio, idDesarrollo }: { idSocio: number; idDesarrollo: number }) => {
-      // Reactivar si ya existía (evita duplicado); si no, insertar.
+      // Reactivar si ya existía (evita duplicado); si no, insertar. El trigger de
+      // BD rechaza desarrollos no comercializados por SOZU.
       const { data: existente } = await (supabase as any)
         .from("socio_bancario_desarrollos")
         .select("id")
@@ -273,17 +306,14 @@ export function useAsignarDesarrollo() {
       if (existente?.id) {
         const { error } = await (supabase as any)
           .from("socio_bancario_desarrollos")
-          .update({ estado: "activo" })
+          .update({ activo: true })
           .eq("id", existente.id);
         if (error) throw error;
         return;
       }
-      const { error } = await (supabase as any).from("socio_bancario_desarrollos").insert({
-        id_socio_bancario: idSocio,
-        id_desarrollo: idDesarrollo, // regla solo-SOZU validada en UI + backend
-        estado: "activo",
-        created_by: profile?.email ?? null,
-      });
+      const { error } = await (supabase as any)
+        .from("socio_bancario_desarrollos")
+        .insert({ id_socio_bancario: idSocio, id_desarrollo: idDesarrollo, activo: true });
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -292,13 +322,12 @@ export function useAsignarDesarrollo() {
 
 export function useQuitarDesarrollo() {
   const invalidate = useInvalidate();
-  const { profile } = useAuth();
   return useMutation({
     mutationFn: async ({ id }: { id: number }) => {
       // Soft-disable de la asignación (auditable), no borrado.
       const { error } = await (supabase as any)
         .from("socio_bancario_desarrollos")
-        .update({ estado: "inactivo", revoked_by: profile?.email ?? null, revoked_at: new Date().toISOString() })
+        .update({ activo: false })
         .eq("id", id);
       if (error) throw error;
     },
@@ -315,8 +344,7 @@ export function useInvitarUsuario() {
       correo: string;
       telefono?: string | null;
     }) => {
-      // Invitación Supabase Auth (magic link) vía edge function service-role.
-      // Nunca se captura ni almacena contraseña. // SWAP POINT: edge fn a desplegar.
+      // Invitación (magic link) vía edge function service-role. Nunca contraseña.
       const response = await supabase.functions.invoke("invite-socio-bancario-user", {
         body: {
           id_socio_bancario: input.idSocio,
@@ -335,9 +363,9 @@ export function useInvitarUsuario() {
 
 export function useReenviarInvitacion() {
   return useMutation({
-    mutationFn: async (input: { idUsuario: number; correo: string }) => {
+    mutationFn: async (input: { correo: string }) => {
       const response = await supabase.functions.invoke("invite-socio-bancario-user", {
-        body: { reenviar: true, id_usuario: input.idUsuario, correo: input.correo.toLowerCase().trim() },
+        body: { reenviar: true, correo: input.correo.toLowerCase().trim() },
       });
       if (response.error) throw new Error(await extractInvokeError(response.error));
       if (response.data?.error) throw new Error(response.data.error);
@@ -348,27 +376,25 @@ export function useReenviarInvitacion() {
 
 export function useToggleUsuarioSocio() {
   const invalidate = useInvalidate();
-  const { profile } = useAuth();
   return useMutation({
-    mutationFn: async ({ id, activar }: { id: number; activar: boolean }) => {
-      // Baja = desactivación + revocar sesión (edge fn). Reactivación = estado activo.
-      const patch: Record<string, any> = { estado: activar ? "activo" : "inactivo" };
+    mutationFn: async ({ correo, activar }: { correo: string; activar: boolean }) => {
+      const email = correo.toLowerCase().trim();
       if (!activar) {
-        patch.revoked_by = profile?.email ?? null;
-        patch.revoked_at = new Date().toISOString();
+        // Revocar: la edge function desactiva el usuario y revoca su acceso auth.
+        const response = await supabase.functions.invoke("invite-socio-bancario-user", {
+          body: { revocar: true, correo: email },
+        });
+        if (response.error) throw new Error(await extractInvokeError(response.error));
+        if (response.data?.error) throw new Error(response.data.error);
+        return;
       }
-      const { error } = await (supabase as any).from("usuarios_socio_bancario").update(patch).eq("id", id);
+      // Reactivar: no hay acción de la edge fn en el contrato → reactivar activo.
+      // SWAP POINT: si re-habilitar el acceso auth requiere backend, añadir acción.
+      const { error } = await (supabase as any)
+        .from("usuarios")
+        .update({ activo: true })
+        .eq("email", email);
       if (error) throw error;
-      if (!activar) {
-        // Revocar acceso en Supabase Auth (best-effort). // SWAP POINT: edge fn revoke.
-        try {
-          await supabase.functions.invoke("invite-socio-bancario-user", {
-            body: { revocar: true, id_usuario: id },
-          });
-        } catch {
-          /* la desactivación de estado ya aplicó; el revoke real lo hace el backend */
-        }
-      }
     },
     onSuccess: invalidate,
   });

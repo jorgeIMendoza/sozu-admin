@@ -621,7 +621,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
 
             {/* readOnly: el banco VERIFICA, no valida. Sin Validar/Rechazar ni
                 historial de verificaciones internas (emails de empleados SOZU). */}
-            <ExpedienteDocumentos cuentaId={row.cuentaId} propiedadId={row.propiedadId} readOnly />
+            <ExpedienteDocumentos cuentaId={row.cuentaId} propiedadId={row.propiedadId} idProyecto={row.proyectoId} readOnly />
           </section>
 
           {/* Bitácora interna de SOZU (nombres de empleados) OCULTA para el banco
