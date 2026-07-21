@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Circle, HardHat, Calendar, X, ImageIcon } from "lucide-react";
+import { HardHat, Calendar, X, ImageIcon } from "lucide-react";
 import SectionCard from "./SectionCard";
 import { deriveStages, currentStageOf } from "@/utils/avanceObra";
 
@@ -21,6 +21,7 @@ interface Props {
 
 const OfferConstructionProgress = ({
   progress,
+  milestones,
   estimatedDelivery,
   lastUpdated,
   videoUrl,
@@ -37,8 +38,8 @@ const OfferConstructionProgress = ({
     return () => document.removeEventListener("keydown", handler);
   }, [lightboxIndex]);
 
-  // Lógica compartida (fuente de verdad): avance propio por etapa + etapa actual.
-  const stageRows = deriveStages(progress);
+  // Lógica compartida (fuente de verdad): etapas reales del proyecto (estatus_proyecto).
+  const stageRows = deriveStages(progress, milestones);
   const currentStage = currentStageOf(stageRows);
 
   return (
@@ -66,7 +67,7 @@ const OfferConstructionProgress = ({
       </div>
 
       {/* ── 2 columnas: video | etapas (misma altura) ── */}
-      <div className="grid gap-5 md:grid-cols-2 md:items-stretch">
+      <div className="grid gap-5 md:grid-cols-2 md:items-start">
 
         {/* IZQUIERDA: video / material del avance */}
         <div className="flex flex-col gap-3">
@@ -109,38 +110,51 @@ const OfferConstructionProgress = ({
         {/* DERECHA: etapas de obra (todas) */}
         <div className="rounded-md border border-border bg-card p-5 space-y-3">
           <p className="text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground">Etapas de obra</p>
-          <ul className="space-y-2.5">
-            {stageRows.map((m, i) => {
+          {(() => {
+            const renderStage = (m: typeof stageRows[number], i: number) => {
               const isCurrent = !m.done && m.phase === currentStage;
               return (
-                <li key={i} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {m.done ? (
-                      <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                    ) : isCurrent ? (
-                      <span className="w-4 h-4 shrink-0 flex items-center justify-center">
-                        <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      </span>
-                    ) : (
-                      <Circle className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                    )}
-                    <span className={`truncate ${m.done ? "text-foreground" : isCurrent ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                      {m.phase}
-                    </span>
-                  </div>
-                  <span className={`text-xs tabular-nums shrink-0 ${m.done ? "text-success font-medium" : isCurrent ? "text-primary font-semibold" : "text-muted-foreground/60"}`}>
+                <li key={i} className="flex items-center gap-2.5 text-sm">
+                  <span
+                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold leading-none tabular-nums ${
+                      m.done
+                        ? "border-success text-success"
+                        : isCurrent
+                        ? "border-amber-500 bg-amber-50 text-amber-600"
+                        : "border-muted-foreground/30 text-muted-foreground/50"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className={`flex-1 truncate ${m.done ? "text-foreground" : isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                    {m.phase}
+                  </span>
+                  <span className={`shrink-0 text-xs tabular-nums ${m.done ? "font-medium text-success" : isCurrent ? "font-semibold text-amber-600" : "text-muted-foreground/60"}`}>
                     {m.ownPct}%
                   </span>
                 </li>
               );
-            })}
-          </ul>
+            };
+            const mid = Math.ceil(stageRows.length / 2);
+            return (
+              <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+                <ul className="space-y-2.5">{stageRows.slice(0, mid).map((m, j) => renderStage(m, j))}</ul>
+                <ul className="space-y-2.5">{stageRows.slice(mid).map((m, j) => renderStage(m, mid + j))}</ul>
+              </div>
+            );
+          })()}
 
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-3 border-t border-border/60">
-            <Calendar className="w-3 h-3 shrink-0" />
-            Entrega estimada ·{" "}
-            {new Date(estimatedDelivery).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
-          </p>
+          <div className="pt-3 border-t border-border/60 space-y-0.5">
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Calendar className="w-3 h-3 shrink-0" />
+              Posible fecha de entrega ·{" "}
+              {new Date(estimatedDelivery).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 leading-snug">
+              Fecha estimada y sujeta a cambios según el avance de obra. No constituye una fecha
+              de entrega contractual.
+            </p>
+          </div>
         </div>
       </div>
 

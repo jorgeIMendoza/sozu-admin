@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 
 // ── Types ──
 
@@ -86,26 +87,10 @@ interface ProyectoRow {
   hitos_avance?: ConstructionMilestone[] | null;
 }
 
-const DEFAULT_MILESTONES: ConstructionMilestone[] = [
-  { phase: "Cimentación",   pct: 5,   done: false },
-  { phase: "Estructura",    pct: 28,  done: false },
-  { phase: "Albañilería",   pct: 55,  done: false },
-  { phase: "Instalaciones", pct: 75,  done: false },
-  { phase: "Acabados",      pct: 90,  done: false },
-  { phase: "Entrega",       pct: 100, done: false },
-];
-
-function calcProgressFromDates(inicio: string | null, entrega: string | null): number {
-  if (!inicio || !entrega) return 0;
-  const start = new Date(inicio).getTime();
-  const end   = new Date(entrega).getTime();
-  const now   = Date.now();
-  if (end <= start) return 0;
-  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
-}
-
 function applyProgressToMilestones(milestones: ConstructionMilestone[], pct: number): ConstructionMilestone[] {
-  return milestones.map((m) => ({ ...m, done: pct >= m.pct }));
+  // done = etapa YA superada (pct estrictamente menor al avance). La etapa cuyo
+  // pct == avance es la ACTUAL (no done) → coincide con el estatus seleccionado.
+  return milestones.map((m) => ({ ...m, done: pct > m.pct }));
 }
 
 // ── Hook ──
@@ -155,6 +140,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         { data: videos, error: ev },
         { data: fotos, error: ef },
         { data: categoriasData, error: ec },
+        { data: estatusCatalogRows },
       ] = await Promise.all([
         supabase
           .from("proyectos")
@@ -178,6 +164,10 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         supabase
           .from("categorias_multimedia_proyecto")
           .select("id, nombre")
+          .eq("activo", true),
+        (supabase as any)
+          .from("estatus_proyecto")
+          .select("*")
           .eq("activo", true),
       ]);
       if (ep) throw ep;
@@ -221,10 +211,12 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         videoTitle: v.nombre,
       }));
 
-      const globalProgress = p.porcentaje_avance
-        ?? calcProgressFromDates(p.fecha_lanzamiento, p.fecha_entrega);
-
-      const rawMilestones = (p.hitos_avance ?? DEFAULT_MILESTONES) as ConstructionMilestone[];
+      // Avance de obra — fuente única: etapa (id_estatus_proyecto) del proyecto
+      // vía catálogo estatus_proyecto.porcentaje_avance (mismo criterio que la
+      // oferta digital / portal agente / Editar Proyecto).
+      const estatusCatalog = mapEstatusCatalog((estatusCatalogRows ?? []) as any[]);
+      const globalProgress = progressFromEstatus(estatusCatalog, p.id_estatus_proyecto);
+      const rawMilestones = milestonesFromEstatus(estatusCatalog) as ConstructionMilestone[];
       const milestones = applyProgressToMilestones(rawMilestones, globalProgress);
 
       return {
@@ -282,6 +274,34 @@ export function useProjectPhotos(projectId: number | undefined) {
       });
     },
     enabled: !!projectId,
+    staleTime: 300_000,
+  });
+}
+
+// ── Fotos del modelo (galería interior del depto) ──
+
+export function useModelPhotos(idModelo: number | null | undefined) {
+  return useQuery({
+    queryKey: ["model-photos", idModelo],
+    queryFn: async (): Promise<ConstructionPhoto[]> => {
+      const { data, error } = await supabase
+        .from("multimedias_modelo")
+        .select("id, url")
+        .eq("id_modelo", idModelo!)
+        .eq("activo", true)
+        .eq("es_imagen", true)
+        .order("id", { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      return (data ?? []).map((f) => {
+        const raw = f.url as string;
+        if (!raw || !raw.includes(".supabase.co/storage/v1/object/public/")) return { url: raw, alt: "" };
+        const base = raw.split("?")[0];
+        const optimized = base.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + "?quality=90&format=webp";
+        return { url: optimized, alt: "" };
+      });
+    },
+    enabled: !!idModelo,
     staleTime: 300_000,
   });
 }

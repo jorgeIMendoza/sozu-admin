@@ -161,7 +161,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   // Datos completos de esas cuentas (incluye clabe_stp para el modal de recibo)
   const { data: cuentasFull } = await supabase
     .from("cuentas_cobranza")
-    .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
+    .select("id, id_oferta, id_propiedad, id_cuenta_cobranza_padre, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
     .in("id", allCuentaIds)
     .eq("activo", true)
     .eq("es_aprobado", true);
@@ -187,10 +187,15 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const mainCuentasRaw: Record<string, unknown>[] = [];
   const productCuentas: Record<string, unknown>[] = [];
   for (const c of cuentasFull as Record<string, unknown>[]) {
+    // Cuentas HIJAS (mantenimiento/sub-cuentas con padre) no son propiedades
+    // por sí mismas; se procesan aparte (paso 3.6). Incluirlas aquí generaba
+    // "cards fantasma" sin proyecto/unidad (ej. cuenta sin oferta ni propiedad).
+    if (c.id_cuenta_cobranza_padre != null) continue;
     const of = ofertaMap[c.id_oferta as number];
     if (c.id_propiedad == null) c.id_propiedad = of?.id_propiedad ?? null;
     if (of?.id_producto != null) productCuentas.push(c);
-    else mainCuentasRaw.push(c);
+    // Cuenta principal sin propiedad resoluble = malformada → no se puede pintar.
+    else if (c.id_propiedad != null) mainCuentasRaw.push(c);
   }
 
   const cuentas = mainCuentasRaw;

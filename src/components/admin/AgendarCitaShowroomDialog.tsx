@@ -431,21 +431,20 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
 
   const isRescheduling = !!existingCitaForProject;
 
-  const labelCls = "mb-1.5 block text-[11px] font-semibold text-[#4B5563]";
-  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
-  const readonlyBoxCls = "flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-[#F6F7F8] px-3 py-2.5 text-[13px] font-medium text-[#171A1D]";
+  const labelCls = "mb-1.5 block text-[13px] font-medium text-[#4B5563]";
+  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[14px] font-medium text-[#171A1D] data-[placeholder]:font-normal data-[placeholder]:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
+  const readonlyBoxCls = "flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-[#F6F7F8] px-3 py-2.5 text-[14px] font-medium text-[#171A1D]";
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleClose}>
+      {/* open&&!addProspectoOpen: al abrir "Crear prospecto" la cita se OCULTA (sin
+          resetear su estado) para no apilar dos overlays; reaparece al cerrar aquélla. */}
+      <Dialog open={open && !addProspectoOpen} onOpenChange={(v) => { if (!v && !addProspectoOpen) handleClose(); }}>
         <DialogContent
           className="max-w-[480px] gap-0 overflow-hidden rounded-md p-0"
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >
-          <DialogHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#EAF6F0] text-[hsl(158_64%_38%)]">
-              <CalendarDays className="h-[18px] w-[18px]" />
-            </span>
+          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
             <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
               {rescheduleData ? "Reagendar Cita" : "Agendar Cita al Showroom"}
             </DialogTitle>
@@ -454,7 +453,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
           <div className="flex max-h-[calc(90vh-9rem)] flex-col gap-4 overflow-y-auto px-[22px] py-[22px]">
             {/* Prospecto */}
             <div>
-              <div className={labelCls}>Prospecto <span className="text-[hsl(158_64%_38%)]">*</span></div>
+              <div className={labelCls}>Prospecto <span className="text-red-500">*</span></div>
               {rescheduleData ? (
                 <div className={readonlyBoxCls}>
                   {rescheduleData.prospectoName || 'Prospecto'}
@@ -521,7 +520,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
             {/* Project selector (dropdown) */}
             {selectedProspecto && (rescheduleData || (selectedProspectoData && selectedProspectoData.proyectos.length > 0)) && (
               <div>
-                <div className={labelCls}>Desarrollo para la cita <span className="text-[hsl(158_64%_38%)]">*</span></div>
+                <div className={labelCls}>Desarrollo para la cita <span className="text-red-500">*</span></div>
                 {rescheduleData ? (
                   <div className={readonlyBoxCls}>
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -680,11 +679,11 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
             <div>
               <div className={labelCls}>Notas (opcional)</div>
               <Textarea
-                placeholder="Agregar notas…"
+                placeholder="El prospecto prefiere visita por la tarde y viene acompañado."
                 value={notas}
                 onChange={(e) => { setNotas(e.target.value); trackFieldFill(); }}
-                rows={2}
-                className="rounded-md border-[#ECEEF0] text-[13px] focus-visible:border-[hsl(158_64%_38%)] focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)]/15 focus-visible:ring-offset-0"
+                rows={6}
+                className="resize-none rounded-md border-[#ECEEF0] text-[14px] placeholder:font-normal placeholder:text-[#9AA3AD] focus-visible:border-[hsl(158_64%_38%)] focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)]/15 focus-visible:ring-offset-0"
               />
             </div>
           </div>
@@ -702,7 +701,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
               type="button"
               onClick={() => { track({ page: "modal_cita", elementId: "modal_cita_guardar" }); createMutation.mutate(); }}
               disabled={createMutation.isPending || !selectedProspecto || !selectedProyectoId || !selectedDate || !selectedHour || !selectedConfigId}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[hsl(158_64%_38%)] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[hsl(158_64%_31%)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando…</> : isRescheduling ? "Reagendar Cita" : "Agendar Cita"}
             </button>

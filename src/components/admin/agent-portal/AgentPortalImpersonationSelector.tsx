@@ -10,19 +10,19 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronsUpDown, Check, UserSearch, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Roles con acceso al portal de agentes (submenus_permisos sobre /admin/agent/*).
-const AGENT_PORTAL_ROLE_IDS = [1, 2, 3, 5, 8, 9, 10, 11];
+// Roles impersonables desde el Portal Agente. Hardcode a propósito: aún no
+// usamos una columna en BD. Incluye los roles con acceso real al portal
+// (1 Super Admin, 2 Admin Proyecto, 3 Agente Inmob., 9 Agente Interno) + el
+// rol 30 (Super Admin "fake" que existe en prod pero no en dev; se quiere ver).
+const AGENT_PORTAL_ROLE_IDS = [1, 2, 3, 9, 30];
 
 // Etiqueta corta por rol para el badge del selector.
 const ROLE_BADGE: Record<number, string> = {
   1: "Super Admin",
   2: "Admin Proy.",
   3: "Agente Inmob.",
-  5: "Vendedor",
-  8: "Solo Lectura",
   9: "Interno",
-  10: "Admin Data",
-  11: "Doc. Escrituras",
+  30: "Super Admin",
 };
 
 export function AgentPortalImpersonationSelector() {
@@ -37,15 +37,16 @@ export function AgentPortalImpersonationSelector() {
   const [open, setOpen] = useState(false);
 
   const canImpersonate = profile?.puede_impersonar === true;
-  if (!canImpersonate) return null;
+
+  const roleIds = AGENT_PORTAL_ROLE_IDS;
 
   const { data: agents = [] } = useQuery({
-    queryKey: ["all-agents-for-portal-impersonation"],
+    queryKey: ["all-agents-for-portal-impersonation", roleIds],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("usuarios")
         .select("email, rol_id, personas(id, nombre_legal)")
-        .in("rol_id", AGENT_PORTAL_ROLE_IDS)
+        .in("rol_id", roleIds)
         .eq("activo", true)
         .order("email");
 
@@ -61,6 +62,8 @@ export function AgentPortalImpersonationSelector() {
     },
     enabled: canImpersonate,
   });
+
+  if (!canImpersonate) return null;
 
   return (
     <div className="flex items-center gap-2">

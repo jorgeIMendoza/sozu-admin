@@ -607,13 +607,16 @@ const AgentUnidadesProyecto = () => {
 
       {/* Property Detail - modal centrado (izq carrusel · der info) */}
       <Dialog open={!!selectedProperty} onOpenChange={(open) => !open && setSelectedProperty(null)}>
-        <DialogContent className="light w-[95vw] max-w-4xl p-0 gap-0 overflow-hidden max-h-[88vh]">
+        <DialogContent
+          className="light w-[95vw] max-w-4xl p-0 gap-0 overflow-hidden rounded-md max-h-[90vh]"
+          style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
+        >
           <DialogTitle className="sr-only">Detalle del departamento</DialogTitle>
           <DialogDescription className="sr-only">Información, precio y esquemas de pago de la unidad seleccionada</DialogDescription>
           {selectedProperty && (
-            <div className="grid max-h-[88vh] md:grid-cols-2">
+            <div className="grid max-h-[90vh] md:grid-cols-2">
               {/* Izquierda: carrusel (llena la columna) */}
-              <div className="relative bg-gray-100 aspect-[4/3] md:aspect-auto md:h-[88vh]">
+              <div className="relative bg-gray-100 aspect-[4/3] md:aspect-auto md:h-[90vh]">
                 {selectedProperty.model_images?.length > 0 ? (
                   <DetailCarousel images={selectedProperty.model_images} />
                 ) : (
@@ -621,12 +624,12 @@ const AgentUnidadesProyecto = () => {
                 )}
               </div>
               {/* Derecha: información */}
-              <div className="flex min-h-0 flex-col md:max-h-[88vh]">
-                <div className="shrink-0 space-y-0 px-6 pt-6 pb-3">
-                  <h2 className="text-[17px] font-bold text-foreground">Departamento {selectedProperty.numero || selectedProperty.id}</h2>
-                  <p className="text-[12px] text-muted-foreground">{selectedProperty.proyecto_nombre}</p>
+              <div className="flex min-h-0 flex-col md:max-h-[90vh]">
+                <div className="shrink-0 space-y-0.5 px-[22px] pt-[22px] pb-3">
+                  <h2 className="text-[18px] font-bold text-[#171A1D]">Departamento {selectedProperty.numero || selectedProperty.id}</h2>
+                  <p className="text-[12px] font-normal text-[#6B7280]">{selectedProperty.proyecto_nombre}</p>
                 </div>
-                <div className="flex-1 overflow-y-auto px-6 space-y-4 pb-4">
+                <div className="flex-1 overflow-y-auto px-[22px] space-y-4 pb-5">
                 {/* Contexto */}
                 <div className="flex flex-wrap gap-1.5">
                   {selectedProperty.edificio_nombre && <span className="inline-flex items-center rounded-md bg-[#F6F7F8] px-2.5 py-1 text-[11px] font-semibold text-[#4B5563]">{selectedProperty.edificio_nombre}</span>}
@@ -635,7 +638,7 @@ const AgentUnidadesProyecto = () => {
                 </div>
 
                 {/* Specs */}
-                <div className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-md border border-gray-100 bg-white p-3.5 text-sm font-medium text-[#4B5563]">
+                <div className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-md border border-[#ECEEF0] bg-white p-3.5 text-sm font-medium text-[#4B5563]">
                   {selectedProperty.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.m2_total.toFixed(2)} m²</span>}
                   {selectedProperty.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.recamaras} rec.</span>}
                   {selectedProperty.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.banos} baño{selectedProperty.banos > 1 ? "s" : ""}</span>}
@@ -755,7 +758,7 @@ const AgentUnidadesProyecto = () => {
                   </div>
                 )}
               </div>
-              <div className="shrink-0 px-6 py-4 border-t bg-background">
+              <div className="shrink-0 px-[22px] py-4 border-t border-[#ECEEF0] bg-background">
                 {canGenerateOffer && (
                   isAgentRole && !hasTrainingComplete ? (
                     <Button className="w-full gap-2 rounded-md" size="lg" disabled>
@@ -773,7 +776,7 @@ const AgentUnidadesProyecto = () => {
                       forceLight={true}
                       enableDigitalOffer={canGenerateDigitalOffer}
                       customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-semibold text-sm hover:bg-[hsl(158_64%_38%)]/[0.06] active:scale-[0.98] transition-all">
+                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-semibold text-sm hover:bg-[hsl(158_64%_38%)] hover:text-white active:scale-[0.98] transition-all">
                           <FileText className="h-5 w-5" />
                           <span>
                             Configurar Oferta

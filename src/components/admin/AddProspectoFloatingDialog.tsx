@@ -451,10 +451,10 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     onOpenChange(false);
   };
 
-  const labelCls = "mb-1.5 block text-[11px] font-semibold text-[#4B5563]";
-  const labelBoldCls = "mb-2 text-[11px] font-bold text-[#4B5563]";
-  const inputCls = "w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2.5 text-[13px] font-medium text-[#171A1D] outline-none transition-all placeholder:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15";
-  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[13px] font-medium text-[#171A1D] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
+  const labelCls = "mb-1.5 block text-[13px] font-medium text-[#4B5563]";
+  const labelBoldCls = "mb-2 text-[13px] font-medium text-[#4B5563]";
+  const inputCls = "w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2.5 text-[14px] font-medium text-[#171A1D] outline-none transition-all placeholder:font-normal placeholder:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15";
+  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[14px] font-medium text-[#171A1D] data-[placeholder]:font-normal data-[placeholder]:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
   const rfcInvalid = !!rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc);
   const curpInvalid = !!curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp);
 
@@ -507,7 +507,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           {/* Desarrollos de interés - búsqueda + lista */}
           <div>
             <div className={labelBoldCls}>
-              Desarrollos de Interés {!isEditMode && <span className="text-[hsl(158_64%_38%)]">*</span>}
+              Desarrollos de Interés {!isEditMode && <span className="text-red-500">*</span>}
             </div>
 
             {/* Seleccionados */}
@@ -589,14 +589,14 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
           {/* Información básica · datos sensibles */}
           <div className="border-t border-[#ECEEF0] pt-4">
-            <div className="mb-3 flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">
+            <div className="mb-3 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[#9AA3AD]">
               <Lock className="h-3 w-3" />
               Información básica · datos sensibles
             </div>
             <div className="flex flex-col gap-3">
               {/* Tipo de persona - segmented */}
               <div>
-                <div className={labelCls}>Tipo de Persona <span className="text-[hsl(158_64%_38%)]">*</span></div>
+                <div className={labelCls}>Tipo de Persona <span className="text-red-500">*</span></div>
                 <div className="flex max-w-[240px] rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-[3px]">
                   {[{ v: "pf", l: "Física" }, { v: "pm", l: "Moral" }].map((o) => (
                     <button
@@ -618,10 +618,10 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
               {/* Nombre */}
               <div>
-                <div className={labelCls}>Nombre Completo <span className="text-[hsl(158_64%_38%)]">*</span></div>
+                <div className={labelCls}>Nombre Completo <span className="text-red-500">*</span></div>
                 <input
                   className={inputCls}
-                  placeholder="Nombre y apellidos"
+                  placeholder="Juan Pérez García"
                   value={nombre}
                   onChange={(e) => { setNombre(e.target.value); trackFieldFill(); }}
                 />
@@ -630,11 +630,11 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               {/* Email + Teléfono */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <div className={labelCls}>Email <span className="text-[hsl(158_64%_38%)]">*</span></div>
+                  <div className={labelCls}>Email <span className="text-red-500">*</span></div>
                   <input
                     type="email"
                     className={cn(inputCls, "disabled:bg-[#F6F7F8] disabled:text-[#9AA3AD]")}
-                    placeholder="correo@dominio.com"
+                    placeholder="juan.perez@correo.com"
                     value={email}
                     onChange={(e) => handleEmailChange(e.target.value)}
                     disabled={isEditMode && !!selectedProspectoId}
@@ -644,7 +644,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   )}
                 </div>
                 <div>
-                  <div className={labelCls}>Teléfono <span className="text-[hsl(158_64%_38%)]">*</span> (+52)</div>
+                  <div className={labelCls}>Teléfono <span className="text-red-500">*</span> (+52)</div>
                   <div className="flex gap-2">
                     <Select value={clavePais} onValueChange={setClavePais}>
                       <SelectTrigger className={cn(triggerCls, "w-[70px] shrink-0")}>
@@ -659,7 +659,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                     <input
                       className={cn(inputCls, "tabular-nums")}
                       inputMode="numeric"
-                      placeholder="10 dígitos"
+                      placeholder="5512345678"
                       value={telefono}
                       onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 10); setTelefono(v); trackFieldFill(); }}
                       maxLength={10}
@@ -674,7 +674,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   <div className={labelCls}>RFC</div>
                   <input
                     className={cn(inputCls, "uppercase", rfcInvalid && "border-red-400 focus:border-red-400 focus:ring-red-400/15")}
-                    placeholder="Opcional"
+                    placeholder="PEGJ850101H2A"
                     value={rfc}
                     onChange={(e) => setRfc(e.target.value.toUpperCase())}
                     maxLength={13}
@@ -685,7 +685,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   <div className={labelCls}>CURP</div>
                   <input
                     className={cn(inputCls, "uppercase", curpInvalid && "border-red-400 focus:border-red-400 focus:ring-red-400/15")}
-                    placeholder="Opcional"
+                    placeholder="PEGJ850101HDFRRN09"
                     value={curp}
                     onChange={(e) => setCurp(e.target.value.toUpperCase())}
                     maxLength={18}
@@ -710,7 +710,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             type="button"
             onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
             disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[hsl(158_64%_38%)] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[hsl(158_64%_31%)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : isEditMode ? "Actualizar" : "Guardar"}
           </button>

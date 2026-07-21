@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
-import { Loader2, ArrowLeft, Pencil, CalendarPlus, Check, FileText, MessageSquare, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Pencil, CalendarPlus, Check, FileText, MessageSquare, Download, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -50,6 +50,30 @@ const AgentProspectoDetalle = () => {
   const [composerOpen, setComposerOpen] = useState(false);
   // Nota abierta en modal: ver detalle o editar.
   const [notaModal, setNotaModal] = useState<{ id: number; contenido: string; mode: "view" | "edit" } | null>(null);
+  // Archivo/imagen adjunto abierto en el visor in-app (sin salir de la plataforma).
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
+
+  // Intercepta clics sobre imágenes/enlaces adjuntos dentro del HTML de una nota
+  // para abrir el visor interno en vez de navegar fuera de la app.
+  const handleNoteContentClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest("a");
+    if (anchor && anchor.getAttribute("href")) {
+      e.preventDefault();
+      const href = anchor.getAttribute("href")!;
+      const name = (anchor.textContent || "archivo").replace(/^📎\s*/, "").trim() || "archivo";
+      setPreviewFile({ url: href, name });
+      return;
+    }
+    if (target.tagName === "IMG") {
+      e.preventDefault();
+      setPreviewFile({ url: (target as HTMLImageElement).src, name: "Imagen" });
+    }
+  };
+
+  const previewExt = previewFile ? (previewFile.url.split("?")[0].split(".").pop() || "").toLowerCase() : "";
+  const previewIsImage = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"].includes(previewExt);
+  const previewIsPdf = previewExt === "pdf";
 
   useEffect(() => {
     registrarVista(`/admin/agent/prospectos/${personaId}`, { persona_id: personaId });
@@ -400,7 +424,8 @@ const AgentProspectoDetalle = () => {
                         {it.kind === "nota" ? (
                           it.html && (
                             <div
-                              className="mt-0.5 line-clamp-3 text-[12px] leading-snug text-[#4B5563] [&_img]:mt-1 [&_img]:inline-block [&_img]:h-auto [&_img]:max-h-20 [&_img]:w-auto [&_img]:max-w-[120px] [&_img]:rounded [&_img]:border [&_img]:border-gray-100 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4"
+                              onClick={handleNoteContentClick}
+                              className="mt-0.5 line-clamp-3 text-[12px] leading-snug text-[#4B5563] [&_img]:mt-1 [&_img]:inline-block [&_img]:h-auto [&_img]:max-h-20 [&_img]:w-auto [&_img]:max-w-[120px] [&_img]:cursor-pointer [&_img]:rounded [&_img]:border [&_img]:border-gray-100 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4 [&_a]:cursor-pointer [&_a]:font-medium [&_a]:text-[hsl(158_64%_38%)] [&_a]:underline"
                               dangerouslySetInnerHTML={{ __html: it.html }}
                             />
                           )
@@ -433,17 +458,18 @@ const AgentProspectoDetalle = () => {
 
       {/* Nota interna: ver detalle / editar / eliminar */}
       <Dialog open={!!notaModal} onOpenChange={(o) => !o && setNotaModal(null)}>
-        <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
-          <DialogHeader className="space-y-0.5 border-b border-[#F0F2F4] px-5 py-4 text-left">
-            <DialogTitle className="text-[15px] font-bold tracking-[-0.2px] text-[#171A1D]">
+        <DialogContent
+          className="max-w-[560px] gap-0 overflow-hidden rounded-md p-0"
+          style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
+        >
+          <DialogHeader className="space-y-1 border-b border-[#ECEEF0] px-[22px] py-5 text-left">
+            <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
               {notaModal?.mode === "edit" ? "Editar nota" : "Nota interna"}
             </DialogTitle>
-            <p className="flex items-center gap-1.5 text-[11px] font-medium text-[#9AA3AD]">
-              <MessageSquare className="h-3 w-3" /> Solo visible para ti
-            </p>
+            <p className="text-[12px] font-normal text-[#6B7280]">Solo visible para ti</p>
           </DialogHeader>
 
-          <div className="px-5 py-4">
+          <div className="max-h-[calc(90vh-9rem)] overflow-y-auto px-[22px] py-[22px]">
             {notaModal?.mode === "edit" ? (
               <NoteEditor
                 value={notaModal.contenido}
@@ -453,40 +479,93 @@ const AgentProspectoDetalle = () => {
               />
             ) : (
               <div
-                className="prose prose-sm max-h-[58vh] max-w-none overflow-y-auto rounded-md border border-[#F0F2F4] bg-[#FCFCFD] p-4 text-[13px] leading-relaxed text-[#3F464E] [&_img]:mx-auto [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-h-72 [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-gray-100 [&_ul]:list-disc [&_ul]:pl-5"
+                onClick={handleNoteContentClick}
+                className="prose prose-sm max-w-none rounded-md border border-[#ECEEF0] bg-[#FCFCFD] p-4 text-[13px] leading-relaxed text-[#3F464E] [&_img]:mx-auto [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-h-72 [&_img]:w-auto [&_img]:max-w-full [&_img]:cursor-pointer [&_img]:rounded-lg [&_img]:border [&_img]:border-gray-100 [&_ul]:list-disc [&_ul]:pl-5 [&_a]:cursor-pointer [&_a]:font-medium [&_a]:text-[hsl(158_64%_38%)] [&_a]:underline"
                 dangerouslySetInnerHTML={{ __html: notaModal?.contenido || "" }}
               />
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-2 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          <div className="flex items-center justify-between gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2.5 text-[13px] font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={deleteNota.isPending}
               onClick={() => notaModal && deleteNota.mutate(notaModal.id)}
             >
-              {deleteNota.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Eliminar
-            </Button>
+              {deleteNota.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Eliminar
+            </button>
             {notaModal?.mode === "view" ? (
-              <Button
-                size="sm"
-                className="gap-1.5 text-xs border border-[#E6C34D] bg-white text-[#B5730A] hover:bg-[#FBF3DC]"
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => setNotaModal((m) => (m ? { ...m, mode: "edit" } : m))}
               >
                 <Pencil className="h-3.5 w-3.5" /> Editar
-              </Button>
+              </button>
             ) : (
-              <Button
-                size="sm"
-                className="gap-1.5 text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={updateNota.isPending || !notaModal || (!notaModal.contenido.replace(/<[^>]+>/g, "").trim() && !/<img/i.test(notaModal.contenido))}
                 onClick={() => notaModal && updateNota.mutate({ id: notaModal.id, contenido: notaModal.contenido })}
               >
                 {updateNota.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Guardar
-              </Button>
+              </button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Visor in-app de adjuntos: imagen / PDF sin salir de la plataforma. */}
+      <Dialog open={!!previewFile} onOpenChange={(o) => !o && setPreviewFile(null)}>
+        <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
+          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#F0F2F4] px-5 py-4 text-left">
+            <DialogTitle className="truncate pr-8 text-[15px] font-bold tracking-[-0.2px] text-[#171A1D]">
+              {previewFile?.name || "Adjunto"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="bg-[#F6F7F8] p-4">
+            {previewIsImage ? (
+              <img
+                src={previewFile?.url}
+                alt={previewFile?.name || "Adjunto"}
+                className="mx-auto max-h-[70vh] w-auto max-w-full rounded-md border border-gray-200 bg-white object-contain"
+              />
+            ) : previewIsPdf ? (
+              <iframe
+                src={previewFile?.url}
+                title={previewFile?.name || "Documento"}
+                className="h-[70vh] w-full rounded-md border border-gray-200 bg-white"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+                <FileText className="h-10 w-10 text-[#9AA3AD]" />
+                <p className="text-[13px] font-medium text-[#4B5563]">Este tipo de archivo no se puede previsualizar aquí.</p>
+                <p className="text-[11px] text-[#9AA3AD]">Descárgalo para abrirlo.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
+            <a
+              href={previewFile?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Abrir en pestaña
+            </a>
+            <a
+              href={previewFile?.url}
+              download={previewFile?.name}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
+            >
+              <Download className="h-3.5 w-3.5" /> Descargar
+            </a>
           </div>
         </DialogContent>
       </Dialog>

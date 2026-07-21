@@ -6,7 +6,7 @@ import Color from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Bold, Italic, Underline as UnderlineIcon, List, Palette, ImagePlus, Loader2 } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, List, Palette, Paperclip, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -27,7 +27,22 @@ export function NoteEditor({ value, onChange, storagePrefix, placeholder = "Agre
   const [uploading, setUploading] = useState(false);
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextStyle, Color, Image.configure({ inline: false })],
+    extensions: [
+      // StarterKit v3 ya incluye Link; se configura aquí (no se agrega aparte para
+      // evitar extensión duplicada). Los adjuntos no-imagen se insertan como enlace-chip;
+      // openOnClick=false evita navegar dentro del editor (el preview se maneja al render).
+      StarterKit.configure({
+        link: {
+          openOnClick: false,
+          autolink: false,
+          HTMLAttributes: { class: "crm-attachment", target: "_blank", rel: "noopener noreferrer" },
+        },
+      }),
+      Underline,
+      TextStyle,
+      Color,
+      Image.configure({ inline: false }),
+    ],
     content: value,
     autofocus: autoFocus,
     editorProps: { attributes: { class: "tiptap focus:outline-none" } },
@@ -43,18 +58,30 @@ export function NoteEditor({ value, onChange, storagePrefix, placeholder = "Agre
 
   if (!editor) return null;
 
-  const uploadImage = async (file: File) => {
+  const uploadFile = async (file: File) => {
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "png";
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
       const rand = Math.random().toString(36).slice(2, 8);
       const path = `${storagePrefix}/${Date.now()}_${rand}.${ext}`;
       const { error } = await supabase.storage.from("documentos").upload(path, file, { upsert: true });
       if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
-      editor.chain().focus().setImage({ src: publicUrl }).run();
+      const isImage = file.type.startsWith("image/");
+      if (isImage) {
+        editor.chain().focus().setImage({ src: publicUrl }).run();
+      } else {
+        // Cualquier otro archivo (pdf, docx, xlsx, etc.) se inserta como enlace-chip.
+        // El nombre se conserva como texto del enlace (con 📎) para poder previsualizar/descargar.
+        const safeName = file.name.replace(/</g, "").replace(/>/g, "");
+        editor
+          .chain()
+          .focus()
+          .insertContent(`<a href="${publicUrl}" class="crm-attachment" target="_blank" rel="noopener noreferrer">📎 ${safeName}</a>&nbsp;`)
+          .run();
+      }
     } catch (e: any) {
-      toast.error(e.message || "No se pudo subir la imagen");
+      toast.error(e.message || "No se pudo subir el archivo");
     } finally {
       setUploading(false);
     }
@@ -88,15 +115,15 @@ export function NoteEditor({ value, onChange, storagePrefix, placeholder = "Agre
             </div>
           </PopoverContent>
         </Popover>
-        <ToolBtn onClick={() => fileRef.current?.click()} title="Insertar imagen">
-          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+        <ToolBtn onClick={() => fileRef.current?.click()} title="Adjuntar archivo o imagen">
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
         </ToolBtn>
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip,.rar,.7z"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
         />
       </div>
       <div className="relative">
@@ -108,7 +135,8 @@ export function NoteEditor({ value, onChange, storagePrefix, placeholder = "Agre
           className="prose prose-sm max-w-none p-3 min-h-[80px] max-h-[260px] overflow-y-auto text-[12.5px]
             [&_.tiptap]:outline-none [&_.tiptap]:min-h-[60px]
             [&_.tiptap_p]:my-1 [&_.tiptap_ul]:my-1 [&_.tiptap_li]:my-0.5
-            [&_.tiptap_img]:h-auto [&_.tiptap_img]:max-h-40 [&_.tiptap_img]:w-auto [&_.tiptap_img]:max-w-full [&_.tiptap_img]:rounded [&_.tiptap_img]:border [&_.tiptap_img]:border-gray-100"
+            [&_.tiptap_img]:h-auto [&_.tiptap_img]:max-h-40 [&_.tiptap_img]:w-auto [&_.tiptap_img]:max-w-full [&_.tiptap_img]:rounded [&_.tiptap_img]:border [&_.tiptap_img]:border-gray-100
+            [&_.tiptap_a]:font-medium [&_.tiptap_a]:text-[hsl(158_64%_38%)] [&_.tiptap_a]:underline [&_.tiptap_a]:decoration-[hsl(158_64%_38%)]/40 [&_.tiptap_a]:cursor-pointer"
         />
       </div>
     </div>
