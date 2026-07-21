@@ -10,8 +10,8 @@ import {
   Mail, Phone, Save, GitBranch, Zap, TriangleAlert, Plus, Search,
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
-  Calendar, ChevronRight, Check, ChevronDown, Download, Settings2, Upload, Loader2,
-  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid,
+  Calendar, ChevronRight, ChevronLeft, Check, ChevronDown, Download, Settings2, Upload, Loader2,
+  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid, GripVertical,
   Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -2816,12 +2816,14 @@ function etapaColorClasses(et: any, i: number): string {
 
 export function CrmDeals() {
   const qc = useQueryClient();
-  const [view, setView] = useState<"list" | "board">("list");
+  const [view, setView] = useState<"list" | "board">("board");
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [boardPipeline, setBoardPipeline] = useState<string>("");
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [collapsedCols, setCollapsedCols] = useState<Set<number>>(new Set());
+  const [manualCols, setManualCols] = useState<Set<number>>(new Set());
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const { data: pipelines } = useQuery({
@@ -2841,7 +2843,7 @@ export function CrmDeals() {
     queryKey: dealsKey,
     queryFn: async () => {
       let q = (supabase as any).from("crm_negocios")
-        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, fecha_creacion")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, prioridad, fecha_creacion")
         .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
       if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
       if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
@@ -2906,9 +2908,42 @@ export function CrmDeals() {
     },
   });
 
-  const listRows = pipelineFilter === "all" ? rows : rows.filter((r) => String(r.id_pipeline) === pipelineFilter);
-  const boardRows = rows.filter((r) => String(r.id_pipeline) === effectiveBoardPipeline);
+  const listRows = useMemo(
+    () => (pipelineFilter === "all" ? rows : rows.filter((r) => String(r.id_pipeline) === pipelineFilter)),
+    [rows, pipelineFilter],
+  );
+  const boardRows = useMemo(
+    () => rows.filter((r) => String(r.id_pipeline) === effectiveBoardPipeline),
+    [rows, effectiveBoardPipeline],
+  );
   const activeRows = view === "board" ? boardRows : listRows;
+
+  // Auto-colapsa columnas vacías (salvo alternadas a mano). Si el pipeline no tiene
+  // ningún negocio, deja todo expandido para ver el embudo completo.
+  useEffect(() => {
+    if (view !== "board" || !boardEtapas) return;
+    const anyDeals = boardRows.length > 0;
+    setCollapsedCols((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      boardEtapas.forEach((et: any) => {
+        if (manualCols.has(et.id)) return;
+        const shouldCollapse = anyDeals && !boardRows.some((r) => r.id_etapa === et.id);
+        if (shouldCollapse && !next.has(et.id)) { next.add(et.id); changed = true; }
+        if (!shouldCollapse && next.has(et.id)) { next.delete(et.id); changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [boardEtapas, boardRows, manualCols, view]);
+
+  const toggleCol = (id: number) => {
+    setManualCols((prev) => new Set(prev).add(id));
+    setCollapsedCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const metrics = useMemo(() => {
     let total = 0, ponderada = 0, abierto = 0, ganado = 0;
@@ -2978,32 +3013,34 @@ export function CrmDeals() {
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
-        {view === "list" ? (
-          <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
-            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los pipelines</SelectItem>
-              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Select value={effectiveBoardPipeline} onValueChange={setBoardPipeline}>
-            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
-            <SelectContent>
-              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-          <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los propietarios</SelectItem>
-            {(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
+        <div className="relative w-full sm:w-auto sm:min-w-[240px] max-w-xs">
           <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar negocio" className="pl-8 h-9" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          {view === "list" ? (
+            <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
+              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los pipelines</SelectItem>
+                {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select value={effectiveBoardPipeline} onValueChange={setBoardPipeline}>
+              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+              <SelectContent>
+                {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los propietarios</SelectItem>
+              {(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -3015,12 +3052,14 @@ export function CrmDeals() {
           <EmptyState title="Sin pipelines" description="Crea un pipeline en Configuración para ver el tablero." />
         ) : (
           <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(Number(e.active.id))} onDragEnd={handleDragEnd}>
-            <div className="flex gap-3 overflow-x-auto pb-4">
-              {(boardEtapas ?? []).map((et: any, i: number) => {
-                const colDeals = boardRows.filter((r) => r.id_etapa === et.id);
-                const total = colDeals.reduce((s, r) => s + Number(r.valor ?? 0), 0);
-                return <BoardColumn key={et.id} etapa={et} deals={colDeals} colorClass={etapaColorClasses(et, i)} total={total} />;
-              })}
+            <div className="flex gap-2 overflow-x-auto pb-4 items-start">
+              {(boardEtapas ?? []).map((et: any, i: number) => (
+                <BoardColumn key={et.id} etapa={et}
+                  deals={boardRows.filter((r) => r.id_etapa === et.id)}
+                  colorClass={etapaColorClasses(et, i)}
+                  collapsed={collapsedCols.has(et.id)}
+                  onToggle={() => toggleCol(et.id)} />
+              ))}
               {(boardEtapas ?? []).length === 0 && (
                 <p className="text-sm text-muted-foreground py-8">Este pipeline no tiene etapas. Agrégalas en Configuración → Pipelines.</p>
               )}
@@ -3071,50 +3110,91 @@ export function CrmDeals() {
   );
 }
 
-// Columna del tablero (zona soltable) con su header de color y total.
-function BoardColumn({ etapa, deals, colorClass, total }: { etapa: any; deals: any[]; colorClass: string; total: number }) {
+// Columna del tablero (zona soltable). Colapsable a una pestaña vertical.
+function BoardColumn({ etapa, deals, colorClass, collapsed, onToggle }: { etapa: any; deals: any[]; colorClass: string; collapsed: boolean; onToggle: () => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: etapa.id });
+  const total = deals.reduce((s, r) => s + Number(r.valor ?? 0), 0);
+  const ponderada = deals.reduce((s, r) => s + Number(r.valor ?? 0) * (Number(r.probabilidad ?? 0) / 100), 0);
+
+  if (collapsed) {
+    return (
+      <div ref={setNodeRef} className={`shrink-0 w-11 self-stretch rounded-lg border ${colorClass} ${isOver ? "ring-2 ring-primary" : ""}`}>
+        <button onClick={onToggle} title={`Mostrar ${etapa.nombre}`}
+          className="h-full w-full min-h-[240px] flex flex-col items-center gap-2 py-2 cursor-pointer hover:opacity-80 transition-opacity">
+          <ChevronRight className="h-4 w-4 shrink-0" />
+          <span className="[writing-mode:vertical-lr] text-xs font-semibold whitespace-nowrap">{etapa.nombre}</span>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{deals.length}</Badge>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-w-[280px] max-w-[280px] flex flex-col">
+    <div ref={setNodeRef} className={`min-w-[276px] max-w-[276px] flex flex-col rounded-lg ${isOver ? "ring-2 ring-primary" : ""}`}>
       <div className={`rounded-t-lg px-3 py-2 flex items-center justify-between ${colorClass}`}>
         <span className="font-semibold text-sm truncate">{etapa.nombre}</span>
-        <Badge variant="secondary" className="text-xs shrink-0">{deals.length}</Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          <Badge variant="secondary" className="text-xs">{deals.length}</Badge>
+          <button onClick={onToggle} title="Contraer columna" className="opacity-70 hover:opacity-100 transition-opacity"><ChevronLeft className="h-3.5 w-3.5" /></button>
+        </div>
       </div>
-      <div ref={setNodeRef}
-        className={`border border-t-0 rounded-b-lg bg-muted/30 p-2 space-y-2 min-h-[240px] max-h-[calc(100vh-360px)] overflow-y-auto flex-1 ${isOver ? "ring-2 ring-primary ring-inset" : ""}`}>
+      <div className="border border-t-0 bg-muted/30 p-2 space-y-2 min-h-[240px] max-h-[calc(100vh-380px)] overflow-y-auto flex-1">
         {deals.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8">Sin negocios</p>
         ) : deals.map((d) => <DealBoardCard key={d.id} deal={d} />)}
       </div>
-      <div className="px-1 pt-1 text-[11px] text-muted-foreground tabular-nums">{fmtMXN(total)}</div>
+      <div className="rounded-b-lg border border-t-0 bg-card px-3 py-1.5 text-[11px] text-muted-foreground space-y-0.5">
+        <div className="flex items-center justify-between gap-2"><span>Cantidad total</span><span className="font-semibold tabular-nums text-foreground">{fmtMXN(total)}</span></div>
+        <div className="flex items-center justify-between gap-2"><span>Ponderada</span><span className="tabular-nums">{fmtMXN(ponderada)}</span></div>
+      </div>
     </div>
   );
 }
+
+// Iniciales para el avatar del contacto en la tarjeta.
+function dealInitials(name?: string | null): string {
+  if (!name) return "?";
+  return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+}
+// Fondo/tono del pill de prioridad.
+const PRIORIDAD_PILL: Record<string, string> = {
+  baja: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  media: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  alta: "bg-red-500/10 text-red-700 dark:text-red-400",
+};
 
 // Tarjeta arrastrable del tablero.
 function DealBoardCard({ deal, dragging }: { deal: any; dragging?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
   const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
+  const prio = deal.prioridad && PRIORIDAD_META[deal.prioridad] ? deal.prioridad : null;
   return (
     <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
-      className={`cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
-      <CardContent className="p-3 space-y-1.5">
-        <div className="flex items-center gap-1.5">
-          {deal.prioridad && PRIORIDAD_META[deal.prioridad] && (
-            <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} title={`Prioridad ${PRIORIDAD_META[deal.prioridad].label}`} />
-          )}
-          <p className="text-sm font-semibold truncate flex-1">{deal.nombre}</p>
+      className={`cursor-grab active:cursor-grabbing border-border hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
+      <CardContent className="p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2 min-h-[18px]">
+          {prio ? (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[prio]}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
+            </span>
+          ) : <span />}
+          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" aria-hidden="true" />
         </div>
-        {deal.contacto_nombre && <p className="text-xs text-muted-foreground truncate">{deal.contacto_nombre}</p>}
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-bold tabular-nums">{deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—"}</span>
+        <p className="text-sm font-medium leading-snug">{deal.nombre}</p>
+        {deal.contacto_nombre && (
+          <div className="flex items-center gap-2">
+            <span className="h-5 w-5 shrink-0 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">{dealInitials(deal.contacto_nombre)}</span>
+            <span className="text-xs text-muted-foreground truncate">{deal.contacto_nombre}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
+          <span className="text-sm font-semibold tabular-nums">{deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—"}</span>
           {deal.fecha_cierre_estimada && (
-            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
               <Calendar className="h-3 w-3" />{fmtDate(deal.fecha_cierre_estimada)}
             </span>
           )}
         </div>
-        <p className="text-[11px] text-muted-foreground truncate">{deal.propietario_nombre}</p>
       </CardContent>
     </Card>
   );
