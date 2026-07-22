@@ -1566,17 +1566,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 <span className="text-muted-foreground">Precio Propiedad:</span>
                 {priceCalculations.schemeAdjustment !== 0 ? (
                   <>
-                    <p className="text-xs text-muted-foreground line-through">${priceCalculations.propertyPrice.toLocaleString()}</p>
-                    <p className="font-semibold text-lg">${priceCalculations.adjustedPropertyPrice.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground line-through">${priceCalculations.propertyPrice.toLocaleString("es-MX")}</p>
+                    <p className="font-semibold text-lg">${priceCalculations.adjustedPropertyPrice.toLocaleString("es-MX")}</p>
                   </>
                 ) : (
-                  <p className="font-semibold text-lg">${priceCalculations.propertyPrice.toLocaleString()}</p>
+                  <p className="font-semibold text-lg">${priceCalculations.propertyPrice.toLocaleString("es-MX")}</p>
                 )}
               </div>
               {priceCalculations.productsTotal > 0 && (
                 <div>
                   <span className="text-muted-foreground">Productos adicionales:</span>
-                  <p className="font-medium text-amber-600">+${priceCalculations.productsTotal.toLocaleString()}</p>
+                  <p className="font-medium text-amber-600">+${priceCalculations.productsTotal.toLocaleString("es-MX")}</p>
                 </div>
               )}
             </div>
@@ -1584,7 +1584,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               <div className="mt-2 pt-2 border-t border-primary/20">
                 <div className="flex justify-between items-center">
                   <span className="font-medium">Total:</span>
-                  <span className="font-bold text-xl text-primary">${priceCalculations.grandTotal.toLocaleString()}</span>
+                  <span className="font-bold text-xl text-primary">${priceCalculations.grandTotal.toLocaleString("es-MX")}</span>
                 </div>
               </div>
             )}
@@ -1622,9 +1622,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <Warehouse className="h-3 w-3" />
                         {bodega.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluida en el precio total del depa)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")} · incluida en el precio total del depa)</span>
                         ) : (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")})</span>
                         )}
                       </Badge>
                     );
@@ -1646,9 +1646,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <Car className="h-3 w-3" />
                         {est.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()} · incluido en el precio total del depa)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")} · incluido en el precio total del depa)</span>
                         ) : (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")})</span>
                         )}
                       </Badge>
                     );
@@ -2040,17 +2040,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                   <AlertTriangle className="h-4 w-4" />
                                 )}
                                 <span>
-                                  Suma tramos: ${tramosValidation.sumaMontos.toLocaleString()}
+                                  Suma tramos: ${tramosValidation.sumaMontos.toLocaleString("es-MX")}
                                 </span>
                                 <span className="text-muted-foreground">
-                                  (esperado: ${tramosValidation.montoEsperado.toLocaleString()})
+                                  (esperado: ${tramosValidation.montoEsperado.toLocaleString("es-MX")})
                                 </span>
                               </div>
                               {!tramosValidation.isMontosValid && (
                                 <span className="font-medium">
                                   {tramosValidation.diferenciaMonto > 0 
-                                    ? `Faltan $${tramosValidation.diferenciaMonto.toLocaleString()}`
-                                    : `Excede $${Math.abs(tramosValidation.diferenciaMonto).toLocaleString()}`
+                                    ? `Faltan $${tramosValidation.diferenciaMonto.toLocaleString("es-MX")}`
+                                    : `Excede $${Math.abs(tramosValidation.diferenciaMonto).toLocaleString("es-MX")}`
                                   }
                                 </span>
                               )}
@@ -2061,7 +2061,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                           {tramosValidation.hasTramos && !tramosValidation.isMontosValid && tramosValidation.isCountValid && (
                             <p className="text-xs text-muted-foreground mt-2">
                               💡 Monto sugerido por mensualidad (uniforme): $
-                              {(tramosValidation.montoEsperado / parseInt(form.watch("numero_mensualidades") || "1")).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              {(tramosValidation.montoEsperado / parseInt(form.watch("numero_mensualidades") || "1")).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
                             </p>
                           )}
                         </>
@@ -2117,19 +2117,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <div className="mb-3 pb-3 border-b">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Precio original:</span>
-                            <span>${manualSchemeCalculations.precioOriginal.toLocaleString()}</span>
+                            <span>${manualSchemeCalculations.precioOriginal.toLocaleString("es-MX")}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className={manualSchemeCalculations.diferencia < 0 ? "text-green-600" : "text-amber-600"}>
                               {manualSchemeCalculations.diferencia < 0 ? "Descuento:" : "Aumento:"}
                             </span>
                             <span className={manualSchemeCalculations.diferencia < 0 ? "text-green-600" : "text-amber-600"}>
-                              {manualSchemeCalculations.diferencia < 0 ? "-" : "+"}${Math.abs(manualSchemeCalculations.diferencia).toLocaleString()}
+                              {manualSchemeCalculations.diferencia < 0 ? "-" : "+"}${Math.abs(manualSchemeCalculations.diferencia).toLocaleString("es-MX")}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm font-semibold mt-1">
                             <span>Precio ajustado:</span>
-                            <span className="text-primary">${manualSchemeCalculations.precioAjustado.toLocaleString()}</span>
+                            <span className="text-primary">${manualSchemeCalculations.precioAjustado.toLocaleString("es-MX")}</span>
                           </div>
                         </div>
                       )}
@@ -2139,14 +2139,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         {parseFloat(watchedEnganche || "0") > 0 && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Enganche ({watchedEnganche}%):</span>
-                            <span className="font-medium">${manualSchemeCalculations.montoEnganche.toLocaleString()}</span>
+                            <span className="font-medium">${manualSchemeCalculations.montoEnganche.toLocaleString("es-MX")}</span>
                           </div>
                         )}
                         {parseFloat(watchedMensualidades || "0") > 0 && (
                           <>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Mensualidades ({watchedMensualidades}%):</span>
-                              <span className="font-medium">${manualSchemeCalculations.montoMensualidades.toLocaleString()}</span>
+                              <span className="font-medium">${manualSchemeCalculations.montoMensualidades.toLocaleString("es-MX")}</span>
                             </div>
                             {usarTramosPersonalizados && tramosMensualidad.length > 0 ? (
                               // Show tiered breakdown
@@ -2161,7 +2161,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                         {tramo.numero_mensualidades} pagos de:
                                       </span>
                                       <span>
-                                        ${(tramo.monto / 100).toLocaleString()}
+                                        ${(tramo.monto / 100).toLocaleString("es-MX")}
                                         {index > 0 && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
@@ -2182,7 +2182,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               manualSchemeCalculations.numMensualidades > 0 && (
                                 <div className="flex justify-between pl-4 text-xs">
                                   <span className="text-muted-foreground">{manualSchemeCalculations.numMensualidades} pagos de:</span>
-                                  <span>${manualSchemeCalculations.montoPorMensualidad.toLocaleString()}</span>
+                                  <span>${manualSchemeCalculations.montoPorMensualidad.toLocaleString("es-MX")}</span>
                                 </div>
                               )
                             )}
@@ -2191,7 +2191,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         {parseFloat(watchedEntrega || "0") > 0 && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Entrega ({watchedEntrega}%):</span>
-                            <span className="font-medium">${manualSchemeCalculations.montoEntrega.toLocaleString()}</span>
+                            <span className="font-medium">${manualSchemeCalculations.montoEntrega.toLocaleString("es-MX")}</span>
                           </div>
                         )}
                       </div>
@@ -2661,7 +2661,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       {productsWithPriceInfo.valid.map((p: any, i: number) => (
                         <div key={i} className="bg-background rounded-md p-2 border">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-foreground">• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString()})</span>
+                            <span className="text-foreground">• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString("es-MX")})</span>
                           </div>
                           <div className="ml-2">
                             <label className="text-xs text-muted-foreground block mb-1">Esquema de pago:</label>
