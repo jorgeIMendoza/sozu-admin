@@ -608,25 +608,51 @@ export class OfertaPdfNativeService {
 
     y = Math.max(y, propStartY + 40);
 
-    // Nota full-width de bodegas incluidas: nombre + metraje + precio (precio/m² × m²)
-    // con aclaración de que su valor ya está sumado en los esquemas de pago.
+    // Detalle de bodegas incluidas: área, precio/m², precio de la bodega y precio TOTAL
+    // (precio_lista + valor de bodegas incluidas — la base de los esquemas de pago).
     const bodegasIncluidasNota = (data.bodegas ?? []).filter((b: any) => b.es_incluido);
     if (bodegasIncluidasNota.length > 0) {
-      pdf.setFontSize(8);
-      pdf.setFont("helvetica", "italic");
-      pdf.setTextColor(grayColor);
+      const bodegasTotal = bodegasIncluidasNota.reduce(
+        (s: number, b: any) => s + Number(b.costo ?? 0),
+        0,
+      );
+      const precioTotal = Number(data.propertyDetails.precio_lista ?? 0) + bodegasTotal;
+      const col2X = margin + contentWidth / 2;
+
       for (const b of bodegasIncluidasNota) {
-        const m2Txt = b.m2 != null
-          ? `${Number(b.m2).toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²`
-          : "";
-        const costoTxt = formatCurrency(Number(b.costo ?? 0));
-        const nota = `Bodega ${b.nombre ?? ""}${m2Txt ? ` (${m2Txt})` : ""}: ${costoTxt} — se sumará en los esquemas de pago.`;
-        pdf.text(nota.trim(), margin, y);
-        y += 4.5;
+        const m2Num = Number(b.m2 ?? 0);
+        const costo = Number(b.costo ?? 0);
+        const precioM2 = m2Num > 0 ? costo / m2Num : 0;
+
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(primaryColor);
+        pdf.text(`Bodega ${b.nombre ?? ""} incluida`, margin, y);
+        y += 5;
+
+        const field = (label: string, value: string, x: number) => {
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(grayColor);
+          pdf.text(label, x, y);
+          pdf.setFont("helvetica", "bold");
+          pdf.setTextColor(primaryColor);
+          pdf.text(value, x + 32, y);
+        };
+
+        field("Área bodega:", m2Num > 0 ? `${m2Num.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²` : "N/A", margin);
+        field("Precio m² bodega:", formatCurrency(precioM2), col2X);
+        y += 5;
+        field("Precio bodega:", formatCurrency(costo), margin);
+        y += 6;
       }
-      pdf.setFont("helvetica", "normal");
+
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(grayColor);
+      pdf.text("Precio TOTAL:", margin, y);
       pdf.setTextColor(primaryColor);
-      y += 1.5;
+      pdf.text(formatCurrency(precioTotal), margin + 32, y);
+      y += 4;
     }
 
     drawLine(y);
