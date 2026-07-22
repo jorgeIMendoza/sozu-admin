@@ -150,8 +150,8 @@ const OfferPropertyDetails = ({
                         mono
                       />
                     )}
-                    <SpecRow label="Bodega precio de lista" value={`${formatMXN(precioM2)} /m²`} mono />
-                    <SpecRow label="Bodega precio total" value={formatMXN(costo)} mono highlight />
+                    <SpecRow label="Bodega precio m²" value={formatMXN(precioM2)} mono />
+                    <SpecRow label="Bodega precio de lista" value={formatMXN(costo)} mono highlight />
                   </Fragment>
                 );
               })}
@@ -162,7 +162,7 @@ const OfferPropertyDetails = ({
                 .reduce((s, b) => s + (b.costo ?? 0), 0);
               return bodegaTotal > 0 ? (
                 <div className="flex items-baseline justify-between gap-3 mt-2 pt-3 border-t-2 border-primary/30">
-                  <span className="text-[11px] uppercase tracking-[0.14em] font-bold text-foreground">Total</span>
+                  <span className="text-[11px] uppercase tracking-[0.14em] font-bold text-foreground">Precio Total</span>
                   <span className="text-lg font-extrabold tabular-nums text-primary text-right leading-tight">
                     {formatMXN(property.listPrice + bodegaTotal)}
                   </span>
