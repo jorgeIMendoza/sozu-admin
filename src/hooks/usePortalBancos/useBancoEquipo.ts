@@ -113,8 +113,8 @@ export function useBancoEquipo(idBanco?: number | null) {
         .from("usuarios")
         .select("email, nombre, rol_id, activo, telefono")
         .eq("id_banco", idBanco)
+        .eq("activo", true) // Ejecutivos inactivos no se muestran ni tienen acceso al portal
         .in("rol_id", rolIds)
-        .order("activo", { ascending: false })
         .order("nombre", { ascending: true });
       if (error || !data) return [];
       return (data as any[]).map((u) => ({
