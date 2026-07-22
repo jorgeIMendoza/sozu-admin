@@ -323,6 +323,8 @@ export interface OfertaBodega {
   incluido: boolean;
   /** Producto al que pertenece (bodegas.id_producto) — enlaza con su oferta/esquema. */
   idProducto?: number;
+  /** Costo de la bodega = productos_servicios.precio_lista (precio/m²) × m². */
+  costo?: number;
   /** Esquema de pago + CLABE de la bodega (oferta de producto del mismo lead). */
   pago?: OfertaBodegaPago;
 }

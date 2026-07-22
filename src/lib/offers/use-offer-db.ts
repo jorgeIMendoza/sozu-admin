@@ -758,15 +758,30 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     }
   }
 
-  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => ({
-    id: b.id,
-    nombre: b.nombre ?? "",
-    ubicacion: b.ubicacion ?? undefined,
-    m2: b.m2 != null ? Number(b.m2) : undefined,
-    incluido: !!b.es_incluido,
-    idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
-    pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
-  }));
+  // Precio/m² de cada bodega (productos_servicios.precio_lista) → costo = precio/m² × m².
+  const bodegaPrecioByProducto = new Map<number, number>();
+  if (bodegaProductoIds.length > 0) {
+    const { data: prods } = await (supabase as any)
+      .from("productos_servicios")
+      .select("id, precio_lista")
+      .in("id", bodegaProductoIds);
+    for (const pr of (prods as any[]) ?? []) bodegaPrecioByProducto.set(pr.id, Number(pr.precio_lista ?? 0));
+  }
+
+  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => {
+    const m2 = b.m2 != null ? Number(b.m2) : undefined;
+    const precioM2 = b.id_producto != null ? bodegaPrecioByProducto.get(Number(b.id_producto)) ?? 0 : 0;
+    return {
+      id: b.id,
+      nombre: b.nombre ?? "",
+      ubicacion: b.ubicacion ?? undefined,
+      m2,
+      incluido: !!b.es_incluido,
+      idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
+      costo: precioM2 * (m2 ?? 0),
+      pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
+    };
+  });
   const estacionamientos = ((estacionamientosRows as any[]) ?? []).map((e) => ({
     id: e.id,
     nombre: e.nombre ?? "",
