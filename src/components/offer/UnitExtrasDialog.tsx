@@ -131,9 +131,9 @@ const UnitExtrasDialog = ({ open, onOpenChange, kind, bodegas, estacionamientos 
                     {meta.singular} {it.nombre}
                   </span>
                   {it.incluido && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
-                      <Check className="w-3 h-3" />
-                      Incluido
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary text-right">
+                      <Check className="w-3 h-3 shrink-0" />
+                      Se incluye en el precio total
                     </span>
                   )}
                 </div>
