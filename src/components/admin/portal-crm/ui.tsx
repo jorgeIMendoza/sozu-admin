@@ -118,6 +118,16 @@ export function ComingSoon({ title, items }: { title: string; items: string[] })
   );
 }
 
+// Fila etiqueta/valor compacta (para paneles de detalle y tarjetas).
+export function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boolean }) {
+  return (
+    <div className="flex justify-between gap-2 py-1 border-b last:border-0">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className={`text-xs truncate max-w-[180px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
+    </div>
+  );
+}
+
 export function Panel({
   title,
   description,
