@@ -790,8 +790,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     incluido: !!e.es_incluido,
     tipo: e.id_tipo != null ? tipoEstacMap.get(e.id_tipo) : undefined,
   }));
-  // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido).
-  const clabeStp = leadRfcValido ? (propiedad as any).clabe_stp_tmp_apartado || undefined : undefined;
+  // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido)
+  // Y si la oferta tiene un esquema de pago seleccionado (sin esquema no aplica pago).
+  const clabeStp = (leadRfcValido && selectedId != null)
+    ? (propiedad as any).clabe_stp_tmp_apartado || undefined
+    : undefined;
 
   // ── Desarrolladora que lleva el proyecto: entidad relacionada tipo 4
   // (Dueño Vendedor — es donde vive el dato real, ej. Tallwood en Daiku).
