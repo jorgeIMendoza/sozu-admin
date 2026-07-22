@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Bed, Bath, Car, Building2, Ruler, Package, ChevronRight, KeyRound, Copy, Check } from "lucide-react";
 import type { PropertyDetails, OfertaBodega, OfertaEstacionamiento } from "@/lib/offers/offer-data";
 import { formatMXN } from "@/lib/offers/offer-data";
@@ -103,7 +103,6 @@ const OfferPropertyDetails = ({
   const hasEstac = (estacionamientos?.length ?? 0) > 0;
   const estacTipos = parkingTypesLabel(estacionamientos);
   const estacIncluido = hasEstac && estacionamientos!.every((e) => e.incluido);
-  const bodegaIncluida = hasBodegas && bodegas!.every((b) => b.incluido);
 
   const copyClabe = async () => {
     if (!clabeStp) return;
@@ -134,6 +133,42 @@ const OfferPropertyDetails = ({
             {property.pricePerM2 ? (
               <SpecRow label="Precio por m²" value={formatMXN(property.pricePerM2)} mono />
             ) : null}
+            {/* Desglose de bodegas incluidas (mismo detalle que el diálogo de bodega) */}
+            {(bodegas ?? [])
+              .filter((b) => b.incluido && (b.costo ?? 0) > 0)
+              .map((b) => {
+                const m2 = b.m2 ?? 0;
+                const costo = b.costo ?? 0;
+                const precioM2 = m2 > 0 ? costo / m2 : costo;
+                return (
+                  <Fragment key={`bodega-ficha-${b.id}`}>
+                    <SpecRow label="Bodega" value={b.nombre} />
+                    {m2 > 0 && (
+                      <SpecRow
+                        label="Bodega m²"
+                        value={`${m2.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²`}
+                        mono
+                      />
+                    )}
+                    <SpecRow label="Bodega precio de lista" value={`${formatMXN(precioM2)} /m²`} mono />
+                    <SpecRow label="Bodega precio total" value={formatMXN(costo)} mono highlight />
+                  </Fragment>
+                );
+              })}
+            {/* Total = precio de lista de la propiedad + costo de bodegas incluidas */}
+            {(() => {
+              const bodegaTotal = (bodegas ?? [])
+                .filter((b) => b.incluido)
+                .reduce((s, b) => s + (b.costo ?? 0), 0);
+              return bodegaTotal > 0 ? (
+                <div className="flex items-baseline justify-between gap-3 mt-2 pt-3 border-t-2 border-primary/30">
+                  <span className="text-[11px] uppercase tracking-[0.14em] font-bold text-foreground">Total</span>
+                  <span className="text-lg font-extrabold tabular-nums text-primary text-right leading-tight">
+                    {formatMXN(property.listPrice + bodegaTotal)}
+                  </span>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           {/* Right: características + extras - cada dato UNA sola vez */}
@@ -170,11 +205,9 @@ const OfferPropertyDetails = ({
                     label={`${bodegas!.length} bodega${bodegas!.length === 1 ? "" : "s"}`}
                     sublabel={(() => {
                       const total = bodegas!.reduce((s, b) => s + (b.costo ?? 0), 0);
-                      const costoTxt = total > 0
+                      return total > 0
                         ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(total)
-                        : null;
-                      if (bodegaIncluida) return costoTxt ? `Incluida · ${costoTxt}` : "Incluida";
-                      return costoTxt ?? undefined;
+                        : undefined;
                     })()}
                     onClick={() => setDialogKind("bodega")}
                   />
