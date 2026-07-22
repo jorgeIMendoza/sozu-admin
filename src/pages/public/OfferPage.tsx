@@ -198,10 +198,10 @@ const OfferPage = () => {
   // si no, precio_lista + valor de bodegas incluidas. Las bodegas incluidas suman al total
   // pero se listan aparte en tamaño chico.
   const listPrice = offer.property.listPrice;
-  const bodegaIncluidaTotal = (offer.bodegas ?? []).reduce(
-    (s, b) => s + (b.incluido ? (b.costo ?? 0) : 0),
-    0,
-  );
+  const bodegasIncluidas = (offer.bodegas ?? []).filter((b) => b.incluido);
+  const bodegaIncluidaTotal = bodegasIncluidas.reduce((s, b) => s + (b.costo ?? 0), 0);
+  const bodegaM2Total = bodegasIncluidas.reduce((s, b) => s + (b.m2 ?? 0), 0);
+  const bodegaPrecioM2 = bodegaM2Total > 0 ? bodegaIncluidaTotal / bodegaM2Total : 0;
   const basePrice = listPrice + bodegaIncluidaTotal;
   const selectedPlan = offer.selectedPlanId
     ? offer.paymentPlans?.find((p) => p.id === offer.selectedPlanId)
@@ -259,6 +259,9 @@ const OfferPage = () => {
                 {bodegaIncluidaTotal > 0 && (
                   <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60 tabular-nums">
                     Bodega {fmtMXN(bodegaIncluidaTotal)}
+                    {bodegaPrecioM2 > 0 && (
+                      <span className="text-success"> · {fmtMXN(bodegaPrecioM2)}/m²</span>
+                    )}
                   </p>
                 )}
                 <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50 mt-1">
@@ -537,14 +540,21 @@ const OfferPage = () => {
                       </p>
                     )}
                     {bodegaIncluidaTotal > 0 && (
-                      <div className="flex items-center justify-center gap-1.5">
-                        <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60">
-                          Bodega
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {fmtMXN(bodegaIncluidaTotal)}
-                        </span>
-                      </div>
+                      <>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60">
+                            Bodega
+                          </span>
+                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                            {fmtMXN(bodegaIncluidaTotal)}
+                          </span>
+                        </div>
+                        {bodegaPrecioM2 > 0 && (
+                          <p className="text-[10px] font-medium text-success tabular-nums">
+                            {fmtMXN(bodegaPrecioM2)} /m²
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
 
