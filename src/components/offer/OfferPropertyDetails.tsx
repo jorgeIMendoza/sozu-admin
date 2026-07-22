@@ -103,7 +103,6 @@ const OfferPropertyDetails = ({
   const hasEstac = (estacionamientos?.length ?? 0) > 0;
   const estacTipos = parkingTypesLabel(estacionamientos);
   const estacIncluido = hasEstac && estacionamientos!.every((e) => e.incluido);
-  const bodegaIncluida = hasBodegas && bodegas!.every((b) => b.incluido);
 
   const copyClabe = async () => {
     if (!clabeStp) return;
@@ -170,11 +169,9 @@ const OfferPropertyDetails = ({
                     label={`${bodegas!.length} bodega${bodegas!.length === 1 ? "" : "s"}`}
                     sublabel={(() => {
                       const total = bodegas!.reduce((s, b) => s + (b.costo ?? 0), 0);
-                      const costoTxt = total > 0
+                      return total > 0
                         ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(total)
-                        : null;
-                      if (bodegaIncluida) return costoTxt ? `Incluida · ${costoTxt}` : "Incluida";
-                      return costoTxt ?? undefined;
+                        : undefined;
                     })()}
                     onClick={() => setDialogKind("bodega")}
                   />
