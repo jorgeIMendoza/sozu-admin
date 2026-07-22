@@ -150,8 +150,8 @@ const OfferPropertyDetails = ({
                         mono
                       />
                     )}
-                    <SpecRow label="Bodega precio de lista" value={`${formatMXN(precioM2)} /m²`} mono />
-                    <SpecRow label="Bodega precio total" value={formatMXN(costo)} mono highlight />
+                    <SpecRow label="Bodega precio m²" value={formatMXN(precioM2)} mono />
+                    <SpecRow label="Bodega precio de lista" value={formatMXN(costo)} mono highlight />
                   </Fragment>
                 );
               })}
