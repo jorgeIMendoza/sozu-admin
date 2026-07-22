@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import {
   STATUS_DESCRIPTORS, VALID_TRANSITIONS, REJECTION_REASONS, DESIST_REASONS,
   fmtMXN, fmtDate,
@@ -45,9 +45,10 @@ import {
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X,
+  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X, Image as ImageIcon,
 } from "lucide-react";
 import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
+import { PropiedadDetalleSheet } from "@/components/admin/portal-bancos/PropiedadDetalleSheet";
 
 // ------------------------------ Helpers UI ------------------------------
 /** Fecha + hora local (es-MX) para la Bitácora, p. ej. "16 jul 2026, 14:03". */
@@ -72,17 +73,6 @@ function toneClass(t: "neutral" | "info" | "warning" | "success" | "destructive"
     success: "bg-emerald-100 text-emerald-700",
     destructive: "bg-red-100 text-red-700",
   }[t];
-}
-
-/**
- * Acceso a una ruta administrativa del Portal Bancos (Equipo / Bancos) según
- * los permisos reales del rol (`submenus_permisos` · 'leer'). Super Admin
- * siempre tiene acceso. Reemplaza el gate hardcodeado a rol_id=1, que ocultaba
- * estas secciones a roles con permiso explícito (ej. Supervisor Bancos).
- */
-function useBancosPathAllowed(path: string) {
-  const { isPathAllowed, isLoading } = useAllowedMenus();
-  return { allowed: isPathAllowed(path), isLoading };
 }
 
 function useBankScopedLeads(): BankLead[] {
@@ -160,6 +150,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
   const [closeReason, setCloseReason] = useState<string>("");
   const [verCliente, setVerCliente] = useState(false);
   const [verPagos, setVerPagos] = useState(false);
+  const [verPropiedad, setVerPropiedad] = useState(false);
 
   if (!lead) return null;
   const idNum = Number(lead.id);
@@ -316,6 +307,24 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
             </div>
           )}
 
+          {lead.idCuentaCobranza != null && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">Propiedad</p>
+              <Button
+                data-cta="bancos.solicitud.ver-propiedad"
+                variant="outline"
+                className="w-full justify-start h-9"
+                onClick={() => setVerPropiedad(true)}
+              >
+                <Building2 className="h-4 w-4 mr-2" />
+                Ver proyecto, modelo, metraje, estacionamientos, bodegas y planos
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Detalle de la unidad que adquiere el cliente.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground">Asignación</p>
             {puedeAsignar ? (
@@ -419,6 +428,14 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
           onOpenChange={setVerPagos}
           idCuentaCobranza={lead.idCuentaCobranza}
           total={lead.sale?.totalPagado ?? 0}
+        />
+      )}
+
+      {lead.idCuentaCobranza != null && (
+        <PropiedadDetalleSheet
+          open={verPropiedad}
+          onOpenChange={setVerPropiedad}
+          idCuentaCobranza={lead.idCuentaCobranza}
         />
       )}
     </Sheet>
@@ -1018,7 +1035,11 @@ function Avatar2({ name }: { name: string }) {
 
 // ============================== BANCOS (convenio — real) ==============================
 export function BancosBancos() {
-  const { allowed, isLoading: cargandoPermisos } = useBancosPathAllowed("/admin/portal-bancos/bancos");
+  // Bancos (alta/baja de convenios): SOLO Super Administrador. Coincide con la
+  // visibilidad del menú en PortalBancosLayout (canSeeBancos = isSuperAdmin) y
+  // cierra el acceso por URL directa para Admin de banco / Agente.
+  const { profile } = useAuth();
+  const isSuperAdmin = profile?.rol_id === 1;
   const { data: convenios = [], isLoading } = useBancosConvenio();
   const { data: catalogo = [] } = useBancosCatalogo();
   const agregar = useAgregarBancoConvenio();
@@ -1026,8 +1047,7 @@ export function BancosBancos() {
 
   const [nuevo, setNuevo] = useState({ id_banco: "", producto_nombre: "", tasa_desde: "", color_marca: "", orden: "" });
 
-  if (cargandoPermisos) return null;
-  if (!allowed) return <AccessDenied />;
+  if (!isSuperAdmin) return <AccessDenied />;
 
   const disponibles = catalogo.filter((c) => !convenios.some((cv) => cv.id_banco === c.id));
 
@@ -1104,7 +1124,7 @@ function ConvenioRow({
   c,
   onToggle,
 }: {
-  c: { id: number; nombre: string; color_marca: string | null; producto_nombre: string | null; tasa_desde: number | null; orden: number; activo: boolean };
+  c: { id: number; nombre: string; color_marca: string | null; logo_url: string | null; icono_url: string | null; producto_nombre: string | null; tasa_desde: number | null; orden: number; activo: boolean };
   onToggle: () => void;
 }) {
   const actualizar = useActualizarBancoConvenio();
@@ -1114,6 +1134,9 @@ function ConvenioRow({
     color_marca: c.color_marca ?? "",
     orden: String(c.orden),
   });
+  const [subiendo, setSubiendo] = useState<null | "logo" | "icono">(null);
+  const fileLogo = useRef<HTMLInputElement>(null);
+  const fileIcono = useRef<HTMLInputElement>(null);
 
   const guardar = () => {
     actualizar.mutate(
@@ -1133,10 +1156,54 @@ function ConvenioRow({
     );
   };
 
+  // Sube la imagen a Storage (bucket `documentos`) y guarda la URL pública en la
+  // columna correspondiente del convenio (logo_url / icono_url).
+  const subirImagen = async (kind: "logo" | "icono", file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Archivo inválido", description: "Selecciona una imagen (PNG, JPG, SVG…).", variant: "destructive" });
+      return;
+    }
+    setSubiendo(kind);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `bancos-convenio/${c.id}/${kind}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("documentos")
+        .upload(path, file, { upsert: true, cacheControl: "3600" });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
+      await actualizar.mutateAsync({
+        id: c.id,
+        patch: kind === "logo" ? { logo_url: publicUrl } : { icono_url: publicUrl },
+      });
+      toast({ title: kind === "logo" ? "Logo actualizado" : "Ícono actualizado" });
+    } catch (e: any) {
+      toast({ title: "No se pudo subir la imagen", description: e?.message ?? "Error", variant: "destructive" });
+    } finally {
+      setSubiendo(null);
+    }
+  };
+
+  const quitarImagen = async (kind: "logo" | "icono") => {
+    try {
+      await actualizar.mutateAsync({
+        id: c.id,
+        patch: kind === "logo" ? { logo_url: null } : { icono_url: null },
+      });
+      toast({ title: kind === "logo" ? "Logo removido" : "Ícono removido" });
+    } catch (e: any) {
+      toast({ title: "No se pudo quitar la imagen", description: e?.message ?? "Error", variant: "destructive" });
+    }
+  };
+
   return (
     <div className={`rounded-lg border border-border p-3 space-y-2 ${c.activo ? "" : "opacity-60"}`}>
       <div className="flex items-center gap-3">
-        <span className="h-8 w-8 rounded-md shrink-0 border" style={{ backgroundColor: c.color_marca ?? "#e5e7eb" }} />
+        {c.icono_url ? (
+          <img src={c.icono_url} alt={c.nombre} className="h-8 w-8 rounded-md shrink-0 border object-contain bg-white" />
+        ) : (
+          <span className="h-8 w-8 rounded-md shrink-0 border" style={{ backgroundColor: c.color_marca ?? "#e5e7eb" }} />
+        )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate">{c.nombre}</p>
           {!c.activo && <Badge variant="outline" className="text-[10px]">Inactivo</Badge>}
@@ -1145,6 +1212,54 @@ function ConvenioRow({
           <Power className="h-3.5 w-3.5 mr-1" /> {c.activo ? "Desactivar" : "Activar"}
         </Button>
       </div>
+
+      {/* Branding: ícono (marca cuadrada) + logo (wordmark), subidos a Storage */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md bg-muted/40 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground w-10 shrink-0">Ícono</span>
+          {c.icono_url ? (
+            <img src={c.icono_url} alt="ícono" className="h-9 w-9 rounded-md border object-contain bg-white" />
+          ) : (
+            <span className="h-9 w-9 rounded-md border bg-muted flex items-center justify-center">
+              <ImageIcon className="h-4 w-4 text-muted-foreground/50" />
+            </span>
+          )}
+          <input ref={fileIcono} type="file" accept="image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) subirImagen("icono", f); e.target.value = ""; }} />
+          <Button size="sm" variant="outline" onClick={() => fileIcono.current?.click()} disabled={subiendo !== null}>
+            {subiendo === "icono" ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5 mr-1" />}
+            {c.icono_url ? "Cambiar" : "Subir"}
+          </Button>
+          {c.icono_url && (
+            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => quitarImagen("icono")} disabled={subiendo !== null}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground w-10 shrink-0">Logo</span>
+          {c.logo_url ? (
+            <img src={c.logo_url} alt="logo" className="h-9 max-w-[160px] rounded border object-contain bg-white px-1" />
+          ) : (
+            <span className="h-9 w-24 rounded border bg-muted flex items-center justify-center">
+              <ImageIcon className="h-4 w-4 text-muted-foreground/50" />
+            </span>
+          )}
+          <input ref={fileLogo} type="file" accept="image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) subirImagen("logo", f); e.target.value = ""; }} />
+          <Button size="sm" variant="outline" onClick={() => fileLogo.current?.click()} disabled={subiendo !== null}>
+            {subiendo === "logo" ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5 mr-1" />}
+            {c.logo_url ? "Cambiar" : "Subir"}
+          </Button>
+          {c.logo_url && (
+            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => quitarImagen("logo")} disabled={subiendo !== null}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
         <Input placeholder="Producto" value={edit.producto_nombre} onChange={(e) => setEdit({ ...edit, producto_nombre: e.target.value })} />
         <Input placeholder="Tasa desde %" type="number" step="0.01" value={edit.tasa_desde} onChange={(e) => setEdit({ ...edit, tasa_desde: e.target.value })} />
