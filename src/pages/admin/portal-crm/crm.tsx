@@ -2895,6 +2895,166 @@ function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: string; 
   );
 }
 
+// Diálogo "Crear negocio" desde el módulo (contacto OPCIONAL, con búsqueda).
+// A diferencia de NewDealForm (que exige un contacto), aquí el contacto puede
+// quedar en NULL para crear un negocio suelto desde la vista de Negocios.
+function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
+  const { user } = useAuth();
+  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: user?.id ?? "", tipo_negocio: "", prioridad: "" };
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
+  const [contactSearch, setContactSearch] = useState("");
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["crm-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const { data: etapas } = useQuery({
+    queryKey: ["crm-etapas", form.id_pipeline],
+    enabled: !!form.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas").select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+
+  // Búsqueda de contacto (mismo patrón que el diálogo global de tarea).
+  const { data: contactResults = [], isFetching } = useQuery({
+    queryKey: ["crm-deal-contact-search", contactSearch],
+    enabled: open && contactSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = contactSearch.trim();
+      const { data: personas } = await (supabase as any).from("personas")
+        .select("id, nombre_legal, nombre_comercial")
+        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
+        .eq("activo", true).limit(20);
+      const pIds = (personas ?? []).map((p: any) => p.id);
+      if (!pIds.length) return [];
+      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
+      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
+    },
+  });
+
+  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
+  const reset = () => { setForm(empty); setContact(null); setContactSearch(""); };
+
+  const save = async (close: boolean) => {
+    if (!canSave) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_negocios").insert({
+      nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
+      valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
+      fecha_cierre_estimada: form.fecha_cierre || null,
+      id_usuario_propietario: form.id_propietario || user?.id || null,
+      tipo_negocio: form.tipo_negocio || null, prioridad: form.prioridad || null,
+      id_entidad_relacionada: contact ? contact.id : null,
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio creado");
+    onSaved();
+    if (close) { reset(); onOpenChange(false); }
+    else { setForm({ ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario }); setContact(null); setContactSearch(""); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Crear negocio</DialogTitle></DialogHeader>
+        <div className="grid gap-3 pt-2">
+          <DField label="Nombre del negocio *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus /></DField>
+          <DField label="Pipeline *">
+            <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+              <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          <DField label="Etapa del negocio *">
+            <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+              <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige un pipeline primero"} /></SelectTrigger>
+              <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          {/* Contacto asociado (opcional) */}
+          <div>
+            <Label>Contacto asociado <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+            {contact ? (
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                <span className="font-medium truncate">{contact.name}</span>
+                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive shrink-0"><X className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras… (o déjalo vacío)" className="pl-8" />
+                </div>
+                {contactSearch.trim().length >= 2 && (
+                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
+                    {isFetching ? (
+                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
+                    ) : contactResults.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
+                    ) : contactResults.map((c) => (
+                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
+            <DField label="Moneda">
+              <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="MXN">Peso mexicano (MXN)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent>
+              </Select>
+            </DField>
+          </div>
+          <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
+          <DField label="Propietario del negocio">
+            <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un propietario" /></SelectTrigger>
+              <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          <div className="grid grid-cols-2 gap-3">
+            <DField label="Tipo de negocio">
+              <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </DField>
+            <DField label="Prioridad">
+              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                    <SelectItem key={value} value={value}><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DField>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
+          <Button onClick={() => save(true)} disabled={!canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Negocios (vista general, estilo HubSpot) ─────────────────────────────────
 
 function DealMetric({ label, value }: { label: string; value: string }) {
@@ -2938,6 +3098,7 @@ export function CrmDeals() {
   const [editTarget, setEditTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const { data: pipelines } = useQuery({
@@ -3130,7 +3291,14 @@ export function CrmDeals() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={viewToggle} />
+      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={
+        <div className="flex items-center gap-2">
+          {viewToggle}
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Plus className="h-4 w-4 mr-1" />Crear negocio
+          </Button>
+        </div>
+      } />
 
       {/* Métricas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -3240,6 +3408,9 @@ export function CrmDeals() {
         </div>
       )}
       {view === "list" && data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
+
+      {/* Crear negocio (desde el módulo, contacto opcional) */}
+      <NewDealDialog open={createOpen} onOpenChange={setCreateOpen} onSaved={() => qc.invalidateQueries({ queryKey: ["deals-list"] })} />
 
       {/* Editar negocio */}
       <EditDealDialog deal={editTarget} pipelines={pipelines ?? []} owners={owners ?? []}
@@ -4509,9 +4680,11 @@ function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                 <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                </div>
                 {contactSearch.trim().length >= 2 && (
                   <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
                     {isFetching ? (
@@ -4523,7 +4696,7 @@ function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
           <CitaFormFields form={form} setForm={setForm} owners={owners} />
@@ -5340,9 +5513,11 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                 <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                </div>
                 {contactSearch.trim().length >= 2 && (
                   <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
                     {isFetching ? (
@@ -5354,7 +5529,7 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
           <TaskFormFields form={form} setForm={setForm} owners={owners} />
