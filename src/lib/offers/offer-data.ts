@@ -274,6 +274,8 @@ export interface OfertaComercial {
   amenities: string[];
   location: { address: string; lat: number; lng: number; nearby: string[] };
   paymentPlans: PaymentPlan[];
+  /** Id del esquema de pago seleccionado en la oferta (para resaltar su precio). */
+  selectedPlanId?: string;
   generatedAt: string;
   generatedBy: string;
   agentId: string;

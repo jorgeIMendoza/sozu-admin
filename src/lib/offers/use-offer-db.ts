@@ -874,6 +874,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       nearby:  [],
     },
     paymentPlans,
+    selectedPlanId: selectedId != null ? String(selectedId) : undefined,
     prospectEmail: (leadPersona as any)?.email ?? undefined,
     generatedAt: oferta.fecha_generacion ?? new Date().toISOString(),
     generatedBy: oferta.email_creador ?? "SOZU",
