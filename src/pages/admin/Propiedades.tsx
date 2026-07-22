@@ -49,6 +49,7 @@ import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
 import { formatEscalonadoLabel, mesesMensualidadesRestantes, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { getBodegasIncluidasCosto } from "@/lib/offers/included-bodegas";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -3594,12 +3595,13 @@ const Propiedades = () => {
         nombre,
         m2,
         ubicacion,
+        es_incluido,
         productos_servicios!bodegas_id_producto_fkey(precio_lista)
       `)
       .eq('id_propiedad', propertyId)
       .eq('activo', true)
       .order('nombre');
-    
+
     if (error) {
       console.error('Error fetching bodegas:', error);
       return [];
@@ -3613,6 +3615,7 @@ const Propiedades = () => {
         nombre: item.nombre,
         m2: item.m2,
         ubicacion: item.ubicacion,
+        es_incluido: item.es_incluido,
         precio_m2: precioM2,
         precio_final: precioFinal
       };
@@ -3831,9 +3834,15 @@ const Propiedades = () => {
         precio_lista = precio_base;
       } else {
         precio_lista = property?.precio_lista || 0;
+        // Bodegas incluidas (es_incluido): su valor suma a la base antes del descuento.
+        const { total: bodegasIncluidasTotal } = await getBodegasIncluidasCosto(propertyId);
+        if (bodegasIncluidasTotal > 0) {
+          console.log('🏬 Bodegas incluidas suman a base:', bodegasIncluidasTotal);
+          precio_lista += bodegasIncluidasTotal;
+        }
       }
 
-      console.log('💰 Precio lista:', precio_lista);
+      console.log('💰 Precio lista (base, incluye bodegas incluidas):', precio_lista);
 
       // Get porcentaje_descuento_aumento from payment scheme
       const porcentaje_descuento_aumento = currentOffer.porcentaje_descuento_aumento || 0;

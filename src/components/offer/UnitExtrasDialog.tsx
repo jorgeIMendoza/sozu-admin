@@ -27,6 +27,16 @@ const KIND_META: Record<ExtraKind, { title: string; singular: string; icon: type
 const formatM2 = (m2?: number) =>
   m2 != null && m2 > 0 ? `${m2.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²` : null;
 
+const formatCurrency = (v?: number) =>
+  v != null && v > 0
+    ? new Intl.NumberFormat("es-MX", {
+        style: "currency",
+        currency: "MXN",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(v)
+    : null;
+
 // % sin decimales innecesarios: 5 → "5%", 16.29 → "16.29%".
 const fmtPct = (n: number) =>
   `${n.toLocaleString("es-MX", { maximumFractionDigits: 2 })}%`;
@@ -77,6 +87,7 @@ const UnitExtrasDialog = ({ open, onOpenChange, kind, bodegas, estacionamientos 
           ubicacion: b.ubicacion,
           m2: b.m2,
           incluido: b.incluido,
+          costo: b.costo,
           tipo: undefined as string | undefined,
           pago: b.pago as OfertaBodegaPago | undefined,
         }))
@@ -86,6 +97,7 @@ const UnitExtrasDialog = ({ open, onOpenChange, kind, bodegas, estacionamientos 
           ubicacion: e.ubicacion,
           m2: e.m2,
           incluido: e.incluido,
+          costo: undefined as number | undefined,
           tipo: e.tipo,
           pago: undefined as OfertaBodegaPago | undefined,
         }));
@@ -106,6 +118,7 @@ const UnitExtrasDialog = ({ open, onOpenChange, kind, bodegas, estacionamientos 
         <div className="space-y-3 max-h-[60vh] overflow-y-auto">
           {items.map((it) => {
             const m2 = formatM2(it.m2);
+            const costo = kind === "bodega" ? formatCurrency(it.costo) : null;
             const pago = kind === "bodega" ? it.pago : undefined;
             const tramos = pago ? esquemaTramos(pago) : [];
             return (
@@ -129,6 +142,17 @@ const UnitExtrasDialog = ({ open, onOpenChange, kind, bodegas, estacionamientos 
                   {it.ubicacion && <DetailChip icon={MapPin} label={it.ubicacion} />}
                   {m2 && <DetailChip icon={Ruler} label={m2} />}
                 </div>
+
+                {costo && (
+                  <div className="mt-3 pt-3 border-t border-border/50 flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-bold tabular-nums">{costo}</span>
+                    {it.incluido && (
+                      <span className="text-[11px] italic text-muted-foreground text-right">
+                        se sumará en el precio total de la oferta
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {pago && (tramos.length > 0 || pago.clabeStp) && (
                   <div className="mt-3 pt-3 border-t border-border/50 space-y-2.5">

@@ -168,7 +168,14 @@ const OfferPropertyDetails = ({
                   <StatTile
                     icon={Package}
                     label={`${bodegas!.length} bodega${bodegas!.length === 1 ? "" : "s"}`}
-                    sublabel={bodegaIncluida ? "Incluida" : undefined}
+                    sublabel={(() => {
+                      const total = bodegas!.reduce((s, b) => s + (b.costo ?? 0), 0);
+                      const costoTxt = total > 0
+                        ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(total)
+                        : null;
+                      if (bodegaIncluida) return costoTxt ? `Incluida · ${costoTxt}` : "Incluida";
+                      return costoTxt ?? undefined;
+                    })()}
                     onClick={() => setDialogKind("bodega")}
                   />
                 )}

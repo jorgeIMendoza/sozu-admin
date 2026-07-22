@@ -6,6 +6,7 @@ import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } 
 import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { getBodegasIncluidasCosto } from "./included-bodegas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -484,6 +485,12 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const listPrice    = Number(propiedad.precio_lista ?? 0);
   const selectedId   = oferta.id_esquema_pago_seleccionado;
 
+  // Bodegas incluidas (es_incluido): su valor suma a la BASE del precio final,
+  // no al precio de lista mostrado. base = precio_lista_depa + Σ (precio/m² × m²).
+  // El descuento del esquema se aplica sobre esta base (ver calcPaymentPlans).
+  const { total: bodegasIncluidasTotal } = await getBodegasIncluidasCosto(propiedadId);
+  const calcBasePrice = listPrice + bodegasIncluidasTotal;
+
   // Si el esquema seleccionado fue VERSIONADO (desactivado al editarlo), no aparece en la
   // lista activa del proyecto. Lo traemos aparte para que la oferta del cliente siga
   // mostrando su plan CONGELADO (los porcentajes con los que lo aceptó).
@@ -539,7 +546,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     ?? (proyecto as any).fecha_entrega
     ?? null;
 
-  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
+  const paymentPlans = calcPaymentPlans(filteredEsqs, calcBasePrice, oferta.fecha_generacion, entregaFecha);
 
   // 9b. If manual scheme selected, override with actual acuerdos when plan was modified
   if (selectedIsManual && selectedId && paymentPlans.length > 0) {
@@ -751,15 +758,30 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     }
   }
 
-  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => ({
-    id: b.id,
-    nombre: b.nombre ?? "",
-    ubicacion: b.ubicacion ?? undefined,
-    m2: b.m2 != null ? Number(b.m2) : undefined,
-    incluido: !!b.es_incluido,
-    idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
-    pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
-  }));
+  // Precio/m² de cada bodega (productos_servicios.precio_lista) → costo = precio/m² × m².
+  const bodegaPrecioByProducto = new Map<number, number>();
+  if (bodegaProductoIds.length > 0) {
+    const { data: prods } = await (supabase as any)
+      .from("productos_servicios")
+      .select("id, precio_lista")
+      .in("id", bodegaProductoIds);
+    for (const pr of (prods as any[]) ?? []) bodegaPrecioByProducto.set(pr.id, Number(pr.precio_lista ?? 0));
+  }
+
+  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => {
+    const m2 = b.m2 != null ? Number(b.m2) : undefined;
+    const precioM2 = b.id_producto != null ? bodegaPrecioByProducto.get(Number(b.id_producto)) ?? 0 : 0;
+    return {
+      id: b.id,
+      nombre: b.nombre ?? "",
+      ubicacion: b.ubicacion ?? undefined,
+      m2,
+      incluido: !!b.es_incluido,
+      idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
+      costo: precioM2 * (m2 ?? 0),
+      pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
+    };
+  });
   const estacionamientos = ((estacionamientosRows as any[]) ?? []).map((e) => ({
     id: e.id,
     nombre: e.nombre ?? "",
@@ -852,6 +874,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       nearby:  [],
     },
     paymentPlans,
+    selectedPlanId: selectedId != null ? String(selectedId) : undefined,
     prospectEmail: (leadPersona as any)?.email ?? undefined,
     generatedAt: oferta.fecha_generacion ?? new Date().toISOString(),
     generatedBy: oferta.email_creador ?? "SOZU",
