@@ -274,6 +274,8 @@ export interface OfertaComercial {
   amenities: string[];
   location: { address: string; lat: number; lng: number; nearby: string[] };
   paymentPlans: PaymentPlan[];
+  /** Id del esquema de pago seleccionado en la oferta (para resaltar su precio). */
+  selectedPlanId?: string;
   generatedAt: string;
   generatedBy: string;
   agentId: string;
@@ -323,6 +325,8 @@ export interface OfertaBodega {
   incluido: boolean;
   /** Producto al que pertenece (bodegas.id_producto) — enlaza con su oferta/esquema. */
   idProducto?: number;
+  /** Costo de la bodega = productos_servicios.precio_lista (precio/m²) × m². */
+  costo?: number;
   /** Esquema de pago + CLABE de la bodega (oferta de producto del mismo lead). */
   pago?: OfertaBodegaPago;
 }
