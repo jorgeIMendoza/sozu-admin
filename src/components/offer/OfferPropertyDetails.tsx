@@ -155,6 +155,15 @@ const OfferPropertyDetails = ({
                   </Fragment>
                 );
               })}
+            {/* Total = precio de lista de la propiedad + costo de bodegas incluidas */}
+            {(() => {
+              const bodegaTotal = (bodegas ?? [])
+                .filter((b) => b.incluido)
+                .reduce((s, b) => s + (b.costo ?? 0), 0);
+              return bodegaTotal > 0 ? (
+                <SpecRow label="Total" value={formatMXN(property.listPrice + bodegaTotal)} mono highlight />
+              ) : null;
+            })()}
           </div>
 
           {/* Right: características + extras - cada dato UNA sola vez */}
