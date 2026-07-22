@@ -13,10 +13,11 @@ import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
-  DocEstatusBadge, InfoRow,
+  InfoRow,
   INFO_TABS, ACTIVITY_TABS,
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
+import { CuentaDocumentosExpediente } from '@/components/admin/CuentaDocumentosExpediente';
 
 export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
   const [infoTab, setInfoTab] = useState<InfoTab>('resumen');
@@ -26,7 +27,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     cuentaId, precio_final, totalPagado, saldoPendiente, parcialidadesVencidas,
     montoVencido, pagadoEfectivo, limiteEfectivo, aunPermitido, acuerdosPendientes,
     porcentajePagado, montoValidado, montoSinValidar,
-    acuerdos, docs, docsLoading, aplicacionesList,
+    acuerdos, aplicacionesList,
     expandedAcuerdos, setExpandedAcuerdos,
     planIsModified, esquemaNombreDisplay, esquemaNombre, esquemaPct,
     _planParcAcuerdos, _planEngTotal, _planParcTotal, _planEntTotal,
@@ -46,7 +47,13 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     proyectoNombre, edificioNombre, modeloNombre, numero_propiedad,
     productoNombre, estatusPropiedad, m2Interiores, m2Exteriores, precioM2,
     tipo,
+    propiedadId, tipoFinanciamiento, empresaVendedora, compradorPersonaIds, setReiniciarFinDialog,
   } = ctx;
+
+  const financiamientoLabel =
+    tipoFinanciamiento === 'CREDITO_HIPOTECARIO' ? 'Crédito hipotecario'
+    : tipoFinanciamiento === 'RECURSOS_PROPIOS' ? 'Recursos propios'
+    : 'No definido';
 
   const PlanRow = ({ label, pE, nP, pP, pEnt, amtE, amtP, amtEnt, active }: any) => {
     const perPago = nP > 0 ? amtP / nP : 0;
@@ -221,6 +228,16 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             Recalcular pagos
           </button>
         )}
+        {/* Reiniciar financiamiento — acción interna de emergencia. Solo si ya hay
+            un método elegido (tipo_financiamiento definido). */}
+        {(tipoFinanciamiento === 'CREDITO_HIPOTECARIO' || tipoFinanciamiento === 'RECURSOS_PROPIOS') && (
+          <button
+            onClick={() => setReiniciarFinDialog(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-background text-[12px] font-medium text-amber-600 hover:bg-amber-50 transition-colors"
+          >
+            <RefreshCw className="size-3.5" />Reiniciar financiamiento
+          </button>
+        )}
       </div>
 
       {/* Info section */}
@@ -259,33 +276,36 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                   <div className="flex items-start gap-3 py-2 border-b border-border/50">
                     <Hash className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
                     <span className="text-[12px] text-muted-foreground w-28 shrink-0">Oferta PDF</span>
-                    <button
-                      onClick={handleDownloadOferta}
-                      disabled={downloadingOferta}
-                      title="Descargar PDF de oferta"
-                      className="text-[12px] font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 disabled:opacity-40 transition-colors"
-                    >
-                      {downloadingOferta
-                        ? <span className="inline-flex items-center gap-1"><Loader2 className="size-3 animate-spin" />{formatOfertaId(ofertaId)}</span>
-                        : formatOfertaId(ofertaId)
-                      }
-                    </button>
+                    <IconTip label="Descargar PDF de la oferta">
+                      <button
+                        onClick={handleDownloadOferta}
+                        disabled={downloadingOferta}
+                        className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 disabled:opacity-40 transition-colors"
+                      >
+                        {downloadingOferta && <Loader2 className="size-3 animate-spin" />}
+                        {formatOfertaId(ofertaId)}
+                      </button>
+                    </IconTip>
                   </div>
                   <div className="flex items-start gap-3 py-2 border-b border-border/50">
                     <Hash className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
                     <span className="text-[12px] text-muted-foreground w-28 shrink-0">Oferta digital</span>
-                    <a
-                      href={`${window.location.origin}/oferta/${ofertaId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[12px] font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors"
-                    >
-                      {formatOfertaId(ofertaId)}
-                    </a>
+                    <IconTip label="Abrir oferta digital en nueva pestaña">
+                      <a
+                        href={`${window.location.origin}/oferta/${ofertaId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[12px] font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors"
+                      >
+                        {formatOfertaId(ofertaId)}
+                      </a>
+                    </IconTip>
                   </div>
                 </>
               )}
               {esquemaNombreDisplay && <InfoRow icon={Calendar} label="Plan de pagos" value={esquemaNombreDisplay} />}
+              <InfoRow icon={Building2} label="Empresa vendedora" value={empresaVendedora ?? 'Sin asignar'} />
+              <InfoRow icon={CreditCard} label="Financiamiento" value={financiamientoLabel} />
             </div>
           </div>
         )}
@@ -732,100 +752,20 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
         )}
 
         {activityTab === 'documentos' && (
-          <>
-            <div className="px-5 py-3 border-b border-border/50 flex items-center justify-between">
-              <p className="text-[11px] text-muted-foreground">
-                {docsLoading ? 'Cargando...' : `${docs.length} documento${docs.length !== 1 ? 's' : ''}`}
-              </p>
-              {!isEnDemanda && (
-                <button
-                  onClick={() => setUploadDialog(true)}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
-                >
-                  <Upload className="size-3.5" />Subir
-                </button>
-              )}
-            </div>
-            {docsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : docs.length === 0 ? (
-              <div className="px-5 py-12 text-center space-y-2">
-                <FileText className="size-7 text-muted-foreground/20 mx-auto" />
-                <p className="text-[13px] text-muted-foreground">Sin documentos registrados.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="sozu-thead">
-                      {['Archivo', 'Origen', 'Fecha', 'Estatus', ''].map((h) => (
-                        <th key={h} className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-center">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {docs.map((d: any) => (
-                      <tr key={d.id} className={cn('border-b border-border/50 transition-colors duration-100', d.missing ? 'bg-muted/20' : 'hover:bg-muted/40')}>
-                        <td className="px-4 py-2.5 text-center">
-                          <span className={cn('text-[12px]', d.missing && 'text-muted-foreground/60')}>{d.tipoNombre}</span>
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          {d.missing ? (
-                            <span className="text-[10px] text-muted-foreground/40">-</span>
-                          ) : (
-                            <span className={cn(
-                              'inline-block text-[10px] font-medium px-1.5 py-0.5 rounded',
-                              d.source === 'Cuenta' ? 'bg-primary/10 text-primary' :
-                              d.source === 'Propiedad' ? 'bg-blue-500/10 text-blue-600' :
-                              'bg-emerald-500/10 text-emerald-700'
-                            )}>
-                              {d.source}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          {d.missing
-                            ? <span className="text-[11px] text-muted-foreground/50">Sin registro</span>
-                            : <span className="text-[12px] tabular-nums text-muted-foreground">{fmtDate(d.fecha)}</span>
-                          }
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          {d.missing
-                            ? <span className="text-[10px] text-muted-foreground/40">-</span>
-                            : <DocEstatusBadge id={d.estatusId} />
-                          }
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          <div className="inline-flex items-center gap-1">
-                            {d.url && (
-                              <button
-                                onClick={() => setPdfPreviewModal({ url: d.url, title: d.tipoNombre })}
-                                className="inline-flex items-center justify-center p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                                title="Ver documento"
-                              >
-                                <Eye className="size-3.5" />
-                              </button>
-                            )}
-                            {!isEnDemanda && (
-                              <button
-                                onClick={() => { setUploadDialog(true); }}
-                                className="inline-flex items-center justify-center p-1 rounded hover:bg-emerald-50 text-muted-foreground/50 hover:text-emerald-600 transition-colors"
-                                title={d.missing ? 'Subir documento' : 'Reemplazar documento'}
-                              >
-                                <Upload className="size-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+          <CuentaDocumentosExpediente
+            cuentaId={cuentaId}
+            propiedadId={propiedadId}
+            personaIds={compradorPersonaIds}
+            onView={(url, title) => setPdfPreviewModal({ url, title })}
+            headerRight={!isEnDemanda ? (
+              <button
+                onClick={() => setUploadDialog(true)}
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                <Upload className="size-3.5" />Subir
+              </button>
+            ) : undefined}
+          />
         )}
       </div>
     </>

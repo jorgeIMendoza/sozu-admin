@@ -787,6 +787,73 @@ const FinancialSideCard = ({ investment, onPay }: { investment: InvestmentProper
         </div>
       </div>
 
+      {/* Desglose a escrituración: departamento + estacionamiento (cat 1) y bodega
+          (cat 2). Informativo — cada uno se paga en su propia cuenta, no se mezcla.
+          Precio 0 = incluido (no es gratis, ya viene en el depa). El total suma los
+          saldos pendientes (lo que falta pagar para escriturar). */}
+      {(() => {
+        const complementos = (investment.additionalProducts ?? []).filter(
+          (p) => p.categoriaId === 1 || p.categoriaId === 2,
+        );
+        if (complementos.length === 0) return null;
+        const precioDepto = Math.max(0, financials.initialPrice);
+        const restanteDepto = Math.max(0, financials.pendingBalance);
+        const precioComplementos = complementos.reduce((s, p) => s + Math.max(0, p.totalPrice), 0);
+        const restanteComplementos = complementos.reduce((s, p) => s + Math.max(0, p.pendingBalance), 0);
+        const precioTotal = precioDepto + precioComplementos;
+        const totalEscriturar = restanteDepto + restanteComplementos;
+        return (
+          <div className="pb-4 border-b border-border mb-4">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">
+              Desglose a escrituración
+            </p>
+            <div className="rounded-xl border border-border bg-muted/30 divide-y divide-border/60">
+              <div className="flex items-start justify-between gap-3 px-3 py-2">
+                <span className="text-[12px] text-muted-foreground min-w-0">Departamento</span>
+                <div className="text-right shrink-0">
+                  <p className="text-[13px] font-semibold tabular-nums text-foreground leading-tight">{fmtMXN(restanteDepto)}</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">Lista {fmtMXN(precioDepto)}</p>
+                </div>
+              </div>
+              {complementos.map((p) => {
+                const incluido = p.totalPrice <= 0.01;
+                const pagado = !incluido && p.pendingBalance <= 0.01;
+                return (
+                  <div key={p.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                    <span className="text-[12px] text-muted-foreground min-w-0 break-words">{p.name}</span>
+                    <div className="text-right shrink-0">
+                      {incluido ? (
+                        <span className="inline-flex items-center text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Incluido</span>
+                      ) : pagado ? (
+                        <>
+                          <span className="inline-flex items-center text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5">Pagado</span>
+                          <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">Lista {fmtMXN(p.totalPrice)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[13px] font-semibold tabular-nums text-foreground leading-tight">{fmtMXN(p.pendingBalance)}</p>
+                          <p className="text-[10px] text-muted-foreground tabular-nums">Lista {fmtMXN(p.totalPrice)}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex items-start justify-between gap-3 px-3 py-2 bg-primary/[0.04]">
+                <span className="text-[12px] font-semibold text-foreground min-w-0">Total a escriturar</span>
+                <div className="text-right shrink-0">
+                  <p className="text-[13px] font-bold tabular-nums text-foreground leading-tight">{fmtMXN(totalEscriturar)}</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">Lista {fmtMXN(precioTotal)}</p>
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
+              El monto grande es lo que falta pagar (restante) para escriturar; "Lista" es el precio total. Cada complemento se paga en su propia cuenta, aparte del departamento.
+            </p>
+          </div>
+        );
+      })()}
+
       {property.deliveryDate && property.deliveryDate !== "-" && (
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-4">
           <Calendar className="w-3.5 h-3.5 shrink-0" />

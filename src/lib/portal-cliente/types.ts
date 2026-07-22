@@ -87,6 +87,8 @@ export interface PaymentRecord {
 export interface AdditionalProduct {
   id: string;
   name: string;
+  /** Categoría del producto: 1=Estacionamiento, 2=Bodega, 3=Muebles, 4=Condensadora. */
+  categoriaId?: number | null;
   description?: string;
   totalPrice: number;
   totalPaid: number;
