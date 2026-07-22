@@ -57,6 +57,24 @@ import {
   taskStatusLabel, TASK_STATUS, type DealStage,
 } from "@/lib/crm-lib";
 import {
+  fmtMoneda, stripHtml, dealInitials, etapaColorClasses,
+  advanceByRecurrence, fmtDueDateTime, fmtCitaWhen,
+  TIPO_NEGOCIO_OPTS, PRIORIDAD_META,
+} from "@/lib/crm-format";
+import {
+  META_LEAD_STATUSES, useLeadStates, fetchCrmCategorias,
+  fetchCrmOwners, type CrmOwner,
+} from "@/hooks/useCrmCatalogos";
+import {
+  PERSONA_EMAIL_RE, PERSONA_PHONE_RE, MSG_TELEFONO_INVALIDO,
+  MSG_EMAIL_INVALIDO, mensajeErrorContacto,
+} from "@/lib/crm-validaciones";
+import {
+  CRM_ATTACH_BUCKET, classifyAttachment, humanFileSize,
+  saveNoteAttachments, fetchNoteAttachments, NoteAttachmentsStrip,
+  type AttachKind, type PendingAttachment, type NoteAttachment,
+} from "./crm-adjuntos";
+import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
 } from "@/lib/crm-lead-scoring";
 import { aggregateAgentPerf, fmtNum, fmtPct } from "@/lib/crm-analytics";
@@ -115,56 +133,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
 
 const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
 
-const META_LEAD_STATUSES: { value: string; label: string; color?: string }[] = [
-  { value: "nuevo", label: "Nuevo" },
-  { value: "en_curso", label: "En curso" },
-  { value: "negocio_abierto", label: "Negocio abierto" },
-  { value: "sin_calificar", label: "Sin calificar" },
-  { value: "intento_contacto", label: "Intento de contacto" },
-  { value: "conectado", label: "Conectado" },
-  { value: "programo_cita", label: "Programó cita" },
-  { value: "asistio_cita", label: "Asistió a cita" },
-  { value: "fuera_presupuesto", label: "Fuera de presupuesto" },
-  { value: "compra_futura", label: "Compra futura" },
-  { value: "sin_respuesta_7", label: "Sin respuesta 7+" },
-  { value: "tiempo_entrega", label: "Tiempo de entrega" },
-  { value: "asesor_inmobiliario", label: "Asesor inmobiliario" },
-  { value: "registro_error", label: "Registro por error" },
-  { value: "proveedor", label: "Proveedor" },
-  { value: "fuera_area", label: "Fuera del área" },
-];
 
-// Estados de lead configurables (tabla crm_estados_lead, administrable en Configuración
-// › Estados de lead). Si la tabla aún no existe o está vacía, cae al catálogo fijo de
-// arriba para no romper. La `clave` es el valor guardado en crm_leads_atribucion.estatus_lead.
-type LeadStateOpt = { value: string; label: string; color?: string };
-const fetchLeadStates = async (): Promise<LeadStateOpt[]> => {
-  const { data, error } = await (supabase as any)
-    .from("crm_estados_lead")
-    .select("clave, nombre, color, orden")
-    .eq("activo", true)
-    .order("orden");
-  if (error || !data || data.length === 0) return META_LEAD_STATUSES;
-  return data.map((r: any) => ({ value: r.clave, label: r.nombre, color: r.color ?? undefined }));
-};
-const useLeadStates = () => useQuery({ queryKey: ["crm-estados-lead"], queryFn: fetchLeadStates });
-
-// Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
-const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-const PERSONA_PHONE_RE = /^[0-9 ()+\-]{5,20}$/;
-const MSG_TELEFONO_INVALIDO = "El teléfono no es válido. Usa solo números (opcional + espacios o guiones), de 5 a 20 caracteres. Ej: 3312345678";
-const MSG_EMAIL_INVALIDO = "El correo no es válido. Debe tener el formato nombre@dominio.com";
-
-// Traduce errores crudos de la BD (en inglés) a un mensaje claro en español.
-function mensajeErrorContacto(e: any): string {
-  const m = (e?.message ?? "").toLowerCase();
-  if (m.includes("telefono_formato")) return MSG_TELEFONO_INVALIDO;
-  if (m.includes("email_formato")) return MSG_EMAIL_INVALIDO;
-  if (m.includes("curp_formato")) return "El CURP no tiene un formato válido.";
-  if (m.includes("rfc_formato")) return "El RFC no tiene un formato válido.";
-  if (m.includes("duplicate") || m.includes("unique")) return "Ese contacto ya existe (dato duplicado).";
-  return "No se pudo guardar el contacto. Revisa los datos e inténtalo de nuevo.";
-}
 
 function loadContactColumns(): ColumnConfig[] {
   if (typeof window === "undefined") return DEFAULT_CONTACT_COLUMNS;
@@ -225,48 +194,7 @@ function DateChip({ date }: { date: string | null }) {
 }
 
 // ─── Categorías de contacto (procedencia) ──────────────────────────────────────
-const fetchCrmCategorias = async (): Promise<{ id: number; nombre: string }[]> => {
-  const { data, error } = await (supabase as any)
-    .from("crm_categorias")
-    .select("id, nombre")
-    .eq("activo", true)
-    .order("orden");
-  if (error) return []; // tabla aún no desplegada en este ambiente → sin categorías
-  return data ?? [];
-};
 
-type CrmOwner = { id: string; full_name: string; email: string };
-
-// Propietarios posibles del CRM = usuarios activos cuyo rol tiene acceso a alguna
-// ruta /admin/portal-crm/... (mismo criterio que el selector "Ver como"). Se deriva
-// dinámicamente en vez de hardcodear rol_ids: así incluye Super Admin, Agente Interno,
-// Admin CRM y cualquier otro rol admin del CRM (p. ej. el que solo existe en producción)
-// sin depender del ambiente. Fallback a [1, 9] si aún no hay submenús del CRM en BD.
-const fetchCrmOwners = async (): Promise<CrmOwner[]> => {
-  let rolIds: number[] = [];
-  const { data: subs } = await (supabase as any)
-    .from("submenus")
-    .select("id")
-    .like("vista_front_end", "/admin/portal-crm/%");
-  const submenuIds = (subs ?? []).map((s: any) => s.id);
-  if (submenuIds.length) {
-    const { data: perms } = await (supabase as any)
-      .from("submenus_permisos")
-      .select("rol_id")
-      .in("submenu_id", submenuIds)
-      .eq("activo", true);
-    rolIds = Array.from(new Set((perms ?? []).map((p: any) => p.rol_id)));
-  }
-  if (!rolIds.length) rolIds = [1, 9]; // fallback: Super Admin + Agente Interno
-  const { data } = await (supabase as any)
-    .from("usuarios")
-    .select("auth_user_id, nombre, email")
-    .eq("activo", true)
-    .in("rol_id", rolIds);
-  return (data ?? [])
-    .map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email }))
-    .sort((a: CrmOwner, b: CrmOwner) => (a.full_name ?? "").localeCompare(b.full_name ?? "")) as CrmOwner[];
-};
 
 // Categoría del contacto en la ficha (select único; persiste al instante).
 function ContactCategories({ contactId }: { contactId: number }) {
@@ -952,102 +880,6 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
 
-// ─── Adjuntos de notas (imágenes / archivos / notas de voz) ─────────────────────
-
-const CRM_ATTACH_BUCKET = "documentos";
-
-type AttachKind = "image" | "file" | "audio";
-type PendingAttachment = { id: string; file: File; tipo: AttachKind; nombre: string; previewUrl: string };
-type NoteAttachment = { id: number; url: string; tipo: string; nombre: string; mime: string | null };
-
-const classifyAttachment = (file: File): AttachKind => {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("audio/")) return "audio";
-  return "file";
-};
-
-const humanFileSize = (bytes?: number | null): string => {
-  if (!bytes && bytes !== 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-// Sube un archivo al storage y devuelve su URL pública + metadatos.
-async function uploadCrmNoteFile(file: File): Promise<{ url: string; nombre: string; mime: string | null; tamano: number } | null> {
-  const safeExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
-  const path = `crm-notes/${crypto.randomUUID()}.${safeExt}`;
-  const { data, error } = await supabase.storage
-    .from(CRM_ATTACH_BUCKET)
-    .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
-  if (error || !data) return null;
-  const { data: pub } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
-  return { url: pub.publicUrl, nombre: file.name, mime: file.type || null, tamano: file.size };
-}
-
-// Sube y registra los adjuntos de una nota (best-effort: si la tabla aún no existe,
-// no rompe el guardado de la nota).
-async function saveNoteAttachments(noteId: number, userId: string | undefined, pend: PendingAttachment[]): Promise<void> {
-  for (const a of pend) {
-    const up = await uploadCrmNoteFile(a.file);
-    if (!up) { toast.error(`No se pudo subir ${a.nombre}`); continue; }
-    const { error } = await (supabase as any).from("crm_notas_adjuntos").insert({
-      id_nota: noteId, tipo: a.tipo, url: up.url, nombre: up.nombre,
-      mime: up.mime, tamano_bytes: up.tamano, id_usuario: userId ?? null,
-    });
-    if (error) console.warn("crm_notas_adjuntos no disponible:", error.message);
-  }
-}
-
-// Chips/vista previa de adjuntos ya guardados en una nota.
-function NoteAttachmentsStrip({ attachments }: { attachments: NoteAttachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {attachments.map((a) => {
-        if (a.tipo === "image") {
-          return (
-            <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className="block">
-              <img src={a.url} alt={a.nombre} className="h-24 w-24 object-cover rounded-md border border-border" />
-            </a>
-          );
-        }
-        if (a.tipo === "audio") {
-          return (
-            <div key={a.id} className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 p-2 max-w-full">
-              <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Mic className="h-3 w-3" />{a.nombre}</span>
-              <audio controls src={a.url} className="h-8 max-w-[240px]" />
-            </div>
-          );
-        }
-        return (
-          <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1 text-xs text-foreground hover:bg-muted transition-colors">
-            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="truncate max-w-[180px]">{a.nombre}</span>
-            <Download className="h-3 w-3 text-muted-foreground shrink-0" />
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-// Carga los adjuntos de un conjunto de notas → Record<id_nota, NoteAttachment[]>.
-// Best-effort: si la tabla no existe en el ambiente, devuelve {} sin romper.
-async function fetchNoteAttachments(noteIds: number[]): Promise<Record<number, NoteAttachment[]>> {
-  if (!noteIds.length) return {};
-  const res = await (supabase as any).from("crm_notas_adjuntos")
-    .select("id, id_nota, url, tipo, nombre, mime")
-    .in("id_nota", noteIds).eq("activo", true)
-    .order("id", { ascending: true });
-  if (res.error) return {};
-  const byNote: Record<number, NoteAttachment[]> = {};
-  for (const r of (res.data ?? [])) {
-    (byNote[r.id_nota] ??= []).push({ id: r.id, url: r.url, tipo: r.tipo, nombre: r.nombre, mime: r.mime ?? null });
-  }
-  return byNote;
-}
 
 // ─── Rich Note Editor ─────────────────────────────────────────────────────────
 
@@ -1841,9 +1673,6 @@ function DField({ label, children }: { label: string; children: React.ReactNode 
 
 type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean; attachments?: any[] };
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
 
 function HL({ label, value }: { label: string; value: string }) {
   return (
@@ -2625,24 +2454,6 @@ function CitaDialog({ contactId, owners, userId, onSaved, trigger }: any) {
 // ─── Negocios en la ficha del contacto (estilo HubSpot) ───────────────────────
 
 // Formatea un monto con su moneda; cae a fmtMXN si la moneda no es válida.
-function fmtMoneda(v: number, moneda?: string): string {
-  try {
-    return new Intl.NumberFormat("es-MX", { style: "currency", currency: moneda || "MXN", maximumFractionDigits: 0 }).format(v);
-  } catch {
-    return fmtMXN(v);
-  }
-}
-
-// Catálogos fijos del negocio (según el form de HubSpot).
-const TIPO_NEGOCIO_OPTS: { value: string; label: string }[] = [
-  { value: "cliente_nuevo", label: "Cliente nuevo" },
-  { value: "cliente_existente", label: "Cliente existente" },
-];
-const PRIORIDAD_META: Record<string, { label: string; dot: string }> = {
-  baja: { label: "Baja", dot: "bg-emerald-500" },
-  media: { label: "Media", dot: "bg-amber-500" },
-  alta: { label: "Alta", dot: "bg-red-500" },
-};
 
 // Tarjeta lateral "Negocios (N)" con lista de negocios asociados + botón Agregar.
 function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
@@ -3068,21 +2879,6 @@ function DealMetric({ label, value }: { label: string; value: string }) {
 
 // Colores de columna del tablero (etapas dinámicas): ganado=verde, perdido=rojo,
 // el resto cicla una paleta por índice.
-const BOARD_COLORS = [
-  "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-  "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
-  "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-  "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
-];
-function etapaColorClasses(et: any, i: number): string {
-  if (et?.es_ganado) return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
-  if (et?.es_perdido) return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-  return BOARD_COLORS[i % BOARD_COLORS.length];
-}
 
 export function CrmDeals() {
   const qc = useQueryClient();
@@ -3624,10 +3420,6 @@ function BoardColumn({ etapa, deals, colorClass, collapsed, onToggle, onOpen, on
 }
 
 // Iniciales para el avatar del contacto en la tarjeta.
-function dealInitials(name?: string | null): string {
-  if (!name) return "?";
-  return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
-}
 // Fondo/tono del pill de prioridad.
 const PRIORIDAD_PILL: Record<string, string> = {
   baja: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
@@ -4885,16 +4677,6 @@ function buildTaskInsert(form: TaskFormState, contactId: number) {
   };
 }
 
-function advanceByRecurrence(d: Date, rec: string): Date {
-  switch (rec) {
-    case "diaria": return addDays(d, 1);
-    case "semanal": return addWeeks(d, 1);
-    case "quincenal": return addWeeks(d, 2);
-    case "mensual": return addMonths(d, 1);
-    case "anual": return addYears(d, 1);
-    default: return d;
-  }
-}
 
 // Al completar una tarea recurrente, genera la siguiente ocurrencia (mismo offset de
 // recordatorio respecto al vencimiento). Se llama tras marcarla completada.
@@ -4922,12 +4704,6 @@ async function regenerateRecurringTask(t: {
   });
 }
 
-// Formato de vencimiento con hora cuando no es medianoche.
-function fmtDueDateTime(iso: string): string {
-  const d = parseISO(iso);
-  const base = isToday(d) ? "Hoy" : fmtDateFns(d, "dd MMM yyyy");
-  return d.getHours() === 0 && d.getMinutes() === 0 ? base : `${base} · ${fmtDateFns(d, "HH:mm")}`;
-}
 
 // Campos compartidos del formulario de tarea (título, tipo, prioridad, vencimiento+hora,
 // recordatorio, recurrencia, asignado, notas). El contacto lo maneja cada diálogo.
@@ -5057,18 +4833,6 @@ function buildCitaInsert(form: CitaFormState, contactId: number) {
 }
 
 // Formato de fecha/hora de la cita: "Hoy · 09:00–09:30" o "12 ago 2026 · 11:00".
-function fmtCitaWhen(inicio?: string | null, fin?: string | null): string {
-  if (!inicio) return "Sin fecha";
-  const di = parseISO(inicio);
-  if (isNaN(di.getTime())) return "Sin fecha";
-  const base = isToday(di) ? "Hoy" : fmtDateFns(di, "dd MMM yyyy");
-  const hi = fmtDateFns(di, "HH:mm");
-  if (fin) {
-    const df = parseISO(fin);
-    if (!isNaN(df.getTime())) return `${base} · ${hi}–${fmtDateFns(df, "HH:mm")}`;
-  }
-  return `${base} · ${hi}`;
-}
 
 // Campos compartidos del formulario de cita. El contacto lo maneja cada diálogo.
 function CitaFormFields({ form, setForm, owners }: {
@@ -5542,672 +5306,5 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ─── CrmSequences ─────────────────────────────────────────────────────────────
-
-export function CrmSequences() {
-  const [activeSeq, setActiveSeq] = useState(SEQUENCES[0].id);
-  const seq = SEQUENCES.find(s => s.id === activeSeq) ?? SEQUENCES[0];
-
-  const CHANNEL_ICON: Record<string, React.ReactNode> = {
-    call: <Phone className="w-3.5 h-3.5 text-blue-500" />,
-    whatsapp_mock: <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />,
-    email_mock: <Mail className="w-3.5 h-3.5 text-violet-500" />,
-    task: <ClipboardList className="w-3.5 h-3.5 text-amber-500" />,
-  };
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Secuencias" subtitle="Cadencias de seguimiento por stage del lead" />
-      <div className="flex gap-4">
-        <div className="w-52 shrink-0 space-y-1">
-          {SEQUENCES.map(s => (
-            <button key={s.id} onClick={() => setActiveSeq(s.id)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeSeq === s.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-              <div className="font-medium truncate">{s.name}</div>
-              <div className="text-[11px] opacity-70 truncate">{s.stage}</div>
-            </button>
-          ))}
-        </div>
-        <Card className="flex-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{seq.name}</CardTitle>
-            <p className="text-xs text-muted-foreground">{seq.objective}</p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {seq.steps.map((step, i) => (
-                <div key={i} className="flex gap-3 items-start p-3 rounded-lg bg-muted/40 border">
-                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-background border text-[11px] font-semibold shrink-0">{i + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {CHANNEL_ICON[step.channel]}
-                      <span className="text-xs font-medium capitalize">{step.channel.replace("_mock","").replace("_"," ")}</span>
-                      <span className="ml-auto text-[11px] text-muted-foreground">{step.timing}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{step.copy}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1 italic">Objetivo: {step.objective}</p>
-                  </div>
-                  <button onClick={() => { navigator.clipboard.writeText(step.copy); toast.success("Copiado"); }}
-                    className="shrink-0 p-1 hover:bg-background rounded transition-colors">
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmRouting ───────────────────────────────────────────────────────────────
-
-export function CrmRouting() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: unassigned = [], isLoading } = useQuery({
-    queryKey: ["crm-unassigned", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,source_name,created_at").eq("organization_id", orgId)
-        .is("contact_owner", null).order("created_at", { ascending: true }).limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const MOCK_ADVISORS: AdvisorLoad[] = [
-    { user_id: "a1", name: "Ana García", active_leads: 12, pending_tasks: 3, lead_to_appt_rate: 0.32, appt_to_reservation_rate: 0.21 },
-    { user_id: "a2", name: "Carlos López", active_leads: 8, pending_tasks: 1, lead_to_appt_rate: 0.41, appt_to_reservation_rate: 0.18 },
-    { user_id: "a3", name: "María Torres", active_leads: 19, pending_tasks: 7, lead_to_appt_rate: 0.28, appt_to_reservation_rate: 0.25 },
-  ];
-
-  const assign = useMutation({
-    mutationFn: async ({ contactId, advisorId }: { contactId: string; advisorId: string }) => {
-      await (supabase as any).from("crm_contacts").update({ contact_owner: advisorId }).eq("id", contactId);
-      await (supabase as any).from("lead_assignment_history").insert({ contact_id: contactId, assigned_to: advisorId, organization_id: orgId, reason: "manual_routing" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-unassigned", orgId] }); toast.success("Lead asignado"); },
-  });
-
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Routing" subtitle="Asignación de leads no asignados a asesores" />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {MOCK_ADVISORS.map(a => (
-          <Card key={a.user_id} className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold">{a.name[0]}</div>
-              <div><p className="text-sm font-medium">{a.name}</p></div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>Leads activos</span><span className="text-right font-medium text-foreground">{a.active_leads}</span>
-              <span>Lead→Cita</span><span className="text-right font-medium text-foreground">{fmtPct(a.lead_to_appt_rate)}</span>
-              <span>Cita→Apart.</span><span className="text-right font-medium text-foreground">{fmtPct(a.appt_to_reservation_rate)}</span>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Estatus</TableHead>
-            <TableHead>Fuente</TableHead>
-            <TableHead>Creado</TableHead>
-            <TableHead>Recomendado</TableHead>
-            <TableHead>Asignar a</TableHead>
-            <TableHead></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
-            ) : unassigned.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin leads sin asignar</TableCell></TableRow>
-            ) : unassigned.map((c: any) => {
-              const rec = recommendOwner(c, MOCK_ADVISORS);
-              const selectedAdvisor = overrides[c.id] ?? rec?.recommended_owner_id ?? "";
-              return (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.full_name}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{leadStatusLabel[c.lead_status] ?? c.lead_status}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{c.source_name ?? "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{relTime(c.created_at)}</TableCell>
-                  <TableCell className="text-xs">{rec ? <span title={rec.reason}>{rec.recommended_owner_name}</span> : "—"}</TableCell>
-                  <TableCell>
-                    <Select value={selectedAdvisor} onValueChange={v => setOverrides(prev => ({ ...prev, [c.id]: v }))}>
-                      <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Elegir" /></SelectTrigger>
-                      <SelectContent>{MOCK_ADVISORS.map(a => <SelectItem key={a.user_id} value={a.user_id}>{a.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => selectedAdvisor && assign.mutate({ contactId: c.id, advisorId: selectedAdvisor })}
-                      disabled={!selectedAdvisor || assign.isPending}>
-                      <UserPlus className="w-3.5 h-3.5 mr-1" />Asignar
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmAutomationRules ───────────────────────────────────────────────────────
-
-export function CrmAutomationRules() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: dbRules = [], isLoading } = useQuery({
-    queryKey: ["crm-automation-rules", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_automation_rules")
-        .select("*").eq("organization_id", orgId).order("created_at");
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const seedDefaults = useMutation({
-    mutationFn: async () => {
-      if (!orgId) return;
-      const rows = DEFAULT_AUTOMATION_RULES.map(r => ({ ...r, organization_id: orgId, is_active: true }));
-      await (supabase as any).from("crm_automation_rules").upsert(rows, { onConflict: "organization_id,name" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-automation-rules", orgId] }); toast.success("Reglas base sembradas"); },
-  });
-
-  const toggleActive = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      await (supabase as any).from("crm_automation_rules").update({ is_active }).eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-automation-rules", orgId] }),
-  });
-
-  const PRIORITY_TONE: Record<string, string> = {
-    urgent: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    normal: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-
-  const displayRules = dbRules.length ? dbRules : DEFAULT_AUTOMATION_RULES.map((r, i) => ({ ...r, id: `mock-${i}`, is_active: true, isMock: true }));
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Reglas de automatización" subtitle="Triggers automáticos para acciones del CRM">
-        <Button size="sm" variant="outline" onClick={() => seedDefaults.mutate()} disabled={seedDefaults.isPending}>
-          <Zap className="w-4 h-4 mr-1" />{seedDefaults.isPending ? "Sembrando…" : "Sembrar defaults"}
-        </Button>
-      </PageHeader>
-
-      {dbRules.length === 0 && (
-        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
-          <TriangleAlert className="w-4 h-4 shrink-0" />
-          Mostrando reglas de ejemplo. Presiona "Sembrar defaults" para guardarlas en BD.
-        </div>
-      )}
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Nombre</TableHead>
-            <TableHead>Trigger</TableHead>
-            <TableHead>Acción</TableHead>
-            <TableHead>Prioridad</TableHead>
-            <TableHead>Activa</TableHead>
-            <TableHead></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : displayRules.map((rule: any) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium text-sm">{rule.name}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{rule.trigger_type?.replace(/_/g," ")}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{rule.action_type?.replace(/_/g," ")}</TableCell>
-                <TableCell><Badge className={`text-xs ${PRIORITY_TONE[rule.priority ?? "normal"]}`}>{rule.priority ?? "normal"}</Badge></TableCell>
-                <TableCell>
-                  <button onClick={() => !rule.isMock && toggleActive.mutate({ id: rule.id, is_active: !rule.is_active })}
-                    className={`w-9 h-5 rounded-full transition-colors ${rule.is_active ? "bg-emerald-500" : "bg-muted"}`} title={rule.isMock ? "Sembrar para activar" : ""}>
-                    <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ${rule.is_active ? "translate-x-4" : "translate-x-0"}`} />
-                  </button>
-                </TableCell>
-                <TableCell>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.info(`Simulando: ${rule.name}`)}>
-                    <PlayCircle className="w-3.5 h-3.5 mr-1" />Simular
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmEscalations ───────────────────────────────────────────────────────────
-
-export function CrmEscalations() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: escalations = [], isLoading } = useQuery({
-    queryKey: ["crm-escalations", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_escalations")
-        .select("id,title,severity,status,created_at,resolved_at,contacts(full_name)").eq("organization_id", orgId)
-        .order("created_at", { ascending: false }).limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const patch: any = { status };
-      if (status === "resolved") patch.resolved_at = new Date().toISOString();
-      await (supabase as any).from("crm_escalations").update(patch).eq("id", id);
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-escalations", orgId] }); toast.success("Escalación actualizada"); },
-  });
-
-  const SEVERITY_TONE: Record<string, string> = {
-    critical: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    warning: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    info: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-  const STATUS_TONE: Record<string, string> = {
-    open: "bg-red-500/15 text-red-700 dark:text-red-400",
-    acknowledged: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    resolved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-    dismissed: "bg-muted text-muted-foreground",
-  };
-
-  const MOCK_ESC = [
-    { id: "m1", title: "Lead hot sin contacto >4h", severity: "critical", status: "open", created_at: new Date(Date.now()-5*3600000).toISOString(), contacts: { full_name: "Jorge M." } },
-    { id: "m2", title: "Asesor con +10 tareas vencidas", severity: "warning", status: "acknowledged", created_at: new Date(Date.now()-2*3600000).toISOString(), contacts: null },
-    { id: "m3", title: "Deal sin next-task >48h", severity: "high", status: "open", created_at: new Date(Date.now()-26*3600000).toISOString(), contacts: { full_name: "Ana Ruiz" } },
-  ];
-
-  const display = escalations.length ? escalations : MOCK_ESC;
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Escalaciones" subtitle="SLA incumplidos y alertas del equipo" />
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Escalación</TableHead>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Severidad</TableHead>
-            <TableHead>Estatus</TableHead>
-            <TableHead>Creada</TableHead>
-            <TableHead>Acciones</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : display.map((e: any) => (
-              <TableRow key={e.id}>
-                <TableCell className="font-medium text-sm max-w-[200px] truncate">{e.title}</TableCell>
-                <TableCell className="text-sm">{e.contacts?.full_name ?? "—"}</TableCell>
-                <TableCell><Badge className={`text-xs ${SEVERITY_TONE[e.severity ?? "info"]}`}><ShieldAlert className="w-3 h-3 mr-1" />{e.severity}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${STATUS_TONE[e.status ?? "open"]}`}>{e.status}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground">{relTime(e.created_at)}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    {e.status === "open" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatus.mutate({ id: e.id, status: "acknowledged" })}>
-                        <Bell className="w-3 h-3 mr-1" />Ack
-                      </Button>
-                    )}
-                    {e.status !== "resolved" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatus.mutate({ id: e.id, status: "resolved" })}>
-                        <CheckCircle2 className="w-3 h-3 mr-1" />Resolver
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => updateStatus.mutate({ id: e.id, status: "dismissed" })}>
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmLeadIntelligence ──────────────────────────────────────────────────────
-
-export function CrmLeadIntelligence() {
-  const orgId = useCrmOrgId();
-  const [activeTab, setActiveTab] = useState<"hot" | "at_risk" | "tracking" | "sales_ready">("hot");
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-lead-intel-global", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,lifecycle_stage,last_contacted_at,last_activity_at,created_at,buying_intent,budget_range,development_id,contact_owner")
-        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(200);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const scored = useMemo(() => contacts.map((c: any) => ({ c, intel: computeLeadIntelligence({ contact: c }) })), [contacts]);
-
-  const hot = scored.filter(({ intel }) => intel.label === "Hot" || intel.label === "High intent");
-  const atRisk = scored.filter(({ intel }) => intel.label === "At risk");
-  const tracking = scored.filter(({ intel }) => intel.label === "Tracking issue");
-  const salesReady = scored.filter(({ intel }) => intel.label === "Sales ready");
-
-  const KPIs = [
-    { label: "Hot / High intent", value: hot.length, tone: "text-red-600 dark:text-red-400" },
-    { label: "En riesgo", value: atRisk.length, tone: "text-rose-600 dark:text-rose-400" },
-    { label: "Tracking issue", value: tracking.length, tone: "text-violet-600 dark:text-violet-400" },
-    { label: "Sales ready", value: salesReady.length, tone: "text-emerald-600 dark:text-emerald-400" },
-    { label: "Total analizados", value: scored.length, tone: "text-foreground" },
-    { label: "Score promedio", value: fmtNum(scored.reduce((s, x) => s + x.intel.final_score, 0) / Math.max(1, scored.length)), tone: "text-foreground" },
-  ];
-
-  const BUCKETS: Record<typeof activeTab, typeof scored> = { hot, at_risk: atRisk, tracking, sales_ready: salesReady };
-  const bucket = BUCKETS[activeTab];
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Lead Intelligence Global" subtitle="Scoring automatizado de toda la base" />
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {KPIs.map(k => (
-          <Card key={k.label} className="p-3">
-            <p className="text-xs text-muted-foreground">{k.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${k.tone}`}>{isLoading ? "…" : k.value}</p>
-          </Card>
-        ))}
-      </div>
-
-      <Tabs value={activeTab} onValueChange={v => setActiveTab(v as typeof activeTab)}>
-        <TabsList>
-          <TabsTrigger value="hot">Hot <span className="ml-1 text-[10px]">({hot.length})</span></TabsTrigger>
-          <TabsTrigger value="at_risk">En riesgo <span className="ml-1 text-[10px]">({atRisk.length})</span></TabsTrigger>
-          <TabsTrigger value="tracking">Tracking issue <span className="ml-1 text-[10px]">({tracking.length})</span></TabsTrigger>
-          <TabsTrigger value="sales_ready">Sales ready <span className="ml-1 text-[10px]">({salesReady.length})</span></TabsTrigger>
-        </TabsList>
-        {(["hot","at_risk","tracking","sales_ready"] as const).map(t => (
-          <TabsContent key={t} value={t}>
-            {isLoading ? <Skeleton className="h-40 w-full mt-2" /> : bucket.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sin leads en esta categoría</p>
-            ) : (
-              <div className="rounded-md border overflow-auto mt-2">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Contacto</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Fit</TableHead>
-                    <TableHead>Engagement</TableHead>
-                    <TableHead>Recomendación</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {bucket.slice(0, 30).map(({ c, intel }) => (
-                      <TableRow key={c.id}>
-                        <TableCell>
-                          <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
-                        </TableCell>
-                        <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold">{intel.final_score}</span>
-                            <Progress value={intel.final_score} className="w-16 h-1.5" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{intel.fit.score} · {intel.fit.label}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{intel.engagement.score} · {intel.engagement.label}</TableCell>
-                        <TableCell className="text-xs max-w-[200px] truncate text-muted-foreground">{intel.recommendation}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
-  );
-}
-
-// ─── CrmAgentPerformance ──────────────────────────────────────────────────────
-
-export function CrmAgentPerformance() {
-  const orgId = useCrmOrgId();
-  const [range, setRange] = useState<DateRange>("30d");
-
-  const since = useMemo(() => rangeToSince(range), [range]);
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-agent-perf-contacts", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,contact_owner,lead_status,lifecycle_stage,created_at,last_contacted_at,crm_deals(deal_stage,value)")
-        .eq("organization_id", orgId).gte("created_at", since).limit(500);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const { data: tasks = [] } = useQuery({
-    queryKey: ["crm-agent-perf-tasks", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_tasks")
-        .select("assigned_to,status,due_date").eq("organization_id", orgId).gte("created_at", since).limit(2000);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const perf = useMemo(() => aggregateAgentPerf(contacts, [], [], tasks, []), [contacts, tasks]);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Desempeño de asesores"
-        description="Métricas de conversión por asesor"
-        actions={
-          <Select value={range} onValueChange={v => setRange(v as DateRange)}>
-            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{(Object.entries(RANGE_LABEL) as [DateRange,string][]).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-          </Select>
-        }
-      />
-
-      {isLoading ? <Skeleton className="h-40 w-full" /> : perf.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-10">Sin datos para el período</p>
-      ) : (
-        <div className="rounded-md border overflow-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>Asesor</TableHead>
-              <TableHead className="text-right">Leads</TableHead>
-              <TableHead className="text-right">Contactados</TableHead>
-              <TableHead className="text-right">Citas</TableHead>
-              <TableHead className="text-right">Reservas</TableHead>
-              <TableHead className="text-right">Lead→Cita</TableHead>
-              <TableHead className="text-right">Cita→Reserva</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">Vencidas</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {perf.map(a => (
-                <TableRow key={a.user_id}>
-                  <TableCell className="font-medium text-sm">{a.name ?? "Sin asesor"}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_assigned)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_contacted)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.appointments_scheduled)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.reservations)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.lead_to_appt_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.appt_to_reservation_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.revenue)}</TableCell>
-                  <TableCell className="text-right text-sm">
-                    <span className={a.overdue_tasks > 3 ? "text-red-500 font-medium" : ""}>{fmtNum(a.overdue_tasks)}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── CrmSalesOperations ───────────────────────────────────────────────────────
-
-export function CrmSalesOperations() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-  const [msgOpen, setMsgOpen] = useState(false);
-  const [msgContact, setMsgContact] = useState<any>(null);
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-sales-ops-queue", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,lifecycle_stage,last_contacted_at,last_activity_at,created_at,buying_intent,development_id,contact_owner,crm_tasks(status,due_date)")
-        .eq("organization_id", orgId).neq("lead_status", "lost").order("last_activity_at", { ascending: true }).limit(60);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const queue = useMemo(() => {
-    return contacts.map((c: any) => {
-      const intel = computeLeadIntelligence({ contact: c, tasks: c.crm_tasks ?? [] });
-      const sla = calculateSlaStatus(c, { intelLabel: intel.label });
-      const priority = getFollowUpPriority(sla, intel.label);
-      return { c, intel, sla, priority };
-    }).sort((a, b) => {
-      const order = { P0: 0, P1: 1, P2: 2, P3: 3 };
-      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-    });
-  }, [contacts]);
-
-  const PRIORITY_TONE: Record<string, string> = {
-    P0: "bg-red-500/15 text-red-700 dark:text-red-400 font-bold",
-    P1: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    P2: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    P3: "bg-muted text-muted-foreground",
-  };
-
-  const createTask = useMutation({
-    mutationFn: async (contactId: string) => {
-      if (!orgId) return;
-      await (supabase as any).from("crm_tasks").insert({ organization_id: orgId, contact_id: contactId, title: "Seguimiento urgente (sales ops)", priority: "high", status: "pending" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-sales-ops-queue", orgId] }); toast.success("Tarea creada"); },
-  });
-
-  const selectedMsg = useMemo(() => {
-    if (!msgContact) return null;
-    const intel = computeLeadIntelligence({ contact: msgContact });
-    return generateMessage(intel.label === "Hot" || intel.label === "High intent" ? "whatsapp_hot_lead" : "whatsapp_new_lead", {
-      contact_name: msgContact.full_name,
-      advisor_name: "tu asesor",
-    });
-  }, [msgContact]);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Sales Operations" subtitle="Cola de seguimiento por prioridad SLA" />
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>SLA</TableHead>
-            <TableHead>Prioridad</TableHead>
-            <TableHead>Regla SLA</TableHead>
-            <TableHead>Recomendación</TableHead>
-            <TableHead>Acciones</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : queue.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Sin leads en cola</TableCell></TableRow>
-            ) : queue.map(({ c, intel, sla, priority }) => (
-              <TableRow key={c.id}>
-                <TableCell>
-                  <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
-                </TableCell>
-                <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${SLA_TONE[sla.status]}`}>{sla.status.replace(/_/g," ")}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${PRIORITY_TONE[priority]}`}>{priority}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">{sla.reason}</TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{sla.recommendation}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => createTask.mutate(c.id)}>
-                      <ClipboardList className="w-3 h-3 mr-1" />Tarea
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setMsgContact(c); setMsgOpen(true); }}>
-                      <MessageSquare className="w-3 h-3 mr-1" />Msg
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog open={msgOpen} onOpenChange={setMsgOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Mensaje generado — {msgContact?.full_name}</DialogTitle></DialogHeader>
-          {selectedMsg && (
-            <div className="space-y-3 py-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MessageSquare className="w-4 h-4" />{selectedMsg.channel.replace("_mock","")}
-              </div>
-              <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">{selectedMsg.body}</div>
-              <p className="text-xs text-amber-600 dark:text-amber-400">{selectedMsg.disclaimer}</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { navigator.clipboard.writeText(selectedMsg?.body ?? ""); toast.success("Copiado"); }}>
-              <Copy className="w-4 h-4 mr-1" />Copiar
-            </Button>
-            <Button onClick={() => setMsgOpen(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
   );
 }

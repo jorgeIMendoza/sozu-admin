@@ -75,7 +75,6 @@ const MortgageBankSelector = ({ onConfirm, onBack }: MortgageBankSelectorProps) 
                   {bank.producto_nombre && (
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       {bank.producto_nombre}
-                      {bank.tasa_desde != null ? ` · desde ${bank.tasa_desde}%` : ""}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-1.5 mt-2.5">
