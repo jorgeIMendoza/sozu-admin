@@ -1336,7 +1336,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const watchedDescuentoAumento = form.watch("porcentaje_descuento_aumento");
   
   const manualSchemeCalculations = React.useMemo(() => {
-    const basePrice = priceCalculations.propertyPrice;
+    // Base = precio_lista + valor de bodegas incluidas (es_incluido): el descuento/aumento
+    // del esquema manual se aplica sobre esta base (igual que PDF, RPC y oferta digital).
+    const bodegasIncluidasTotal = (includedProducts?.bodegas ?? []).reduce((s: number, b: any) => {
+      if (!b.es_incluido) return s;
+      const precio = (b.productos_servicios as any)?.precio_lista || 0;
+      return s + precio * (b.m2 || 0);
+    }, 0);
+    const basePrice = priceCalculations.propertyPrice + bodegasIncluidasTotal;
     const descuentoAumento = parseFloat(watchedDescuentoAumento || "0");
     const precioAjustado = basePrice * (1 + descuentoAumento / 100);
     
@@ -1360,7 +1367,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       montoPorMensualidad,
       numMensualidades
     };
-  }, [priceCalculations.propertyPrice, watchedEnganche, watchedMensualidades, watchedEntrega, watchedNumeroMensualidades, watchedDescuentoAumento]);
+  }, [priceCalculations.propertyPrice, includedProducts, watchedEnganche, watchedMensualidades, watchedEntrega, watchedNumeroMensualidades, watchedDescuentoAumento]);
 
   // Validate tramos sum equals numero_mensualidades and amounts match expected total
   const tramosValidation = React.useMemo(() => {
