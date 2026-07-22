@@ -189,11 +189,38 @@ const OfferPage = () => {
 
   // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
   // precio, metraje y $/m² reconcilien exacto entre sí.
-  const formattedPrice = new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 2,
-  }).format(offer.property.listPrice);
+  const fmtMXN = (v: number, dec = 2) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: dec }).format(v);
+
+  const formattedPrice = fmtMXN(offer.property.listPrice);
+
+  // Precio grande = precio del esquema seleccionado (con descuento/aumento) si hay uno;
+  // si no, precio_lista + valor de bodegas incluidas. Las bodegas incluidas suman al total
+  // pero se listan aparte en tamaño chico.
+  const listPrice = offer.property.listPrice;
+  const bodegasIncluidas = (offer.bodegas ?? []).filter((b) => b.incluido);
+  const bodegaIncluidaTotal = bodegasIncluidas.reduce((s, b) => s + (b.costo ?? 0), 0);
+  const bodegaM2Total = bodegasIncluidas.reduce((s, b) => s + (b.m2 ?? 0), 0);
+  const bodegaPrecioM2 = bodegaM2Total > 0 ? bodegaIncluidaTotal / bodegaM2Total : 0;
+  const basePrice = listPrice + bodegaIncluidaTotal;
+  const selectedPlan = offer.selectedPlanId
+    ? offer.paymentPlans?.find((p) => p.id === offer.selectedPlanId)
+    : undefined;
+  const heroPrice = selectedPlan ? selectedPlan.finalPrice : basePrice;
+  // % de descuento (negativo) o aumento (positivo) del plan vs. la base (lista + bodega).
+  const heroPct = selectedPlan && basePrice > 0 ? (selectedPlan.finalPrice / basePrice - 1) * 100 : 0;
+  const heroPctLabel =
+    selectedPlan && Math.abs(heroPct) >= 0.01
+      ? `${Math.abs(heroPct).toLocaleString("es-MX", { maximumFractionDigits: 2 })}% ${heroPct < 0 ? "descuento" : "aumento"}`
+      : null;
+  const heroPriceLabel = selectedPlan
+    ? `${selectedPlan.name}${heroPctLabel ? ` · ${heroPctLabel}` : ""}`
+    : "Precio total";
+  // Total sin descuento = base (lista + bodega); se muestra cuando el plan aplica ajuste.
+  const showSinDescuento = !!selectedPlan && Math.abs(heroPrice - basePrice) >= 0.01;
+  const heroTotalCaption = showSinDescuento
+    ? (heroPct < 0 ? "Total con descuento" : "Total con aumento")
+    : "Total";
 
   const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
 
@@ -228,14 +255,31 @@ const OfferPage = () => {
                   <MapPin className="w-3 h-3 shrink-0 opacity-60" />
                   {offer.location.address}
                 </p>
-                <p className="text-2xl font-bold tabular-nums text-foreground leading-none tracking-tight">
-                  {formattedPrice}
+                <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60 tabular-nums">
+                  Precio de lista {formattedPrice}
+                  {!!offer.property.pricePerM2 && offer.property.area && (
+                    <span className="text-success"> · {fmtMXN(offer.property.pricePerM2)}/m²</span>
+                  )}
                 </p>
-                {!!offer.property.pricePerM2 && offer.property.area && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
-                    {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
+                {bodegaIncluidaTotal > 0 && (
+                  <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60 tabular-nums">
+                    Bodega {fmtMXN(bodegaIncluidaTotal)}
+                    {bodegaPrecioM2 > 0 && (
+                      <span className="text-success"> · {fmtMXN(bodegaPrecioM2)}/m²</span>
+                    )}
                   </p>
                 )}
+                {showSinDescuento && (
+                  <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/50 tabular-nums mt-1">
+                    Total sin descuento <span className="line-through">{fmtMXN(basePrice)}</span>
+                  </p>
+                )}
+                <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50 mt-1">
+                  {heroPriceLabel}
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-none tracking-tight">
+                  {fmtMXN(heroPrice)} <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/55">{heroTotalCaption}</span>
+                </p>
               </div>
 
             </header>
@@ -490,17 +534,62 @@ const OfferPage = () => {
 
                 {/* Precio - centrado */}
                 <div className="py-4 border-b border-border/60 text-center">
+                  {/* Desglose chico: precio de lista, $/m² y bodega incluida */}
+                  <div className="mb-2.5 space-y-0.5">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60">
+                        Precio de lista
+                      </span>
+                      <span className="text-xs font-semibold tabular-nums text-foreground">
+                        {formattedPrice}
+                      </span>
+                    </div>
+                    {!!offer.property.pricePerM2 && offer.property.area && (
+                      <p className="text-[10px] font-medium text-success tabular-nums">
+                        {fmtMXN(offer.property.pricePerM2)} /m²
+                      </p>
+                    )}
+                    {bodegaIncluidaTotal > 0 && (
+                      <>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60">
+                            Bodega
+                          </span>
+                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                            {fmtMXN(bodegaIncluidaTotal)}
+                          </span>
+                        </div>
+                        {bodegaPrecioM2 > 0 && (
+                          <p className="text-[10px] font-medium text-success tabular-nums">
+                            {fmtMXN(bodegaPrecioM2)} /m²
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Total sin descuento (base = lista + bodega), antes del total ajustado */}
+                  {showSinDescuento && (
+                    <div className="mb-2">
+                      <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50">
+                        Total sin descuento
+                      </p>
+                      <p className="text-base font-semibold tabular-nums text-muted-foreground line-through">
+                        {fmtMXN(basePrice)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Precio grande: total del esquema seleccionado (o precio_lista + bodega) */}
                   <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mb-1.5">
-                    Precio de lista
+                    {heroPriceLabel}
                   </p>
                   <p className="text-[1.75rem] font-bold tabular-nums text-foreground leading-none tracking-tight">
-                    {formattedPrice}
+                    {fmtMXN(heroPrice)}
                   </p>
-                  {!!offer.property.pricePerM2 && offer.property.area && (
-                    <p className="text-[11px] font-semibold text-success mt-1.5 tabular-nums">
-                      {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
-                    </p>
-                  )}
+                  <p className="text-[10px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mt-1">
+                    {heroTotalCaption}
+                  </p>
                 </div>
 
                 {/* Datos clave - Entrega | Expedición (fechas completas, centradas) */}

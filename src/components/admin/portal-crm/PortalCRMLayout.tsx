@@ -142,6 +142,7 @@ const PATH_ICONS: Record<string, LucideIcon> = {
   "/admin/portal-crm/configuracion/usuarios":                 UserCog,
   "/admin/portal-crm/configuracion/desarrollos":              Building2,
   "/admin/portal-crm/configuracion/pipelines":                Briefcase,
+  "/admin/portal-crm/configuracion/estados-lead":             Target,
   "/admin/portal-crm/configuracion/roles":                    KeyRound,
   "/admin/portal-crm/configuracion/etapas-pipeline":          ListTree,
   "/admin/portal-crm/configuracion/campos-personalizados":    SlidersHorizontal,

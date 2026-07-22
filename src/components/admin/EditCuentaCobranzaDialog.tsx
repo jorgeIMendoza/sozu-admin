@@ -1613,10 +1613,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     mutationFn: async (esquemaId: number) => {
       if (!cuentaDetalle) throw new Error('Cuenta no encontrada');
       
-      // 1. Actualizar el esquema de pago seleccionado en la oferta
+      // 1. Actualizar el esquema de pago seleccionado en la oferta (invalidar PDF → url=null)
       const { error: updateError } = await supabase
         .from('ofertas')
-        .update({ id_esquema_pago_seleccionado: esquemaId })
+        .update({ id_esquema_pago_seleccionado: esquemaId, url: null })
         .eq('id', cuentaDetalle.id_oferta);
       
       if (updateError) throw updateError;

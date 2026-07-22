@@ -1156,10 +1156,10 @@ export default function DetalleCuentaCobranza() {
         }
       }
 
-      // 5. Actualizar el esquema en la oferta
+      // 5. Actualizar el esquema en la oferta (invalidar PDF cacheado → url=null)
       const { error: updateError } = await supabase
         .from('ofertas')
-        .update({ id_esquema_pago_seleccionado: schemeId })
+        .update({ id_esquema_pago_seleccionado: schemeId, url: null })
         .eq('id', offerData.id);
 
       if (updateError) throw updateError;

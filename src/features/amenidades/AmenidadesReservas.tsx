@@ -34,9 +34,17 @@ import { CalendarioEspacio } from "./CalendarioEspacio";
 import { SlotModal, type SlotSel } from "./SlotModal";
 import { BloqueoModal } from "./BloqueoModal";
 
-type TabInterna = "calendario" | "validar" | "excepciones";
+export type TabInterna = "calendario" | "validar" | "excepciones";
 
-export function AmenidadesReservas() {
+export function AmenidadesReservas({
+  tab,
+  onTab,
+  espacioInicial,
+}: {
+  tab: TabInterna;
+  onTab: (t: TabInterna) => void;
+  espacioInicial?: string;
+}) {
   const { profile } = useAuth();
   const store = useAmenidadesStore();
   const { espacios, reservas, bloqueos, abonosExcepcion, ahora, config } = store;
@@ -55,10 +63,14 @@ export function AmenidadesReservas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [tab, setTab] = useState<TabInterna>("calendario");
-  const [espacioSel, setEspacioSel] = useState<string>(espacios[0]?.id ?? "");
+  const [espacioSel, setEspacioSel] = useState<string>(espacioInicial ?? espacios[0]?.id ?? "");
   const [slot, setSlot] = useState<SlotSel | null>(null);
   const [bloqueoOpen, setBloqueoOpen] = useState(false);
+
+  // Si la página pide abrir el calendario de un espacio concreto (desde el catálogo).
+  useEffect(() => {
+    if (espacioInicial) setEspacioSel(espacioInicial);
+  }, [espacioInicial]);
 
   const porValidar = reservas.filter((r) => r.estado === "apartado");
   const porPagar = reservas.filter((r) => r.estado === "por_pagar");
@@ -91,7 +103,7 @@ export function AmenidadesReservas() {
     <div>
       {/* KPIs — clickeables, orientados a la acción */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <button type="button" onClick={() => setTab("validar")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
+        <button type="button" onClick={() => onTab("validar")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
           <KPICard
             title="Solicitudes por validar"
             value={String(porValidar.length)}
@@ -99,7 +111,7 @@ export function AmenidadesReservas() {
             variant={porValidarUrgente > 0 ? "danger" : porValidar.length ? "warning" : "default"}
           />
         </button>
-        <button type="button" onClick={() => setTab("excepciones")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
+        <button type="button" onClick={() => onTab("excepciones")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
           <KPICard
             title="Reservas por pagar"
             value={String(porPagar.length)}
@@ -107,7 +119,7 @@ export function AmenidadesReservas() {
             variant={porPagar.length ? "warning" : "default"}
           />
         </button>
-        <button type="button" onClick={() => setTab("calendario")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
+        <button type="button" onClick={() => onTab("calendario")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
           <KPICard
             title="Confirmadas (próx. 30 días)"
             value={String(confirmadas30.length)}
@@ -115,7 +127,7 @@ export function AmenidadesReservas() {
             variant="success"
           />
         </button>
-        <button type="button" onClick={() => setTab("excepciones")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
+        <button type="button" onClick={() => onTab("excepciones")} className="text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
           <KPICard
             title="Excepciones de pago"
             value={String(totalExcepciones)}
@@ -125,35 +137,18 @@ export function AmenidadesReservas() {
         </button>
       </div>
 
-      {/* Tabs internas + controles demo */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="inline-flex rounded-lg border border-border p-0.5 text-sm">
-          {([
-            { k: "calendario", label: "Calendario" },
-            { k: "validar", label: `Solicitudes por validar${porValidar.length ? ` (${porValidar.length})` : ""}` },
-            { k: "excepciones", label: `Excepciones${totalExcepciones ? ` (${totalExcepciones})` : ""}` },
-          ] as const).map((t) => (
-            <button
-              key={t.k}
-              onClick={() => setTab(t.k)}
-              className={cn("px-3 py-1.5 rounded-md font-medium transition-colors", tab === t.k ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")}
-            >
-              {t.label}
-            </button>
-          ))}
+      {/* Controles de demo (las pestañas las controla la página) */}
+      {import.meta.env.DEV && (
+        <div className="flex items-center justify-end gap-2 mb-3">
+          <span className="text-[11px] text-muted-foreground tabular-nums">Reloj demo: {fmtFechaHora(new Date(ahora).toISOString())}</span>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => store.avanzarReloj(6)}>
+            <FastForward className="h-3.5 w-3.5" /> +6 h
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => store.reset()}>
+            <RotateCcw className="h-3.5 w-3.5" /> Repoblar
+          </Button>
         </div>
-        {import.meta.env.DEV && (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground tabular-nums">Reloj demo: {fmtFechaHora(new Date(ahora).toISOString())}</span>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => store.avanzarReloj(6)}>
-              <FastForward className="h-3.5 w-3.5" /> +6 h
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => store.reset()}>
-              <RotateCcw className="h-3.5 w-3.5" /> Repoblar
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
 
       {tab === "calendario" && (
         <>

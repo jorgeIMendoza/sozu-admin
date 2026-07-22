@@ -11,7 +11,7 @@ import {
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
   Calendar, ChevronRight, ChevronLeft, Check, ChevronDown, Download, Settings2, Upload, Loader2,
-  MoreHorizontal, Pencil, Trash2,
+  MoreHorizontal, Pencil, Trash2, Video, MapPin, Building2, Store, ExternalLink, Clock, Users,
   Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid, GripVertical,
   Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
@@ -53,8 +53,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { isToday, isPast, isFuture, parseISO, format as fmtDateFns, addDays, addWeeks, addMonths, addYears } from "date-fns";
 import {
   leadStatusLabel, lifecycleLabel, leadScoreColor, relTime, fmtDate,
-  fmtDateTime, fmtMXN, DEAL_STAGES, apptStatusLabel,
-  taskStatusLabel, TASK_STATUS, APPT_STATUS, type DealStage,
+  fmtDateTime, fmtMXN, DEAL_STAGES,
+  taskStatusLabel, TASK_STATUS, type DealStage,
 } from "@/lib/crm-lib";
 import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
@@ -115,7 +115,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
 
 const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
 
-const META_LEAD_STATUSES: { value: string; label: string }[] = [
+const META_LEAD_STATUSES: { value: string; label: string; color?: string }[] = [
   { value: "nuevo", label: "Nuevo" },
   { value: "en_curso", label: "En curso" },
   { value: "negocio_abierto", label: "Negocio abierto" },
@@ -133,6 +133,21 @@ const META_LEAD_STATUSES: { value: string; label: string }[] = [
   { value: "proveedor", label: "Proveedor" },
   { value: "fuera_area", label: "Fuera del área" },
 ];
+
+// Estados de lead configurables (tabla crm_estados_lead, administrable en Configuración
+// › Estados de lead). Si la tabla aún no existe o está vacía, cae al catálogo fijo de
+// arriba para no romper. La `clave` es el valor guardado en crm_leads_atribucion.estatus_lead.
+type LeadStateOpt = { value: string; label: string; color?: string };
+const fetchLeadStates = async (): Promise<LeadStateOpt[]> => {
+  const { data, error } = await (supabase as any)
+    .from("crm_estados_lead")
+    .select("clave, nombre, color, orden")
+    .eq("activo", true)
+    .order("orden");
+  if (error || !data || data.length === 0) return META_LEAD_STATUSES;
+  return data.map((r: any) => ({ value: r.clave, label: r.nombre, color: r.color ?? undefined }));
+};
+const useLeadStates = () => useQuery({ queryKey: ["crm-estados-lead"], queryFn: fetchLeadStates });
 
 // Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
 const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -324,6 +339,7 @@ export function CrmContacts() {
   const pageSize = 25;
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
   const [editColumnsOpen, setEditColumnsOpen] = useState(false);
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
 
   const persistColumns = (next: ColumnConfig[]) => {
     setColumns(next);
@@ -552,7 +568,7 @@ export function CrmContacts() {
         <CFilter value={filterSource} onChange={(v) => { setFilterSource(v); setPage(0); }} placeholder="Fuente"
           options={[{ v: "all", l: "Todas las fuentes" }, { v: "meta", l: "Solo Meta" }, { v: "manual", l: "Manual" }]} />
         <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado del lead"
-          options={[{ v: "all", l: "Todos estados" }, ...META_LEAD_STATUSES.map((s) => ({ v: s.value, l: s.label }))]} />
+          options={[{ v: "all", l: "Todos estados" }, ...leadStates.map((s) => ({ v: s.value, l: s.label }))]} />
         {(categoriasCatalog as any[]).length > 0 && (
           <CFilter value={filterCategoria} onChange={(v) => { setFilterCategoria(v); setPage(0); }} placeholder="Categoría"
             options={[{ v: "all", l: "Todas las categorías" }, ...(categoriasCatalog as any[]).map((c: any) => ({ v: String(c.id), l: c.nombre }))]} />
@@ -632,7 +648,8 @@ export function CrmContacts() {
                         case "phone":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.phone || "—"}</td>;
                         case "lead_status": {
-                          const metaLabel = META_LEAD_STATUSES.find((s) => s.value === c.lead_status)?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
+                          const st = leadStates.find((s) => s.value === c.lead_status);
+                          const metaLabel = st?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
                           const statusColor: Record<string, string> = {
                             nuevo: "bg-sky-50 text-sky-700 border-sky-200",
                             en_curso: "bg-amber-50 text-amber-700 border-amber-200",
@@ -657,10 +674,15 @@ export function CrmContacts() {
                             unqualified: "bg-slate-50 text-slate-500 border-slate-200",
                             lost: "bg-red-50 text-red-600 border-red-200",
                           };
-                          const cls = statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200";
+                          // Color configurable (hex de crm_estados_lead) vía estilo inline;
+                          // si el estado no trae color, cae al mapa de clases de siempre.
+                          const badgeStyle = st?.color
+                            ? { backgroundColor: `${st.color}1a`, color: st.color, borderColor: `${st.color}55` }
+                            : undefined;
+                          const cls = st?.color ? "" : (statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200");
                           return (
                             <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>{metaLabel}</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`} style={badgeStyle}>{metaLabel}</span>
                             </td>
                           );
                         }
@@ -813,6 +835,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "", contact_owner: "" });
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
   // Auto-asignar el propietario al usuario actual (editable antes de crear).
   useEffect(() => {
     const uid = user?.id;
@@ -897,7 +920,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
             <CField label="Estado del lead">
               <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </CField>
             <CField label="Lifecycle">
@@ -1412,6 +1435,26 @@ export function CrmContactDetail() {
     },
   });
 
+  // Citas del contacto (tabla real crm_citas; fail-soft si aún no existe en el ambiente).
+  const { data: citas } = useQuery({
+    queryKey: ["contact-citas", contactId],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_citas")
+        .select("id, titulo, tipo, estatus, fecha_inicio, fecha_fin, ubicacion, enlace_reunion, resultado, descripcion, fecha_recordatorio, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_inicio", { ascending: false });
+      if (res.error) return [];
+      return (res.data ?? []).map((c: any) => ({
+        id: c.id, title: c.titulo, tipo: c.tipo, status: c.estatus,
+        start_at: c.fecha_inicio, end_at: c.fecha_fin,
+        ubicacion: c.ubicacion ?? null, enlace: c.enlace_reunion ?? null,
+        resultado: c.resultado ?? null, descripcion: c.descripcion ?? null,
+        created_at: c.fecha_creacion,
+      }));
+    },
+  });
+
   // Negocios del contacto (un negocio pertenece a un solo contacto).
   const { data: contactDeals } = useQuery({
     queryKey: ["contact-deals", contactId],
@@ -1438,14 +1481,13 @@ export function CrmContactDetail() {
     },
   });
 
-  // Fase 1: citas, pipeline y eventos de conversión aún no persisten.
-  const appointments: any[] = [];
+  // Fase 1: pipeline y eventos de conversión aún no persisten.
   const deals: any[] = [];
   const pipelineEvents: any[] = [];
   const conversionEvents: any[] = [];
 
   const invalidateAll = () => {
-    ["contact-sozu", "contact-notes", "contact-tasks", "contact-deals"].forEach(
+    ["contact-sozu", "contact-notes", "contact-tasks", "contact-citas", "contact-deals"].forEach(
       (k) => qc.invalidateQueries({ queryKey: [k, contactId] }),
     );
     // También refrescar la lista de contactos para que refleje los cambios al volver.
@@ -1474,6 +1516,16 @@ export function CrmContactDetail() {
     const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id);
     if (error) { toast.error(error.message); return; }
     toast.success("Nota eliminada"); invalidateAll();
+  };
+  const updateCitaStatus = async (id: number, estatus: string) => {
+    const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Cita actualizada"); invalidateAll();
+  };
+  const deleteCita = async (id: number) => {
+    const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Cita eliminada"); invalidateAll();
   };
 
   if (isLoading) return (
@@ -1532,6 +1584,7 @@ export function CrmContactDetail() {
         <div className="flex gap-2">
           <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
           <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
+          <CitaDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
         </div>
       </div>
 
@@ -1564,7 +1617,7 @@ export function CrmContactDetail() {
           </div>
 
           {/* Quick action icons */}
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-3 gap-1">
             <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll}
               trigger={
                 <button className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors w-full">
@@ -1581,6 +1634,15 @@ export function CrmContactDetail() {
                     <ClipboardList className="h-3.5 w-3.5" />
                   </div>
                   <span className="text-[9px] text-muted-foreground leading-none">Tarea</span>
+                </button>
+              } />
+            <CitaDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll}
+              trigger={
+                <button className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors w-full">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground leading-none">Cita</span>
                 </button>
               } />
           </div>
@@ -1610,15 +1672,17 @@ export function CrmContactDetail() {
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <DescriptionPanel
-                contact={contact} notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
+                contact={contact} notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
               />
             </TabsContent>
             <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <ActivityPanel
                 contactId={contactId!} userId={user?.id} owners={owners ?? []} contact={contact}
-                notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
+                notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
               />
             </TabsContent>
             <TabsContent value="avanzado" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
@@ -1675,6 +1739,7 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
     development_id: contact.development_id ?? "", contact_owner: contact.contact_owner ?? "",
   });
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
 
   // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
   const run = async (fn: () => Promise<{ error: any }>) => {
@@ -1740,7 +1805,7 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
         <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            {leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
       </CField>
@@ -1801,11 +1866,12 @@ function AssocCard({ title }: { title: string }) {
   );
 }
 
-function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote }: any) {
+function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita }: any) {
   const lastActivity = (() => {
     const dates: string[] = [
       ...(notes ?? []).map((n: any) => n.created_at),
       ...(tasks ?? []).map((t: any) => t.created_at),
+      ...(citas ?? []).map((c: any) => c.created_at),
     ].filter(Boolean);
     if (contact.last_activity_at) dates.push(contact.last_activity_at);
     if (!dates.length) return null;
@@ -1817,6 +1883,9 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
   const upcoming = (tasks ?? [])
     .filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= today)
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  const upcomingCitas = (citas ?? [])
+    .filter((c: any) => (c.status === "programada" || c.status === "reprogramada") && c.start_at && new Date(c.start_at) >= today)
+    .sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
   return (
     <div className="space-y-4">
@@ -1834,19 +1903,37 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
         <Timeline
-          notes={notes ?? []} tasks={tasks ?? []} appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
+          notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} deals={[]} pipelineEvents={[]} conversionEvents={[]}
           contact={contact}
-          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
+          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
+          onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
         />
       </div>
 
-      {/* Próximas actividades (tareas pendientes con fecha futura) */}
+      {/* Próximas actividades (tareas y citas pendientes con fecha futura) */}
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Próximas actividades</h3>
-        {!upcoming.length ? (
+        {!upcoming.length && !upcomingCitas.length ? (
           <p className="text-xs text-muted-foreground">Sin próximas actividades.</p>
         ) : (
           <div className="space-y-2">
+            {upcomingCitas.map((c: any) => {
+              const TipoIcon = CITA_TYPE_META[c.tipo]?.icon ?? CalendarClock;
+              return (
+                <div key={`cita-${c.id}`} className="flex items-center gap-3 group/up">
+                  <div className="h-7 w-7 shrink-0 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-400 flex items-center justify-center">
+                    <TipoIcon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{c.title}</div>
+                    <div className="text-xs text-muted-foreground">{fmtCitaWhen(c.start_at, c.end_at)}</div>
+                  </div>
+                  <button onClick={() => onUpdateCita?.(c.id, "realizada")} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 opacity-0 group-hover/up:opacity-100 transition-opacity shrink-0">
+                    <Check className="h-3 w-3" />Realizada
+                  </button>
+                </div>
+              );
+            })}
             {upcoming.map((t: any) => (
               <div key={t.id} className="flex items-center gap-3 group/up">
                 <div className="h-7 w-7 shrink-0 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 flex items-center justify-center">
@@ -1873,14 +1960,18 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
   );
 }
 
-function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote, includeSystem = true }: any) {
-  const [filter, setFilter] = useState<"all" | "note" | "task">("all");
+function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, includeSystem = true }: any) {
+  const [filter, setFilter] = useState<"all" | "note" | "task" | "cita">("all");
   const [search, setSearch] = useState("");
-  const TABS: { id: "all" | "note" | "task"; label: string }[] = [
+  const TABS: { id: "all" | "note" | "task" | "cita"; label: string }[] = [
     { id: "all", label: "Todas las actividades" },
     { id: "note", label: "Notas" },
     { id: "task", label: "Tareas" },
+    { id: "cita", label: "Citas" },
   ];
+  const showNotes = filter === "all" || filter === "note";
+  const showTasks = filter === "all" || filter === "task";
+  const showCitas = filter === "all" || filter === "cita";
   return (
     <div className="space-y-4">
       {/* Sub-tabs por tipo de actividad */}
@@ -1893,7 +1984,7 @@ function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSav
         ))}
       </div>
 
-      {/* Compositor contextual: nota solo en "Notas", crear tarea solo en "Tareas".
+      {/* Compositor contextual: nota solo en "Notas", crear tarea/cita solo en su pestaña.
           "Todas las actividades" es solo el recap (sin compositor). */}
       {filter === "note" && (
         <InlineNoteForm contactId={contactId} userId={userId} onSaved={onSaved} />
@@ -1912,14 +2003,24 @@ function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSav
               </Button>
             } />
         )}
+        {filter === "cita" && (
+          <CitaDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
+            trigger={
+              <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30">
+                <Plus className="h-3.5 w-3.5" />Crear cita
+              </Button>
+            } />
+        )}
       </div>
 
       <Timeline
-        notes={filter === "task" ? [] : notes}
-        tasks={filter === "note" ? [] : tasks}
-        appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
+        notes={showNotes ? notes : []}
+        tasks={showTasks ? tasks : []}
+        citas={showCitas ? citas : []}
+        deals={[]} pipelineEvents={[]} conversionEvents={[]}
         contact={contact} search={search} includeSystem={includeSystem && filter === "all"}
-        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
+        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
+        onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
       />
     </div>
   );
@@ -2131,7 +2232,7 @@ function NoteCard({ note, contactName, onEdited, onDelete, defaultExpanded = tru
   );
 }
 
-function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onEdited }: any) {
+function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, onEdited }: any) {
   const synthetic: TLItem = {
     id: "contact-created",
     ts: contact.created_at,
@@ -2144,7 +2245,7 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
   let items: TLItem[] = [
     ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, attachments: n.attachments ?? [], icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
     ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
-    ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
+    ...citas.map((c: any) => ({ id: `cita-${c.id}`, type: "cita", rawId: c.id, status: c.status, ts: c.start_at ?? c.created_at, kind: `Cita · ${CITA_STATUS_META[c.status]?.label ?? c.status}`, title: c.title, subtitle: `${CITA_TYPE_META[c.tipo]?.label ?? c.tipo} · ${fmtCitaWhen(c.start_at, c.end_at)}`, icon: CITA_TYPE_META[c.tipo]?.icon ?? CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
     ...pipelineEvents.map((p: any) => ({ id: `p-${p.id}`, ts: p.changed_at, kind: "Pipeline", title: `${p.old_stage ?? "—"} → ${p.new_stage}`, icon: GitBranch, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" })),
     ...conversionEvents.map((c: any) => ({ id: `c-${c.id}`, ts: c.event_time, kind: "Evento", title: c.event_name, subtitle: `Meta: ${c.meta_status} · Google: ${c.google_status}`, icon: Zap, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-400" })),
@@ -2230,6 +2331,23 @@ function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversio
                       </button>
                     )}
                     <button onClick={() => onDeleteTask?.(it.rawId)} className="text-[11px] text-destructive hover:underline inline-flex items-center gap-1">
+                      <X className="h-3 w-3" />Eliminar
+                    </button>
+                  </div>
+                )}
+                {it.type === "cita" && (
+                  <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                    {(it.status === "programada" || it.status === "reprogramada") && (
+                      <>
+                        <button onClick={() => onUpdateCita?.(it.rawId, "realizada")} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1">
+                          <Check className="h-3 w-3" />Realizada
+                        </button>
+                        <button onClick={() => onUpdateCita?.(it.rawId, "no_asistio")} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1">
+                          <TriangleAlert className="h-3 w-3" />No asistió
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => onDeleteCita?.(it.rawId)} className="text-[11px] text-destructive hover:underline inline-flex items-center gap-1">
                       <X className="h-3 w-3" />Eliminar
                     </button>
                   </div>
@@ -2473,46 +2591,32 @@ function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
   );
 }
 
-function AppointmentDialog({ contactId, orgId, developmentId, owners, onSaved }: any) {
-  const { user } = useAuth();
+// Diálogo "Nueva cita" (por contacto / negocio). Escribe en la tabla real crm_citas.
+function CitaDialog({ contactId, owners, userId, onSaved, trigger }: any) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ appointment_type: "call", scheduled_at: "", assigned_to: user?.id ?? "" });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<CitaFormState>(emptyCitaForm(userId ?? ""));
   const save = async () => {
-    if (!orgId || !form.scheduled_at) return;
-    const { error } = await (supabase as any).from("appointments").insert({
-      organization_id: orgId, contact_id: contactId, development_id: developmentId,
-      appointment_type: form.appointment_type, scheduled_at: new Date(form.scheduled_at).toISOString(),
-      assigned_to: form.assigned_to || null, status: "scheduled",
-    });
+    if (!form.titulo.trim()) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_citas").insert(buildCitaInsert(form, Number(contactId)));
+    setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Cita creada"); setOpen(false); onSaved();
+    toast.success("Cita creada"); setOpen(false); setForm(emptyCitaForm(userId ?? "")); onSaved();
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><CalendarClock className="h-4 w-4 mr-1.5" />Cita</Button></DialogTrigger>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyCitaForm(userId ?? "")); }}>
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><CalendarClock className="h-4 w-4 mr-1.5" />Cita</Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
         <div className="grid gap-3">
-          <DField label="Tipo">
-            <Select value={form.appointment_type} onValueChange={(v) => setForm({ ...form, appointment_type: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="call">Llamada</SelectItem>
-                <SelectItem value="video">Videollamada</SelectItem>
-                <SelectItem value="showroom">Showroom</SelectItem>
-                <SelectItem value="site_visit">Visita en obra</SelectItem>
-              </SelectContent>
-            </Select>
-          </DField>
-          <DField label="Fecha y hora"><Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} /></DField>
-          <DField label="Asesor">
-            <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-              <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-            </Select>
-          </DField>
+          <CitaFormFields form={form} setForm={setForm} owners={owners as any[]} />
         </div>
-        <DialogFooter><Button onClick={save} disabled={!form.scheduled_at} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -2791,6 +2895,166 @@ function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: string; 
   );
 }
 
+// Diálogo "Crear negocio" desde el módulo (contacto OPCIONAL, con búsqueda).
+// A diferencia de NewDealForm (que exige un contacto), aquí el contacto puede
+// quedar en NULL para crear un negocio suelto desde la vista de Negocios.
+function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
+  const { user } = useAuth();
+  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: user?.id ?? "", tipo_negocio: "", prioridad: "" };
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
+  const [contactSearch, setContactSearch] = useState("");
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["crm-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const { data: etapas } = useQuery({
+    queryKey: ["crm-etapas", form.id_pipeline],
+    enabled: !!form.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas").select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+
+  // Búsqueda de contacto (mismo patrón que el diálogo global de tarea).
+  const { data: contactResults = [], isFetching } = useQuery({
+    queryKey: ["crm-deal-contact-search", contactSearch],
+    enabled: open && contactSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = contactSearch.trim();
+      const { data: personas } = await (supabase as any).from("personas")
+        .select("id, nombre_legal, nombre_comercial")
+        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
+        .eq("activo", true).limit(20);
+      const pIds = (personas ?? []).map((p: any) => p.id);
+      if (!pIds.length) return [];
+      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
+      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
+    },
+  });
+
+  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
+  const reset = () => { setForm(empty); setContact(null); setContactSearch(""); };
+
+  const save = async (close: boolean) => {
+    if (!canSave) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_negocios").insert({
+      nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
+      valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
+      fecha_cierre_estimada: form.fecha_cierre || null,
+      id_usuario_propietario: form.id_propietario || user?.id || null,
+      tipo_negocio: form.tipo_negocio || null, prioridad: form.prioridad || null,
+      id_entidad_relacionada: contact ? contact.id : null,
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio creado");
+    onSaved();
+    if (close) { reset(); onOpenChange(false); }
+    else { setForm({ ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario }); setContact(null); setContactSearch(""); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Crear negocio</DialogTitle></DialogHeader>
+        <div className="grid gap-3 pt-2">
+          <DField label="Nombre del negocio *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus /></DField>
+          <DField label="Pipeline *">
+            <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+              <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          <DField label="Etapa del negocio *">
+            <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+              <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige un pipeline primero"} /></SelectTrigger>
+              <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          {/* Contacto asociado (opcional) */}
+          <div>
+            <Label>Contacto asociado <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+            {contact ? (
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                <span className="font-medium truncate">{contact.name}</span>
+                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive shrink-0"><X className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras… (o déjalo vacío)" className="pl-8" />
+                </div>
+                {contactSearch.trim().length >= 2 && (
+                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
+                    {isFetching ? (
+                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
+                    ) : contactResults.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
+                    ) : contactResults.map((c) => (
+                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
+            <DField label="Moneda">
+              <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="MXN">Peso mexicano (MXN)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent>
+              </Select>
+            </DField>
+          </div>
+          <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
+          <DField label="Propietario del negocio">
+            <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un propietario" /></SelectTrigger>
+              <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </DField>
+          <div className="grid grid-cols-2 gap-3">
+            <DField label="Tipo de negocio">
+              <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </DField>
+            <DField label="Prioridad">
+              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                    <SelectItem key={value} value={value}><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </DField>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
+          <Button onClick={() => save(true)} disabled={!canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Negocios (vista general, estilo HubSpot) ─────────────────────────────────
 
 function DealMetric({ label, value }: { label: string; value: string }) {
@@ -2834,6 +3098,7 @@ export function CrmDeals() {
   const [editTarget, setEditTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const { data: pipelines } = useQuery({
@@ -3026,7 +3291,14 @@ export function CrmDeals() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={viewToggle} />
+      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={
+        <div className="flex items-center gap-2">
+          {viewToggle}
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Plus className="h-4 w-4 mr-1" />Crear negocio
+          </Button>
+        </div>
+      } />
 
       {/* Métricas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -3136,6 +3408,9 @@ export function CrmDeals() {
         </div>
       )}
       {view === "list" && data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
+
+      {/* Crear negocio (desde el módulo, contacto opcional) */}
+      <NewDealDialog open={createOpen} onOpenChange={setCreateOpen} onSaved={() => qc.invalidateQueries({ queryKey: ["deals-list"] })} />
 
       {/* Editar negocio */}
       <EditDealDialog deal={editTarget} pipelines={pipelines ?? []} owners={owners ?? []}
@@ -3570,12 +3845,14 @@ export function CrmDealDetail() {
     queryKey: ["deal-activity", erId],
     enabled: !!erId,
     queryFn: async () => {
-      const [notasRes, tareasRes] = await Promise.all([
+      const [notasRes, tareasRes, citasRes] = await Promise.all([
         (supabase as any).from("crm_notas").select("id, contenido, fecha_creacion, id_usuario, anclado").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("anclado", { ascending: false }).order("fecha_creacion", { ascending: false }),
         (supabase as any).from("crm_tareas").select("id, titulo, tipo, estatus, prioridad, descripcion, fecha_vencimiento, fecha_recordatorio, recurrencia, id_usuario_asignado, fecha_creacion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_creacion", { ascending: false }),
+        (supabase as any).from("crm_citas").select("id, titulo, tipo, estatus, fecha_inicio, fecha_fin, ubicacion, enlace_reunion, resultado, descripcion, fecha_creacion, id_usuario_asignado").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_inicio", { ascending: false }),
       ]);
       const notasRows = notasRes.data ?? [];
       const tareasRows = tareasRes.data ?? [];
+      const citasRows = citasRes.error ? [] : (citasRes.data ?? []); // fail-soft si crm_citas no existe aún
       // Resuelve nombres de usuario (autor de nota / asignado de tarea) en un solo lookup.
       const uids = Array.from(new Set([
         ...notasRows.map((n: any) => n.id_usuario),
@@ -3593,13 +3870,22 @@ export function CrmDealDetail() {
         recurrencia: t.recurrencia, assignee: t.id_usuario_asignado ? (nameMap[t.id_usuario_asignado] ?? null) : null,
         created_at: t.fecha_creacion,
       }));
-      return { notes, tasks };
+      const citas = citasRows.map((c: any) => ({
+        id: c.id, title: c.titulo, tipo: c.tipo, status: c.estatus,
+        start_at: c.fecha_inicio, end_at: c.fecha_fin,
+        ubicacion: c.ubicacion ?? null, enlace: c.enlace_reunion ?? null,
+        resultado: c.resultado ?? null, descripcion: c.descripcion ?? null,
+        created_at: c.fecha_creacion,
+      }));
+      return { notes, tasks, citas };
     },
   });
   const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
   const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea completada"); invalidateActivity(); };
   const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea eliminada"); invalidateActivity(); };
   const deleteNote = async (id: number) => { const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Nota eliminada"); invalidateActivity(); };
+  const updateCitaStatus = async (id: number, estatus: string) => { const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita actualizada"); invalidateActivity(); };
+  const deleteCita = async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita eliminada"); invalidateActivity(); };
 
   if (isLoading || !form) {
     return (
@@ -3628,6 +3914,7 @@ export function CrmDealDetail() {
   ];
   const actNotes = activity?.notes ?? [];
   const actTasks = activity?.tasks ?? [];
+  const actCitas = activity?.citas ?? [];
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const upcomingTasks = actTasks.filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= todayStart)
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
@@ -3815,9 +4102,10 @@ export function CrmDealDetail() {
                 <ActivityPanel
                   contactId={String(erId)} userId={user?.id} owners={owners ?? []}
                   contact={{ full_name: deal.contacto?.nombre }}
-                  notes={actNotes} tasks={actTasks} includeSystem={false}
+                  notes={actNotes} tasks={actTasks} citas={actCitas} includeSystem={false}
                   onSaved={invalidateActivity}
                   onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                  onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
                 />
               )}
             </TabsContent>
@@ -4056,114 +4344,472 @@ function TaskActivityCard({ task, defaultExpanded = false, onComplete, onDelete 
   );
 }
 
-// ─── CrmAppointments ──────────────────────────────────────────────────────────
+// ─── CrmCitas (globales) ──────────────────────────────────────────────────────
+// Todas las citas/reuniones de todos los contactos. Lee/escribe la tabla real
+// `crm_citas` (español), resuelve nombre de contacto y asignado por waterfall,
+// y ofrece una "Vista previa" en panel lateral (estilo HubSpot). Se conserva el
+// nombre de export `CrmAppointments` porque App.tsx ya lo rutea en /ventas/citas.
+// (El esquema ficticio `crm_appointments`/`contacts`/`organization_id` se descartó.)
+
+type GlobalCita = {
+  id: number;
+  titulo: string;
+  tipo: string;
+  estatus: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  ubicacion: string | null;
+  enlace_reunion: string | null;
+  resultado: string | null;
+  descripcion: string | null;
+  id_entidad_relacionada: number;
+  id_usuario_asignado: string | null;
+  contact_name: string | null;
+  assigned_name: string | null;
+};
 
 export function CrmAppointments() {
-  const orgId = useCrmOrgId();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [tab, setTab] = useState<"upcoming" | "today" | "past" | "all">("upcoming");
+  const [search, setSearch] = useState("");
+  const [fType, setFType] = useState("all");
+  const [fStatus, setFStatus] = useState("all");
+  const [fAssignee, setFAssignee] = useState("all");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ contact_id: "", scheduled_at: "", title: "", notes: "" });
+  const [preview, setPreview] = useState<GlobalCita | null>(null);
 
-  const { data: appts = [], isLoading } = useQuery({
-    queryKey: ["crm-appts", orgId, tab],
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+
+  const { data: citas = [], isLoading } = useQuery<GlobalCita[]>({
+    queryKey: ["crm-citas-global"],
     queryFn: async () => {
-      if (!orgId) return [];
-      const now = new Date().toISOString();
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-      let q = (supabase as any).from("crm_appointments").select("id,title,scheduled_at,status,notes,contacts(full_name)").eq("organization_id", orgId).order("scheduled_at", { ascending: tab !== "past" });
-      if (tab === "upcoming") q = q.gt("scheduled_at", now);
-      if (tab === "today") q = q.gte("scheduled_at", today.toISOString()).lte("scheduled_at", todayEnd.toISOString());
-      if (tab === "past") q = q.lt("scheduled_at", now);
-      const { data } = await q.limit(50);
-      return data ?? [];
+      const res = await (supabase as any).from("crm_citas")
+        .select("id, titulo, tipo, estatus, fecha_inicio, fecha_fin, ubicacion, enlace_reunion, resultado, descripcion, id_entidad_relacionada, id_usuario_asignado")
+        .eq("activo", true)
+        .order("fecha_inicio", { ascending: false, nullsFirst: false })
+        .limit(1000);
+      if (res.error) return []; // crm_citas aún no desplegada en este ambiente
+      const rows: any[] = res.data ?? [];
+      if (!rows.length) return [];
+
+      // Nombre de contacto: entidades_relacionadas → personas.
+      const entIds = Array.from(new Set(rows.map((r) => r.id_entidad_relacionada).filter(Boolean)));
+      const contactMap: Record<number, string> = {};
+      if (entIds.length) {
+        const { data: ents } = await (supabase as any).from("entidades_relacionadas").select("id, id_persona").in("id", entIds);
+        const personaByEnt: Record<number, number> = Object.fromEntries((ents ?? []).map((e: any) => [e.id, e.id_persona]));
+        const personaIds = Array.from(new Set(Object.values(personaByEnt).filter(Boolean)));
+        if (personaIds.length) {
+          const { data: personas } = await (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", personaIds);
+          const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+          for (const [entId, pId] of Object.entries(personaByEnt)) contactMap[Number(entId)] = pName[pId as number] ?? "Sin nombre";
+        }
+      }
+      // Nombre del usuario asignado.
+      const userIds = Array.from(new Set(rows.map((r) => r.id_usuario_asignado).filter(Boolean)));
+      let userMap: Record<string, string> = {};
+      if (userIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", userIds);
+        userMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      return rows.map((r) => ({
+        id: r.id, titulo: r.titulo, tipo: r.tipo, estatus: r.estatus,
+        fecha_inicio: r.fecha_inicio, fecha_fin: r.fecha_fin,
+        ubicacion: r.ubicacion ?? null, enlace_reunion: r.enlace_reunion ?? null,
+        resultado: r.resultado ?? null, descripcion: r.descripcion ?? null,
+        id_entidad_relacionada: r.id_entidad_relacionada, id_usuario_asignado: r.id_usuario_asignado,
+        contact_name: contactMap[r.id_entidad_relacionada] ?? null,
+        assigned_name: r.id_usuario_asignado ? (userMap[r.id_usuario_asignado] ?? null) : null,
+      }));
     },
-    enabled: !!orgId,
   });
+
+  // Conteos por pestaña (por fecha_inicio).
+  const counts = useMemo(() => {
+    const c = { all: citas.length, today: 0, upcoming: 0, past: 0 };
+    for (const cita of citas) {
+      if (!cita.fecha_inicio) continue;
+      const d = parseISO(cita.fecha_inicio);
+      if (isNaN(d.getTime())) continue;
+      if (isToday(d)) c.today++;
+      else if (isFuture(d)) c.upcoming++;
+      else if (isPast(d)) c.past++;
+    }
+    return c;
+  }, [citas]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return citas
+      .filter((c) => {
+        if (tab !== "all") {
+          if (!c.fecha_inicio) return false;
+          const d = parseISO(c.fecha_inicio);
+          if (isNaN(d.getTime())) return false;
+          if (tab === "today" && !isToday(d)) return false;
+          if (tab === "upcoming" && !isFuture(d)) return false;
+          if (tab === "past" && !(isPast(d) && !isToday(d))) return false;
+        }
+        if (fType !== "all" && c.tipo !== fType) return false;
+        if (fStatus !== "all" && c.estatus !== fStatus) return false;
+        if (fAssignee !== "all") {
+          if (fAssignee === "none" && c.id_usuario_asignado) return false;
+          if (fAssignee !== "none" && c.id_usuario_asignado !== fAssignee) return false;
+        }
+        if (q && !(c.titulo?.toLowerCase().includes(q) || c.contact_name?.toLowerCase().includes(q))) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const da = a.fecha_inicio ?? "9999";
+        const db = b.fecha_inicio ?? "9999";
+        return tab === "past" ? db.localeCompare(da) : da.localeCompare(db);
+      });
+  }, [citas, tab, search, fType, fStatus, fAssignee]);
 
   const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      await (supabase as any).from("crm_appointments").update({ status }).eq("id", id);
+    mutationFn: async ({ id, estatus }: { id: number; estatus: string }) => {
+      const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id);
+      if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-appts", orgId] }),
+    onSuccess: (_d, v) => {
+      qc.refetchQueries({ queryKey: ["crm-citas-global"] });
+      setPreview((p) => (p && p.id === v.id ? { ...p, estatus: v.estatus } : p));
+      toast.success("Cita actualizada");
+    },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
+  });
+  const removeCita = useMutation({
+    mutationFn: async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) throw error; },
+    onSuccess: () => { qc.refetchQueries({ queryKey: ["crm-citas-global"] }); setPreview(null); toast.success("Cita eliminada"); },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
   });
 
-  const create = useMutation({
-    mutationFn: async () => {
-      if (!orgId) return;
-      await (supabase as any).from("crm_appointments").insert({ organization_id: orgId, ...form });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-appts", orgId] }); setOpen(false); setForm({ contact_id: "", scheduled_at: "", title: "", notes: "" }); toast.success("Cita creada"); },
-  });
-
-  const TABS = [
-    { id: "upcoming", label: "Próximas" },
-    { id: "today", label: "Hoy" },
-    { id: "past", label: "Pasadas" },
-    { id: "all", label: "Todas" },
-  ] as const;
+  const CITA_TABS = [
+    { id: "upcoming" as const, label: "Próximas", count: counts.upcoming },
+    { id: "today" as const, label: "Hoy", count: counts.today },
+    { id: "past" as const, label: "Pasadas", count: counts.past },
+    { id: "all" as const, label: "Todas", count: counts.all },
+  ];
+  const hasFilters = search || fType !== "all" || fStatus !== "all" || fAssignee !== "all";
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Citas" subtitle="Gestión de citas con prospectos">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva cita</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
-            <div className="space-y-3 py-2">
-              <div><Label>ID Contacto</Label><Input value={form.contact_id} onChange={e => setForm(f => ({ ...f, contact_id: e.target.value }))} placeholder="UUID del contacto" /></div>
-              <div><Label>Título</Label><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Visita al desarrollo" /></div>
-              <div><Label>Fecha y hora</Label><Input type="datetime-local" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} /></div>
-              <div><Label>Notas</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </PageHeader>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Citas</h1>
+          <p className="text-sm text-muted-foreground">{citas.length} cita{citas.length === 1 ? "" : "s"} · {counts.upcoming} próxima{counts.upcoming === 1 ? "" : "s"}</p>
+        </div>
+        <NewGlobalCitaDialog open={open} onOpenChange={setOpen} owners={owners} defaultAssignee={user?.id ?? ""} onCreated={() => qc.refetchQueries({ queryKey: ["crm-citas-global"] })} />
+      </div>
 
-      <Tabs value={tab} onValueChange={v => setTab(v as typeof tab)}>
-        <TabsList>{TABS.map(t => <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>)}</TabsList>
-        {TABS.map(t => (
-          <TabsContent key={t.id} value={t.id}>
-            {isLoading ? <Skeleton className="h-40 w-full mt-2" /> : appts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sin citas</p>
-            ) : (
-              <div className="rounded-md border overflow-auto mt-2">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Contacto</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Estatus</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {appts.map((a: any) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{a.title ?? "—"}</TableCell>
-                        <TableCell>{a.contacts?.full_name ?? "—"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{fmtDateTime(a.scheduled_at)}</TableCell>
-                        <TableCell>
-                          <Select value={a.status ?? "scheduled"} onValueChange={s => updateStatus.mutate({ id: a.id, status: s })}>
-                            <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
-                            <SelectContent>{APPT_STATUS.map(s => <SelectItem key={s} value={s}>{apptStatusLabel[s] ?? s}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
+      {/* Tabs con conteos */}
+      <div className="border-b border-border flex gap-1 overflow-x-auto">
+        {CITA_TABS.map((t) => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors duration-150 whitespace-nowrap flex items-center gap-2 ${tab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}>
+            {t.label}
+            <span className={`text-[11px] rounded-full px-1.5 min-w-[20px] text-center ${tab === t.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{t.count}</span>
+          </button>
         ))}
-      </Tabs>
+      </div>
+
+      {/* Barra de filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por título o contacto…" className="pl-8" />
+        </div>
+        <Select value={fAssignee} onValueChange={setFAssignee}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Asignado a" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los usuarios</SelectItem>
+            <SelectItem value="none">Sin asignar</SelectItem>
+            {owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={fType} onValueChange={setFType}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los tipos</SelectItem>
+            {Object.entries(CITA_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={fStatus} onValueChange={setFStatus}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Estatus" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todo estatus</SelectItem>
+            {CITA_STATUS_ORDER.map((k) => <SelectItem key={k} value={k}>{CITA_STATUS_META[k].label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFType("all"); setFStatus("all"); setFAssignee("all"); }}>
+            <X className="h-4 w-4 mr-1" />Limpiar
+          </Button>
+        )}
+      </div>
+
+      {/* Tabla */}
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-x-auto">
+        {isLoading ? (
+          <div className="p-6 space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="p-3 text-left font-medium">Título</th>
+                <th className="p-3 text-left font-medium">Cuándo</th>
+                <th className="p-3 text-left font-medium">Estatus</th>
+                <th className="p-3 text-left font-medium">Contacto asociado</th>
+                <th className="p-3 text-left font-medium">Asignado a</th>
+                <th className="p-3 w-32"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">
+                  {hasFilters || tab !== "all" ? "Sin citas para este filtro." : "Aún no hay citas. Crea la primera con “Nueva cita”."}
+                </td></tr>
+              )}
+              {filtered.map((c) => {
+                const typeMeta = CITA_TYPE_META[c.tipo] ?? { label: c.tipo, icon: CalendarClock };
+                const statusMeta = CITA_STATUS_META[c.estatus];
+                const TypeIcon = typeMeta.icon;
+                return (
+                  <tr key={c.id} className="border-t border-border hover:bg-muted/30 group align-top cursor-pointer" onClick={() => setPreview(c)}>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-medium">{c.titulo}</span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground ml-6">{typeMeta.label}</span>
+                    </td>
+                    <td className="p-3 whitespace-nowrap text-muted-foreground">
+                      <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{fmtCitaWhen(c.fecha_inicio, c.fecha_fin)}</span>
+                    </td>
+                    <td className="p-3">
+                      {statusMeta ? <Badge variant="outline" className={statusMeta.cls}>{statusMeta.label}</Badge> : <span className="text-muted-foreground">{c.estatus}</span>}
+                    </td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      {c.contact_name ? <Link to={`/admin/portal-crm/ventas/contactos/${c.id_entidad_relacionada}`} className="text-info hover:underline">{c.contact_name}</Link> : "—"}
+                    </td>
+                    <td className="p-3 text-muted-foreground">{c.assigned_name ?? <span className="italic text-muted-foreground/60">Sin asignar</span>}</td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-primary" onClick={() => setPreview(c)}>
+                          <ChevronRight className="h-3.5 w-3.5" />Vista previa
+                        </Button>
+                        <button type="button" title="Eliminar cita" onClick={() => removeCita.mutate(c.id)} className="text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <CitaPreviewSheet
+        cita={preview}
+        onOpenChange={(v) => { if (!v) setPreview(null); }}
+        onUpdateStatus={(estatus) => preview && updateStatus.mutate({ id: preview.id, estatus })}
+        onDelete={() => preview && removeCita.mutate(preview.id)}
+      />
     </div>
+  );
+}
+
+// Diálogo "Nueva cita" global: selector de contacto con búsqueda + campos de cita.
+function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssignee, onCreated }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  owners: { id: string; full_name: string; email: string }[];
+  defaultAssignee: string;
+  onCreated: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
+  const [contactSearch, setContactSearch] = useState("");
+  const [form, setForm] = useState<CitaFormState>(emptyCitaForm(defaultAssignee));
+
+  const { data: contactResults = [], isFetching } = useQuery({
+    queryKey: ["crm-cita-contact-search", contactSearch],
+    enabled: open && contactSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = contactSearch.trim();
+      const { data: personas } = await (supabase as any).from("personas")
+        .select("id, nombre_legal, nombre_comercial")
+        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
+        .eq("activo", true).limit(20);
+      const pIds = (personas ?? []).map((p: any) => p.id);
+      if (!pIds.length) return [];
+      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
+      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
+    },
+  });
+
+  const reset = () => { setForm(emptyCitaForm(defaultAssignee)); setContact(null); setContactSearch(""); };
+  const save = async () => {
+    if (!form.titulo.trim() || !contact) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_citas").insert(buildCitaInsert(form, contact.id));
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Cita creada"); reset(); onOpenChange(false); onCreated();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva cita</Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
+        <div className="grid gap-3 py-1">
+          <div>
+            <Label>Contacto asociado</Label>
+            {contact ? (
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                <span className="font-medium">{contact.name}</span>
+                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                </div>
+                {contactSearch.trim().length >= 2 && (
+                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
+                    {isFetching ? (
+                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
+                    ) : contactResults.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
+                    ) : contactResults.map((c) => (
+                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <CitaFormFields form={form} setForm={setForm} owners={owners} />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !form.titulo.trim() || !contact} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Crear cita"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CitaPreviewRow({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className="text-foreground break-words">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+// Panel lateral "Vista previa" de una cita (estilo HubSpot). Solo lectura + acciones rápidas.
+function CitaPreviewSheet({ cita, onOpenChange, onUpdateStatus, onDelete }: {
+  cita: GlobalCita | null;
+  onOpenChange: (v: boolean) => void;
+  onUpdateStatus: (estatus: string) => void;
+  onDelete: () => void;
+}) {
+  const typeMeta = cita ? (CITA_TYPE_META[cita.tipo] ?? { label: cita.tipo, icon: CalendarClock }) : null;
+  const statusMeta = cita ? CITA_STATUS_META[cita.estatus] : null;
+  const TypeIcon = typeMeta?.icon ?? CalendarClock;
+  const abierta = cita ? (cita.estatus === "programada" || cita.estatus === "reprogramada") : false;
+  return (
+    <Sheet open={!!cita} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[380px] sm:w-[440px] overflow-y-auto">
+        {cita && (
+          <>
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2">
+                <span className="h-8 w-8 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-400 flex items-center justify-center shrink-0"><TypeIcon className="h-4 w-4" /></span>
+                <span className="truncate">{cita.titulo}</span>
+              </SheetTitle>
+              <SheetDescription>Vista previa de la cita</SheetDescription>
+            </SheetHeader>
+            <div className="mt-5 space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {statusMeta && <Badge variant="outline" className={statusMeta.cls}>{statusMeta.label}</Badge>}
+                <Badge variant="outline" className="bg-muted text-muted-foreground border-border">{typeMeta?.label}</Badge>
+              </div>
+
+              <CitaPreviewRow icon={Clock} label="Cuándo" value={fmtCitaWhen(cita.fecha_inicio, cita.fecha_fin)} />
+              {cita.enlace_reunion && (
+                <div className="flex items-start gap-2">
+                  <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Enlace de reunión</div>
+                    <a href={cita.enlace_reunion} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{cita.enlace_reunion}</a>
+                  </div>
+                </div>
+              )}
+              {cita.ubicacion && <CitaPreviewRow icon={MapPin} label="Ubicación" value={cita.ubicacion} />}
+              <CitaPreviewRow icon={UserPlus} label="Asignado a" value={cita.assigned_name ?? "Sin asignar"} />
+              <div className="flex items-start gap-2">
+                <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Contacto</div>
+                  {cita.contact_name ? (
+                    <Link to={`/admin/portal-crm/ventas/contactos/${cita.id_entidad_relacionada}`} className="text-primary hover:underline">{cita.contact_name}</Link>
+                  ) : <span className="text-muted-foreground">Sin contacto</span>}
+                </div>
+              </div>
+              {cita.descripcion && (
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Agenda / notas</div>
+                  <p className="text-foreground whitespace-pre-wrap">{cita.descripcion}</p>
+                </div>
+              )}
+              {cita.resultado && (
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Resultado</div>
+                  <p className="text-foreground whitespace-pre-wrap">{cita.resultado}</p>
+                </div>
+              )}
+
+              <Separator />
+              <div className="space-y-2">
+                {abierta && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/5" onClick={() => onUpdateStatus("realizada")}><Check className="h-3.5 w-3.5" />Realizada</Button>
+                    <Button size="sm" variant="outline" className="gap-1 border-amber-500/30 text-amber-600 hover:bg-amber-500/5" onClick={() => onUpdateStatus("no_asistio")}><TriangleAlert className="h-3.5 w-3.5" />No asistió</Button>
+                    <Button size="sm" variant="outline" className="gap-1 text-muted-foreground" onClick={() => onUpdateStatus("cancelada")}><X className="h-3.5 w-3.5" />Cancelar</Button>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  {cita.contact_name ? (
+                    <Button size="sm" variant="ghost" className="gap-1 text-primary" asChild>
+                      <Link to={`/admin/portal-crm/ventas/contactos/${cita.id_entidad_relacionada}`}><ExternalLink className="h-3.5 w-3.5" />Ver contacto</Link>
+                    </Button>
+                  ) : <span />}
+                  <Button size="sm" variant="ghost" className="gap-1 text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="h-3.5 w-3.5" />Eliminar</Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -4332,6 +4978,155 @@ function TaskFormFields({ form, setForm, owners }: {
         </Select>
       </div>
       <div><Label>Notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Detalles de la tarea…" rows={3} /></div>
+    </>
+  );
+}
+
+// ─── Citas (reuniones) — máquina compartida ─────────────────────────────────
+// Actividad nativa del CRM (tabla real `crm_citas`, español), espejo de crm_tareas
+// pero con ventana de tiempo, lugar/enlace y resultado. Se muestra en la ficha del
+// contacto, en la del negocio (vía su contacto) y en la vista global de Citas.
+// En HubSpot esto es "Reuniones"; aquí seguimos el vocabulario del embudo ("cita").
+
+const CITA_TYPE_META: Record<string, { label: string; icon: typeof CalendarClock }> = {
+  presencial: { label: "Presencial", icon: MapPin },
+  videollamada: { label: "Videollamada", icon: Video },
+  llamada: { label: "Llamada", icon: Phone },
+  visita_obra: { label: "Visita a obra", icon: Building2 },
+  showroom: { label: "Showroom", icon: Store },
+};
+const CITA_STATUS_META: Record<string, { label: string; cls: string; dot: string }> = {
+  programada: { label: "Programada", cls: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400", dot: "bg-blue-500" },
+  reprogramada: { label: "Reprogramada", cls: "bg-violet-500/10 text-violet-600 border-violet-500/30 dark:text-violet-400", dot: "bg-violet-500" },
+  realizada: { label: "Realizada", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400", dot: "bg-emerald-500" },
+  no_asistio: { label: "No asistió", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400", dot: "bg-amber-500" },
+  cancelada: { label: "Cancelada", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", dot: "bg-slate-400" },
+};
+// Orden de presentación en selects (embudo natural de la cita).
+const CITA_STATUS_ORDER = ["programada", "reprogramada", "realizada", "no_asistio", "cancelada"];
+const CITA_DURATIONS: { id: string; label: string; minutes: number }[] = [
+  { id: "15", label: "15 minutos", minutes: 15 },
+  { id: "30", label: "30 minutos", minutes: 30 },
+  { id: "45", label: "45 minutos", minutes: 45 },
+  { id: "60", label: "1 hora", minutes: 60 },
+  { id: "90", label: "1 h 30 min", minutes: 90 },
+  { id: "120", label: "2 horas", minutes: 120 },
+];
+
+// Estado local unificado del formulario de cita (global y por contacto/negocio).
+type CitaFormState = {
+  titulo: string; tipo: string; estatus: string;
+  fecha: string; hora: string; duracion: string;
+  ubicacion: string; enlace_reunion: string;
+  recordatorio: string; descripcion: string; resultado: string; assigned_to: string;
+};
+const emptyCitaForm = (assignee = ""): CitaFormState => ({
+  titulo: "", tipo: "presencial", estatus: "programada",
+  fecha: "", hora: "09:00", duracion: "30",
+  ubicacion: "", enlace_reunion: "",
+  recordatorio: "none", descripcion: "", resultado: "", assigned_to: assignee,
+});
+
+// Construye el payload de INSERT a crm_citas desde el estado del formulario.
+function buildCitaInsert(form: CitaFormState, contactId: number) {
+  const startIso = form.fecha ? new Date(`${form.fecha}T${form.hora || "09:00"}:00`).toISOString() : null;
+  let endIso: string | null = null;
+  if (startIso) {
+    const mins = Number(form.duracion) || 30;
+    endIso = new Date(new Date(startIso).getTime() + mins * 60000).toISOString();
+  }
+  let recIso: string | null = null;
+  if (startIso && form.recordatorio !== "none") {
+    const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === form.recordatorio)?.minutes;
+    if (mins != null) recIso = new Date(new Date(startIso).getTime() - mins * 60000).toISOString();
+  }
+  return {
+    id_entidad_relacionada: contactId,
+    titulo: form.titulo.trim(),
+    tipo: form.tipo,
+    estatus: form.estatus,
+    fecha_inicio: startIso,
+    fecha_fin: endIso,
+    ubicacion: form.ubicacion.trim() || null,
+    enlace_reunion: form.enlace_reunion.trim() || null,
+    descripcion: form.descripcion.trim() || null,
+    resultado: form.resultado.trim() || null,
+    fecha_recordatorio: recIso,
+    id_usuario_asignado: form.assigned_to || null,
+  };
+}
+
+// Formato de fecha/hora de la cita: "Hoy · 09:00–09:30" o "12 ago 2026 · 11:00".
+function fmtCitaWhen(inicio?: string | null, fin?: string | null): string {
+  if (!inicio) return "Sin fecha";
+  const di = parseISO(inicio);
+  if (isNaN(di.getTime())) return "Sin fecha";
+  const base = isToday(di) ? "Hoy" : fmtDateFns(di, "dd MMM yyyy");
+  const hi = fmtDateFns(di, "HH:mm");
+  if (fin) {
+    const df = parseISO(fin);
+    if (!isNaN(df.getTime())) return `${base} · ${hi}–${fmtDateFns(df, "HH:mm")}`;
+  }
+  return `${base} · ${hi}`;
+}
+
+// Campos compartidos del formulario de cita. El contacto lo maneja cada diálogo.
+function CitaFormFields({ form, setForm, owners }: {
+  form: CitaFormState;
+  setForm: (f: CitaFormState) => void;
+  owners: { id: string; full_name: string; email: string }[];
+}) {
+  const esVirtual = form.tipo === "videollamada" || form.tipo === "llamada";
+  return (
+    <>
+      <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Recorrido en showroom" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Tipo</Label>
+          <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{Object.entries(CITA_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div><Label>Estatus</Label>
+          <Select value={form.estatus} onValueChange={(v) => setForm({ ...form, estatus: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{CITA_STATUS_ORDER.map((k) => <SelectItem key={k} value={k}>{CITA_STATUS_META[k].label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div><Label>Fecha</Label><Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></div>
+        <div><Label>Hora</Label><Input type="time" value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} disabled={!form.fecha} /></div>
+        <div><Label>Duración</Label>
+          <Select value={form.duracion} onValueChange={(v) => setForm({ ...form, duracion: v })} disabled={!form.fecha}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{CITA_DURATIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      {esVirtual ? (
+        <div><Label>Enlace de reunión</Label><Input value={form.enlace_reunion} onChange={(e) => setForm({ ...form, enlace_reunion: e.target.value })} placeholder="https://meet.google.com/…" /></div>
+      ) : (
+        <div><Label>Ubicación</Label><Input value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} placeholder="Showroom / dirección" /></div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Recordatorio</Label>
+          <Select value={form.recordatorio} onValueChange={(v) => setForm({ ...form, recordatorio: v })} disabled={!form.fecha}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{TASK_REMINDER_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div><Label>Asignar a</Label>
+          <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div><Label>Agenda / notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Temas a tratar…" rows={2} /></div>
+      {(form.estatus === "realizada" || form.estatus === "no_asistio") && (
+        <div><Label>Resultado</Label><Textarea value={form.resultado} onChange={(e) => setForm({ ...form, resultado: e.target.value })} placeholder="Resumen y siguientes pasos…" rows={2} /></div>
+      )}
     </>
   );
 }
@@ -4718,9 +5513,11 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                 <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                </div>
                 {contactSearch.trim().length >= 2 && (
                   <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
                     {isFetching ? (
@@ -4732,7 +5529,7 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
           <TaskFormFields form={form} setForm={setForm} owners={owners} />
