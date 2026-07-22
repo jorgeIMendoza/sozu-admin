@@ -1234,13 +1234,11 @@ const Propiedades = () => {
         });
       }
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error generating/downloading PDF:', error);
-      // DEBUG temporal: mostrar el mensaje real del error en el toast para diagnóstico.
-      const detalle = error?.message || error?.error_description || String(error);
       toast({
         title: "Error al descargar PDF",
-        description: `Detalle: ${detalle}`,
+        description: "Hubo un problema al descargar el PDF. Intente nuevamente.",
         variant: "destructive",
       });
     } finally {
