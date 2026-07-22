@@ -2991,9 +2991,11 @@ function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenC
                 <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive shrink-0"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras… (o déjalo vacío)" className="pl-8" />
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras… (o déjalo vacío)" className="pl-8" />
+                </div>
                 {contactSearch.trim().length >= 2 && (
                   <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
                     {isFetching ? (
@@ -3005,7 +3007,7 @@ function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenC
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -4678,9 +4680,11 @@ function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                 <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                </div>
                 {contactSearch.trim().length >= 2 && (
                   <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
                     {isFetching ? (
@@ -4692,7 +4696,7 @@ function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
           <CitaFormFields form={form} setForm={setForm} owners={owners} />
@@ -5509,9 +5513,11 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                 <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
+                </div>
                 {contactSearch.trim().length >= 2 && (
                   <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
                     {isFetching ? (
@@ -5523,7 +5529,7 @@ function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCr
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
           <TaskFormFields form={form} setForm={setForm} owners={owners} />
