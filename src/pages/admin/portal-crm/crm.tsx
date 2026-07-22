@@ -115,7 +115,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
 
 const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
 
-const META_LEAD_STATUSES: { value: string; label: string }[] = [
+const META_LEAD_STATUSES: { value: string; label: string; color?: string }[] = [
   { value: "nuevo", label: "Nuevo" },
   { value: "en_curso", label: "En curso" },
   { value: "negocio_abierto", label: "Negocio abierto" },
