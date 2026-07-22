@@ -154,7 +154,7 @@ import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
 
 // Read-only documents view component
-function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number }) {
+function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] }: { cuentaCobranzaId: number; propiedadId?: number | null; personaIds?: number[] }) {
   const { toast } = useToast();
   const [isDownloading, setIsDownloading] = useState(false);
   const [viewerDialog, setViewerDialog] = useState<{ isOpen: boolean; url: string; title: string }>({
@@ -163,10 +163,18 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number 
     title: ''
   });
 
-  // Fetch documents with category info
+  // Fetch documents with category info.
+  // Reúne TODOS los documentos relacionados: los de la cuenta, los personales del
+  // comprador (id_persona) y los de la propiedad (id_propiedad). Antes solo traía
+  // los de id_cuenta_cobranza, por eso faltaban los personales/de propiedad.
+  const personaKey = personaIds.join(",");
   const { data: documentos, isLoading } = useQuery({
-    queryKey: ["documentos_cuenta_cobranza", cuentaCobranzaId],
+    queryKey: ["documentos_cuenta_cobranza", cuentaCobranzaId, propiedadId, personaKey],
     queryFn: async () => {
+      const orParts: string[] = [`id_cuenta_cobranza.eq.${cuentaCobranzaId}`];
+      if (propiedadId) orParts.push(`id_propiedad.eq.${propiedadId}`);
+      if (personaIds.length) orParts.push(`id_persona.in.(${personaIds.join(",")})`);
+
       const { data: docs, error } = await supabase
         .from('documentos')
         .select(`
@@ -179,7 +187,7 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId }: { cuentaCobranzaId: number 
           id_tipo_documento,
           tipos_documento:id_tipo_documento(id, nombre, id_categoria_documento)
         `)
-        .eq('id_cuenta_cobranza', cuentaCobranzaId)
+        .or(orParts.join(","))
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
 
@@ -5419,7 +5427,13 @@ export default function DetalleCuentaCobranza() {
                 {/* Documentos Tab - only available for properties */}
                 {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
                   <TabsContent value="documentos" className="mt-6">
-                    <ReadOnlyDocumentsView cuentaCobranzaId={cuentaDetalle.id} />
+                    <ReadOnlyDocumentsView
+                      cuentaCobranzaId={cuentaDetalle.id}
+                      propiedadId={cuentaDetalle.id_propiedad ?? null}
+                      personaIds={(cuentaDetalle.compradores ?? [])
+                        .map((c) => c.id_persona)
+                        .filter((x): x is number => typeof x === 'number')}
+                    />
                   </TabsContent>
                 )}
               </Tabs>
