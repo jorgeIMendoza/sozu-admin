@@ -3702,9 +3702,11 @@ const Propiedades = () => {
 
   const handleSchemeSelection = async (offerId: number, schemeId: number) => {
     try {
+      // Al cambiar el esquema, invalidar el PDF cacheado (url=null) para que se
+      // regenere con el nuevo esquema/precio en la próxima descarga.
       const { error } = await supabase
         .from('ofertas')
-        .update({ id_esquema_pago_seleccionado: schemeId })
+        .update({ id_esquema_pago_seleccionado: schemeId, url: null })
         .eq('id', offerId);
 
       if (error) {
