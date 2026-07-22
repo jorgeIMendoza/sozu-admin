@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Bed, Bath, Car, Building2, Ruler, Package, ChevronRight, KeyRound, Copy, Check } from "lucide-react";
 import type { PropertyDetails, OfertaBodega, OfertaEstacionamiento } from "@/lib/offers/offer-data";
 import { formatMXN } from "@/lib/offers/offer-data";
@@ -133,6 +133,28 @@ const OfferPropertyDetails = ({
             {property.pricePerM2 ? (
               <SpecRow label="Precio por m²" value={formatMXN(property.pricePerM2)} mono />
             ) : null}
+            {/* Desglose de bodegas incluidas (mismo detalle que el diálogo de bodega) */}
+            {(bodegas ?? [])
+              .filter((b) => b.incluido && (b.costo ?? 0) > 0)
+              .map((b) => {
+                const m2 = b.m2 ?? 0;
+                const costo = b.costo ?? 0;
+                const precioM2 = m2 > 0 ? costo / m2 : costo;
+                return (
+                  <Fragment key={`bodega-ficha-${b.id}`}>
+                    <SpecRow label="Bodega" value={b.nombre} />
+                    {m2 > 0 && (
+                      <SpecRow
+                        label="Bodega m²"
+                        value={`${m2.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²`}
+                        mono
+                      />
+                    )}
+                    <SpecRow label="Bodega precio de lista" value={`${formatMXN(precioM2)} /m²`} mono />
+                    <SpecRow label="Bodega precio total" value={formatMXN(costo)} mono highlight />
+                  </Fragment>
+                );
+              })}
           </div>
 
           {/* Right: características + extras - cada dato UNA sola vez */}
