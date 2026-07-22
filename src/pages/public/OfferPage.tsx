@@ -216,6 +216,11 @@ const OfferPage = () => {
   const heroPriceLabel = selectedPlan
     ? `${selectedPlan.name}${heroPctLabel ? ` · ${heroPctLabel}` : ""}`
     : "Precio total";
+  // Total sin descuento = base (lista + bodega); se muestra cuando el plan aplica ajuste.
+  const showSinDescuento = !!selectedPlan && Math.abs(heroPrice - basePrice) >= 0.01;
+  const heroTotalCaption = showSinDescuento
+    ? (heroPct < 0 ? "Total con descuento" : "Total con aumento")
+    : "Total";
 
   const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
 
@@ -264,11 +269,16 @@ const OfferPage = () => {
                     )}
                   </p>
                 )}
+                {showSinDescuento && (
+                  <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/50 tabular-nums mt-1">
+                    Total sin descuento <span className="line-through">{fmtMXN(basePrice)}</span>
+                  </p>
+                )}
                 <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50 mt-1">
                   {heroPriceLabel}
                 </p>
                 <p className="text-2xl font-bold tabular-nums text-foreground leading-none tracking-tight">
-                  {fmtMXN(heroPrice)} <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/55">Total</span>
+                  {fmtMXN(heroPrice)} <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/55">{heroTotalCaption}</span>
                 </p>
               </div>
 
@@ -558,6 +568,18 @@ const OfferPage = () => {
                     )}
                   </div>
 
+                  {/* Total sin descuento (base = lista + bodega), antes del total ajustado */}
+                  {showSinDescuento && (
+                    <div className="mb-2">
+                      <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50">
+                        Total sin descuento
+                      </p>
+                      <p className="text-base font-semibold tabular-nums text-muted-foreground line-through">
+                        {fmtMXN(basePrice)}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Precio grande: total del esquema seleccionado (o precio_lista + bodega) */}
                   <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mb-1.5">
                     {heroPriceLabel}
@@ -566,7 +588,7 @@ const OfferPage = () => {
                     {fmtMXN(heroPrice)}
                   </p>
                   <p className="text-[10px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mt-1">
-                    Total
+                    {heroTotalCaption}
                   </p>
                 </div>
 
