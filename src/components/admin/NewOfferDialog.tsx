@@ -1118,13 +1118,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           title: "Oferta generada",
           description: `Se descargaron ${generatedPdfFiles.length} PDF(s).`,
         });
-      } catch (pdfErr: any) {
+      } catch (pdfErr) {
         console.error('Error generating/downloading PDFs:', pdfErr);
-        // DEBUG temporal: mostrar el mensaje real del error en el toast.
-        const detalle = pdfErr?.message || pdfErr?.error_description || String(pdfErr);
         toast({
           title: "Error al generar oferta",
-          description: `PDF: ${detalle}`,
+          description: "La oferta se creó correctamente, pero hubo un error al generar los PDFs.",
           variant: "destructive",
         });
         queryClient.invalidateQueries({ queryKey: ["properties"] });
