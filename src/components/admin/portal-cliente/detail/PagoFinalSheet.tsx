@@ -209,12 +209,38 @@ const PagoFinalSheet = ({
   const isFullyPaid = saldoEscrituracion <= 0;
 
   // Hydrate persisted mortgage process when sheet opens.
-  // Prioridad: (1) store en memoria; (2) solicitud persistida en BD - sobrevive
-  // logout/login y recarga, y BLOQUEA re-selección de banco (la selección es
-  // definitiva mientras el banco responde); (3) crédito elegido sin solicitud
-  // aún enviada → permitir elegir banco; (4) método sin definir.
+  //
+  // FUENTE DE VERDAD: `cuentas_cobranza.tipo_financiamiento`. Todo el flujo nace
+  // de ese campo. Si está vacío (null / reiniciado), el método NO está definido
+  // → mostrar SIEMPRE la modal de selección, aunque queden registros viejos de
+  // crédito o solicitud dados de baja (no deben "atorar" la re-selección).
+  //
+  // Con tipo_financiamiento = CREDITO_HIPOTECARIO, prioridad:
+  //   (1) store en memoria (flujo en curso);
+  //   (2) solicitud persistida en BD → mostrar estatus (sobrevive login/recarga);
+  //   (3) crédito elegido sin solicitud aún → selector de banco.
   useEffect(() => {
     if (!open) return;
+    const tf = property.tipoFinanciamiento;
+
+    // Método sin definir (o reiniciado) → modal de selección.
+    if (tf !== "CREDITO_HIPOTECARIO" && tf !== "RECURSOS_PROPIOS") {
+      clearMortgageProcess(property.id);
+      setProcess(null);
+      setStep("method");
+      setMethod(null);
+      return;
+    }
+
+    // Recursos propios ya elegido → selección con esa opción marcada.
+    if (tf === "RECURSOS_PROPIOS") {
+      setProcess(null);
+      setStep("method");
+      setMethod("propios");
+      return;
+    }
+
+    // tipo_financiamiento === "CREDITO_HIPOTECARIO"
     const existing = getMortgageProcess(property.id);
     if (existing) {
       setProcess(existing);
@@ -226,15 +252,11 @@ const PagoFinalSheet = ({
       setProcess(buildProcessFromSolicitud(property.id, solicitudVigente, bancos));
       setMethod("credito");
       setStep("status");
-    } else if (property.tipoFinanciamiento === "CREDITO_HIPOTECARIO") {
+    } else {
       // Eligió crédito pero aún no envía solicitud: mostrar selector de banco.
       setProcess(null);
       setMethod("credito");
       setStep("mortgage-select");
-    } else {
-      setProcess(null);
-      setStep("method");
-      setMethod(null);
     }
   }, [open, property.id, property.tipoFinanciamiento, solicitudVigente, bancos]);
 
@@ -248,7 +270,20 @@ const PagoFinalSheet = ({
       .from('cuentas_cobranza')
       .update({ tipo_financiamiento: 'RECURSOS_PROPIOS' })
       .in('id', relatedCuentaIds);
+    // Dar de baja cualquier crédito/solicitud previa (cambió de crédito a propios).
+    await (supabase as any)
+      .from('creditos_hipotecarios')
+      .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
+      .eq('id_cuenta_cobranza', cuentaId)
+      .eq('activo', true);
+    await (supabase as any)
+      .from('bancos_solicitudes')
+      .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
+      .eq('id_cuenta_cobranza', cuentaId)
+      .eq('activo', true);
+    clearMortgageProcess(property.id);
     queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
+    queryClient.invalidateQueries({ queryKey: ['solicitud-credito-vigente', cuentaId] });
     if (onViewPaymentInstructions) {
       onClose();
       setTimeout(() => onViewPaymentInstructions(), 200);
@@ -272,10 +307,21 @@ const PagoFinalSheet = ({
       .in('id', relatedCuentaIds);
 
     // El crédito único se registra en la cuenta PRINCIPAL por el total combinado.
+    // Al reelegir crédito reactivamos el registro (activo=true) y reseteamos el
+    // vobo/pago del banco: si existía un crédito dado de baja, el upsert lo revive
+    // en vez de dejarlo en `activo=false` (que volvería a mostrar la selección).
     await (supabase as any)
       .from('creditos_hipotecarios')
       .upsert(
-        { id_cuenta_cobranza: cuentaId, id_banco: choice.bank.idBanco, monto_credito: saldoEscrituracion },
+        {
+          id_cuenta_cobranza: cuentaId,
+          id_banco: choice.bank.idBanco,
+          monto_credito: saldoEscrituracion,
+          vobo_banco: 'PENDIENTE',
+          pago_banco_estatus: 'PENDIENTE',
+          activo: true,
+          fecha_actualizacion: new Date().toISOString(),
+        },
         { onConflict: 'id_cuenta_cobranza' },
       );
 

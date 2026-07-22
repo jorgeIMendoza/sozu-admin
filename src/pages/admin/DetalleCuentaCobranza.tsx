@@ -117,6 +117,7 @@ interface CuentaDetalle {
   url_factura_comision?: string | null;
   es_draft_factura_comision?: boolean | null;
   dueno_facturar?: boolean;
+  tipo_financiamiento?: string | null;
 }
 
 interface OfferData {
@@ -587,6 +588,7 @@ export default function DetalleCuentaCobranza() {
   const [generarFacturaLoading, setGenerarFacturaLoading] = useState(false);
   const [timbrarFacturaDialog, setTimbrarFacturaDialog] = useState(false);
   const [timbrarFacturaLoading, setTimbrarFacturaLoading] = useState(false);
+  const [reiniciarFinDialog, setReiniciarFinDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canUpdate, canDelete, isSuperAdmin } = usePagePermissions('/admin/cuentas-cobranza');
@@ -613,7 +615,9 @@ export default function DetalleCuentaCobranza() {
           monto_cobro_cancelacion,
           id_tipo_cancelacion,
           url_factura_comision,
-          es_draft_factura_comision
+          es_draft_factura_comision,
+          tipo_financiamiento,
+          id_propiedad
         `)
         .eq('id', cuentaId)
         .maybeSingle();
@@ -802,12 +806,70 @@ export default function DetalleCuentaCobranza() {
         url_factura_comision: cuenta.url_factura_comision,
         es_draft_factura_comision: cuenta.es_draft_factura_comision,
         dueno_facturar: (entidadResult.data as any)?.facturar_comision_sozu || false,
+        tipo_financiamiento: (cuenta as any).tipo_financiamiento ?? null,
       };
 
       return detalle;
     },
     enabled: !!cuentaId,
     staleTime: 30000, // 30 segundos - evita refetch automático al abrir modal
+  });
+
+  // Reinicia el financiamiento de la propiedad (acción INTERNA, no del cliente).
+  // Limpia el campo maestro `tipo_financiamiento` en TODAS las cuentas de la
+  // propiedad (principal + productos) y da de baja el crédito y la solicitud
+  // vigentes. Tras esto el cliente vuelve a ver la modal de selección de método.
+  const reiniciarFinanciamiento = useMutation({
+    mutationFn: async () => {
+      // Resolver la propiedad de esta cuenta para incluir sus cuentas hijas.
+      const { data: cuentaRow } = await (supabase as any)
+        .from('cuentas_cobranza')
+        .select('id_propiedad')
+        .eq('id', cuentaId)
+        .maybeSingle();
+      const propId = cuentaRow?.id_propiedad ?? null;
+
+      let cuentaIds: number[] = [Number(cuentaId)];
+      if (propId != null) {
+        const { data: hermanas } = await (supabase as any)
+          .from('cuentas_cobranza')
+          .select('id')
+          .eq('id_propiedad', propId);
+        if (hermanas?.length) cuentaIds = hermanas.map((c: any) => Number(c.id));
+      }
+
+      const now = new Date().toISOString();
+      await (supabase as any)
+        .from('cuentas_cobranza')
+        .update({ tipo_financiamiento: null })
+        .in('id', cuentaIds);
+      await (supabase as any)
+        .from('creditos_hipotecarios')
+        .update({ activo: false, fecha_actualizacion: now })
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true);
+      await (supabase as any)
+        .from('bancos_solicitudes')
+        .update({ activo: false, fecha_actualizacion: now })
+        .in('id_cuenta_cobranza', cuentaIds)
+        .eq('activo', true);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cuenta_detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
+      setReiniciarFinDialog(false);
+      toast({
+        title: 'Financiamiento reiniciado',
+        description: 'El cliente puede elegir de nuevo su método de pago.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'No se pudo reiniciar el financiamiento.',
+        variant: 'destructive',
+      });
+    },
   });
 
   // Fetch offer data with payment scheme info
@@ -3104,7 +3166,7 @@ export default function DetalleCuentaCobranza() {
             </div>
             )}
 
-            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
+            <div className="flex flex-wrap items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border/50">
               {!esDacionEnPago && (
               <Button
                 onClick={async () => {
@@ -3147,7 +3209,7 @@ export default function DetalleCuentaCobranza() {
               {(canUpdate || isSuperAdmin) && (
               <>
                 <div className="h-5 w-px bg-border" />
-                <Button 
+                <Button
                   onClick={() => setEditCuentaDialog(true)}
                   variant="ghost"
                   size="sm"
@@ -3158,7 +3220,26 @@ export default function DetalleCuentaCobranza() {
                 </Button>
               </>
               )}
-              
+
+              {/* Reiniciar financiamiento — acción interna. Solo si ya hay un
+                  método elegido (tipo_financiamiento definido) en la propiedad. */}
+              {(canUpdate || isSuperAdmin) && cuentaDetalle.tipo_cuenta === 'Propiedad' &&
+               (cuentaDetalle.tipo_financiamiento === 'CREDITO_HIPOTECARIO' ||
+                cuentaDetalle.tipo_financiamiento === 'RECURSOS_PROPIOS') && (
+                <>
+                  <div className="h-5 w-px bg-border" />
+                  <Button
+                    onClick={() => setReiniciarFinDialog(true)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 text-amber-600 hover:text-amber-700"
+                  >
+                    <RefreshCcw className="h-4 w-4 mr-2" />
+                    Reiniciar financiamiento
+                  </Button>
+                </>
+              )}
+
               {/* Botón Poner en Demanda */}
               {(canUpdate || isSuperAdmin) && cuentaDetalle.tipo_cuenta === 'Propiedad' &&
                cuentaDetalle.id_estatus_disponibilidad !== 11 && !esDacionEnPago &&
@@ -3725,10 +3806,28 @@ export default function DetalleCuentaCobranza() {
                   <label className="text-sm font-medium">Fecha Compra</label>
                   <p className="text-sm text-muted-foreground">{formatDate(cuentaDetalle.fecha_compra)}</p>
                 </div>
+                <div>
+                  <label className="text-sm font-medium">Financiamiento</label>
+                  <div className="mt-0.5">
+                    {cuentaDetalle.tipo_financiamiento === 'CREDITO_HIPOTECARIO' ? (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                        Crédito hipotecario
+                      </Badge>
+                    ) : cuentaDetalle.tipo_financiamiento === 'RECURSOS_PROPIOS' ? (
+                      <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200">
+                        Recursos propios
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        No definido
+                      </Badge>
+                    )}
+                  </div>
+                </div>
                 {agenteVendedor && (
                   <div>
                     <label className="text-sm font-medium">Agente Vendedor</label>
-                    <button 
+                    <button
                       onClick={() => setAgenteVendedorDialog(true)}
                       className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
                     >
@@ -5483,6 +5582,45 @@ export default function DetalleCuentaCobranza() {
             </Button>
             <Button onClick={handleTimbrarFacturaSozu} disabled={timbrarFacturaLoading}>
               {timbrarFacturaLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Timbrando...</> : <><Stamp className="h-4 w-4 mr-2" /> Timbrar</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmar reinicio de financiamiento (acción interna) */}
+      <Dialog open={reiniciarFinDialog} onOpenChange={setReiniciarFinDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reiniciar financiamiento</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Método actual:{" "}
+            <span className="font-medium text-foreground">
+              {cuentaDetalle?.tipo_financiamiento === 'CREDITO_HIPOTECARIO'
+                ? 'Crédito hipotecario'
+                : cuentaDetalle?.tipo_financiamiento === 'RECURSOS_PROPIOS'
+                  ? 'Recursos propios'
+                  : '—'}
+            </span>
+            . Se limpiará el método de financiamiento de la propiedad y sus productos, y se
+            darán de baja el crédito y la solicitud vigentes. El cliente volverá a elegir su
+            método de pago. Esta acción no borra pagos.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setReiniciarFinDialog(false)}
+              disabled={reiniciarFinanciamiento.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => reiniciarFinanciamiento.mutate()}
+              disabled={reiniciarFinanciamiento.isPending}
+            >
+              {reiniciarFinanciamiento.isPending
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Reiniciando...</>
+                : <><RefreshCcw className="h-4 w-4 mr-2" /> Reiniciar</>}
             </Button>
           </div>
         </DialogContent>
