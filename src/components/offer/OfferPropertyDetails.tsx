@@ -161,7 +161,12 @@ const OfferPropertyDetails = ({
                 .filter((b) => b.incluido)
                 .reduce((s, b) => s + (b.costo ?? 0), 0);
               return bodegaTotal > 0 ? (
-                <SpecRow label="Total" value={formatMXN(property.listPrice + bodegaTotal)} mono highlight />
+                <div className="flex items-baseline justify-between gap-3 mt-2 pt-3 border-t-2 border-primary/30">
+                  <span className="text-[11px] uppercase tracking-[0.14em] font-bold text-foreground">Total</span>
+                  <span className="text-lg font-extrabold tabular-nums text-primary text-right leading-tight">
+                    {formatMXN(property.listPrice + bodegaTotal)}
+                  </span>
+                </div>
               ) : null;
             })()}
           </div>
