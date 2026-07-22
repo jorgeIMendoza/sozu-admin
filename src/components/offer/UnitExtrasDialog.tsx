@@ -131,26 +131,38 @@ const UnitExtrasDialog = ({ open, onOpenChange, kind, bodegas, estacionamientos 
                     {meta.singular} {it.nombre}
                   </span>
                   {it.incluido && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
-                      <Check className="w-3 h-3" />
-                      Incluido
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary text-right">
+                      <Check className="w-3 h-3 shrink-0" />
+                      Se incluye en el precio total
                     </span>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                   {it.tipo && <DetailChip icon={Car} label={`Tipo: ${it.tipo}`} />}
                   {it.ubicacion && <DetailChip icon={MapPin} label={it.ubicacion} />}
-                  {m2 && <DetailChip icon={Ruler} label={m2} />}
+                  {m2 && kind !== "bodega" && <DetailChip icon={Ruler} label={m2} />}
                 </div>
 
-                {costo && (
-                  <div className="mt-3 pt-3 border-t border-border/50 flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-bold tabular-nums">{costo}</span>
-                    {it.incluido && (
-                      <span className="text-[11px] italic text-muted-foreground text-right">
-                        se sumará en el precio total de la oferta
-                      </span>
+                {kind === "bodega" && it.costo != null && it.costo > 0 && (
+                  <div className="mt-3 pt-3 border-t border-border/50 space-y-1">
+                    {it.m2 != null && it.m2 > 0 && (
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">M²</span>
+                        <span className="text-xs font-semibold tabular-nums">
+                          {it.m2.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²
+                        </span>
+                      </div>
                     )}
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">Precio de lista</span>
+                      <span className="text-xs font-semibold tabular-nums">
+                        {formatCurrency(it.m2 && it.m2 > 0 ? it.costo / it.m2 : it.costo)} /m²
+                      </span>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">Precio total</span>
+                      <span className="text-sm font-bold tabular-nums">{costo}</span>
+                    </div>
                   </div>
                 )}
 
