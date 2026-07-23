@@ -1563,6 +1563,10 @@ const ClientePerfil = () => {
                         const isUploading = uploadingSlot === slot.key;
                         const hasFile = !!best?.url;
                         const isCamera = !!slot.camera;
+                        // Ícono de acción: subir/cámara solo si falta el archivo, está
+                        // vencido o fue rechazado (hay que cargar uno nuevo). Si está
+                        // aprobado o en revisión → lápiz (reemplazar por si se equivocaron).
+                        const needsUpload = status === 'missing' || status === 'expired' || status === 'rejected';
                         // Slot del representante legal sin persona vinculada → no se puede subir aquí.
                         const repMissing = slot.owner === 'rep' && !repLegalPersonaId;
                         const slotPersonaId = slot.owner === 'rep' ? repLegalPersonaId : effectivePersonaId;
@@ -1592,10 +1596,10 @@ const ClientePerfil = () => {
                               <button
                                 onClick={() => { if (isCamera) { setCameraMode(slot.key.startsWith('pasaporte') ? 'pasaporte' : 'ine'); setCameraPersonaId(slotPersonaId ?? effectivePersonaId); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
                                 disabled={isUploading || repMissing}
-                                title={repMissing ? 'Primero captura al representante legal' : isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
+                                title={repMissing ? 'Primero captura al representante legal' : needsUpload ? (isCamera ? 'Capturar con cámara' : 'Subir documento') : 'Reemplazar documento'}
                                 className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCamera ? <Camera className="h-4 w-4" /> : hasFile ? <Pencil className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : needsUpload ? (isCamera ? <Camera className="h-4 w-4" /> : <Upload className="h-4 w-4" />) : <Pencil className="h-4 w-4" />}
                               </button>
                               {hasFile && (
                                 <button
