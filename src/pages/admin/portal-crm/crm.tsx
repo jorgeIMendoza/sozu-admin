@@ -87,6 +87,7 @@ import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
   NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL,
 } from "./crm-negocios";
+import { CargaMasivaDialog } from "./crm-carga-masiva";
 import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
 } from "@/lib/crm-lead-scoring";
@@ -485,6 +486,7 @@ export function CrmContacts() {
           </h1>
         </div>
         <div className="flex gap-2">
+          <CargaMasivaDialog onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
           <CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
         </div>
       </div>
