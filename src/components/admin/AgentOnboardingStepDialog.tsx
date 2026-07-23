@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays, Landmark, Trash2, Camera, Shield, PenTool, Send, Lock, ChevronRight } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,6 +28,17 @@ import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import { cn } from "@/lib/utils";
 import { ENVIRONMENT } from "@/lib/config";
+import {
+  FIELD_LABEL_CLS,
+  FIELD_INPUT_CLS,
+  FIELD_SELECT_TRIGGER_CLS,
+  BTN_SECONDARY_CLS,
+  BTN_PRIMARY_CLS,
+  SEG_TRACK_CLS,
+  segBtnCls,
+  Req,
+  ModalHeader,
+} from "@/components/ui/form-standard";
 import {
   useStabilityDetection,
   CaptureFlash,
@@ -202,12 +213,11 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-md shadow-2xl border-0">
-        <DialogHeader>
-          <DialogTitle className="text-lg">{title}</DialogTitle>
-          <DialogDescription className="text-xs">{description}</DialogDescription>
-        </DialogHeader>
-        {content}
+      <DialogContent className="max-w-[540px] w-[calc(100vw-2rem)] max-h-[90vh] gap-0 overflow-hidden rounded-md border border-[#ECEEF0] bg-white p-0 shadow-lg">
+        <ModalHeader title={title} subtitle={description} />
+        <div className="max-h-[calc(90vh-5.5rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden px-[22px] py-[22px]">
+          {content}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -286,6 +296,9 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const streamRef = useRef<MediaStream | null>(null);
   const autoCaptureLockRef = useRef(false);
   const activeVerifyCallsRef = useRef(0);
+  // Preview de documento capturado (revisar antes de subir/verificar). Solo documentos.
+  const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
+  const pendingBlobRef = useRef<Blob | null>(null);
 
   // --- Mifiel digital signature state for doc type 48 ---
   const [mifielDialogOpen, setMifielDialogOpen] = useState(false);
@@ -293,6 +306,8 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const [sendingToMifiel, setSendingToMifiel] = useState(false);
   const [syncingFirma, setSyncingFirma] = useState(false);
   const [cartaPdfViewerUrl, setCartaPdfViewerUrl] = useState<string | null>(null);
+  // Visor interno de documentos del expediente (PDF o imagen).
+  const [docView, setDocView] = useState<{ url: string; nombre: string } | null>(null);
   const [agentSignaturePadOpen, setAgentSignaturePadOpen] = useState(false);
   const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null);
   const [pendingSignAction, setPendingSignAction] = useState<"firmar" | "continuar" | null>(null);
@@ -685,6 +700,16 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     setCameraActive(false);
     setCapturedFront(null);
     autoCaptureLockRef.current = false;
+    if (pendingBlobRef.current) pendingBlobRef.current = null;
+    setDocPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+  };
+
+  // Detiene solo el stream (mantiene el overlay para mostrar el preview del documento).
+  const freezeStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
   };
 
   // Upload and return the public URL + document ID
@@ -763,174 +788,232 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     }
   };
 
-  const capturePhoto = useCallback(async () => {
+  // Procesa un blob ya capturado: sube + avanza de paso / verifica con IA.
+  const processShot = async (blob: Blob, step: 'front' | 'back' | 'passport' | 'selfie') => {
+    if (step === 'front') {
+      const file = new File([blob], `ine_frente_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const result = await uploadAndGetUrl(2, file);
+      if (result) {
+        setCapturedDocUrls(prev => {
+          const next = { ...prev, front: result.url };
+          capturedDocUrlsRef.current = next;
+          return next;
+        });
+        toast.success("INE frente capturado. Ahora captura el reverso.", { duration: 4000 });
+        startCamera('back');
+      } else {
+        autoCaptureLockRef.current = false;
+      }
+    } else if (step === 'back') {
+      const file = new File([blob], `ine_reverso_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const result = await uploadAndGetUrl(3, file);
+      if (result) {
+        setCapturedDocUrls(prev => {
+          const next = { ...prev, back: result.url };
+          capturedDocUrlsRef.current = next;
+          return next;
+        });
+        setVerificationDocId(result.docId);
+        stopCamera();
+        // Pre-verifica documento mostrando el spinner de IA
+        const urls = capturedDocUrlsRef.current;
+        const [frontCheck, backCheck] = await Promise.all([
+          urls.front ? verifyDocument(urls.front, 'ine_frente') : Promise.resolve(null),
+          verifyDocument(result.url, 'ine_reverso'),
+        ]);
+        const preResult = frontCheck ? {
+          ...frontCheck,
+          numero_identificacion: backCheck?.numero_identificacion || frontCheck.numero_identificacion,
+        } : backCheck;
+        if (preResult && !preResult.is_valid_document) {
+          // Not a valid INE — show result immediately, no selfie
+          setVerificationResult(preResult);
+          toast.error("El documento no es una identificación válida (INE/Pasaporte).", { duration: 6000 });
+          autoCaptureLockRef.current = false;
+        } else {
+          toast.success("INE reverso capturado. Ahora toma una selfie.", { duration: 4000 });
+          setTimeout(() => startCamera('selfie'), 300);
+        }
+      } else {
+        autoCaptureLockRef.current = false;
+      }
+    } else if (step === 'passport') {
+      const file = new File([blob], `pasaporte_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const result = await uploadAndGetUrl(4, file);
+      if (result) {
+        setCapturedDocUrls(prev => {
+          const next = { ...prev, passport: result.url };
+          capturedDocUrlsRef.current = next;
+          return next;
+        });
+        setVerificationDocId(result.docId);
+        stopCamera();
+        // Pre-verifica documento mostrando el spinner de IA
+        const preResult = await verifyDocument(result.url, 'pasaporte');
+        if (preResult && !preResult.is_valid_document) {
+          // Not a valid passport — show result immediately, no selfie
+          setVerificationResult(preResult);
+          toast.error("El documento no es una identificación válida (INE/Pasaporte).", { duration: 6000 });
+          autoCaptureLockRef.current = false;
+        } else {
+          toast.success("Pasaporte capturado. Ahora toma una selfie.", { duration: 4000 });
+          setTimeout(() => startCamera('selfie'), 300);
+        }
+      } else {
+        autoCaptureLockRef.current = false;
+      }
+    } else if (step === 'selfie') {
+      const file = new File([blob], `selfie_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const selfieResult = await uploadAndGetUrl(SELFIE_DOC_TYPE, file);
+      if (selfieResult) {
+        stopCamera();
+        // Use ref for fresh URLs (avoids stale closure)
+        const urls = capturedDocUrlsRef.current;
+        const isPasaporteFlow = !!urls.passport;
+        const frontUrl = urls.front || '';
+        const backUrl = urls.back || '';
+        const passportUrl = urls.passport || '';
+        const primaryDocUrl = passportUrl || frontUrl;
+
+        if (!primaryDocUrl) {
+          toast.error("No se encontró la imagen del documento. Intenta de nuevo.", {
+            duration: 6000,
+            description: "Vuelve a capturar el documento desde el inicio.",
+          });
+          autoCaptureLockRef.current = false;
+          return;
+        }
+
+        // Spinner is shown via the `verifying` state — no toast needed
+
+        let aiResult: VerificationResult | null = null;
+
+        if (isPasaporteFlow) {
+          aiResult = await verifyDocument(primaryDocUrl, 'pasaporte', selfieResult.url);
+        } else {
+          const [frontVerification, backVerification] = await Promise.all([
+            verifyDocument(frontUrl, 'ine_frente', selfieResult.url),
+            backUrl ? verifyDocument(backUrl, 'ine_reverso') : Promise.resolve(null),
+          ]);
+
+          if (frontVerification) {
+            aiResult = {
+              ...frontVerification,
+              numero_identificacion:
+                backVerification?.numero_identificacion || frontVerification.numero_identificacion,
+            };
+          } else {
+            aiResult = backVerification;
+          }
+        }
+
+        // verification done — verifying state is cleared by verifyDocument
+
+        if (aiResult) {
+          setVerificationResult(aiResult);
+          const strongFaceMatch = aiResult.face_match === true && (aiResult.face_match_confidence ?? 0) >= 70;
+
+          if (!aiResult.is_valid_document) {
+            toast.error("Documento inválido", {
+              duration: 5000,
+              description: aiResult.rejection_reason || "Se rechazó la identificación. Vuelve a capturar.",
+            });
+          } else if (!strongFaceMatch) {
+            toast.error("Selfie no coincide con el documento", {
+              duration: 6000,
+              description: "No se permitirá guardar hasta obtener coincidencia facial confiable.",
+            });
+          } else {
+            toast.success("Verificación completada", {
+              duration: 3000,
+              description: "Revisa los resultados a continuación.",
+            });
+          }
+        } else {
+          toast.error("No se pudo verificar el documento", {
+            duration: 8000,
+            description: "La verificación con IA falló. Intenta capturar de nuevo las fotos.",
+          });
+          // Reset to allow retry
+          autoCaptureLockRef.current = false;
+        }
+      } else {
+        toast.error("Error al subir la selfie. Intenta de nuevo.", { duration: 5000 });
+        autoCaptureLockRef.current = false;
+      }
+    }
+  };
+
+  // Captura el frame. Documentos: recorta al recuadro guía + muestra preview.
+  // Selfie: frame completo y procesa directo (sin preview).
+  const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current || autoCaptureLockRef.current) return;
     autoCaptureLockRef.current = true;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) { autoCaptureLockRef.current = false; return; }
-    ctx.drawImage(video, 0, 0);
+
+    if (cameraStep === 'selfie') {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+    } else {
+      // Recorta EXACTO al recuadro de guía (inset-4 = 16px) considerando object-cover.
+      const cW = video.clientWidth, cH = video.clientHeight, vW = video.videoWidth, vH = video.videoHeight;
+      if (!vW || !vH || !cW || !cH) {
+        canvas.width = vW; canvas.height = vH;
+        ctx.drawImage(video, 0, 0);
+      } else {
+        const scale = Math.max(cW / vW, cH / vH);
+        const offX = (vW - cW / scale) / 2;
+        const offY = (vH - cH / scale) / 2;
+        const inset = 16; // inset-4
+        const sx = Math.max(0, offX + inset / scale);
+        const sy = Math.max(0, offY + inset / scale);
+        const sw = Math.min((cW - 2 * inset) / scale, vW - sx);
+        const sh = Math.min((cH - 2 * inset) / scale, vH - sy);
+        canvas.width = Math.round(sw);
+        canvas.height = Math.round(sh);
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      }
+    }
 
     // Show flash
     setShowFlash(true);
     setTimeout(() => setShowFlash(false), 300);
 
-    canvas.toBlob(async (blob) => {
+    canvas.toBlob((blob) => {
       if (!blob) { autoCaptureLockRef.current = false; return; }
-
-      if (cameraStep === 'front') {
-        const file = new File([blob], `ine_frente_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const result = await uploadAndGetUrl(2, file);
-        if (result) {
-          setCapturedDocUrls(prev => {
-            const next = { ...prev, front: result.url };
-            capturedDocUrlsRef.current = next;
-            return next;
-          });
-          setCameraStep('back');
-          toast.success("INE frente capturado. Ahora captura el reverso.", { duration: 4000 });
-          autoCaptureLockRef.current = false;
-        }
-      } else if (cameraStep === 'back') {
-        const file = new File([blob], `ine_reverso_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const result = await uploadAndGetUrl(3, file);
-        if (result) {
-          setCapturedDocUrls(prev => {
-            const next = { ...prev, back: result.url };
-            capturedDocUrlsRef.current = next;
-            return next;
-          });
-          setVerificationDocId(result.docId);
-          stopCamera();
-          // Pre-verifica documento mostrando el spinner de IA
-          const urls = capturedDocUrlsRef.current;
-          const [frontCheck, backCheck] = await Promise.all([
-            urls.front ? verifyDocument(urls.front, 'ine_frente') : Promise.resolve(null),
-            verifyDocument(result.url, 'ine_reverso'),
-          ]);
-          const preResult = frontCheck ? {
-            ...frontCheck,
-            numero_identificacion: backCheck?.numero_identificacion || frontCheck.numero_identificacion,
-          } : backCheck;
-          if (preResult && !preResult.is_valid_document) {
-            // Not a valid INE — show result immediately, no selfie
-            setVerificationResult(preResult);
-            toast.error("El documento no es una identificación válida (INE/Pasaporte).", { duration: 6000 });
-            autoCaptureLockRef.current = false;
-          } else {
-            toast.success("INE reverso capturado. Ahora toma una selfie.", { duration: 4000 });
-            setTimeout(() => startCamera('selfie'), 300);
-          }
-        }
-      } else if (cameraStep === 'passport') {
-        const file = new File([blob], `pasaporte_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const result = await uploadAndGetUrl(4, file);
-        if (result) {
-          setCapturedDocUrls(prev => {
-            const next = { ...prev, passport: result.url };
-            capturedDocUrlsRef.current = next;
-            return next;
-          });
-          setVerificationDocId(result.docId);
-          stopCamera();
-          // Pre-verifica documento mostrando el spinner de IA
-          const preResult = await verifyDocument(result.url, 'pasaporte');
-          if (preResult && !preResult.is_valid_document) {
-            // Not a valid passport — show result immediately, no selfie
-            setVerificationResult(preResult);
-            toast.error("El documento no es una identificación válida (INE/Pasaporte).", { duration: 6000 });
-            autoCaptureLockRef.current = false;
-          } else {
-            toast.success("Pasaporte capturado. Ahora toma una selfie.", { duration: 4000 });
-            setTimeout(() => startCamera('selfie'), 300);
-          }
-        }
-      } else if (cameraStep === 'selfie') {
-        const file = new File([blob], `selfie_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const selfieResult = await uploadAndGetUrl(SELFIE_DOC_TYPE, file);
-        if (selfieResult) {
-          stopCamera();
-          // Use ref for fresh URLs (avoids stale closure)
-          const urls = capturedDocUrlsRef.current;
-          const isPasaporteFlow = !!urls.passport;
-          const frontUrl = urls.front || '';
-          const backUrl = urls.back || '';
-          const passportUrl = urls.passport || '';
-          const primaryDocUrl = passportUrl || frontUrl;
-          
-          if (!primaryDocUrl) {
-            toast.error("No se encontró la imagen del documento. Intenta de nuevo.", {
-              duration: 6000,
-              description: "Vuelve a capturar el documento desde el inicio.",
-            });
-            autoCaptureLockRef.current = false;
-            return;
-          }
-          
-          // Spinner is shown via the `verifying` state — no toast needed
-
-          let aiResult: VerificationResult | null = null;
-
-          if (isPasaporteFlow) {
-            aiResult = await verifyDocument(primaryDocUrl, 'pasaporte', selfieResult.url);
-          } else {
-            const [frontVerification, backVerification] = await Promise.all([
-              verifyDocument(frontUrl, 'ine_frente', selfieResult.url),
-              backUrl ? verifyDocument(backUrl, 'ine_reverso') : Promise.resolve(null),
-            ]);
-
-            if (frontVerification) {
-              aiResult = {
-                ...frontVerification,
-                numero_identificacion:
-                  backVerification?.numero_identificacion || frontVerification.numero_identificacion,
-              };
-            } else {
-              aiResult = backVerification;
-            }
-          }
-
-          // verification done — verifying state is cleared by verifyDocument
-          
-          if (aiResult) {
-            setVerificationResult(aiResult);
-            const strongFaceMatch = aiResult.face_match === true && (aiResult.face_match_confidence ?? 0) >= 70;
-
-            if (!aiResult.is_valid_document) {
-              toast.error("Documento inválido", {
-                duration: 5000,
-                description: aiResult.rejection_reason || "Se rechazó la identificación. Vuelve a capturar.",
-              });
-            } else if (!strongFaceMatch) {
-              toast.error("Selfie no coincide con el documento", {
-                duration: 6000,
-                description: "No se permitirá guardar hasta obtener coincidencia facial confiable.",
-              });
-            } else {
-              toast.success("Verificación completada", {
-                duration: 3000,
-                description: "Revisa los resultados a continuación.",
-              });
-            }
-          } else {
-            toast.error("No se pudo verificar el documento", {
-              duration: 8000,
-              description: "La verificación con IA falló. Intenta capturar de nuevo las fotos.",
-            });
-            // Reset to allow retry
-            autoCaptureLockRef.current = false;
-          }
-        } else {
-          toast.error("Error al subir la selfie. Intenta de nuevo.", { duration: 5000 });
-          autoCaptureLockRef.current = false;
-        }
+      if (cameraStep === 'selfie') {
+        processShot(blob, 'selfie');
+        return;
       }
+      // Documento → congelar y mostrar preview antes de subir/verificar.
+      freezeStream();
+      pendingBlobRef.current = blob;
+      setDocPreviewUrl(URL.createObjectURL(blob));
     }, 'image/jpeg', 0.85);
   }, [cameraStep]);
+
+  // Preview: repetir captura (reinicia cámara del mismo paso).
+  const retakeDocPreview = () => {
+    if (docPreviewUrl) URL.revokeObjectURL(docPreviewUrl);
+    setDocPreviewUrl(null);
+    pendingBlobRef.current = null;
+    if (cameraStep !== 'selfie') startCamera(cameraStep);
+  };
+
+  // Preview: confirmar captura → sube + avanza/verifica.
+  const confirmDocPreview = () => {
+    const blob = pendingBlobRef.current;
+    if (!blob) return;
+    if (docPreviewUrl) URL.revokeObjectURL(docPreviewUrl);
+    setDocPreviewUrl(null);
+    pendingBlobRef.current = null;
+    processShot(blob, cameraStep);
+  };
 
   // Stability detection for auto-capture
   const onStableCapture = useCallback(() => {
@@ -941,7 +1024,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
   const { stabilityProgress, documentDetected, initialDelayDone, alignmentProgress, alignedQuadrants } = useStabilityDetection(
     videoRef,
-    cameraActive && !uploading && !verifying,
+    cameraActive && !uploading && !verifying && !docPreviewUrl,
     onStableCapture,
     1500,
     cameraStep !== 'selfie'
@@ -1103,6 +1186,40 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
   // Camera overlay
   if (cameraActive) {
+    // Preview del documento capturado — revisar antes de subir/verificar (solo documentos).
+    if (docPreviewUrl && cameraStep !== 'selfie') {
+      const previewLabel = cameraStep === 'front' ? 'INE - Frente' : cameraStep === 'back' ? 'INE - Reverso' : 'Pasaporte';
+      const busy = uploading !== null || verifying;
+      return (
+        <div className="flex flex-col gap-3 pb-2">
+          <CaptureFlash show={showFlash} />
+          <div className="text-center space-y-1">
+            <h3 className="text-base font-bold text-foreground">Revisa tu captura</h3>
+            <p className="text-xs font-medium text-muted-foreground">{previewLabel} · Verifica que se vea completo y legible</p>
+          </div>
+          <div className="relative rounded-2xl overflow-hidden border-4 border-[hsl(158_64%_38%)]/40 bg-black aspect-[8/5]">
+            <img src={docPreviewUrl} alt="Captura" className="w-full h-full object-contain" />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={retakeDocPreview}
+              disabled={busy}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[#ECEEF0] px-4 py-3 text-sm font-semibold text-[#6B7280] transition-colors hover:bg-[#F6F7F8] disabled:opacity-50"
+            >
+              <RefreshCw className="h-4 w-4" /> Repetir
+            </button>
+            <button
+              onClick={confirmDocPreview}
+              disabled={busy}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-3 text-sm font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50"
+            >
+              {uploading !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Continuar
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (cameraStep === 'selfie') {
       return (
         <div>
@@ -1143,66 +1260,41 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
   return (
     <div className="space-y-3 pb-4">
-      {/* Identity type selector - only show when this section has identity docs */}
+      {/* Selector (filtro) del tipo de identificación — solo se usa uno */}
       {hasIdentityDocs && (
-        <div className="space-y-2">
-          <Label className="text-sm font-semibold">Tipo de identificación</Label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleIdentityModeChange('ine')}
-              className={cn(
-                "py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border",
-                identityMode === 'ine'
-                  ? "bg-primary text-primary-foreground border-primary shadow-md"
-                  : "bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5"
-              )}
-            >
-              INE
-            </button>
-            <button
-              onClick={() => handleIdentityModeChange('pasaporte')}
-              className={cn(
-                "py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border",
-                identityMode === 'pasaporte'
-                  ? "bg-primary text-primary-foreground border-primary shadow-md"
-                  : "bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5"
-              )}
-            >
-              Pasaporte
-            </button>
+        <div className="space-y-1.5">
+          <Label className={FIELD_LABEL_CLS}>Tipo de identificación</Label>
+          <div className={cn(SEG_TRACK_CLS, "w-full")} role="tablist">
+            {([['ine', 'INE'], ['pasaporte', 'Pasaporte']] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={identityMode === mode}
+                onClick={() => handleIdentityModeChange(mode)}
+                className={segBtnCls(identityMode === mode)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-
-          {/* Camera capture button for first-time identity docs only */}
-          {((identityMode === 'ine' && !hasINEDocs) || (identityMode === 'pasaporte' && !hasPasaporteDocs)) && (
-            identityMode === 'ine' ? (
-              <button
-                onClick={() => startCamera('front')}
-                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2"
-              >
-                <Camera className="h-4 w-4" />
-                Validar identidad con INE
-              </button>
-            ) : (
-              <button
-                onClick={() => startCamera('passport')}
-                className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2"
-              >
-                <Camera className="h-4 w-4" />
-                Validar identidad con Pasaporte
-              </button>
-            )
-          )}
+          <p className="text-[11.5px] font-medium text-[#9AA3AD]">
+            Solo necesitas uno. Elige el documento que vas a usar; la validación se hace sola al tomar las fotos.
+          </p>
         </div>
       )}
 
       {visibleDocTypes.map((typeId) => {
         const docType = docTypes.find((d: any) => d.id === typeId);
         const doc = getDocForType(typeId);
-        const status = getStatusInfo(doc);
+        const isCameraDoc = CAMERA_DOC_TYPES.includes(typeId);
+        // Identidad se captura por foto: sin documento aún → "Sin capturar" (no "Sin subir").
+        const status = !doc && isCameraDoc
+          ? { label: 'Sin capturar', color: 'text-muted-foreground', bg: 'bg-muted', icon: Camera }
+          : getStatusInfo(doc);
         const StatusIcon = status.icon;
         const isValidated = doc?.id_estatus_verificacion === 2;
         const isUploading = uploading === typeId;
-        const isCameraDoc = CAMERA_DOC_TYPES.includes(typeId);
 
         // Special rendering for doc type 48 (Carta de cumplimiento - firma digital)
         if (typeId === 48) {
@@ -1231,13 +1323,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           return (
             <div
               key={typeId}
-              className={`rounded-2xl border-2 transition-all duration-300 shadow-sm hover:shadow-md ${
-                firmaCompletada || isValidated
-                  ? 'border-emerald-500/30 bg-emerald-500/5'
-                  : firmaEnProgreso
-                  ? 'border-amber-500/30 bg-amber-500/5'
-                  : 'border-dashed border-muted-foreground/20 bg-muted/30'
-              }`}
+              className="rounded-md border border-[#ECEEF0] bg-white transition-colors"
             >
               <div className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -1263,7 +1349,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                       variant="outline"
                       size="sm"
                       onClick={() => setCartaPdfViewerUrl(pdfUrl || doc?.url || null)}
-                      className="h-10 px-3 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 border-primary/20"
+                      className="h-10 px-3 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]"
                     >
                       <FileText className="h-3.5 w-3.5" />
                       Ver PDF
@@ -1276,7 +1362,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                         <Button
                           size="sm"
                           disabled
-                          className="w-full h-10 rounded-2xl font-semibold text-xs gap-1.5"
+                          className="w-full h-10 rounded-md font-semibold text-xs gap-1.5"
                         >
                           <Lock className="h-3.5 w-3.5" />
                           Completa tu información básica y documentos para firmar
@@ -1287,7 +1373,8 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                       size="sm"
                       disabled={sendingToMifiel}
                       onClick={() => handleRequestAgentSignature("firmar")}
-                      className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5"
+                      variant="outline"
+                      className="flex-1 h-10 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]"
                     >
                       {sendingToMifiel ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1309,10 +1396,10 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                       onClick={pendienteContraparte ? undefined : () => handleContinuarFirmaInternal()}
                       disabled={syncingFirma || pendienteContraparte}
                       className={cn(
-                        "flex-1 h-10 rounded-2xl shadow-md font-semibold text-xs gap-1.5",
+                        "flex-1 h-10 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]",
                         pendienteContraparte
                           ? "opacity-70 cursor-not-allowed"
-                          : "hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+                          : ""
                       )}
                     >
                       {syncingFirma ? (
@@ -1336,79 +1423,53 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           );
         }
 
+        // Todos los documentos (identidad por foto y constancia por archivo):
+        // tarjeta compacta en una fila con acciones solo-ícono; ver = visor interno.
         return (
           <div
             key={typeId}
-            className={`rounded-2xl border-2 transition-all duration-300 shadow-sm hover:shadow-md ${
-              isValidated
-                ? 'border-emerald-500/30 bg-emerald-500/5'
-                : doc
-                ? 'border-amber-500/30 bg-amber-500/5'
-                : 'border-dashed border-muted-foreground/20 bg-muted/30'
-            }`}
+            className="rounded-md border border-[#ECEEF0] bg-white transition-colors"
           >
-            <div className="p-4 space-y-3">
-              {/* Doc name + status */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm font-medium text-foreground truncate">
-                    {docType?.nombre || `Documento ${typeId}`}
-                  </span>
+            <div className="flex items-center gap-3 p-4">
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-foreground truncate">
+                  {docType?.nombre || `Documento ${typeId}`}
                 </div>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] px-2 py-0.5 shrink-0 ${status.color} ${status.bg} border-0`}
-                >
-                  <StatusIcon className="h-3 w-3 mr-1" />
-                  {status.label}
-                </Badge>
+                <div className="mt-1">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-2 py-0.5 ${status.color} ${status.bg} border-0`}
+                  >
+                    <StatusIcon className="h-3 w-3 mr-1" />
+                    {status.label}
+                  </Badge>
+                </div>
               </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {doc?.url && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(doc.url, '_blank')}
-                    className="h-10 px-3 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 border-primary/20"
+                    onClick={() => setDocView({ url: doc.url, nombre: docType?.nombre || 'Documento' })}
+                    title="Ver documento"
+                    aria-label="Ver documento"
+                    className="h-[34px] w-[34px] p-0 rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                   >
-                    <FileText className="h-3.5 w-3.5" />
-                    Ver
+                    <FileText className="h-4 w-4" />
                   </Button>
                 )}
-
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={isUploading}
-                  onClick={() => handleFileSelect(typeId)}
-                  className="flex-1 h-10 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5"
+                  onClick={() => isCameraDoc ? startDocumentCamera(typeId) : handleFileSelect(typeId)}
+                  title={isCameraDoc ? (doc ? 'Volver a tomar foto' : 'Tomar foto') : (doc ? 'Reemplazar documento' : 'Subir documento')}
+                  aria-label={isCameraDoc ? (doc ? 'Volver a tomar foto' : 'Tomar foto') : (doc ? 'Reemplazar documento' : 'Subir documento')}
+                  className="h-[34px] w-[34px] p-0 rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                 >
-                  {isUploading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      <Upload className="h-3.5 w-3.5" />
-                      Subir
-                    </>
-                  )}
+                  {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCameraDoc ? <Camera className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
                 </Button>
-
-                {isCameraDoc && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isUploading}
-                    onClick={() => startDocumentCamera(typeId)}
-                    className="h-10 px-3 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 font-semibold text-xs gap-1.5 border-primary/20"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                    {doc ? 'Cámara' : ''}
-                  </Button>
-                )}
-
               </div>
             </div>
           </div>
@@ -1432,6 +1493,27 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         url={cartaPdfViewerUrl || ""}
         title="Carta de Cumplimiento"
       />
+
+      {/* Visor interno del expediente: PDF → PdfViewerDialog; imagen → visor propio */}
+      {docView && /\.pdf(\?|$)/i.test(docView.url) ? (
+        <PdfViewerDialog
+          open
+          onOpenChange={(open) => { if (!open) setDocView(null); }}
+          url={docView.url}
+          title={docView.nombre}
+        />
+      ) : docView ? (
+        <Dialog open onOpenChange={(open) => { if (!open) setDocView(null); }}>
+          <DialogContent className="max-w-3xl w-[92vw] gap-0 overflow-hidden rounded-md border border-[#ECEEF0] bg-white p-0">
+            <div className="flex items-center border-b border-[#ECEEF0] px-[22px] py-4 pr-12">
+              <DialogTitle className="truncate text-[15px] font-bold text-[#171A1D]">{docView.nombre}</DialogTitle>
+            </div>
+            <div className="flex max-h-[78vh] items-center justify-center overflow-auto bg-[#0b0b0b] p-3">
+              <img src={docView.url} alt={docView.nombre} className="max-h-[74vh] max-w-full object-contain" />
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <SignaturePadDialog
         open={agentSignaturePadOpen}
@@ -1904,7 +1986,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
       {/* Cancelled externally warning */}
       {citaCancelledExternally && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3">
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3">
           <p className="text-xs text-destructive font-medium">
             Tu cita fue cancelada por el organizador. Selecciona una nueva fecha y horario para reprogramar.
           </p>
@@ -1913,7 +1995,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
 
       {/* No show warning */}
       {isNoShow && !citaCancelledExternally && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+        <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
           <p className="text-xs text-amber-700 font-medium">
             Tu asistencia no fue confirmada en la cita anterior. Selecciona una nueva fecha y horario para reagendar.
           </p>
@@ -1928,26 +2010,12 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         </div>
       ) : (
         <>
-          {/* Mode toggle */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setMode('schedule')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
-                mode === 'schedule'
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-card border-border text-muted-foreground hover:border-primary/40'
-              }`}
-            >
+          {/* Mode toggle (segmentado tipo pestañas) */}
+          <div className={SEG_TRACK_CLS} role="tablist">
+            <button type="button" role="tab" aria-selected={mode === 'schedule'} onClick={() => setMode('schedule')} className={segBtnCls(mode === 'schedule')}>
               Agendar cita
             </button>
-            <button
-              onClick={() => setMode('already-attended')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all border ${
-                mode === 'already-attended'
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-card border-border text-muted-foreground hover:border-primary/40'
-              }`}
-            >
+            <button type="button" role="tab" aria-selected={mode === 'already-attended'} onClick={() => setMode('already-attended')} className={segBtnCls(mode === 'already-attended')}>
               Ya acudí
             </button>
           </div>
@@ -1976,7 +2044,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
               <button
                 onClick={handleAlreadyAttended}
                 disabled={saving || !attendedDate}
-                className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+                className="w-full py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm tracking-wide transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</> : "Reportar asistencia"}
               </button>
@@ -2028,7 +2096,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                     );
                   })()
                 ) : (
-                  <div className="text-center py-6 rounded-xl border border-border/60 bg-muted/30">
+                  <div className="text-center py-6 rounded-md border border-border/60 bg-muted/30">
                     <p className="text-sm text-muted-foreground">No hay fechas disponibles.</p>
                   </div>
                 )}
@@ -2077,7 +2145,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                                       }
                                     }}
                                     disabled={isDisabled}
-                                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all duration-200 border relative ${
+                                    className={`py-2.5 px-3 rounded-md text-sm font-medium transition-all duration-200 border relative ${
                                       isCancelledSlot
                                         ? 'bg-destructive/10 border-destructive/40 text-destructive/60 cursor-not-allowed line-through'
                                         : isPastSlot
@@ -2085,7 +2153,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                                           : slot.is_full
                                             ? 'bg-muted/50 border-border/30 text-muted-foreground/50 cursor-not-allowed'
                                             : isSelected
-                                              ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]'
+                                              ? 'bg-white text-[hsl(158_64%_38%)] border-[hsl(158_64%_38%)] scale-[1.02]'
                                               : isExisting
                                                 ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
                                                 : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
@@ -2112,7 +2180,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-6 rounded-xl border border-border/60 bg-muted/30">
+                    <div className="text-center py-6 rounded-md border border-border/60 bg-muted/30">
                       <p className="text-sm text-muted-foreground">No hay horarios disponibles para esta fecha.</p>
                       <p className="text-xs text-muted-foreground/70 mt-1">Selecciona otra fecha.</p>
                     </div>
@@ -2123,7 +2191,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
               <button
                 onClick={handleSchedule}
                 disabled={saving || !selectedDate || !selectedSlot}
-                className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+                className="w-full py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm tracking-wide transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : "Agendar Cita"}
               </button>
@@ -2360,7 +2428,8 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
             return;
           }
         }
-        isIncomplete = !rfc.trim() || !regimen || !usoCfdi || !fCalle.trim() || !fColonia.trim() || !fCp.trim() || !fIdPais || !fIdEstado || !fIdMunicipio;
+        const regimenValido = !!regimen && (regimenes.length === 0 || regimenes.some((r: any) => r.id.toString() === regimen));
+        isIncomplete = !rfc.trim() || !regimenValido || !usoCfdi || !fCalle.trim() || !fNumExt.trim() || !fColonia.trim() || !fCp.trim() || !fIdPais || !fIdEstado || !fIdMunicipio;
         updateData = {
           rfc: rfc.trim().toUpperCase() || null,
           regimen: regimen || null,
@@ -2374,6 +2443,13 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
           direccion_fiscal_id_estado: fIdEstado ? parseInt(fIdEstado) : null,
           direccion_fiscal_id_municipio: fIdMunicipio ? parseInt(fIdMunicipio) : null,
         };
+      }
+
+      // La DB exige los obligatorios: si faltan, no se guarda (ni se sobrescribe con vacío).
+      if (isIncomplete) {
+        toast.error("Completa todos los campos obligatorios (*). No pueden quedar vacíos.");
+        setSaving(false);
+        return;
       }
 
       const { data: updatedRow, error } = await supabase
@@ -2398,12 +2474,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
           .eq('id_persona', personaId);
       }
 
-      if (isIncomplete) {
-        const stepTitle = STEP_TITLES[step] || step;
-        toast.warning(`Información guardada. El paso "${stepTitle}" no se marcará como completado hasta llenar todos los campos obligatorios (*).`, { duration: 12000 });
-      } else {
-        toast.success("Información guardada correctamente.");
-      }
+      toast.success("Información guardada correctamente.");
       await onSaved();
     } catch (err: any) {
       const msg = err.message || "Error desconocido";
@@ -2433,31 +2504,31 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
   ) => (
     <div className="space-y-4">
       <div>
-        <Label className="text-sm font-semibold">Calle *</Label>
-        <Input value={calleVal} onChange={(e) => setCalleVal(e.target.value)} className="mt-1.5 neu-input h-auto" />
+        <Label className={FIELD_LABEL_CLS}>Calle <Req /></Label>
+        <Input value={calleVal} onChange={(e) => setCalleVal(e.target.value)} placeholder="Av. Insurgentes Sur" className={FIELD_INPUT_CLS} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label className="text-sm font-semibold">Num. Ext. *</Label>
-          <Input value={numExtVal} onChange={(e) => setNumExtVal(e.target.value)} className="mt-1.5 neu-input h-auto" />
+          <Label className={FIELD_LABEL_CLS}>Num. Ext. <Req /></Label>
+          <Input value={numExtVal} onChange={(e) => setNumExtVal(e.target.value)} placeholder="1234" className={FIELD_INPUT_CLS} />
         </div>
         <div>
-          <Label className="text-sm font-semibold">Num. Int.</Label>
-          <Input value={numIntVal} onChange={(e) => setNumIntVal(e.target.value)} className="mt-1.5 neu-input h-auto" />
+          <Label className={FIELD_LABEL_CLS}>Num. Int.</Label>
+          <Input value={numIntVal} onChange={(e) => setNumIntVal(e.target.value)} placeholder="4B" className={FIELD_INPUT_CLS} />
         </div>
       </div>
       <div>
-        <Label className="text-sm font-semibold">Colonia *</Label>
-        <Input value={coloniaVal} onChange={(e) => setColoniaVal(e.target.value)} className="mt-1.5 neu-input h-auto" />
+        <Label className={FIELD_LABEL_CLS}>Colonia <Req /></Label>
+        <Input value={coloniaVal} onChange={(e) => setColoniaVal(e.target.value)} placeholder="Del Valle" className={FIELD_INPUT_CLS} />
       </div>
       <div>
-        <Label className="text-sm font-semibold">Código Postal *</Label>
-        <Input value={cpVal} onChange={(e) => setCpVal(e.target.value)} className="mt-1.5 neu-input h-auto" maxLength={5} />
+        <Label className={FIELD_LABEL_CLS}>Código Postal <Req /></Label>
+        <Input value={cpVal} onChange={(e) => setCpVal(e.target.value)} placeholder="03100" className={FIELD_INPUT_CLS} maxLength={5} />
       </div>
       <div>
-        <Label className="text-sm font-semibold">País *</Label>
+        <Label className={FIELD_LABEL_CLS}>País <Req /></Label>
         <Select value={paisVal} onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}>
-          <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
           <SelectContent>
             {paises.map((p: any) => (
               <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
@@ -2466,9 +2537,9 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
         </Select>
       </div>
       <div>
-        <Label className="text-sm font-semibold">Estado *</Label>
+        <Label className={FIELD_LABEL_CLS}>Estado <Req /></Label>
         <Select value={estadoVal} onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}>
-          <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
           <SelectContent>
             {filteredEstados(paisVal).map((e: any) => (
               <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
@@ -2477,9 +2548,9 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
         </Select>
       </div>
       <div>
-        <Label className="text-sm font-semibold">Municipio *</Label>
+        <Label className={FIELD_LABEL_CLS}>Municipio <Req /></Label>
         <Select value={municipioVal} onValueChange={setMunicipioVal}>
-          <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
           <SelectContent>
             {filteredMunicipios(estadoVal).map((m: any) => (
               <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
@@ -2501,132 +2572,97 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
   const isLastTab = currentTabIndex === currentTabs.length - 1;
   const isDocTab = activeTab === 'documents' || activeTab === 'constancia';
 
-  const handleNextTab = async () => {
-    // Save first, then advance
-    onTrackSave?.();
-    setSaving(true);
-    try {
-      let updateData: any = {};
-      let validationError = false;
+  // Obligatorios (los marcados con *). La DB los exige: sin ellos no se guarda ni se avanza.
+  const requiredMissing = (): string[] => {
+    const miss: string[] = [];
+    if (step === 'basic' && activeTab === 'personal') {
+      if (!nombre.trim()) miss.push('Nombre completo');
+      if (!telefono.trim()) miss.push('Teléfono');
+    } else if (step === 'basic' && activeTab === 'address') {
+      if (!calle.trim()) miss.push('Calle');
+      if (!numExt.trim()) miss.push('Número exterior');
+      if (!colonia.trim()) miss.push('Colonia');
+      if (!cp.trim()) miss.push('Código Postal');
+      if (!idPais) miss.push('País');
+      if (!idEstado) miss.push('Estado');
+      if (!idMunicipio) miss.push('Municipio');
+    } else if (step === 'fiscal' && activeTab === 'datos') {
+      if (!rfc.trim()) miss.push('RFC');
+      // El régimen debe ser una opción válida de la lista (no un id "fantasma"
+      // que deja el Select en blanco pero con valor en estado).
+      const regimenValido = !!regimen && (regimenes.length === 0 || regimenes.some((r: any) => r.id.toString() === regimen));
+      if (!regimenValido) miss.push('Régimen Fiscal');
+      if (!usoCfdi) miss.push('Uso CFDI');
+    } else if (step === 'fiscal' && activeTab === 'direccion') {
+      if (!fCalle.trim()) miss.push('Calle');
+      if (!fNumExt.trim()) miss.push('Número exterior');
+      if (!fColonia.trim()) miss.push('Colonia');
+      if (!fCp.trim()) miss.push('Código Postal');
+      if (!fIdPais) miss.push('País');
+      if (!fIdEstado) miss.push('Estado');
+      if (!fIdMunicipio) miss.push('Municipio');
+    }
+    return miss;
+  };
 
-      if (step === 'basic' && activeTab === 'personal') {
-        if (telefono.trim() && telefono.trim().length !== 10) {
-          toast.error("El teléfono debe tener 10 dígitos.");
-          validationError = true;
-        }
-        if (!validationError && curp.trim()) {
-          const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
-          if (!curpRegex.test(curp.trim().toUpperCase())) {
-            toast.error("El formato del CURP no es válido (18 caracteres alfanuméricos).");
-            validationError = true;
-          }
-        }
-        if (!validationError) {
-          updateData = {
-            nombre_legal: nombre.trim() || null,
-            email: email.trim() || null,
-            telefono: telefono.trim() || null,
-            curp: curp.trim().toUpperCase() || null,
-            sexo: sexo || null,
-          };
-        }
-      } else if (step === 'basic' && activeTab === 'address') {
-        updateData = {
-          direccion_calle: calle.trim() || null,
-          direccion_num_ext: numExt.trim() || null,
-          direccion_num_int: numInt.trim() || null,
-          direccion_colonia: colonia.trim() || null,
-          direccion_codigo_postal: cp.trim() || null,
-          direccion_id_pais: idPais || null,
-          direccion_id_estado: idEstado ? parseInt(idEstado) : null,
-          direccion_id_municipio: idMunicipio ? parseInt(idMunicipio) : null,
-        };
-      } else if (step === 'fiscal' && activeTab === 'datos') {
-        if (rfc.trim()) {
-          const rfcValidation = validateRFC(rfc);
-          if (!rfcValidation.isValid) {
-            toast.error(rfcValidation.error || "RFC inválido.");
-            validationError = true;
-          }
-        }
-        if (!validationError) {
-          updateData = {
-            rfc: rfc.trim().toUpperCase() || null,
-            regimen: regimen || null,
-            uso_cfdi: usoCfdi || null,
-          };
-        }
-      } else if (step === 'fiscal' && activeTab === 'direccion') {
-        updateData = {
-          direccion_fiscal_calle: fCalle.trim() || null,
-          direccion_fiscal_num_ext: fNumExt.trim() || null,
-          direccion_fiscal_num_int: fNumInt.trim() || null,
-          direccion_fiscal_colonia: fColonia.trim() || null,
-          direccion_fiscal_codigo_postal: fCp.trim() || null,
-          direccion_fiscal_id_pais: fIdPais || null,
-          direccion_fiscal_id_estado: fIdEstado ? parseInt(fIdEstado) : null,
-          direccion_fiscal_id_municipio: fIdMunicipio ? parseInt(fIdMunicipio) : null,
-        };
-      }
+  const warnRequired = (miss: string[]) => {
+    toast.error(
+      miss.length === 1
+        ? `El campo "${miss[0]}" es obligatorio, no puede estar vacío.`
+        : `Faltan campos obligatorios: ${miss.join(', ')}.`
+    );
+  };
 
-      if (validationError) {
-        setSaving(false);
+  // Solo valida (obligatorios + formato) y avanza. NO guarda en BD:
+  // la información se persiste una sola vez al finalizar el último paso.
+  const handleNextTab = () => {
+    const miss = requiredMissing();
+    if (miss.length) { warnRequired(miss); return; }
+
+    // Validación de formato del tab actual
+    if (step === 'basic' && activeTab === 'personal') {
+      if (telefono.trim().length !== 10) {
+        toast.error("El teléfono debe tener 10 dígitos.");
         return;
       }
-
-      if (Object.keys(updateData).length > 0) {
-        const { data: updatedRow, error } = await supabase
-          .from('personas')
-          .update(updateData)
-          .eq('id', personaId)
-          .select()
-          .single();
-        if (error) throw error;
-        if (updatedRow) {
-          queryClient.setQueryData(['agent-onboarding-step-persona', personaId], updatedRow);
-        }
-        // Sync phone if basic personal tab
-        if (step === 'basic' && activeTab === 'personal' && telefono.trim()) {
-          await supabase.from('usuarios').update({ telefono: telefono.trim() }).eq('id_persona', personaId);
+      if (curp.trim()) {
+        const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+        if (!curpRegex.test(curp.trim().toUpperCase())) {
+          toast.error("El formato del CURP no es válido (18 caracteres alfanuméricos).");
+          return;
         }
       }
+    } else if (step === 'fiscal' && activeTab === 'datos') {
+      const rfcValidation = validateRFC(rfc);
+      if (!rfcValidation.isValid) {
+        toast.error(rfcValidation.error || "RFC inválido.");
+        return;
+      }
+    }
 
-      toast.success("Información guardada.");
-      // Advance to next tab
-      const nextIndex = currentTabIndex + 1;
-      if (nextIndex < currentTabs.length) {
-        setActiveTab(currentTabs[nextIndex]);
-      }
-    } catch (err: any) {
-      const msg = err.message || "Error desconocido";
-      if (msg.includes("personas_rfc_key") || (msg.includes("duplicate") && msg.includes("rfc"))) {
-        toast.error("El RFC ingresado ya está dado de alta en el sistema.");
-      } else if (msg.includes("personas_curp_key") || (msg.includes("duplicate") && msg.includes("curp"))) {
-        toast.error("El CURP ingresado ya está dado de alta en el sistema.");
-      } else {
-        toast.error("Error al guardar: " + msg);
-      }
-    } finally {
-      setSaving(false);
+    onTrackFieldChange?.();
+    const nextIndex = currentTabIndex + 1;
+    if (nextIndex < currentTabs.length) {
+      setActiveTab(currentTabs[nextIndex]);
     }
   };
 
   return (
     <div className="space-y-5 pb-4">
       {step === 'basic' && (
-        <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+        <Tabs value={activeTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="personal" className={cn("text-xs", activeTab === 'personal' && "data-[state=active]:bg-emerald-500 data-[state=active]:text-white")}>Datos personales</TabsTrigger>
-            <TabsTrigger value="address" className={cn("text-xs", activeTab === 'address' && "data-[state=active]:bg-emerald-500 data-[state=active]:text-white")}>Dirección</TabsTrigger>
-            <TabsTrigger value="documents" className={cn("text-xs", activeTab === 'documents' && "data-[state=active]:bg-emerald-500 data-[state=active]:text-white")}>Documentos</TabsTrigger>
+            <TabsTrigger value="personal" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Datos personales</TabsTrigger>
+            <TabsTrigger value="address" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Dirección</TabsTrigger>
+            <TabsTrigger value="documents" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Documentos</TabsTrigger>
           </TabsList>
 
-          {/* Step indicator — clickable */}
+          {/* Indicador de progreso (solo visual, no navega) */}
           <div className="flex items-center justify-center gap-1.5 mb-3">
             {basicTabs.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={cn(
-                "h-1.5 rounded-full transition-all duration-300 cursor-pointer hover:opacity-80",
-                i === currentTabIndex ? "w-6 bg-emerald-500" : i < currentTabIndex ? "w-4 bg-emerald-400" : "w-4 bg-muted"
+              <div key={tab} className={cn(
+                "h-1.5 rounded-full transition-all duration-300",
+                i === currentTabIndex ? "w-6 bg-primary" : i < currentTabIndex ? "w-4 bg-primary/60" : "w-4 bg-muted"
               )} />
             ))}
             <span className="text-[10px] text-muted-foreground ml-2">
@@ -2636,29 +2672,29 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
 
           <TabsContent value="personal" className="space-y-4">
             <div>
-              <Label className="text-sm font-semibold">Nombre completo *</Label>
-              <Input value={nombre} onChange={(e) => { setNombre(e.target.value); onTrackFieldChange?.(); }} className="mt-1.5 neu-input h-auto" />
+              <Label className={FIELD_LABEL_CLS}>Nombre completo <Req /></Label>
+              <Input value={nombre} onChange={(e) => { setNombre(e.target.value); onTrackFieldChange?.(); }} placeholder="Juan Pérez García" className={FIELD_INPUT_CLS} />
             </div>
             <div>
-              <Label className="text-sm font-semibold">Correo electrónico *</Label>
-              <Input type="email" value={email} disabled className="mt-1.5 neu-input h-auto opacity-60" />
+              <Label className={FIELD_LABEL_CLS}>Correo electrónico <Req /></Label>
+              <Input type="email" value={email} disabled className={FIELD_INPUT_CLS} />
             </div>
             <div>
-              <Label className="text-sm font-semibold">Teléfono (10 dígitos) *</Label>
-              <Input value={telefono} onChange={(e) => { setTelefono(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }} maxLength={10} className="mt-1.5 neu-input h-auto" />
+              <Label className={FIELD_LABEL_CLS}>Teléfono (10 dígitos) <Req /></Label>
+              <Input value={telefono} onChange={(e) => { setTelefono(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }} maxLength={10} placeholder="5512345678" className={FIELD_INPUT_CLS} />
             </div>
             <div>
-              <Label className="text-sm font-semibold">CURP <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-              <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="Ej. GARC850101HDFRRL09" className="mt-1.5 neu-input h-auto" />
+              <Label className={FIELD_LABEL_CLS}>CURP <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+              <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="GARC850101HDFRRL09" className={FIELD_INPUT_CLS} />
             </div>
             <div>
-              <Label className="text-sm font-semibold">Tipo de Persona</Label>
-              <Input value="Persona Física" disabled className="mt-1.5 neu-input h-auto opacity-60" />
+              <Label className={FIELD_LABEL_CLS}>Tipo de Persona</Label>
+              <Input value="Persona Física" disabled className={FIELD_INPUT_CLS} />
             </div>
             <div>
-              <Label className="text-sm font-semibold">Sexo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+              <Label className={FIELD_LABEL_CLS}>Sexo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
               <Select value={sexo} onValueChange={setSexo}>
-                <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
+                <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="M">Masculino</SelectItem>
                   <SelectItem value="F">Femenino</SelectItem>
@@ -2684,19 +2720,19 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
       )}
 
       {step === 'fiscal' && (
-        <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
+        <Tabs value={activeTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="datos" className={cn("text-xs", activeTab === 'datos' && "data-[state=active]:bg-emerald-500 data-[state=active]:text-white")}>Datos</TabsTrigger>
-            <TabsTrigger value="direccion" className={cn("text-xs", activeTab === 'direccion' && "data-[state=active]:bg-emerald-500 data-[state=active]:text-white")}>Dirección</TabsTrigger>
-            <TabsTrigger value="constancia" className={cn("text-xs", activeTab === 'constancia' && "data-[state=active]:bg-emerald-500 data-[state=active]:text-white")}>Constancia</TabsTrigger>
+            <TabsTrigger value="datos" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Datos</TabsTrigger>
+            <TabsTrigger value="direccion" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Dirección</TabsTrigger>
+            <TabsTrigger value="constancia" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Constancia</TabsTrigger>
           </TabsList>
 
-          {/* Step indicator — clickable */}
+          {/* Indicador de progreso (solo visual, no navega) */}
           <div className="flex items-center justify-center gap-1.5 mb-3">
             {fiscalTabs.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={cn(
-                "h-1.5 rounded-full transition-all duration-300 cursor-pointer hover:opacity-80",
-                i === currentTabIndex ? "w-6 bg-emerald-500" : i < currentTabIndex ? "w-4 bg-emerald-400" : "w-4 bg-muted"
+              <div key={tab} className={cn(
+                "h-1.5 rounded-full transition-all duration-300",
+                i === currentTabIndex ? "w-6 bg-primary" : i < currentTabIndex ? "w-4 bg-primary/60" : "w-4 bg-muted"
               )} />
             ))}
             <span className="text-[10px] text-muted-foreground ml-2">
@@ -2706,13 +2742,13 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
 
           <TabsContent value="datos" className="space-y-4">
             <div>
-              <Label className="text-sm font-semibold">RFC *</Label>
-              <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} maxLength={13} className="mt-1.5 neu-input h-auto" />
+              <Label className={FIELD_LABEL_CLS}>RFC <Req /></Label>
+              <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} maxLength={13} placeholder="PEGJ850101H2A" className={FIELD_INPUT_CLS} />
             </div>
             <div>
-              <Label className="text-sm font-semibold">Régimen Fiscal *</Label>
+              <Label className={FIELD_LABEL_CLS}>Régimen Fiscal <Req /></Label>
               <Select value={regimen} onValueChange={setRegimen}>
-                <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
                   {regimenes.map((r: any) => (
                     <SelectItem key={r.id} value={r.id.toString()}>{r.nombre}</SelectItem>
@@ -2721,9 +2757,9 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
               </Select>
             </div>
             <div>
-              <Label className="text-sm font-semibold">Uso CFDI *</Label>
+              <Label className={FIELD_LABEL_CLS}>Uso CFDI <Req /></Label>
               <Select value={usoCfdi} onValueChange={setUsoCfdi}>
-                <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
                   {usosCfdi.map((u: any) => (
                     <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</SelectItem>
@@ -2748,28 +2784,25 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
         </Tabs>
       )}
 
-      {/* Navigation buttons */}
-      <div className="flex gap-3">
+      {/* Navigation buttons (estándar: derecha, outline verde) */}
+      <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] pt-4 mt-2">
         {currentTabIndex > 0 && (
           <button
             onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}
-            className="flex-shrink-0 px-5 py-4 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-all"
+            className={BTN_SECONDARY_CLS}
           >
             Atrás
           </button>
         )}
         {isDocTab && isLastTab ? (
-          <button
-            onClick={() => onClose?.()}
-            className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2"
-          >
-            Finalizar
+          <button onClick={handleSave} disabled={saving} className={BTN_PRIMARY_CLS}>
+            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Finalizar"}
           </button>
         ) : !isDocTab && (
           <button
             onClick={isLastTab ? handleSave : handleNextTab}
             disabled={saving}
-            className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+            className={BTN_PRIMARY_CLS}
           >
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : isLastTab ? "Guardar y finalizar" : (
               <>Siguiente <ChevronRight className="h-4 w-4" /></>
@@ -2929,7 +2962,7 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
   if (existingAccount && !isEditing) {
     return (
       <div className="space-y-4 pb-4">
-        <div className="rounded-2xl border bg-card p-5 space-y-3">
+        <div className="rounded-md border bg-card p-5 space-y-3">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center">
               <Landmark className="h-5 w-5 text-emerald-600" />
@@ -2954,10 +2987,10 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
             </div>
           )}
           <div className="flex gap-2 pt-1">
-            <Button variant="outline" size="sm" className="flex-1 rounded-xl" onClick={() => setIsEditing(true)}>
+            <Button variant="outline" size="sm" className="flex-1 rounded-md" onClick={() => setIsEditing(true)}>
               Editar
             </Button>
-            <Button variant="outline" size="sm" className="rounded-xl text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={saving}>
+            <Button variant="outline" size="sm" className="rounded-md text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={saving}>
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -2970,9 +3003,9 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
   return (
     <div className="space-y-4 pb-4">
       <div>
-        <Label className="text-sm font-semibold">Banco *</Label>
+        <Label className={FIELD_LABEL_CLS}>Banco <Req /></Label>
         <Select value={bankId} onValueChange={(v) => { setBankId(v); onTrackFieldChange?.(); }}>
-          <SelectTrigger className="mt-1.5 neu-input h-auto"><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
+          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
           <SelectContent>
             {banks.map((b: any) => (
               <SelectItem key={b.id} value={b.id.toString()}>{b.nombre}</SelectItem>
@@ -2981,11 +3014,11 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
         </Select>
       </div>
       <div>
-        <Label className="text-sm font-semibold">Número de Cuenta *</Label>
-        <Input value={numeroCuenta} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setNumeroCuenta(v); onTrackFieldChange?.(); }} placeholder="Entre 8 y 34 dígitos" maxLength={34} className="mt-1.5 neu-input h-auto" />
+        <Label className={FIELD_LABEL_CLS}>Número de Cuenta <Req /></Label>
+        <Input value={numeroCuenta} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setNumeroCuenta(v); onTrackFieldChange?.(); }} placeholder="0123456789" maxLength={34} className={FIELD_INPUT_CLS} />
       </div>
       <div>
-        <Label className="text-sm font-semibold">Titular de la cuenta *</Label>
+        <Label className={FIELD_LABEL_CLS}>Titular de la cuenta <Req /></Label>
         <div className="flex items-center gap-2 mt-1">
           <Checkbox
             id="titular-same-person"
@@ -3007,14 +3040,14 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
         <Input
           value={titular}
           onChange={(e) => { setTitular(e.target.value); setTitularIsSamePerson(false); onTrackFieldChange?.(); }}
-          placeholder="Nombre completo del titular"
-          className="mt-1.5 neu-input h-auto"
+          placeholder="Juan Pérez García"
+          className={FIELD_INPUT_CLS}
           disabled={titularIsSamePerson}
         />
       </div>
       <div>
-        <Label className="text-sm font-semibold">CLABE <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-        <Input value={clabe} onChange={(e) => setClabe(e.target.value)} placeholder="18 dígitos" maxLength={18} className="mt-1.5 neu-input h-auto" />
+        <Label className={FIELD_LABEL_CLS}>CLABE <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+        <Input value={clabe} onChange={(e) => setClabe(e.target.value)} placeholder="012345678901234567" maxLength={18} className={FIELD_INPUT_CLS} />
       </div>
       <div>
         <ImageUploadField
@@ -3028,12 +3061,12 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
+          className="flex-1 py-3 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
         >
           {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar"}
         </button>
         {existingId && (
-          <button onClick={() => setIsEditing(false)} className="py-3 px-4 rounded-2xl border text-sm font-medium text-muted-foreground hover:bg-muted/50">
+          <button onClick={() => setIsEditing(false)} className="py-3 px-4 rounded-md border text-sm font-medium text-muted-foreground hover:bg-muted/50">
             Cancelar
           </button>
         )}
