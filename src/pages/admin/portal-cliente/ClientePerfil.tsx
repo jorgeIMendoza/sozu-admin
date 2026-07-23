@@ -30,13 +30,14 @@ import { Progress } from "@/components/ui/progress";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getTipoPersonaLabel } from "@/utils/tipo-persona";
+import { getTipoPersonaLabel, normalizeTipoPersona } from "@/utils/tipo-persona";
 import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext";
 import { toast } from "sonner";
 import { validateCURPPdf, validateCSFPdf, validateActaNacimientoPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields, extractActaNacimientoFields } from "@/utils/pdfDocumentExtractors";
 import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
+import { OCUPACIONES_OPCIONES, normalizarOcupacion, esOcupacionOtro } from "@/lib/portal-cliente/ocupaciones";
 import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
 
 /* ─── helpers ─── */
@@ -334,8 +335,9 @@ const ClientePerfil = () => {
   /* Edit personal modal */
   const [showEditPersonal, setShowEditPersonal] = useState(false);
   const [editPersonal, setEditPersonal] = useState({
-    nombre_legal: "", rfc: "", curp: "", clave_pais_telefono: "+52", telefono: "",
+    nombre_legal: "", rfc: "", curp: "", clave_pais_telefono: "+52", telefono: "", ocupacion: "",
   });
+  const [ocupacionOtro, setOcupacionOtro] = useState(false);
   const [savingPersonal, setSavingPersonal] = useState(false);
 
   /* Edit fiscal modal */
@@ -418,8 +420,8 @@ const ClientePerfil = () => {
       const { data, error } = await supabase
         .from("personas")
         .select(`
-          id, nombre_legal, tipo_persona, rfc, curp, email, telefono,
-          clave_pais_telefono, regimen, uso_cfdi,
+          id, nombre_legal, tipo_persona, rfc, curp, email, telefono, ocupacion,
+          clave_pais_telefono, regimen, uso_cfdi, id_entidad_relacionada_rep_leg,
           direccion_fiscal_calle, direccion_fiscal_colonia,
           direccion_fiscal_codigo_postal, direccion_fiscal_num_ext,
           direccion_fiscal_num_int, direccion_fiscal_id_estado,
@@ -467,6 +469,7 @@ const ClientePerfil = () => {
         id: d.id,
         name: d.tipos_documento?.nombre || "Documento",
         tipoId: d.id_tipo_documento as number,
+        owner: "self" as "self" | "rep",
         status: (d.id_estatus_verificacion === 2 ? "verified"
                : d.id_estatus_verificacion === 3 ? "rejected"
                : d.id_estatus_verificacion === 4 ? "expired"
@@ -479,6 +482,57 @@ const ClientePerfil = () => {
     },
     enabled: !!effectivePersonaId,
   });
+
+  /* ── Persona moral: resolver persona del representante legal (vía vinculación) ── */
+  const isPM = normalizeTipoPersona(persona?.tipo_persona) === "pm";
+
+  const { data: repLegalPersonaId = null } = useQuery({
+    queryKey: ["cliente-perfil-replegal", persona?.id_entidad_relacionada_rep_leg],
+    queryFn: async () => {
+      const erId = (persona as any)?.id_entidad_relacionada_rep_leg;
+      if (!erId) return null;
+      const { data } = await supabase
+        .from("entidades_relacionadas")
+        .select("id_persona")
+        .eq("id", erId)
+        .maybeSingle();
+      return ((data?.id_persona as number) ?? null);
+    },
+    enabled: isPM && !!(persona as any)?.id_entidad_relacionada_rep_leg,
+  });
+
+  /* Documentos del representante legal (owner 'rep') — misma forma que `documentos`. */
+  const { data: repDocumentos = [] } = useQuery({
+    queryKey: ["cliente-perfil-docs-rep", repLegalPersonaId],
+    queryFn: async () => {
+      if (!repLegalPersonaId) return [];
+      const { data } = await supabase
+        .from("documentos")
+        .select("id, url, id_tipo_documento, id_estatus_verificacion, fecha_creacion, tipos_documento:documentos_id_tipo_documento_fkey!inner(nombre)")
+        .eq("id_persona", repLegalPersonaId)
+        .eq("activo", true)
+        .eq("es_draft", false);
+      return (data || []).map((d: any) => ({
+        id: d.id,
+        name: d.tipos_documento?.nombre || "Documento",
+        tipoId: d.id_tipo_documento as number,
+        owner: "rep" as "self" | "rep",
+        status: (d.id_estatus_verificacion === 2 ? "verified"
+               : d.id_estatus_verificacion === 3 ? "rejected"
+               : d.id_estatus_verificacion === 4 ? "expired"
+               : "review") as "verified" | "rejected" | "review" | "missing" | "expired",
+        date: d.fecha_creacion
+          ? new Date(d.fecha_creacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })
+          : null,
+        url: d.url as string,
+      }));
+    },
+    enabled: !!repLegalPersonaId,
+  });
+
+  /* Docs unificados (self + rep). Cada doc trae `owner` para desambiguar tipos 6/8
+     que aplican tanto a la empresa como al representante legal. */
+  const allDocs = isPM ? [...documentos, ...repDocumentos] : documentos;
 
   const { data: cuentasBancarias = [] } = useQuery({
     queryKey: ["cliente-perfil-bancos", effectivePersonaId],
@@ -562,21 +616,57 @@ const ClientePerfil = () => {
   });
 
   /* ── Expediente slots (cat: agrupación en el expediente) ── */
-  const SLOTS = [
-    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],       primaryTipoId: 2,  required: true,  cat: "personal"   },
-    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],       primaryTipoId: 3,  required: true,  cat: "personal"   },
-    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],       primaryTipoId: 4,  required: false, cat: "personal"   },
-    { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],       primaryTipoId: 1,  required: false, cat: "personal"   },
-    { key: "curp",            label: "CURP",                           tipoIds: [5],       primaryTipoId: 5,  required: true,  cat: "personal"   },
-    { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],       primaryTipoId: 6,  required: true,  cat: "financiero" },
-    { key: "domicilio",       label: "Comprobante de domicilio",       tipoIds: [8],       primaryTipoId: 8,  required: true,  cat: "personal"   },
-    { key: "matrimonio",      label: "Acta de matrimonio",             tipoIds: [11],      primaryTipoId: 11, required: false, cat: "personal"   },
-  ] as const;
+  // tipo_documento nuevo (persona moral): reformas/protocolizaciones posteriores al
+  // acta constitutiva. id fijo 57 (ver Ejecuciones_manuales/documentos/04_catalogo_tipo_reformas_pm.md).
+  const REFORMAS_TIPO_ID = 57;
+
+  type DocSlot = {
+    key: string; label: string; tipoIds: number[]; primaryTipoId: number;
+    required: boolean; cat: string; owner: "self" | "rep";
+  };
+
+  // Persona física (comportamiento actual, sin cambios). owner siempre 'self'.
+  const PF_SLOTS: DocSlot[] = [
+    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],  primaryTipoId: 2,  required: true,  cat: "personal",   owner: "self" },
+    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],  primaryTipoId: 3,  required: true,  cat: "personal",   owner: "self" },
+    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],  primaryTipoId: 4,  required: false, cat: "personal",   owner: "self" },
+    { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],  primaryTipoId: 1,  required: false, cat: "personal",   owner: "self" },
+    { key: "curp",            label: "CURP",                           tipoIds: [5],  primaryTipoId: 5,  required: true,  cat: "personal",   owner: "self" },
+    { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],  primaryTipoId: 6,  required: true,  cat: "financiero", owner: "self" },
+    { key: "domicilio",       label: "Comprobante de domicilio",       tipoIds: [8],  primaryTipoId: 8,  required: true,  cat: "personal",   owner: "self" },
+    { key: "matrimonio",      label: "Acta de matrimonio",             tipoIds: [11], primaryTipoId: 11, required: false, cat: "personal",   owner: "self" },
+  ];
+
+  // Persona moral: docs de la empresa (owner 'self' = persona PM) + docs del
+  // representante legal (owner 'rep' = persona vinculada). tipos 6/8 se repiten
+  // en ambos owners → el match filtra por tipoId + owner.
+  const PM_SLOTS: DocSlot[] = [
+    // Empresa
+    { key: "acta_constitutiva", label: "Acta constitutiva",                                          tipoIds: [7],                 primaryTipoId: 7,                 required: true,  cat: "empresa",  owner: "self" },
+    { key: "registro_comercio", label: "Registro Público de Comercio",                               tipoIds: [10],                primaryTipoId: 10,                required: true,  cat: "empresa",  owner: "self" },
+    { key: "reformas",          label: "Reformas / protocolizaciones",                               tipoIds: [REFORMAS_TIPO_ID],  primaryTipoId: REFORMAS_TIPO_ID,  required: false, cat: "empresa",  owner: "self" },
+    { key: "csf_empresa",       label: "Constancia de situación fiscal (empresa)",                   tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "empresa",  owner: "self" },
+    { key: "domicilio_empresa", label: "Comprobante de domicilio fiscal (empresa)",                  tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "empresa",  owner: "self" },
+    // Representante legal
+    { key: "poder_notarial",    label: "Poder notarial del representante legal",                     tipoIds: [9],                 primaryTipoId: 9,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "identificacion_rep",label: "Identificación oficial del representante legal",             tipoIds: [53, 2, 4],          primaryTipoId: 53,                required: true,  cat: "replegal", owner: "rep" },
+    { key: "curp_rep",          label: "CURP del representante legal",                               tipoIds: [5],                 primaryTipoId: 5,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "csf_rep",           label: "Constancia de situación fiscal del representante legal",     tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "domicilio_rep",     label: "Comprobante de domicilio del representante legal",           tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "replegal", owner: "rep" },
+  ];
+
+  const SLOTS: DocSlot[] = isPM ? PM_SLOTS : PF_SLOTS;
   // Grupos del expediente: orden de categorías + orden alfabético dentro de cada una.
-  const DOC_GROUPS = [
-    { key: "personal",   label: "Personales" },
-    { key: "financiero", label: "Fiscal y financiero" },
-  ] as const;
+  const DOC_GROUPS: { key: string; label: string }[] = isPM
+    ? [
+        { key: "empresa",    label: "Empresa" },
+        { key: "replegal",   label: "Representante legal" },
+        { key: "financiero", label: "Fiscal y financiero" },
+      ]
+    : [
+        { key: "personal",   label: "Personales" },
+        { key: "financiero", label: "Fiscal y financiero" },
+      ];
 
   /* ── Derived display ── */
   const displayName = persona?.nombre_legal || profile?.nombre || "Cliente";
@@ -591,7 +681,7 @@ const ClientePerfil = () => {
   /* ── Documentos: todos los requeridos verificados → sección "Documentos" completa ── */
   const requiredSlots = SLOTS.filter((s) => s.required);
   const docsAllVerified = requiredSlots.length > 0 && requiredSlots.every((s) =>
-    documentos.some((d) => (s.tipoIds as readonly number[]).includes(d.tipoId) && d.status === "verified"),
+    allDocs.some((d) => s.tipoIds.includes(d.tipoId) && d.owner === s.owner && d.status === "verified"),
   );
 
   /* ── CSF (tipo 6) verificada = fuente de los datos fiscales. Si se extrajo y quedó
@@ -762,7 +852,9 @@ const ClientePerfil = () => {
       curp:                persona?.curp || "",
       clave_pais_telefono: persona?.clave_pais_telefono || "+52",
       telefono:            persona?.telefono || "",
+      ocupacion:           (persona as any)?.ocupacion || "",
     });
+    setOcupacionOtro(esOcupacionOtro((persona as any)?.ocupacion));
     setShowEditPersonal(true);
   };
 
@@ -784,6 +876,7 @@ const ClientePerfil = () => {
         curp:                editPersonal.curp.trim().toUpperCase() || null,
         clave_pais_telefono: editPersonal.clave_pais_telefono.trim() || null,
         telefono:            editPersonal.telefono.trim() || null,
+        ocupacion:           normalizarOcupacion(editPersonal.ocupacion),
       };
       const { error } = await supabase.from("personas").update(payload as any).eq("id", effectivePersonaId);
       if (error) {
@@ -974,11 +1067,13 @@ const ClientePerfil = () => {
     primaryTipoId: number,
     estatus: number,
     personaUpdates?: Record<string, string>,
+    targetPersonaId?: number | null,
   ): Promise<boolean> => {
-    if (!effectivePersonaId) return false;
+    const personaId = targetPersonaId ?? effectivePersonaId;
+    if (!personaId) return false;
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
-    const path = `personas/${effectivePersonaId}/${primaryTipoId}_${Date.now()}.${ext}`;
+    const path = `personas/${personaId}/${primaryTipoId}_${Date.now()}.${ext}`;
     const { error: uploadErr } = await supabase.storage.from("documentos").upload(path, file, { upsert: false });
     if (uploadErr) { toast.error("Error al subir archivo: " + uploadErr.message); return false; }
     const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
@@ -988,7 +1083,7 @@ const ClientePerfil = () => {
     const { data: activeDocs } = await (supabase as any)
       .from("documentos")
       .select("id")
-      .eq("id_persona", effectivePersonaId)
+      .eq("id_persona", personaId)
       .eq("id_tipo_documento", primaryTipoId)
       .eq("activo", true)
       .order("id", { ascending: true });
@@ -1008,7 +1103,7 @@ const ClientePerfil = () => {
     }
 
     const { error: insertErr } = await (supabase as any).from("documentos").insert({
-      id_persona: effectivePersonaId,
+      id_persona: personaId,
       id_tipo_documento: primaryTipoId,
       url: publicUrl,
       activo: true,
@@ -1018,8 +1113,10 @@ const ClientePerfil = () => {
     if (insertErr) { console.error("[uploadDoc]", insertErr); toast.error("Error al registrar documento"); return false; }
 
     // Captura automática de datos del documento en el perfil (CURP/CSF confirmados).
+    // Solo aplica a docs de la persona en sesión (owner 'self'); los del representante
+    // legal no auto-capturan datos → nunca llegan aquí con personaUpdates.
     if (personaUpdates && Object.keys(personaUpdates).length > 0) {
-      const { error: pErr } = await (supabase as any).from("personas").update(personaUpdates).eq("id", effectivePersonaId);
+      const { error: pErr } = await (supabase as any).from("personas").update(personaUpdates).eq("id", personaId);
       if (pErr) console.error("[uploadDoc] persona update:", pErr);
       else queryClient.invalidateQueries({ queryKey: ["cliente-perfil-persona", effectivePersonaId] });
     }
@@ -1043,11 +1140,33 @@ const ClientePerfil = () => {
     }
 
     queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] });
+    queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs-rep", personaId] });
     return true;
   };
 
-  const handleUploadDoc = async (file: File, slotKey: string, primaryTipoId: number) => {
+  const handleUploadDoc = async (
+    file: File,
+    slotKey: string,
+    primaryTipoId: number,
+    owner: "self" | "rep" = "self",
+    targetPersonaId?: number | null,
+  ) => {
     if (!effectivePersonaId) return;
+
+    // Docs del representante legal (persona vinculada): se guardan en SU persona y
+    // NO auto-capturan datos en el perfil (la extracción CURP/CSF aplica solo al
+    // titular en sesión). Van directo a revisión manual (estatus 1).
+    if (owner === "rep") {
+      if (!targetPersonaId) { toast.error("No hay representante legal vinculado."); return; }
+      setUploadingSlot(slotKey);
+      try {
+        const ok = await commitDoc(file, primaryTipoId, 1, undefined, targetPersonaId);
+        if (ok) toast.success("Documento enviado para revisión");
+      } finally {
+        setUploadingSlot(null);
+      }
+      return;
+    }
 
     // CURP(5) y CSF(6): PDF obligatorio → validación por texto + extracción de datos.
     // No se sube todavía; primero el cliente confirma los datos extraídos.
@@ -1327,10 +1446,9 @@ const ClientePerfil = () => {
           <>
             {/* Motor hero (estilo agente: expediente + estado de secciones) */}
             {(() => {
-              const docReq = SLOTS.filter(s => s.required);
-              const docAllVerified = docReq.length > 0 && docReq.every(s => documentos.some(d => (s.tipoIds as readonly number[]).includes(d.tipoId) && d.status === 'verified'));
+              const docAllVerified = docsAllVerified;
               const secciones = [
-                { state: docAllVerified ? 'val' : documentos.length > 0 ? 'proc' : 'pend' },
+                { state: docAllVerified ? 'val' : allDocs.length > 0 ? 'proc' : 'pend' },
                 { state: persona?.nombre_legal ? 'val' : 'pend' },
                 { state: persona?.regimen ? 'val' : 'pend' },
                 { state: (cuentasBancarias.length === 0 || !cuentasBancarias.every(c => c.evidencia)) ? 'pend' : cuentasBancarias.every(c => c.estatus === 2) ? 'val' : 'proc' },
@@ -1434,14 +1552,17 @@ const ClientePerfil = () => {
                     <div className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">{group.label}</div>
                     <div className="flex flex-col gap-2.5">
                       {groupSlots.map((slot) => {
-                        const slotDocs = documentos.filter(d => (slot.tipoIds as readonly number[]).includes(d.tipoId));
+                        const slotDocs = allDocs.filter(d => slot.tipoIds.includes(d.tipoId) && d.owner === slot.owner);
                         const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
                         const status = best?.status ?? 'missing';
                         const isUploading = uploadingSlot === slot.key;
                         const hasFile = !!best?.url;
                         const isCamera = slot.key === 'ine_frente' || slot.key === 'ine_reverso' || slot.key === 'pasaporte';
-                        const badge = status === 'verified' ? { c:'text-[hsl(158_64%_38%)]', bg:'bg-[#E8F5EE]' } : status === 'review' ? { c:'text-[#B5730A]', bg:'bg-[#FBEFD9]' } : status === 'rejected' ? { c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' } : { c:'text-[#6B7280]', bg:'bg-[#F2F4F5]' };
-                        const badgeLabel = status === 'verified' ? 'Aprobado' : status === 'review' ? 'En revisión' : status === 'rejected' ? 'Rechazado' : status === 'expired' ? 'Expirado' : 'Pendiente';
+                        // Slot del representante legal sin persona vinculada → no se puede subir aquí.
+                        const repMissing = slot.owner === 'rep' && !repLegalPersonaId;
+                        const slotPersonaId = slot.owner === 'rep' ? repLegalPersonaId : effectivePersonaId;
+                        const badge = repMissing ? { c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' } : status === 'verified' ? { c:'text-[hsl(158_64%_38%)]', bg:'bg-[#E8F5EE]' } : status === 'review' ? { c:'text-[#B5730A]', bg:'bg-[#FBEFD9]' } : status === 'rejected' ? { c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' } : { c:'text-[#6B7280]', bg:'bg-[#F2F4F5]' };
+                        const badgeLabel = repMissing ? 'Sin representante legal' : status === 'verified' ? 'Aprobado' : status === 'review' ? 'En revisión' : status === 'rejected' ? 'Rechazado' : status === 'expired' ? 'Expirado' : 'Pendiente';
                         return (
                           <div key={slot.key} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
                             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
@@ -1452,7 +1573,7 @@ const ClientePerfil = () => {
                                 <span className="text-[13px] font-bold text-[#171A1D]">{slot.label}</span>
                                 <span className={`rounded-full px-2.5 py-[3px] text-[9.5px] font-bold ${badge.bg} ${badge.c}`}>{badgeLabel}</span>
                               </div>
-                              <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{best?.date ? `Subido el ${best.date}` : 'Sin cargar'}</p>
+                              <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{repMissing ? 'Falta capturar al representante legal' : best?.date ? `Subido el ${best.date}` : 'Sin cargar'}</p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
                               <input
@@ -1460,13 +1581,13 @@ const ClientePerfil = () => {
                                 type="file"
                                 accept={AUTO_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
                                 className="hidden"
-                                onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId); e.target.value = ''; }}
+                                onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId, slot.owner, slotPersonaId); e.target.value = ''; }}
                               />
                               {/* INE frente/reverso y pasaporte → captura por cámara. Resto → subir archivo. */}
                               <button
                                 onClick={() => { if (isCamera) { setCameraMode(slot.key === 'pasaporte' ? 'pasaporte' : 'ine'); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
-                                disabled={isUploading}
-                                title={isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
+                                disabled={isUploading || repMissing}
+                                title={repMissing ? 'Primero captura al representante legal' : isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
                                 className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCamera ? <Camera className="h-4 w-4" /> : hasFile ? <Pencil className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
@@ -1564,6 +1685,7 @@ const ClientePerfil = () => {
                   { label:'RFC con homoclave', value:persona?.rfc, mono:true },
                   { label:'CURP', value:persona?.curp, mono:true },
                   { label:'Teléfono', value:persona?.telefono ? `${persona.clave_pais_telefono || '+52'} ${persona.telefono}` : null },
+                  { label:'Ocupación', value:(persona as any)?.ocupacion || null },
                   { label:'Correo electrónico', value:persona?.email || profile?.email, note:'No editable' },
                 ].map((f) => (
                   <div key={f.label} className="flex items-start justify-between gap-4 py-3">
@@ -1736,6 +1858,27 @@ const ClientePerfil = () => {
                       className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
                     />
                   </div>
+                </FormField>
+                <FormField label="Ocupación">
+                  <SearchSelect
+                    value={ocupacionOtro ? "Otro" : editPersonal.ocupacion}
+                    onChange={(v) => {
+                      if (v === "Otro") { setOcupacionOtro(true); setEditPersonal(f => ({ ...f, ocupacion: "" })); }
+                      else { setOcupacionOtro(false); setEditPersonal(f => ({ ...f, ocupacion: v })); }
+                    }}
+                    options={OCUPACIONES_OPCIONES}
+                    placeholder="Selecciona tu ocupación..."
+                    getLabel={(o) => o.nombre}
+                    getValue={(o) => o.nombre}
+                  />
+                  {ocupacionOtro && (
+                    <input
+                      className={`${INPUT_CLS} mt-2`}
+                      value={editPersonal.ocupacion}
+                      onChange={(e) => setEditPersonal(f => ({ ...f, ocupacion: e.target.value }))}
+                      placeholder="Especifica tu ocupación"
+                    />
+                  )}
                 </FormField>
                 <div className="rounded-md bg-muted/40 px-3 py-2.5 flex items-center gap-2">
                   <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
