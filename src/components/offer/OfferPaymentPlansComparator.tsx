@@ -67,17 +67,9 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
 
   const hasPersonalized = plans.some((p) => p.isPersonalized);
 
-  // Las mensualidades corren hasta UN MES ANTES de la entrega (el mes de entrega
-  // es el Pago a escrituración). Mostrar ese último mes, no el de entrega.
-  const lastInstallmentLabel = (() => {
-    if (!selectedPlan.installments?.endDate) return null;
-    const d = new Date(selectedPlan.installments.endDate);
-    d.setMonth(d.getMonth() - 1);
-    return d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-  })();
-  const installmentsSublabel = selectedPlan.installments
-    ? `${selectedPlan.installments.count} mensualidades${lastInstallmentLabel ? ` · hasta ${lastInstallmentLabel}` : ""}`
-    : "";
+  // Las mensualidades corren hasta la escrituración (el conteo de meses se calcula
+  // internamente contra la fecha de entrega, pero no se muestra en la leyenda).
+  const installmentsSublabel = selectedPlan.installments ? "hasta la escritura" : "";
 
   return (
     <SectionCard icon={BadgePercent} title="Esquemas de financiamiento" bodyClassName="p-5 md:p-6">
@@ -259,10 +251,10 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
         <div className="mt-4 flex items-start gap-2.5 p-3 rounded-md bg-muted/40 border border-border/60">
           <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            En caso de que la propiedad pueda escriturarse o entregarse antes de que transcurran
-            las <span className="font-semibold text-foreground">{selectedPlan.installments.count} mensualidades</span>,
-            el cliente deberá liquidar la totalidad del saldo pendiente del precio. Las mensualidades
-            no cubiertas se acumulan al Pago a escrituración.
+            En caso de que la propiedad pueda escriturarse o entregarse antes de que se cubran
+            todas las <span className="font-semibold text-foreground">mensualidades</span>, el cliente
+            deberá liquidar la totalidad del saldo pendiente del precio. Las mensualidades no
+            cubiertas se acumulan al Pago a escrituración.
           </p>
         </div>
       )}
