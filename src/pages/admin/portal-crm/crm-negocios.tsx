@@ -38,6 +38,7 @@ import { DField } from "@/components/admin/portal-crm/ui";
 import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META } from "@/lib/crm-format";
 import { fmtMXN, fmtDate } from "@/lib/crm-lib";
 import { fetchCrmOwners } from "@/hooks/useCrmCatalogos";
+import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
 
 // ─── (símbolos extraídos abajo; se les añade `export` automáticamente) ──────────
 export function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
@@ -461,6 +462,7 @@ export function DealMetric({ label, value }: { label: string; value: string }) {
 
 // Menú de acciones (Ver · Editar · Eliminar) de un negocio.
 export function DealActionsMenu({ deal, onOpen, onEdit, onDelete, onBoard }: { deal: any; onOpen: (id: number) => void; onEdit: (d: any) => void; onDelete: (d: any) => void; onBoard?: boolean }) {
+  const canDelete = useCrmCanDelete("/admin/portal-crm/ventas/negocios");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -475,8 +477,12 @@ export function DealActionsMenu({ deal, onOpen, onEdit, onDelete, onBoard }: { d
       <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
         <DropdownMenuItem onClick={() => onOpen(deal.id)}><Briefcase className="h-4 w-4 mr-2" />Ver negocio</DropdownMenuItem>
         <DropdownMenuItem onClick={() => onEdit(deal)}><Pencil className="h-4 w-4 mr-2" />Editar</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onDelete(deal)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar</DropdownMenuItem>
+        {canDelete && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onDelete(deal)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar</DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
