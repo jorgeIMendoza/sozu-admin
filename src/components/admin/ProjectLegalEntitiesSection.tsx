@@ -182,7 +182,10 @@ export const ProjectLegalEntitiesSection = ({
       // Permitir múltiples entidades si:
       // 1. Es un proyecto de Productos/Servicios, O
       // 2. El tipo de entidad es Dueño Vendedor (4) o Aportante (15)
-      const permiteMultiples = isProductosOrServicios || TIPOS_PERMITEN_MULTIPLES.includes(tipoEntidadSeleccionado);
+      // Excepción: la Inmobiliaria (5) siempre es única por proyecto (es la cuenta
+      // madre STP para generar comisiones); no se permite duplicar ni en Productos.
+      const permiteMultiples = (isProductosOrServicios || TIPOS_PERMITEN_MULTIPLES.includes(tipoEntidadSeleccionado))
+        && tipoEntidadSeleccionado !== 5;
       
       if (!permiteMultiples) {
         // Check if project already has an entity of this type
@@ -653,13 +656,18 @@ export const ProjectLegalEntitiesSection = ({
                   setSelectedEntityTypeId(value);
                   setSelectedEntityId("");
                 }}
-                disabled={isProductosOrServicios}
               >
-                <SelectTrigger className={isProductosOrServicios ? "bg-muted cursor-not-allowed" : ""}>
+                <SelectTrigger>
                   <SelectValue placeholder="Selecciona un tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {legalEntityTypes.map((type) => (
+                  {/* En Productos/Servicios solo aplican Dueño Vendedor (4) e Inmobiliaria (5).
+                      La Inmobiliaria es necesaria como cuenta madre STP para generar las
+                      cuentas de comisiones de los dueños vendedores del producto. */}
+                  {(isProductosOrServicios
+                    ? legalEntityTypes.filter((t: any) => [4, 5].includes(t.id))
+                    : legalEntityTypes
+                  ).map((type) => (
                     <SelectItem 
                       key={type.id} 
                       value={type.id.toString()}
