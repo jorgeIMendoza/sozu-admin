@@ -358,13 +358,13 @@ const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/cr
 const CrmDealDetail        = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDealDetail })));
 const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
 const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
-const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSequences })));
-const CrmRouting           = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmRouting })));
-const CrmAutomationRules   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAutomationRules })));
-const CrmEscalations       = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmEscalations })));
-const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmLeadIntelligence })));
-const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAgentPerformance })));
-const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSalesOperations })));
+const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmSequences })));
+const CrmRouting           = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmRouting })));
+const CrmAutomationRules   = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmAutomationRules })));
+const CrmEscalations       = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmEscalations })));
+const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmLeadIntelligence })));
+const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmAgentPerformance })));
+const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmSalesOperations })));
 
 // Portal CRM Sozu — Inteligencia de marketing
 const CrmCampaigns              = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCampaigns })));

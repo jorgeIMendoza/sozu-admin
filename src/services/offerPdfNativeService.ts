@@ -498,10 +498,11 @@ export class OfertaPdfNativeService {
     propertyItems.forEach((item) => {
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(grayColor);
-      pdf.text(item.label, margin, y);
+      pdf.text(String(item.label ?? ""), margin, y);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(primaryColor);
-      pdf.text(item.value, margin + 35, y);
+      // Coerción a string: jsPDF lanza "Invalid arguments" si el valor es null/number.
+      pdf.text(String(item.value ?? ""), margin + 35, y);
       y += 5;
     });
 
@@ -733,8 +734,8 @@ export class OfertaPdfNativeService {
           pdf.setFontSize(10);
           pdf.setFont("helvetica", "bold");
           pdf.setTextColor(primaryColor);
-          pdf.text(scheme.nombre, schemeX + schemePadding, lineY);
-          
+          pdf.text(String(scheme.nombre ?? ""), schemeX + schemePadding, lineY);
+
           // Draw approval status badge next to scheme name
           if (isSelected && data.offerData.id_esquema_pago_seleccionado && data.id_estatus_aprobacion && data.estatus_aprobacion_nombre) {
             const statusColors: Record<number, { bg: [number, number, number]; text: [number, number, number] }> = {
@@ -744,9 +745,9 @@ export class OfertaPdfNativeService {
               4: { bg: [204, 229, 255], text: [0, 64, 133] },
             };
             const colors = statusColors[data.id_estatus_aprobacion] || statusColors[1];
-            const nameWidth = pdf.getTextWidth(scheme.nombre);
+            const nameWidth = pdf.getTextWidth(String(scheme.nombre ?? ""));
             const badgeX = schemeX + schemePadding + nameWidth + 2;
-            const badgeText = data.estatus_aprobacion_nombre;
+            const badgeText = String(data.estatus_aprobacion_nombre ?? "");
             pdf.setFontSize(6);
             pdf.setFont("helvetica", "normal");
             const badgeTextWidth = pdf.getTextWidth(badgeText);
@@ -849,7 +850,7 @@ export class OfertaPdfNativeService {
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
           pdf.text(
-            `${escalonadoDisplay.totalMeses} mensualidades:`,
+            "Mensualidades hasta la escritura:",
             schemeX + schemePadding,
             lineY
           );
@@ -861,21 +862,6 @@ export class OfertaPdfNativeService {
             lineY,
             { align: "right" }
           );
-          lineY += 3;
-
-          // Date sub-line
-          if (escalonadoDisplay.fechaFinalText) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6);
-            pdf.setTextColor(grayColor);
-            pdf.text(
-              escalonadoDisplay.fechaFinalText,
-              schemeX + schemeWidth - schemePadding,
-              lineY,
-              { align: "right" }
-            );
-            pdf.setFontSize(8);
-          }
           lineY += 4;
 
           // Delivery row
@@ -899,7 +885,7 @@ export class OfertaPdfNativeService {
             pdf.setFont("helvetica", "normal");
             pdf.setTextColor(grayColor);
             pdf.text(
-              `${amounts.meses} mensualidades (${amounts.porcentajeMensualidades.toFixed(1)}%):`,
+              "Mensualidades hasta la escritura:",
               schemeX + schemePadding,
               lineY
             );

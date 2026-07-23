@@ -3,6 +3,7 @@ import { Sparkles, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 export function PageHeader({
   title,
@@ -115,6 +116,26 @@ export function ComingSoon({ title, items }: { title: string; items: string[] })
         ))}
       </ul>
     </Card>
+  );
+}
+
+// Fila etiqueta/valor compacta (para paneles de detalle y tarjetas).
+export function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boolean }) {
+  return (
+    <div className="flex justify-between gap-2 py-1 border-b last:border-0">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className={`text-xs truncate max-w-[180px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
+    </div>
+  );
+}
+
+// Campo etiqueta/valor en columna (label arriba, contenido abajo) para formularios/detalle.
+export function DField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-1">
+      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</Label>
+      <div>{children}</div>
+    </div>
   );
 }
 

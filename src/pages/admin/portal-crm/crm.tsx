@@ -19,8 +19,10 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
 import { useCrmOrgId } from "@/hooks/useCrmOrgId";
-import { PageHeader, EmptyState, ComingSoon } from "@/components/admin/portal-crm/ui";
+import { PageHeader, EmptyState, ComingSoon, ARow, DField } from "@/components/admin/portal-crm/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,38 @@ import {
   fmtDateTime, fmtMXN, DEAL_STAGES,
   taskStatusLabel, TASK_STATUS, type DealStage,
 } from "@/lib/crm-lib";
+import {
+  fmtMoneda, stripHtml, dealInitials, etapaColorClasses,
+  advanceByRecurrence, fmtDueDateTime, fmtCitaWhen,
+  TIPO_NEGOCIO_OPTS, PRIORIDAD_META,
+} from "@/lib/crm-format";
+import {
+  META_LEAD_STATUSES, useLeadStates, fetchCrmCategorias,
+  fetchCrmOwners, type CrmOwner,
+} from "@/hooks/useCrmCatalogos";
+import {
+  PERSONA_EMAIL_RE, PERSONA_PHONE_RE, MSG_TELEFONO_INVALIDO,
+  MSG_EMAIL_INVALIDO, mensajeErrorContacto,
+} from "@/lib/crm-validaciones";
+import {
+  CRM_ATTACH_BUCKET, classifyAttachment, humanFileSize,
+  saveNoteAttachments, fetchNoteAttachments, NoteAttachmentsStrip,
+  type AttachKind, type PendingAttachment, type NoteAttachment,
+} from "./crm-adjuntos";
+import { InlineNoteForm, NoteCard, NoteDialog } from "./crm-notas";
+import {
+  TaskDialog, CitaDialog, TaskActivityCard, regenerateRecurringTask,
+  NewGlobalCitaDialog, CitaPreviewSheet, NewGlobalTaskDialog,
+  CITA_TYPE_META, CITA_STATUS_META, CITA_STATUS_ORDER,
+  TASK_TYPE_META, TASK_PRIORITY_META, RECURRENCE_LABEL,
+  type GlobalCita,
+} from "./crm-tareas-citas";
+import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
+import {
+  DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
+  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL,
+} from "./crm-negocios";
+import { CargaMasivaDialog } from "./crm-carga-masiva";
 import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
 } from "@/lib/crm-lead-scoring";
@@ -115,56 +149,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
 
 const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
 
-const META_LEAD_STATUSES: { value: string; label: string; color?: string }[] = [
-  { value: "nuevo", label: "Nuevo" },
-  { value: "en_curso", label: "En curso" },
-  { value: "negocio_abierto", label: "Negocio abierto" },
-  { value: "sin_calificar", label: "Sin calificar" },
-  { value: "intento_contacto", label: "Intento de contacto" },
-  { value: "conectado", label: "Conectado" },
-  { value: "programo_cita", label: "Programó cita" },
-  { value: "asistio_cita", label: "Asistió a cita" },
-  { value: "fuera_presupuesto", label: "Fuera de presupuesto" },
-  { value: "compra_futura", label: "Compra futura" },
-  { value: "sin_respuesta_7", label: "Sin respuesta 7+" },
-  { value: "tiempo_entrega", label: "Tiempo de entrega" },
-  { value: "asesor_inmobiliario", label: "Asesor inmobiliario" },
-  { value: "registro_error", label: "Registro por error" },
-  { value: "proveedor", label: "Proveedor" },
-  { value: "fuera_area", label: "Fuera del área" },
-];
 
-// Estados de lead configurables (tabla crm_estados_lead, administrable en Configuración
-// › Estados de lead). Si la tabla aún no existe o está vacía, cae al catálogo fijo de
-// arriba para no romper. La `clave` es el valor guardado en crm_leads_atribucion.estatus_lead.
-type LeadStateOpt = { value: string; label: string; color?: string };
-const fetchLeadStates = async (): Promise<LeadStateOpt[]> => {
-  const { data, error } = await (supabase as any)
-    .from("crm_estados_lead")
-    .select("clave, nombre, color, orden")
-    .eq("activo", true)
-    .order("orden");
-  if (error || !data || data.length === 0) return META_LEAD_STATUSES;
-  return data.map((r: any) => ({ value: r.clave, label: r.nombre, color: r.color ?? undefined }));
-};
-const useLeadStates = () => useQuery({ queryKey: ["crm-estados-lead"], queryFn: fetchLeadStates });
-
-// Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
-const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-const PERSONA_PHONE_RE = /^[0-9 ()+\-]{5,20}$/;
-const MSG_TELEFONO_INVALIDO = "El teléfono no es válido. Usa solo números (opcional + espacios o guiones), de 5 a 20 caracteres. Ej: 3312345678";
-const MSG_EMAIL_INVALIDO = "El correo no es válido. Debe tener el formato nombre@dominio.com";
-
-// Traduce errores crudos de la BD (en inglés) a un mensaje claro en español.
-function mensajeErrorContacto(e: any): string {
-  const m = (e?.message ?? "").toLowerCase();
-  if (m.includes("telefono_formato")) return MSG_TELEFONO_INVALIDO;
-  if (m.includes("email_formato")) return MSG_EMAIL_INVALIDO;
-  if (m.includes("curp_formato")) return "El CURP no tiene un formato válido.";
-  if (m.includes("rfc_formato")) return "El RFC no tiene un formato válido.";
-  if (m.includes("duplicate") || m.includes("unique")) return "Ese contacto ya existe (dato duplicado).";
-  return "No se pudo guardar el contacto. Revisa los datos e inténtalo de nuevo.";
-}
 
 function loadContactColumns(): ColumnConfig[] {
   if (typeof window === "undefined") return DEFAULT_CONTACT_COLUMNS;
@@ -225,48 +210,7 @@ function DateChip({ date }: { date: string | null }) {
 }
 
 // ─── Categorías de contacto (procedencia) ──────────────────────────────────────
-const fetchCrmCategorias = async (): Promise<{ id: number; nombre: string }[]> => {
-  const { data, error } = await (supabase as any)
-    .from("crm_categorias")
-    .select("id, nombre")
-    .eq("activo", true)
-    .order("orden");
-  if (error) return []; // tabla aún no desplegada en este ambiente → sin categorías
-  return data ?? [];
-};
 
-type CrmOwner = { id: string; full_name: string; email: string };
-
-// Propietarios posibles del CRM = usuarios activos cuyo rol tiene acceso a alguna
-// ruta /admin/portal-crm/... (mismo criterio que el selector "Ver como"). Se deriva
-// dinámicamente en vez de hardcodear rol_ids: así incluye Super Admin, Agente Interno,
-// Admin CRM y cualquier otro rol admin del CRM (p. ej. el que solo existe en producción)
-// sin depender del ambiente. Fallback a [1, 9] si aún no hay submenús del CRM en BD.
-const fetchCrmOwners = async (): Promise<CrmOwner[]> => {
-  let rolIds: number[] = [];
-  const { data: subs } = await (supabase as any)
-    .from("submenus")
-    .select("id")
-    .like("vista_front_end", "/admin/portal-crm/%");
-  const submenuIds = (subs ?? []).map((s: any) => s.id);
-  if (submenuIds.length) {
-    const { data: perms } = await (supabase as any)
-      .from("submenus_permisos")
-      .select("rol_id")
-      .in("submenu_id", submenuIds)
-      .eq("activo", true);
-    rolIds = Array.from(new Set((perms ?? []).map((p: any) => p.rol_id)));
-  }
-  if (!rolIds.length) rolIds = [1, 9]; // fallback: Super Admin + Agente Interno
-  const { data } = await (supabase as any)
-    .from("usuarios")
-    .select("auth_user_id, nombre, email")
-    .eq("activo", true)
-    .in("rol_id", rolIds);
-  return (data ?? [])
-    .map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email }))
-    .sort((a: CrmOwner, b: CrmOwner) => (a.full_name ?? "").localeCompare(b.full_name ?? "")) as CrmOwner[];
-};
 
 // Categoría del contacto en la ficha (select único; persiste al instante).
 function ContactCategories({ contactId }: { contactId: number }) {
@@ -326,9 +270,44 @@ export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
+  const { canDelete: realCanDelete } = usePagePermissions("/admin/portal-crm/ventas/contactos");
+
+  // ¿El rol impersonado es Super Admin? Para que "Ver como" a un super admin muestre todo.
+  const { data: impIsSuper } = useQuery({
+    queryKey: ["crm-imp-role-super", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("roles").select("nombre").eq("id", impersonatedCrmUserRolId).maybeSingle();
+      return data?.nombre === "Super Administrador";
+    },
+  });
+
+  // Permiso de eliminar del ROL impersonado (cuando se usa "Ver como"). permiso_id 4 = eliminar.
+  const { data: impCanDelete } = useQuery({
+    queryKey: ["crm-contactos-imp-candelete", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data: sub } = await (supabase as any).from("submenus")
+        .select("id").eq("vista_front_end", "/admin/portal-crm/ventas/contactos").eq("activo", true).maybeSingle();
+      if (!sub) return false;
+      const { data: sp } = await (supabase as any).from("submenus_permisos")
+        .select("id").eq("submenu_id", sub.id).eq("rol_id", impersonatedCrmUserRolId).eq("permiso_id", 4).eq("activo", true).maybeSingle();
+      return !!sp;
+    },
+  });
+
+  // Bajo "Ver como" todo se evalúa con el rol/usuario impersonado (no con el usuario real).
+  const canDelete = isImpersonating ? (impIsSuper ? true : (impCanDelete ?? false)) : realCanDelete;
+  const isSuperAdmin = isImpersonating ? (impIsSuper ?? false) : (profile?.rol_nombre === "Super Administrador");
+  const effUserId = isImpersonating ? impersonatedCrmUserId : (user?.id ?? null);
 
   const [stageTab, setStageTab] = useState<StageTab>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState<ContactRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState("");
   const [filterDev, setFilterDev] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -377,7 +356,7 @@ export function CrmContacts() {
   );
 
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, page],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, page, isSuperAdmin, effUserId],
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -420,6 +399,15 @@ export function CrmContacts() {
         if (!catErIds.length) return { rows: [], count: 0 };
       }
 
+      // Visibilidad: quien NO es superadmin solo ve SUS contactos (por propietario).
+      let ownedErIds: number[] | null = null;
+      if (!isSuperAdmin) {
+        const { data: mine } = await (supabase as any).from("crm_leads_atribucion")
+          .select("id_entidad_relacionada").eq("activo", true).eq("id_propietario", effUserId ?? "");
+        ownedErIds = (mine ?? []).map((r: any) => Number(r.id_entidad_relacionada));
+        if (!ownedErIds.length) return { rows: [], count: 0 };
+      }
+
       const buildQ = (sel: string, opts?: Record<string, unknown>) => {
         let q = (supabase as any).from("entidades_relacionadas").select(sel, opts ?? {});
         q = q.in("id_tipo_entidad", tipoFilter).eq("activo", true);
@@ -427,6 +415,7 @@ export function CrmContacts() {
         if (searchPersonaIds) q = q.in("id_persona", searchPersonaIds);
         if (sourceErIds) q = q.in("id", sourceErIds);
         if (catErIds) q = q.in("id", catErIds);
+        if (ownedErIds) q = q.in("id", ownedErIds);
         if (excludeErIds.length) q = q.not("id", "in", `(${excludeErIds.join(",")})`);
         return q;
       };
@@ -514,11 +503,12 @@ export function CrmContacts() {
     },
   });
 
+  const effectiveTab: StageTab = isSuperAdmin ? stageTab : "mine";
   const allRows = contacts?.rows ?? [];
   const rows = allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
-    if (stageTab === "mine" && c.contact_owner !== user?.id) return false;
-    if (stageTab === "unassigned" && c.contact_owner !== null) return false;
+    if (effectiveTab === "mine" && c.contact_owner !== effUserId) return false;
+    if (effectiveTab === "unassigned" && c.contact_owner !== null) return false;
     return true;
   });
   const totalCount = contacts?.count ?? 0;
@@ -527,11 +517,26 @@ export function CrmContacts() {
   const rangeEnd = Math.min(page * pageSize + pageSize, totalCount);
   const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? null;
 
-  const CONTACT_TABS = [
-    { id: "all" as StageTab, label: "Todos contactos" },
-    { id: "mine" as StageTab, label: "Mis contactos" },
-    { id: "unassigned" as StageTab, label: "Contactos no asignados" },
-  ];
+  const doDelete = async () => {
+    const ids = rowToDelete ? [rowToDelete.id] : Array.from(selectedIds);
+    if (!ids.length) return;
+    setDeleting(true);
+    const { error } = await (supabase as any).from("entidades_relacionadas")
+      .update({ activo: false }).in("id", ids.map(Number));
+    setDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(ids.length > 1 ? `${ids.length} contactos eliminados` : "Contacto eliminado");
+    setSelectedIds(new Set()); setRowToDelete(null); setDeleteOpen(false);
+    qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+  };
+
+  const CONTACT_TABS = isSuperAdmin
+    ? [
+        { id: "all" as StageTab, label: "Todos contactos" },
+        { id: "mine" as StageTab, label: "Mis contactos" },
+        { id: "unassigned" as StageTab, label: "Contactos no asignados" },
+      ]
+    : [{ id: "mine" as StageTab, label: "Mis contactos" }];
 
   return (
     <div className="space-y-4">
@@ -544,6 +549,12 @@ export function CrmContacts() {
           </h1>
         </div>
         <div className="flex gap-2">
+          {canDelete && selectedIds.size > 0 && (
+            <Button size="sm" variant="destructive" onClick={() => { setRowToDelete(null); setDeleteOpen(true); }}>
+              <Trash2 className="h-4 w-4 mr-1" />Eliminar ({selectedIds.size})
+            </Button>
+          )}
+          <CargaMasivaDialog onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
           <CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
         </div>
       </div>
@@ -554,7 +565,7 @@ export function CrmContacts() {
           <button
             key={t.id}
             onClick={() => { setStageTab(t.id); setPage(0); }}
-            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${stageTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
+            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${effectiveTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
           >
             {t.label}
           </button>
@@ -600,7 +611,14 @@ export function CrmContacts() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
                 <tr>
-                  <th className="px-3 py-2.5 text-left w-8"><Checkbox /></th>
+                  <th className="px-3 py-2.5 text-left w-8">
+                    {canDelete && (
+                      <Checkbox
+                        checked={rows.length > 0 && rows.every((r) => selectedIds.has(r.id))}
+                        onCheckedChange={(v) => setSelectedIds(v ? new Set(rows.map((r) => r.id)) : new Set())}
+                      />
+                    )}
+                  </th>
                   {visibleColumns.map((col) => (
                     <th key={col.id} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{col.label}</th>
                   ))}
@@ -614,7 +632,14 @@ export function CrmContacts() {
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
                     className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
                   >
-                    <td className="p-3" onClick={(e) => e.stopPropagation()}><Checkbox /></td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      {canDelete && (
+                        <Checkbox
+                          checked={selectedIds.has(c.id)}
+                          onCheckedChange={(v) => setSelectedIds((prev) => { const n = new Set(prev); if (v) n.add(c.id); else n.delete(c.id); return n; })}
+                        />
+                      )}
+                    </td>
                     {visibleColumns.map((col) => {
                       switch (col.id) {
                         case "name":
@@ -760,7 +785,14 @@ export function CrmContacts() {
                           return null;
                       }
                     })}
-                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {canDelete && (
+                        <Button size="icon" variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/5 opacity-0 group-hover:opacity-100 transition-all duration-150"
+                          onClick={(e) => { e.stopPropagation(); setRowToDelete(c); setDeleteOpen(true); }} aria-label="Eliminar contacto">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100 transition-all duration-150" asChild>
                         <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} aria-label="Ver detalle">
                           <ChevronRight className="h-4 w-4" />
@@ -811,6 +843,24 @@ export function CrmContacts() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deleteOpen} onOpenChange={(v) => { setDeleteOpen(v); if (!v) setRowToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{rowToDelete ? "¿Eliminar este contacto?" : `¿Eliminar ${selectedIds.size} contactos?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se ocultarán del CRM (borrado lógico, reversible en base de datos). No borra la persona subyacente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); doDelete(); }} disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? "Eliminando…" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -952,344 +1002,9 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
 
-// ─── Adjuntos de notas (imágenes / archivos / notas de voz) ─────────────────────
-
-const CRM_ATTACH_BUCKET = "documentos";
-
-type AttachKind = "image" | "file" | "audio";
-type PendingAttachment = { id: string; file: File; tipo: AttachKind; nombre: string; previewUrl: string };
-type NoteAttachment = { id: number; url: string; tipo: string; nombre: string; mime: string | null };
-
-const classifyAttachment = (file: File): AttachKind => {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("audio/")) return "audio";
-  return "file";
-};
-
-const humanFileSize = (bytes?: number | null): string => {
-  if (!bytes && bytes !== 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-// Sube un archivo al storage y devuelve su URL pública + metadatos.
-async function uploadCrmNoteFile(file: File): Promise<{ url: string; nombre: string; mime: string | null; tamano: number } | null> {
-  const safeExt = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
-  const path = `crm-notes/${crypto.randomUUID()}.${safeExt}`;
-  const { data, error } = await supabase.storage
-    .from(CRM_ATTACH_BUCKET)
-    .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
-  if (error || !data) return null;
-  const { data: pub } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
-  return { url: pub.publicUrl, nombre: file.name, mime: file.type || null, tamano: file.size };
-}
-
-// Sube y registra los adjuntos de una nota (best-effort: si la tabla aún no existe,
-// no rompe el guardado de la nota).
-async function saveNoteAttachments(noteId: number, userId: string | undefined, pend: PendingAttachment[]): Promise<void> {
-  for (const a of pend) {
-    const up = await uploadCrmNoteFile(a.file);
-    if (!up) { toast.error(`No se pudo subir ${a.nombre}`); continue; }
-    const { error } = await (supabase as any).from("crm_notas_adjuntos").insert({
-      id_nota: noteId, tipo: a.tipo, url: up.url, nombre: up.nombre,
-      mime: up.mime, tamano_bytes: up.tamano, id_usuario: userId ?? null,
-    });
-    if (error) console.warn("crm_notas_adjuntos no disponible:", error.message);
-  }
-}
-
-// Chips/vista previa de adjuntos ya guardados en una nota.
-function NoteAttachmentsStrip({ attachments }: { attachments: NoteAttachment[] }) {
-  if (!attachments?.length) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {attachments.map((a) => {
-        if (a.tipo === "image") {
-          return (
-            <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className="block">
-              <img src={a.url} alt={a.nombre} className="h-24 w-24 object-cover rounded-md border border-border" />
-            </a>
-          );
-        }
-        if (a.tipo === "audio") {
-          return (
-            <div key={a.id} className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 p-2 max-w-full">
-              <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Mic className="h-3 w-3" />{a.nombre}</span>
-              <audio controls src={a.url} className="h-8 max-w-[240px]" />
-            </div>
-          );
-        }
-        return (
-          <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1 text-xs text-foreground hover:bg-muted transition-colors">
-            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="truncate max-w-[180px]">{a.nombre}</span>
-            <Download className="h-3 w-3 text-muted-foreground shrink-0" />
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-// Carga los adjuntos de un conjunto de notas → Record<id_nota, NoteAttachment[]>.
-// Best-effort: si la tabla no existe en el ambiente, devuelve {} sin romper.
-async function fetchNoteAttachments(noteIds: number[]): Promise<Record<number, NoteAttachment[]>> {
-  if (!noteIds.length) return {};
-  const res = await (supabase as any).from("crm_notas_adjuntos")
-    .select("id, id_nota, url, tipo, nombre, mime")
-    .in("id_nota", noteIds).eq("activo", true)
-    .order("id", { ascending: true });
-  if (res.error) return {};
-  const byNote: Record<number, NoteAttachment[]> = {};
-  for (const r of (res.data ?? [])) {
-    (byNote[r.id_nota] ??= []).push({ id: r.id, url: r.url, tipo: r.tipo, nombre: r.nombre, mime: r.mime ?? null });
-  }
-  return byNote;
-}
 
 // ─── Rich Note Editor ─────────────────────────────────────────────────────────
 
-function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  if (!editor) return null;
-
-  const addImage = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const ext = file.name.split(".").pop();
-      const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from(CRM_ATTACH_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
-      if (error) { toast.error("Error al subir imagen"); return; }
-      const { data: url } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
-      editor.chain().focus().setImage({ src: url.publicUrl }).run();
-    };
-    input.click();
-  };
-
-  const setLink = () => {
-    const url = window.prompt("URL del enlace:");
-    if (!url) return;
-    editor.chain().focus().setLink({ href: url, target: "_blank" }).run();
-  };
-
-  const btnClass = (active?: boolean) =>
-    `h-7 w-7 flex items-center justify-center rounded transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
-
-  return (
-    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/30 flex-wrap">
-      <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={btnClass(editor.isActive("bold"))} title="Negrita">
-        <Bold className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={btnClass(editor.isActive("italic"))} title="Cursiva">
-        <Italic className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={btnClass(editor.isActive("underline"))} title="Subrayado">
-        <UnderlineIcon className="h-3.5 w-3.5" />
-      </button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} className={btnClass(editor.isActive("bulletList"))} title="Lista">
-        <List className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btnClass(editor.isActive("orderedList"))} title="Lista numerada">
-        <ListOrdered className="h-3.5 w-3.5" />
-      </button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <button type="button" onClick={setLink} className={btnClass(editor.isActive("link"))} title="Enlace">
-        <LinkIcon className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={addImage} className={btnClass()} title="Imagen">
-        <ImageIcon className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; userId?: string; onSaved: () => void }) {
-  const [activityDate, setActivityDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [saving, setSaving] = useState(false);
-  const [isEmpty, setIsEmpty] = useState(true);
-  const [pending, setPending] = useState<PendingAttachment[]>([]);
-  const [recording, setRecording] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      UnderlineExt,
-      ImageExt.configure({ inline: false, allowBase64: false }),
-      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
-      TextStyleExt,
-    ],
-    editorProps: {
-      attributes: { class: "prose prose-sm max-w-none min-h-[80px] px-3 py-2 text-sm focus:outline-none" },
-      // Ctrl+V de imágenes → se adjuntan (no se incrustan en el texto).
-      handlePaste: (_view, event) => {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
-        const imgs: File[] = [];
-        for (const it of Array.from(items)) {
-          if (it.kind === "file" && it.type.startsWith("image/")) {
-            const f = it.getAsFile();
-            if (f) imgs.push(f);
-          }
-        }
-        if (!imgs.length) return false;
-        setPending((p) => [
-          ...p,
-          ...imgs.map((file) => ({ id: crypto.randomUUID(), file, tipo: "image" as AttachKind, nombre: file.name || "imagen.png", previewUrl: URL.createObjectURL(file) })),
-        ]);
-        toast.success(imgs.length > 1 ? `${imgs.length} imágenes adjuntadas` : "Imagen adjuntada");
-        return true;
-      },
-    },
-    onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
-  });
-
-  const addPending = (files: File[]) => {
-    if (!files.length) return;
-    setPending((p) => [
-      ...p,
-      ...files.map((file) => ({ id: crypto.randomUUID(), file, tipo: classifyAttachment(file), nombre: file.name, previewUrl: URL.createObjectURL(file) })),
-    ]);
-  };
-
-  const removePending = (id: string) => {
-    setPending((p) => {
-      const found = p.find((x) => x.id === id);
-      if (found) URL.revokeObjectURL(found.previewUrl);
-      return p.filter((x) => x.id !== id);
-    });
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], `nota-voz-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`, { type: "audio/webm" });
-        addPending([file]);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      mr.start();
-      recorderRef.current = mr;
-      setRecording(true);
-    } catch {
-      toast.error("No se pudo acceder al micrófono");
-    }
-  };
-
-  const stopRecording = () => {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    setRecording(false);
-  };
-
-  const canSave = !!userId && !!editor && (!isEmpty || pending.length > 0) && !recording;
-
-  const save = async () => {
-    if (!canSave || !editor) return;
-    setSaving(true);
-    const html = editor.getHTML();
-    const { data, error } = await (supabase as any).from("crm_notas").insert({
-      id_entidad_relacionada: Number(contactId),
-      id_usuario: userId,
-      contenido: html,
-      fecha_actividad: activityDate,
-    }).select("id").single();
-    if (error) { setSaving(false); toast.error(error.message); return; }
-    if (data?.id && pending.length) await saveNoteAttachments(data.id, userId, pending);
-    setSaving(false);
-    toast.success("Nota guardada");
-    editor.commands.clearContent();
-    setIsEmpty(true);
-    pending.forEach((a) => URL.revokeObjectURL(a.previewUrl));
-    setPending([]);
-    onSaved();
-  };
-
-  const btnClass = "h-7 w-7 flex items-center justify-center rounded transition-colors text-muted-foreground hover:bg-muted hover:text-foreground";
-
-  return (
-    <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
-      <RichNoteToolbar editor={editor} />
-      <EditorContent editor={editor} />
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(e) => { addPending(Array.from(e.target.files ?? [])); e.target.value = ""; }}
-      />
-      {pending.length > 0 && (
-        <div className="flex flex-wrap gap-2 px-3 pt-2">
-          {pending.map((a) => (
-            <div key={a.id} className="relative group">
-              {a.tipo === "image" ? (
-                <img src={a.previewUrl} alt={a.nombre} className="h-16 w-16 object-cover rounded-md border border-border" />
-              ) : (
-                <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs max-w-[200px]">
-                  {a.tipo === "audio" ? <Mic className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                  <span className="truncate">{a.nombre}</span>
-                  <span className="text-[10px] text-muted-foreground/70 shrink-0">{humanFileSize(a.file.size)}</span>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => removePending(a.id)}
-                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center shadow"
-                title="Quitar"
-              >
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/20 gap-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <button type="button" className={btnClass} title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
-            <Paperclip className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={recording ? "h-7 w-7 flex items-center justify-center rounded bg-destructive/10 text-destructive animate-pulse" : btnClass}
-            title={recording ? "Detener grabación" : "Grabar nota de voz"}
-            onClick={recording ? stopRecording : startRecording}
-          >
-            {recording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-          </button>
-          <div className="w-px h-4 bg-border mx-0.5" />
-          <CalendarClock className="h-3.5 w-3.5 shrink-0" />
-          <span>Fecha</span>
-          <Input
-            type="date"
-            value={activityDate}
-            onChange={(e) => setActivityDate(e.target.value)}
-            className="h-6 text-xs w-auto px-2 py-0 border border-border rounded shadow-none focus-visible:ring-0"
-          />
-        </div>
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={saving || !canSave}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
-        >
-          {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
@@ -1830,20 +1545,8 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
   );
 }
 
-function DField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-1">
-      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</Label>
-      <div>{children}</div>
-    </div>
-  );
-}
 
-type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean; attachments?: any[] };
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
 
 function HL({ label, value }: { label: string; value: string }) {
   return (
@@ -1960,1129 +1663,26 @@ function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onComple
   );
 }
 
-function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, includeSystem = true }: any) {
-  const [filter, setFilter] = useState<"all" | "note" | "task" | "cita">("all");
-  const [search, setSearch] = useState("");
-  const TABS: { id: "all" | "note" | "task" | "cita"; label: string }[] = [
-    { id: "all", label: "Todas las actividades" },
-    { id: "note", label: "Notas" },
-    { id: "task", label: "Tareas" },
-    { id: "cita", label: "Citas" },
-  ];
-  const showNotes = filter === "all" || filter === "note";
-  const showTasks = filter === "all" || filter === "task";
-  const showCitas = filter === "all" || filter === "cita";
-  return (
-    <div className="space-y-4">
-      {/* Sub-tabs por tipo de actividad */}
-      <div className="border-b border-border flex gap-1">
-        {TABS.map((t) => (
-          <button key={t.id} onClick={() => setFilter(t.id)}
-            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${filter === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
 
-      {/* Compositor contextual: nota solo en "Notas", crear tarea/cita solo en su pestaña.
-          "Todas las actividades" es solo el recap (sin compositor). */}
-      {filter === "note" && (
-        <InlineNoteForm contactId={contactId} userId={userId} onSaved={onSaved} />
-      )}
-      {/* Barra: buscador (izq) + acción contextual (der) */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
-        </div>
-        {filter === "task" && (
-          <TaskDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
-            trigger={
-              <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30">
-                <Plus className="h-3.5 w-3.5" />Crear tarea
-              </Button>
-            } />
-        )}
-        {filter === "cita" && (
-          <CitaDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
-            trigger={
-              <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30">
-                <Plus className="h-3.5 w-3.5" />Crear cita
-              </Button>
-            } />
-        )}
-      </div>
 
-      <Timeline
-        notes={showNotes ? notes : []}
-        tasks={showTasks ? tasks : []}
-        citas={showCitas ? citas : []}
-        deals={[]} pipelineEvents={[]} conversionEvents={[]}
-        contact={contact} search={search} includeSystem={includeSystem && filter === "all"}
-        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
-        onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
-      />
-    </div>
-  );
-}
 
-function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; noteId: number; initialHtml: string; onSaved: () => void }) {
-  const [saving, setSaving] = useState(false);
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      UnderlineExt,
-      ImageExt.configure({ inline: false, allowBase64: false }),
-      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
-      TextStyleExt,
-    ],
-    editorProps: { attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" } },
-    content: initialHtml || "",
-  });
 
-  useEffect(() => {
-    if (open && editor) editor.commands.setContent(initialHtml || "");
-  }, [open, editor, initialHtml]);
-
-  const save = async () => {
-    if (!editor) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_notas").update({ contenido: editor.getHTML() }).eq("id", noteId);
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Nota actualizada");
-    onOpenChange(false);
-    onSaved();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Editar nota</DialogTitle></DialogHeader>
-        <div className="border border-border rounded-lg overflow-hidden">
-          <RichNoteToolbar editor={editor} />
-          <EditorContent editor={editor} />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={save} disabled={saving} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function NoteCard({ note, contactName, onEdited, onDelete, defaultExpanded = true }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void; defaultExpanded?: boolean }) {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [pinned, setPinned] = useState<boolean>(!!note.anclado);
-  const [showComments, setShowComments] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [propsOpen, setPropsOpen] = useState(false);
-
-  // Comentarios (persisten en crm_notas_comentarios; tabla puede no existir aún → fallback vacío).
-  const { data: comments = [] } = useQuery({
-    queryKey: ["nota-comentarios", note.id],
-    enabled: showComments,
-    queryFn: async () => {
-      const res = await (supabase as any).from("crm_notas_comentarios")
-        .select("id, contenido, fecha_creacion, id_usuario")
-        .eq("id_nota", note.id).eq("activo", true)
-        .order("fecha_creacion", { ascending: true });
-      if (res.error) return [];
-      const rows = res.data ?? [];
-      const ids = Array.from(new Set(rows.map((r: any) => r.id_usuario).filter(Boolean)));
-      let nameMap: Record<string, string> = {};
-      if (ids.length) {
-        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ids);
-        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
-      }
-      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null }));
-    },
-  });
-
-  const copyLink = () => {
-    try { navigator.clipboard.writeText(window.location.href); toast.success("Enlace copiado"); }
-    catch { toast.error("No se pudo copiar el enlace"); }
-  };
-
-  const togglePin = async () => {
-    const next = !pinned;
-    setPinned(next);
-    const { error } = await (supabase as any).from("crm_notas").update({ anclado: next }).eq("id", note.id);
-    if (error) { setPinned(!next); toast.error(error.message); return; }
-    toast.success(next ? "Nota anclada" : "Nota desanclada");
-    onEdited();
-  };
-
-  const addComment = async () => {
-    const text = draft.trim();
-    if (!text) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_notas_comentarios").insert({ id_nota: note.id, id_usuario: user?.id ?? null, contenido: text });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    setDraft("");
-    qc.invalidateQueries({ queryKey: ["nota-comentarios", note.id] });
-  };
-
-  return (
-    <div className={`border rounded-lg bg-card shadow-sm ${pinned ? "border-primary/40 ring-1 ring-primary/20" : "border-border"}`}>
-      <div className="flex items-start gap-2 p-3">
-        <button onClick={() => setExpanded((e) => !e)} className="mt-0.5 text-muted-foreground hover:text-foreground shrink-0" aria-label={expanded ? "Colapsar" : "Expandir"}>
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm">
-              <span className="font-semibold">Nota</span>
-              {note.author ? <span className="text-muted-foreground"> de {note.author}</span> : null}
-              {pinned && <span className="ml-2 text-[10px] font-medium text-primary align-middle">📌 Anclada</span>}
-            </span>
-            <div className="flex items-center gap-3 shrink-0">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={togglePin}>{pinned ? "Desanclar" : "Anclar"}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.message("El historial estará disponible en una fase posterior")}>Historial</DropdownMenuItem>
-                  <DropdownMenuItem onClick={copyLink}>Copiar enlace</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setPropsOpen(true)}>Ver todas las propiedades</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onDelete(note.id)} className="text-destructive focus:text-destructive">Eliminar</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <span className="text-xs text-muted-foreground/70 tabular-nums">{fmtDateTime(note.created_at)}</span>
-            </div>
-          </div>
-
-          {!expanded && (
-            <p className="text-sm text-muted-foreground truncate mt-0.5">{stripHtml(note.content ?? "").slice(0, 140) || "Nota"}</p>
-          )}
-
-          {expanded && (
-            <>
-              <div
-                className="mt-1.5 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
-                dangerouslySetInnerHTML={{ __html: note.content }}
-              />
-              <NoteAttachmentsStrip attachments={note.attachments ?? []} />
-              {/* Footer */}
-              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border">
-                <button onClick={() => setShowComments((s) => !s)} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  {showComments ? "Ocultar comentarios" : "Agregar comentario"}{comments.length ? ` (${comments.length})` : ""}
-                </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">1 asociación <ChevronDown className="h-3 w-3" /></button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem disabled>{contactName}</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              {showComments && (
-                <div className="mt-2 space-y-2">
-                  {comments.map((c: any) => (
-                    <div key={c.id} className="text-sm bg-muted/40 rounded-md p-2">
-                      <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <span className="text-xs font-medium text-foreground">{c.author ?? "Usuario"}</span>
-                        <span className="text-[10px] text-muted-foreground tabular-nums">{relTime(c.ts)}</span>
-                      </div>
-                      <div className="text-foreground">{c.text}</div>
-                    </div>
-                  ))}
-                  <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Deja un comentario…" className="text-sm min-h-[60px]" />
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={addComment} disabled={saving || !draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">{saving ? "Guardando…" : "Comentar"}</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setDraft(""); setShowComments(false); }}>Cancelar</Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Ver todas las propiedades */}
-      <Dialog open={propsOpen} onOpenChange={setPropsOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Propiedades de la nota</DialogTitle></DialogHeader>
-          <div className="space-y-1 text-sm">
-            <ARow label="ID" v={String(note.id)} mono />
-            <ARow label="Autor" v={note.author ?? "—"} />
-            <ARow label="Fecha de creación" v={fmtDateTime(note.created_at)} />
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Editar nota */}
-      <NoteEditDialog open={editOpen} onOpenChange={setEditOpen} noteId={note.id} initialHtml={note.content} onSaved={onEdited} />
-    </div>
-  );
-}
-
-function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, onEdited }: any) {
-  const synthetic: TLItem = {
-    id: "contact-created",
-    ts: contact.created_at,
-    kind: "Sistema",
-    title: "Contacto registrado en SOZU",
-    icon: UserPlus,
-    tone: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
-  };
-
-  let items: TLItem[] = [
-    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, attachments: n.attachments ?? [], icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
-    ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
-    ...citas.map((c: any) => ({ id: `cita-${c.id}`, type: "cita", rawId: c.id, status: c.status, ts: c.start_at ?? c.created_at, kind: `Cita · ${CITA_STATUS_META[c.status]?.label ?? c.status}`, title: c.title, subtitle: `${CITA_TYPE_META[c.tipo]?.label ?? c.tipo} · ${fmtCitaWhen(c.start_at, c.end_at)}`, icon: CITA_TYPE_META[c.tipo]?.icon ?? CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
-    ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
-    ...pipelineEvents.map((p: any) => ({ id: `p-${p.id}`, ts: p.changed_at, kind: "Pipeline", title: `${p.old_stage ?? "—"} → ${p.new_stage}`, icon: GitBranch, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" })),
-    ...conversionEvents.map((c: any) => ({ id: `c-${c.id}`, ts: c.event_time, kind: "Evento", title: c.event_name, subtitle: `Meta: ${c.meta_status} · Google: ${c.google_status}`, icon: Zap, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-400" })),
-    ...(includeSystem ? [synthetic] : []),
-  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-
-  const q = (search ?? "").trim().toLowerCase();
-  if (q) {
-    items = items.filter((it) =>
-      (it.title ?? "").toLowerCase().includes(q) ||
-      stripHtml(it.html ?? "").toLowerCase().includes(q) ||
-      (it.kind ?? "").toLowerCase().includes(q));
-  }
-
-  const hasRealActivity = items.some((it) => it.id !== "contact-created");
-
-  if (!items.length) {
-    return (
-      <div className="text-center py-8 border border-dashed border-primary/20 rounded-xl bg-primary/5">
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-          <MessageSquare className="h-5 w-5 text-primary" />
-        </div>
-        <p className="text-sm font-medium text-primary/80">{q ? "Sin resultados" : "Sin actividad registrada aún"}</p>
-        <p className="text-xs text-primary/60 mt-1">{q ? "Ajusta la búsqueda" : "Agrega una nota para comenzar el historial"}</p>
-      </div>
-    );
-  }
-
-  // Agrupar por mes, respetando el orden descendente.
-  const groups: { key: string; items: TLItem[] }[] = [];
-  for (const it of items) {
-    const d = new Date(it.ts);
-    const key = isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-    let g = groups.find((x) => x.key === key);
-    if (!g) { g = { key, items: [] }; groups.push(g); }
-    g.items.push(it);
-  }
-
-  return (
-    <div className="space-y-5">
-      {groups.map((g) => (
-        <div key={g.key}>
-          <p className="text-xs font-semibold text-muted-foreground mb-2 capitalize">{g.key}</p>
-          <div className="space-y-0">
-            {g.items.map((it, i) => {
-          if (it.type === "note") {
-            return (
-              <div key={it.id} className="pb-4 last:pb-0">
-                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado, attachments: it.attachments ?? [] }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
-              </div>
-            );
-          }
-          const Icon = it.icon;
-          return (
-            <div key={it.id} className="flex gap-3 relative pb-5 last:pb-0 group/item">
-              {i < g.items.length - 1 && (
-                <div className="absolute left-3.5 top-7 bottom-0 w-px bg-border/60" />
-              )}
-              <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center z-10 ring-2 ring-background shadow-sm ${it.tone ?? "bg-muted"}`}>
-                <Icon className="h-3.5 w-3.5" />
-              </div>
-              <div className="flex-1 min-w-0 pt-0.5 rounded-lg p-2 -ml-0.5 group-hover/item:bg-slate-50/80 transition-colors duration-100">
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{it.kind}</span>
-                  <span className="text-xs text-muted-foreground/70 shrink-0 tabular-nums">{relTime(it.ts)}</span>
-                </div>
-                {it.html ? (
-                  <div
-                    className="mt-1 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
-                    dangerouslySetInnerHTML={{ __html: it.html }}
-                  />
-                ) : (
-                  <>
-                    <div className="text-sm mt-0.5 font-medium text-foreground">{it.title}</div>
-                    {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
-                  </>
-                )}
-                {it.type === "task" && (
-                  <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                    {it.status !== "completada" && (
-                      <button onClick={() => onCompleteTask?.(it.rawId)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1">
-                        <Check className="h-3 w-3" />Completar
-                      </button>
-                    )}
-                    <button onClick={() => onDeleteTask?.(it.rawId)} className="text-[11px] text-destructive hover:underline inline-flex items-center gap-1">
-                      <X className="h-3 w-3" />Eliminar
-                    </button>
-                  </div>
-                )}
-                {it.type === "cita" && (
-                  <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                    {(it.status === "programada" || it.status === "reprogramada") && (
-                      <>
-                        <button onClick={() => onUpdateCita?.(it.rawId, "realizada")} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1">
-                          <Check className="h-3 w-3" />Realizada
-                        </button>
-                        <button onClick={() => onUpdateCita?.(it.rawId, "no_asistio")} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1">
-                          <TriangleAlert className="h-3 w-3" />No asistió
-                        </button>
-                      </>
-                    )}
-                    <button onClick={() => onDeleteCita?.(it.rawId)} className="text-[11px] text-destructive hover:underline inline-flex items-center gap-1">
-                      <X className="h-3 w-3" />Eliminar
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-            })}
-          </div>
-        </div>
-      ))}
-      {!hasRealActivity && (
-        <div className="text-center py-6 border border-dashed border-primary/20 rounded-xl bg-primary/5">
-          <p className="text-sm font-medium text-primary/80">Sin actividad registrada aún</p>
-          <p className="text-xs text-primary/60 mt-1">Agrega una nota o tarea para comenzar el historial</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boolean }) {
-  return (
-    <div className="flex justify-between gap-2 py-1 border-b last:border-0">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className={`text-xs truncate max-w-[180px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
-    </div>
-  );
-}
-
-function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string; userId?: string; onSaved: () => void; trigger?: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [isEmpty, setIsEmpty] = useState(true);
-  const [pending, setPending] = useState<PendingAttachment[]>([]);
-  const [recording, setRecording] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      UnderlineExt,
-      ImageExt.configure({ inline: false, allowBase64: false }),
-      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
-      TextStyleExt,
-    ],
-    editorProps: {
-      attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" },
-      // Ctrl+V de imágenes → se adjuntan (no se incrustan en el texto).
-      handlePaste: (_view, event) => {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
-        const imgs: File[] = [];
-        for (const it of Array.from(items)) {
-          if (it.kind === "file" && it.type.startsWith("image/")) {
-            const f = it.getAsFile();
-            if (f) imgs.push(f);
-          }
-        }
-        if (!imgs.length) return false;
-        setPending((p) => [
-          ...p,
-          ...imgs.map((file) => ({ id: crypto.randomUUID(), file, tipo: "image" as AttachKind, nombre: file.name || "imagen.png", previewUrl: URL.createObjectURL(file) })),
-        ]);
-        toast.success(imgs.length > 1 ? `${imgs.length} imágenes adjuntadas` : "Imagen adjuntada");
-        return true;
-      },
-    },
-    onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
-  });
-
-  const addPending = (files: File[]) => {
-    if (!files.length) return;
-    setPending((p) => [
-      ...p,
-      ...files.map((file) => ({ id: crypto.randomUUID(), file, tipo: classifyAttachment(file), nombre: file.name, previewUrl: URL.createObjectURL(file) })),
-    ]);
-  };
-
-  const removePending = (id: string) => {
-    setPending((p) => {
-      const found = p.find((x) => x.id === id);
-      if (found) URL.revokeObjectURL(found.previewUrl);
-      return p.filter((x) => x.id !== id);
-    });
-  };
-
-  const resetAttachments = () => {
-    setPending((p) => { p.forEach((a) => URL.revokeObjectURL(a.previewUrl)); return []; });
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], `nota-voz-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`, { type: "audio/webm" });
-        addPending([file]);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      mr.start();
-      recorderRef.current = mr;
-      setRecording(true);
-    } catch {
-      toast.error("No se pudo acceder al micrófono");
-    }
-  };
-
-  const stopRecording = () => {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    setRecording(false);
-  };
-
-  const handleOpenChange = (v: boolean) => {
-    if (!v) { resetAttachments(); editor?.commands.clearContent(); setIsEmpty(true); if (recording) stopRecording(); }
-    setOpen(v);
-  };
-
-  const canSave = !!userId && !!editor && (!isEmpty || pending.length > 0) && !recording;
-
-  const save = async () => {
-    if (!canSave || !editor) return;
-    setSaving(true);
-    const html = editor.getHTML();
-    const { data, error } = await (supabase as any).from("crm_notas").insert({
-      id_entidad_relacionada: Number(contactId),
-      id_usuario: userId,
-      contenido: html,
-    }).select("id").single();
-    if (error) { setSaving(false); toast.error(error.message); return; }
-    if (data?.id && pending.length) await saveNoteAttachments(data.id, userId, pending);
-    setSaving(false);
-    toast.success("Nota guardada");
-    setOpen(false);
-    editor.commands.clearContent();
-    setIsEmpty(true);
-    resetAttachments();
-    onSaved();
-  };
-
-  const attachBtn = "h-7 w-7 flex items-center justify-center rounded transition-colors text-muted-foreground hover:bg-muted hover:text-foreground";
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors">
-            <StickyNote className="h-4 w-4 mr-1.5" />Nota
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Nueva nota</DialogTitle></DialogHeader>
-        <div className="border border-border rounded-lg overflow-hidden">
-          <RichNoteToolbar editor={editor} />
-          <EditorContent editor={editor} />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => { addPending(Array.from(e.target.files ?? [])); e.target.value = ""; }}
-          />
-          {pending.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-3 pt-2">
-              {pending.map((a) => (
-                <div key={a.id} className="relative">
-                  {a.tipo === "image" ? (
-                    <img src={a.previewUrl} alt={a.nombre} className="h-16 w-16 object-cover rounded-md border border-border" />
-                  ) : (
-                    <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs max-w-[200px]">
-                      {a.tipo === "audio" ? <Mic className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                      <span className="truncate">{a.nombre}</span>
-                      <span className="text-[10px] text-muted-foreground/70 shrink-0">{humanFileSize(a.file.size)}</span>
-                    </div>
-                  )}
-                  <button type="button" onClick={() => removePending(a.id)} className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center shadow" title="Quitar">
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-border bg-muted/20">
-            <button type="button" className={attachBtn} title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
-              <Paperclip className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              className={recording ? "h-7 w-7 flex items-center justify-center rounded bg-destructive/10 text-destructive animate-pulse" : attachBtn}
-              title={recording ? "Detener grabación" : "Grabar nota de voz"}
-              onClick={recording ? stopRecording : startRecording}
-            >
-              {recording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={save} disabled={saving || !canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<TaskFormState>(emptyTaskForm(userId ?? ""));
-  const save = async () => {
-    if (!form.titulo.trim()) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, Number(contactId)));
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Tarea creada"); setOpen(false); setForm(emptyTaskForm(userId ?? "")); onSaved();
-  };
-  return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyTaskForm(userId ?? "")); }}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><ClipboardList className="h-4 w-4 mr-1.5" />Tarea</Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <TaskFormFields form={form} setForm={setForm} owners={owners as any[]} />
-        </div>
-        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Diálogo "Nueva cita" (por contacto / negocio). Escribe en la tabla real crm_citas.
-function CitaDialog({ contactId, owners, userId, onSaved, trigger }: any) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<CitaFormState>(emptyCitaForm(userId ?? ""));
-  const save = async () => {
-    if (!form.titulo.trim()) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_citas").insert(buildCitaInsert(form, Number(contactId)));
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Cita creada"); setOpen(false); setForm(emptyCitaForm(userId ?? "")); onSaved();
-  };
-  return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyCitaForm(userId ?? "")); }}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><CalendarClock className="h-4 w-4 mr-1.5" />Cita</Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <CitaFormFields form={form} setForm={setForm} owners={owners as any[]} />
-        </div>
-        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Negocios en la ficha del contacto (estilo HubSpot) ───────────────────────
 
 // Formatea un monto con su moneda; cae a fmtMXN si la moneda no es válida.
-function fmtMoneda(v: number, moneda?: string): string {
-  try {
-    return new Intl.NumberFormat("es-MX", { style: "currency", currency: moneda || "MXN", maximumFractionDigits: 0 }).format(v);
-  } catch {
-    return fmtMXN(v);
-  }
-}
-
-// Catálogos fijos del negocio (según el form de HubSpot).
-const TIPO_NEGOCIO_OPTS: { value: string; label: string }[] = [
-  { value: "cliente_nuevo", label: "Cliente nuevo" },
-  { value: "cliente_existente", label: "Cliente existente" },
-];
-const PRIORIDAD_META: Record<string, { label: string; dot: string }> = {
-  baja: { label: "Baja", dot: "bg-emerald-500" },
-  media: { label: "Media", dot: "bg-amber-500" },
-  alta: { label: "Alta", dot: "bg-red-500" },
-};
 
 // Tarjeta lateral "Negocios (N)" con lista de negocios asociados + botón Agregar.
-function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
-  const list = deals ?? [];
-  return (
-    <AccordionItem value="deals">
-      <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-        <span className="flex items-center gap-2">Negocios <span className="text-xs text-muted-foreground font-normal">{list.length}</span></span>
-      </AccordionTrigger>
-      <AccordionContent>
-        <div className="space-y-2">
-          <div className="flex justify-end">
-            <CreateDealDialog contactId={contactId} onSaved={onSaved}
-              trigger={
-                <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors">
-                  <Plus className="h-3.5 w-3.5" />Agregar
-                </button>
-              } />
-          </div>
-          {!list.length ? (
-            <p className="text-xs text-muted-foreground py-1">Sin negocios asociados</p>
-          ) : (
-            <div className="space-y-1.5">
-              {list.map((d: any) => (
-                <Link key={d.id} to={`/admin/portal-crm/ventas/negocios/${d.id}`}
-                  className="block rounded-md border border-border p-2.5 bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors">
-                  <div className="flex items-center gap-1.5">
-                    {d.prioridad && PRIORIDAD_META[d.prioridad] && (
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORIDAD_META[d.prioridad].dot}`} title={`Prioridad ${PRIORIDAD_META[d.prioridad].label}`} />
-                    )}
-                    <div className="text-sm font-medium truncate">{d.nombre}</div>
-                  </div>
-                  {d.pipeline_nombre && <div className="text-[11px] text-muted-foreground truncate">{d.pipeline_nombre}</div>}
-                  <div className="flex items-center justify-between mt-1 gap-2">
-                    <Badge variant="outline" className="text-[10px] truncate max-w-[130px]">{d.etapa_nombre}</Badge>
-                    <span className="text-xs font-medium tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </AccordionContent>
-    </AccordionItem>
-  );
-}
 
-// Modal "Crear Negocio" con pestañas "Crear nuevo" / "Agregar existente".
-function CreateDealDialog({ contactId, onSaved, trigger }: { contactId: string; onSaved: () => void; trigger?: React.ReactNode }) {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"nuevo" | "existente">("nuevo");
-  return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setTab("nuevo"); }}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Negocio</Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Crear Negocio</DialogTitle></DialogHeader>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "nuevo" | "existente")}>
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="nuevo">Crear nuevo</TabsTrigger>
-            <TabsTrigger value="existente">Agregar existente</TabsTrigger>
-          </TabsList>
-          <TabsContent value="nuevo" className="mt-0">
-            <NewDealForm contactId={contactId} userId={user?.id}
-              onDone={(close) => { onSaved(); if (close) setOpen(false); }}
-              onCancel={() => setOpen(false)} />
-          </TabsContent>
-          <TabsContent value="existente" className="mt-0">
-            <ExistingDealForm contactId={contactId}
-              onDone={() => { onSaved(); setOpen(false); }}
-              onCancel={() => setOpen(false)} />
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
-// Pestaña "Crear nuevo": Nombre*, Pipeline*, Etapa* (dependiente del pipeline), Valor, Moneda.
-function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId: string; userId?: string; onDone: (close: boolean) => void; onCancel: () => void }) {
-  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: userId ?? "", tipo_negocio: "", prioridad: "" };
-  const [form, setForm] = useState(empty);
-  const [saving, setSaving] = useState(false);
 
-  const { data: pipelines } = useQuery({
-    queryKey: ["crm-pipelines"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("crm_pipelines")
-        .select("id, nombre").eq("activo", true).order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
-    },
-  });
-  // Etapas dependientes del pipeline elegido (cada pipeline tiene su propio embudo).
-  const { data: etapas } = useQuery({
-    queryKey: ["crm-etapas", form.id_pipeline],
-    enabled: !!form.id_pipeline,
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("crm_pipeline_etapas")
-        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
-    },
-  });
-  // Propietarios posibles: derivados de los roles con acceso al portal CRM.
-  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
-  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
-
-  const save = async (close: boolean) => {
-    if (!canSave) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_negocios").insert({
-      nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
-      valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
-      fecha_cierre_estimada: form.fecha_cierre || null,
-      id_usuario_propietario: form.id_propietario || userId || null,
-      tipo_negocio: form.tipo_negocio || null, prioridad: form.prioridad || null,
-      id_entidad_relacionada: Number(contactId),
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Negocio creado");
-    // "Crear y agregar otro": limpia datos pero conserva pipeline/etapa/propietario para encadenar.
-    setForm(close ? empty : { ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario });
-    onDone(close);
-  };
-
-  return (
-    <div className="grid gap-3 pt-4">
-      <DField label="Nombre del negocio *">
-        <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus />
-      </DField>
-      <DField label="Pipeline *">
-        <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
-          <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
-          <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
-        </Select>
-      </DField>
-      <DField label="Etapa del negocio *">
-        <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
-          <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige un pipeline primero"} /></SelectTrigger>
-          <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
-        </Select>
-      </DField>
-      <div className="grid grid-cols-2 gap-3">
-        <DField label="Valor">
-          <Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
-        </DField>
-        <DField label="Moneda">
-          <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="MXN">Peso mexicano (MXN)</SelectItem>
-              <SelectItem value="USD">Dólar (USD)</SelectItem>
-            </SelectContent>
-          </Select>
-        </DField>
-      </div>
-      <DField label="Fecha de cierre">
-        <Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} />
-      </DField>
-      <DField label="Propietario del negocio">
-        <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
-          <SelectTrigger><SelectValue placeholder="Selecciona un propietario" /></SelectTrigger>
-          <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-        </Select>
-      </DField>
-      <div className="grid grid-cols-2 gap-3">
-        <DField label="Tipo de negocio">
-          <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-            <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </DField>
-        <DField label="Prioridad">
-          <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
-                <SelectItem key={value} value={value}>
-                  <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </DField>
-      </div>
-      <DialogFooter className="gap-2 sm:gap-2">
-        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
-        <Button onClick={() => save(true)} disabled={!canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear</Button>
-      </DialogFooter>
-    </div>
-  );
-}
-
-// Pestaña "Agregar existente": busca un negocio ya creado y lo asocia al contacto.
-function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: string; onDone: () => void; onCancel: () => void }) {
-  const [term, setTerm] = useState("");
-  const [assocId, setAssocId] = useState<number | null>(null);
-  const { data: results, isFetching } = useQuery({
-    queryKey: ["crm-negocios-search", term.trim()],
-    enabled: term.trim().length >= 2,
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("crm_negocios")
-        .select("id, nombre, valor, moneda").eq("activo", true)
-        .ilike("nombre", `%${term.trim()}%`).order("fecha_creacion", { ascending: false }).limit(20);
-      return (data ?? []) as any[];
-    },
-  });
-  const associate = async (dealId: number) => {
-    setAssocId(dealId);
-    // Un negocio pertenece a un solo contacto: asociar = fijar su contacto.
-    const { error } = await (supabase as any).from("crm_negocios")
-      .update({ id_entidad_relacionada: Number(contactId) }).eq("id", dealId);
-    setAssocId(null);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Negocio asociado"); onDone();
-  };
-  return (
-    <div className="grid gap-3 pt-4">
-      <div className="relative">
-        <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Buscar negocio por nombre" className="pl-8" autoFocus />
-      </div>
-      {term.trim().length < 2 ? (
-        <p className="text-xs text-muted-foreground">Escribe al menos 2 caracteres para buscar.</p>
-      ) : isFetching ? (
-        <p className="text-xs text-muted-foreground">Buscando…</p>
-      ) : !results?.length ? (
-        <p className="text-xs text-muted-foreground">Sin resultados.</p>
-      ) : (
-        <div className="space-y-1.5 max-h-64 overflow-y-auto">
-          {results.map((d) => (
-            <button key={d.id} onClick={() => associate(d.id)} disabled={assocId === d.id}
-              className="w-full text-left rounded-md border border-border p-2.5 bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50">
-              <div className="text-sm font-medium truncate">{d.nombre}</div>
-              <div className="text-xs text-muted-foreground tabular-nums">{d.valor != null ? fmtMoneda(Number(d.valor), d.moneda) : "—"}</div>
-            </button>
-          ))}
-        </div>
-      )}
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-      </DialogFooter>
-    </div>
-  );
-}
-
-// Diálogo "Crear negocio" desde el módulo (contacto OPCIONAL, con búsqueda).
-// A diferencia de NewDealForm (que exige un contacto), aquí el contacto puede
-// quedar en NULL para crear un negocio suelto desde la vista de Negocios.
-function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
-  const { user } = useAuth();
-  const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: user?.id ?? "", tipo_negocio: "", prioridad: "" };
-  const [form, setForm] = useState(empty);
-  const [saving, setSaving] = useState(false);
-  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
-  const [contactSearch, setContactSearch] = useState("");
-
-  const { data: pipelines } = useQuery({
-    queryKey: ["crm-pipelines"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
-    },
-  });
-  const { data: etapas } = useQuery({
-    queryKey: ["crm-etapas", form.id_pipeline],
-    enabled: !!form.id_pipeline,
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("crm_pipeline_etapas").select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
-    },
-  });
-  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
-
-  // Búsqueda de contacto (mismo patrón que el diálogo global de tarea).
-  const { data: contactResults = [], isFetching } = useQuery({
-    queryKey: ["crm-deal-contact-search", contactSearch],
-    enabled: open && contactSearch.trim().length >= 2,
-    queryFn: async () => {
-      const term = contactSearch.trim();
-      const { data: personas } = await (supabase as any).from("personas")
-        .select("id, nombre_legal, nombre_comercial")
-        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
-        .eq("activo", true).limit(20);
-      const pIds = (personas ?? []).map((p: any) => p.id);
-      if (!pIds.length) return [];
-      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
-      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
-      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
-    },
-  });
-
-  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
-  const reset = () => { setForm(empty); setContact(null); setContactSearch(""); };
-
-  const save = async (close: boolean) => {
-    if (!canSave) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_negocios").insert({
-      nombre: form.nombre.trim(), id_pipeline: Number(form.id_pipeline), id_etapa: Number(form.id_etapa),
-      valor: form.valor ? Number(form.valor) : null, moneda: form.moneda,
-      fecha_cierre_estimada: form.fecha_cierre || null,
-      id_usuario_propietario: form.id_propietario || user?.id || null,
-      tipo_negocio: form.tipo_negocio || null, prioridad: form.prioridad || null,
-      id_entidad_relacionada: contact ? contact.id : null,
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Negocio creado");
-    onSaved();
-    if (close) { reset(); onOpenChange(false); }
-    else { setForm({ ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario }); setContact(null); setContactSearch(""); }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Crear negocio</DialogTitle></DialogHeader>
-        <div className="grid gap-3 pt-2">
-          <DField label="Nombre del negocio *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus /></DField>
-          <DField label="Pipeline *">
-            <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
-              <SelectTrigger><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
-              <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
-            </Select>
-          </DField>
-          <DField label="Etapa del negocio *">
-            <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
-              <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige un pipeline primero"} /></SelectTrigger>
-              <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
-            </Select>
-          </DField>
-          {/* Contacto asociado (opcional) */}
-          <div>
-            <Label>Contacto asociado <span className="text-muted-foreground font-normal">(opcional)</span></Label>
-            {contact ? (
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span className="font-medium truncate">{contact.name}</span>
-                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive shrink-0"><X className="h-4 w-4" /></button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras… (o déjalo vacío)" className="pl-8" />
-                </div>
-                {contactSearch.trim().length >= 2 && (
-                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
-                    {isFetching ? (
-                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
-                    ) : contactResults.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
-                    ) : contactResults.map((c) => (
-                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
-            <DField label="Moneda">
-              <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="MXN">Peso mexicano (MXN)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent>
-              </Select>
-            </DField>
-          </div>
-          <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
-          <DField label="Propietario del negocio">
-            <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
-              <SelectTrigger><SelectValue placeholder="Selecciona un propietario" /></SelectTrigger>
-              <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-            </Select>
-          </DField>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Tipo de negocio">
-              <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-            <DField label="Prioridad">
-              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
-                    <SelectItem key={value} value={value}><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span></SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </DField>
-          </div>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button variant="outline" onClick={() => save(false)} disabled={!canSave}>Crear y agregar otro</Button>
-          <Button onClick={() => save(true)} disabled={!canSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Negocios (vista general, estilo HubSpot) ─────────────────────────────────
 
-function DealMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground truncate">{label}</p>
-      <p className="text-lg font-semibold tabular-nums mt-1">{value}</p>
-    </div>
-  );
-}
 
 // Colores de columna del tablero (etapas dinámicas): ganado=verde, perdido=rojo,
 // el resto cicla una paleta por índice.
-const BOARD_COLORS = [
-  "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-  "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
-  "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-  "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
-];
-function etapaColorClasses(et: any, i: number): string {
-  if (et?.es_ganado) return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
-  if (et?.es_perdido) return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-  return BOARD_COLORS[i % BOARD_COLORS.length];
-}
 
 export function CrmDeals() {
   const qc = useQueryClient();
@@ -3438,250 +2038,10 @@ export function CrmDeals() {
   );
 }
 
-// Menú de acciones (Ver · Editar · Eliminar) de un negocio.
-function DealActionsMenu({ deal, onOpen, onEdit, onDelete, onBoard }: { deal: any; onOpen: (id: number) => void; onEdit: (d: any) => void; onDelete: (d: any) => void; onBoard?: boolean }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          title="Acciones"
-          className={`inline-flex items-center justify-center rounded-md transition-colors ${onBoard ? "h-6 w-6 text-muted-foreground/60 hover:text-foreground hover:bg-muted" : "h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuItem onClick={() => onOpen(deal.id)}><Briefcase className="h-4 w-4 mr-2" />Ver negocio</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onEdit(deal)}><Pencil className="h-4 w-4 mr-2" />Editar</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => onDelete(deal)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
-// Diálogo para editar un negocio (mismos campos que "Acerca de este negocio").
-function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved }: { deal: any | null; pipelines: any[]; owners: any[]; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
-  const [form, setForm] = useState<any | null>(null);
-  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (deal) setForm({
-      nombre: deal.nombre ?? "",
-      id_pipeline: deal.id_pipeline ? String(deal.id_pipeline) : "",
-      id_etapa: deal.id_etapa ? String(deal.id_etapa) : "",
-      valor: deal.valor != null ? String(deal.valor) : "",
-      moneda: deal.moneda ?? "MXN",
-      fecha_cierre: deal.fecha_cierre_estimada ?? "",
-      id_propietario: deal.id_usuario_propietario ?? "",
-      tipo_negocio: deal.tipo_negocio ?? "",
-      prioridad: deal.prioridad ?? "",
-    });
-  }, [deal]);
 
-  const { data: etapas } = useQuery({
-    queryKey: ["edit-deal-etapas", form?.id_pipeline],
-    enabled: !!form?.id_pipeline,
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("crm_pipeline_etapas")
-        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
-    },
-  });
 
-  const save = async () => {
-    if (!form || !form.nombre.trim() || !deal) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_negocios").update({
-      nombre: form.nombre.trim(),
-      id_pipeline: form.id_pipeline ? Number(form.id_pipeline) : null,
-      id_etapa: form.id_etapa ? Number(form.id_etapa) : null,
-      valor: form.valor ? Number(form.valor) : null,
-      moneda: form.moneda,
-      fecha_cierre_estimada: form.fecha_cierre || null,
-      id_usuario_propietario: form.id_propietario || null,
-      tipo_negocio: form.tipo_negocio || null,
-      prioridad: form.prioridad || null,
-    }).eq("id", deal.id);
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Negocio actualizado");
-    onSaved();
-  };
-
-  if (!form) return (
-    <Dialog open={!!deal} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Editar negocio</DialogTitle></DialogHeader></DialogContent>
-    </Dialog>
-  );
-
-  return (
-    <Dialog open={!!deal} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Editar negocio</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <DField label="Nombre *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></DField>
-          <div className="grid grid-cols-2 gap-2">
-            <DField label="Pipeline">
-              <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{pipelines.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-            <DField label="Etapa">
-              <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
-                <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Etapa" : "Elige pipeline"} /></SelectTrigger>
-                <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
-            <DField label="Moneda">
-              <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="MXN">MXN</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent>
-              </Select>
-            </DField>
-          </div>
-          <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
-          <DField label="Propietario">
-            <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
-              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-              <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-            </Select>
-          </DField>
-          <div className="grid grid-cols-2 gap-2">
-            <DField label="Tipo de negocio">
-              <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-            <DField label="Prioridad">
-              <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
-                    <SelectItem key={value} value={value}><span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span></SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </DField>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button onClick={save} disabled={saving || !form.nombre.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Columna del tablero (zona soltable). Colapsable a una pestaña vertical.
-function BoardColumn({ etapa, deals, colorClass, collapsed, onToggle, onOpen, onEdit, onDelete }: { etapa: any; deals: any[]; colorClass: string; collapsed: boolean; onToggle: () => void; onOpen: (id: number) => void; onEdit: (d: any) => void; onDelete: (d: any) => void }) {
-  const { setNodeRef, isOver } = useDroppable({ id: etapa.id });
-  const total = deals.reduce((s, r) => s + Number(r.valor ?? 0), 0);
-  const ponderada = deals.reduce((s, r) => s + Number(r.valor ?? 0) * (Number(r.probabilidad ?? 0) / 100), 0);
-
-  if (collapsed) {
-    return (
-      <div ref={setNodeRef} className={`shrink-0 w-11 self-stretch rounded-lg border ${colorClass} ${isOver ? "ring-2 ring-primary" : ""}`}>
-        <button onClick={onToggle} title={`Mostrar ${etapa.nombre}`}
-          className="h-full w-full min-h-[240px] flex flex-col items-center gap-2 py-2 cursor-pointer hover:opacity-80 transition-opacity">
-          <ChevronRight className="h-4 w-4 shrink-0" />
-          <span className="[writing-mode:vertical-lr] text-xs font-semibold whitespace-nowrap">{etapa.nombre}</span>
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{deals.length}</Badge>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={setNodeRef} className={`min-w-[276px] max-w-[276px] flex flex-col rounded-lg ${isOver ? "ring-2 ring-primary" : ""}`}>
-      <div className={`rounded-t-lg px-3 py-2 flex items-center justify-between ${colorClass}`}>
-        <span className="font-semibold text-sm truncate">{etapa.nombre}</span>
-        <div className="flex items-center gap-1 shrink-0">
-          <Badge variant="secondary" className="text-xs">{deals.length}</Badge>
-          <button onClick={onToggle} title="Contraer columna" className="opacity-70 hover:opacity-100 transition-opacity"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        </div>
-      </div>
-      <div className="border border-t-0 bg-muted/30 p-2 space-y-2 min-h-[240px] max-h-[calc(100vh-380px)] overflow-y-auto flex-1">
-        {deals.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">Sin negocios</p>
-        ) : deals.map((d) => <DealBoardCard key={d.id} deal={d} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />)}
-      </div>
-      <div className="rounded-b-lg border border-t-0 bg-card px-3 py-1.5 text-[11px] text-muted-foreground space-y-0.5">
-        <div className="flex items-center justify-between gap-2"><span>Cantidad total</span><span className="font-semibold tabular-nums text-foreground">{fmtMXN(total)}</span></div>
-        <div className="flex items-center justify-between gap-2"><span>Ponderada</span><span className="tabular-nums">{fmtMXN(ponderada)}</span></div>
-      </div>
-    </div>
-  );
-}
-
-// Iniciales para el avatar del contacto en la tarjeta.
-function dealInitials(name?: string | null): string {
-  if (!name) return "?";
-  return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
-}
-// Fondo/tono del pill de prioridad.
-const PRIORIDAD_PILL: Record<string, string> = {
-  baja: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  media: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  alta: "bg-red-500/10 text-red-700 dark:text-red-400",
-};
-
-// Tarjeta arrastrable del tablero.
-function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { deal: any; dragging?: boolean; onOpen?: (id: number) => void; onEdit?: (d: any) => void; onDelete?: (d: any) => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
-  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
-  const prio = deal.prioridad && PRIORIDAD_META[deal.prioridad] ? deal.prioridad : null;
-  const hasActions = !!(onOpen && onEdit && onDelete);
-  return (
-    <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
-      className={`cursor-grab active:cursor-grabbing border-border hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
-      <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2 min-h-[18px]">
-          {prio ? (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[prio]}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
-            </span>
-          ) : <span />}
-          <div className="flex items-center gap-0.5 shrink-0">
-            {hasActions && <DealActionsMenu deal={deal} onOpen={onOpen!} onEdit={onEdit!} onDelete={onDelete!} onBoard />}
-            <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" aria-hidden="true" />
-          </div>
-        </div>
-        {onOpen ? (
-          <button onClick={(e) => { e.stopPropagation(); onOpen(deal.id); }}
-            className="text-sm font-medium leading-snug text-left hover:text-primary hover:underline">
-            {deal.nombre}
-          </button>
-        ) : (
-          <p className="text-sm font-medium leading-snug">{deal.nombre}</p>
-        )}
-        {deal.contacto_nombre && (
-          <div className="flex items-center gap-2">
-            <span className="h-5 w-5 shrink-0 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">{dealInitials(deal.contacto_nombre)}</span>
-            <span className="text-xs text-muted-foreground truncate">{deal.contacto_nombre}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
-          <span className="text-sm font-semibold tabular-nums">{deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—"}</span>
-          {deal.fecha_cierre_estimada && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Calendar className="h-3 w-3" />{fmtDate(deal.fecha_cierre_estimada)}
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ─── CrmDealDetail — vista de un negocio ──────────────────────────────────────
 
@@ -4172,177 +2532,12 @@ export function CrmDealDetail() {
   );
 }
 
-// Sección "Contactos" de la ficha del negocio (tabla estilo HubSpot).
-function DealContactsSection({ contacto }: { contacto: any | null }) {
-  return (
-    <div className="bg-card border border-border rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold">Contactos</h3>
-        <div className="flex items-center gap-3">
-          <button onClick={() => toast.message("Asociar más contactos llegará en una fase posterior")} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-            <Plus className="h-3.5 w-3.5" />Agregar
-          </button>
-          <button className="text-muted-foreground/70 hover:text-foreground transition-colors" title="Configurar columnas"><Settings2 className="h-4 w-4" /></button>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 mb-3">
-        <div className="relative flex-1">
-          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Buscar" className="pl-8 h-8 text-sm" />
-        </div>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5"><FilterIcon className="h-3.5 w-3.5" />Filtros</Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5"><ChevronDown className="h-3.5 w-3.5" />Ordenar</Button>
-      </div>
-      {!contacto ? (
-        <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">Sin contactos asociados</div>
-      ) : (
-        <div className="rounded-lg border border-border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-[11px] uppercase tracking-wide">Nombre</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wide">Correo</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-wide">Número de teléfono</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="h-7 w-7 shrink-0 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex items-center justify-center">{dealInitials(contacto.nombre)}</span>
-                    <Link to={`/admin/portal-crm/ventas/contactos/${contacto.id}`} className="text-sm text-primary hover:underline truncate">{contacto.nombre}</Link>
-                  </div>
-                </TableCell>
-                <TableCell>{contacto.email ? <a href={`mailto:${contacto.email}`} className="text-sm text-primary hover:underline">{contacto.email}</a> : <span className="text-sm text-muted-foreground">—</span>}</TableCell>
-                <TableCell>{contacto.telefono ? <a href={`tel:${contacto.telefono}`} className="text-sm text-primary hover:underline whitespace-nowrap">{contacto.telefono}</a> : <span className="text-sm text-muted-foreground">—</span>}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Feed de actividades recientes: intercala notas y tareas, agrupa por mes y las
 // pinta colapsables (la nota reusa NoteCard; la tarea usa TaskActivityCard).
-function DealActivityFeed({ notes, tasks, search, defaultExpanded, expandNonce, contactName, onCompleteTask, onDeleteTask, onDeleteNote, onEdited }: any) {
-  const q = (search ?? "").trim().toLowerCase();
-  const items = [
-    ...(notes ?? []).map((n: any) => ({ kind: "note" as const, id: n.id, ts: n.created_at, data: n, text: stripHtml(n.content ?? "") })),
-    ...(tasks ?? []).map((t: any) => ({ kind: "task" as const, id: t.id, ts: t.due_date || t.created_at, data: t, text: t.title ?? "" })),
-  ]
-    .filter((it) => !q || it.text.toLowerCase().includes(q))
-    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-
-  if (!items.length) {
-    return <p className="text-xs text-muted-foreground text-center py-6">{q ? "Sin resultados" : "Sin actividad registrada aún"}</p>;
-  }
-
-  const groups: { key: string; items: typeof items }[] = [];
-  for (const it of items) {
-    const d = new Date(it.ts);
-    const key = isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-    let g = groups.find((x) => x.key === key);
-    if (!g) { g = { key, items: [] }; groups.push(g); }
-    g.items.push(it);
-  }
-
-  return (
-    <div className="space-y-5">
-      {groups.map((g) => (
-        <div key={g.key}>
-          <p className="text-xs font-semibold text-muted-foreground mb-2 capitalize">{g.key}</p>
-          <div className="space-y-2">
-            {g.items.map((it) => it.kind === "note" ? (
-              <NoteCard key={`n-${it.id}-${expandNonce}`} note={it.data} contactName={contactName ?? ""} defaultExpanded={defaultExpanded} onEdited={onEdited} onDelete={onDeleteNote} />
-            ) : (
-              <TaskActivityCard key={`t-${it.id}-${expandNonce}`} task={it.data} defaultExpanded={defaultExpanded} onComplete={onCompleteTask} onDelete={onDeleteTask} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // Tarjeta colapsable de una tarea (equivalente a NoteCard). Expandida muestra
 // vencimiento, recordatorio, etapa, tipo, prioridad y asignado (estilo HubSpot).
-function TaskActivityCard({ task, defaultExpanded = false, onComplete, onDelete }: { task: any; defaultExpanded?: boolean; onComplete: (id: number) => void; onDelete: (id: number) => void }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const done = task.status === "completada" || task.status === "completado";
-  const fields: [string, string][] = [
-    ["Fecha de vencimiento", task.due_date ? fmtDateTime(task.due_date) : "—"],
-    ["Recordatorio", task.reminder ? fmtDateTime(task.reminder) : "Sin recordatorio"],
-    ["Etapa de la tarea", taskStatusLabel[task.status] ?? task.status ?? "—"],
-    ["Repetir", RECURRENCE_LABEL[task.recurrencia] ?? "No se repite"],
-    ["Tipo de tarea", TASK_TYPE_META[task.tipo]?.label ?? task.tipo ?? "—"],
-    ["Prioridad", TASK_PRIORITY_META[task.priority]?.label ?? task.priority ?? "—"],
-    ["Asignado a", task.assignee ?? "—"],
-  ];
-  return (
-    <div className="border border-border rounded-lg bg-card shadow-sm">
-      <div className="flex items-start gap-2 p-3">
-        <button onClick={() => setExpanded((e) => !e)} className="mt-0.5 text-muted-foreground hover:text-foreground shrink-0" aria-label={expanded ? "Colapsar" : "Expandir"}>
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm">
-              <span className="font-semibold">Tarea</span>
-              {task.assignee ? <span className="text-muted-foreground"> asignada a {task.assignee}</span> : null}
-            </span>
-            <div className="flex items-center gap-3 shrink-0">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {!done && <DropdownMenuItem onClick={() => onComplete(task.id)}>Marcar completada</DropdownMenuItem>}
-                  <DropdownMenuItem onClick={() => toast.message("El historial estará disponible en una fase posterior")}>Historial</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-destructive focus:text-destructive">Eliminar</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <span className="text-xs text-muted-foreground/70 tabular-nums">{task.due_date ? fmtDateTime(task.due_date) : fmtDateTime(task.created_at)}</span>
-            </div>
-          </div>
-
-          {/* Título con estado (check) */}
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className={`h-4 w-4 shrink-0 rounded-full flex items-center justify-center ${done ? "bg-emerald-500 text-white" : "border-2 border-muted-foreground/40"}`}>
-              {done && <Check className="h-2.5 w-2.5" />}
-            </span>
-            <span className={`text-sm ${done ? "line-through text-muted-foreground" : "font-medium"}`}>{task.title}</span>
-          </div>
-
-          {expanded && (
-            <>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-3">
-                {fields.map(([l, v]) => (
-                  <div key={l}>
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{l}</div>
-                    <div className="text-sm mt-0.5">{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notas de la tarea</div>
-                <p className="text-sm mt-0.5">{task.descripcion || <span className="text-muted-foreground">Agregar descripción</span>}</p>
-              </div>
-              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border">
-                <button onClick={() => toast.message("Los comentarios de tareas llegarán en una fase posterior")} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3" />Agregar comentario
-                </button>
-                <span className="text-xs text-muted-foreground">1 asociación</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── CrmCitas (globales) ──────────────────────────────────────────────────────
 // Todas las citas/reuniones de todos los contactos. Lee/escribe la tabla real
@@ -4351,22 +2546,6 @@ function TaskActivityCard({ task, defaultExpanded = false, onComplete, onDelete 
 // nombre de export `CrmAppointments` porque App.tsx ya lo rutea en /ventas/citas.
 // (El esquema ficticio `crm_appointments`/`contacts`/`organization_id` se descartó.)
 
-type GlobalCita = {
-  id: number;
-  titulo: string;
-  tipo: string;
-  estatus: string;
-  fecha_inicio: string | null;
-  fecha_fin: string | null;
-  ubicacion: string | null;
-  enlace_reunion: string | null;
-  resultado: string | null;
-  descripcion: string | null;
-  id_entidad_relacionada: number;
-  id_usuario_asignado: string | null;
-  contact_name: string | null;
-  assigned_name: string | null;
-};
 
 export function CrmAppointments() {
   const qc = useQueryClient();
@@ -4623,513 +2802,6 @@ export function CrmAppointments() {
   );
 }
 
-// Diálogo "Nueva cita" global: selector de contacto con búsqueda + campos de cita.
-function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssignee, onCreated }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  owners: { id: string; full_name: string; email: string }[];
-  defaultAssignee: string;
-  onCreated: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
-  const [contactSearch, setContactSearch] = useState("");
-  const [form, setForm] = useState<CitaFormState>(emptyCitaForm(defaultAssignee));
-
-  const { data: contactResults = [], isFetching } = useQuery({
-    queryKey: ["crm-cita-contact-search", contactSearch],
-    enabled: open && contactSearch.trim().length >= 2,
-    queryFn: async () => {
-      const term = contactSearch.trim();
-      const { data: personas } = await (supabase as any).from("personas")
-        .select("id, nombre_legal, nombre_comercial")
-        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
-        .eq("activo", true).limit(20);
-      const pIds = (personas ?? []).map((p: any) => p.id);
-      if (!pIds.length) return [];
-      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
-      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
-      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
-    },
-  });
-
-  const reset = () => { setForm(emptyCitaForm(defaultAssignee)); setContact(null); setContactSearch(""); };
-  const save = async () => {
-    if (!form.titulo.trim() || !contact) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_citas").insert(buildCitaInsert(form, contact.id));
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Cita creada"); reset(); onOpenChange(false); onCreated();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva cita</Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-1">
-          <div>
-            <Label>Contacto asociado</Label>
-            {contact ? (
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span className="font-medium">{contact.name}</span>
-                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
-                </div>
-                {contactSearch.trim().length >= 2 && (
-                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
-                    {isFetching ? (
-                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
-                    ) : contactResults.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
-                    ) : contactResults.map((c) => (
-                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          <CitaFormFields form={form} setForm={setForm} owners={owners} />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={save} disabled={saving || !form.titulo.trim() || !contact} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Crear cita"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CitaPreviewRow({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-      <div className="min-w-0">
-        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-        <div className="text-foreground break-words">{value}</div>
-      </div>
-    </div>
-  );
-}
-
-// Panel lateral "Vista previa" de una cita (estilo HubSpot). Solo lectura + acciones rápidas.
-function CitaPreviewSheet({ cita, onOpenChange, onUpdateStatus, onDelete }: {
-  cita: GlobalCita | null;
-  onOpenChange: (v: boolean) => void;
-  onUpdateStatus: (estatus: string) => void;
-  onDelete: () => void;
-}) {
-  const typeMeta = cita ? (CITA_TYPE_META[cita.tipo] ?? { label: cita.tipo, icon: CalendarClock }) : null;
-  const statusMeta = cita ? CITA_STATUS_META[cita.estatus] : null;
-  const TypeIcon = typeMeta?.icon ?? CalendarClock;
-  const abierta = cita ? (cita.estatus === "programada" || cita.estatus === "reprogramada") : false;
-  return (
-    <Sheet open={!!cita} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[380px] sm:w-[440px] overflow-y-auto">
-        {cita && (
-          <>
-            <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
-                <span className="h-8 w-8 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-400 flex items-center justify-center shrink-0"><TypeIcon className="h-4 w-4" /></span>
-                <span className="truncate">{cita.titulo}</span>
-              </SheetTitle>
-              <SheetDescription>Vista previa de la cita</SheetDescription>
-            </SheetHeader>
-            <div className="mt-5 space-y-4 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {statusMeta && <Badge variant="outline" className={statusMeta.cls}>{statusMeta.label}</Badge>}
-                <Badge variant="outline" className="bg-muted text-muted-foreground border-border">{typeMeta?.label}</Badge>
-              </div>
-
-              <CitaPreviewRow icon={Clock} label="Cuándo" value={fmtCitaWhen(cita.fecha_inicio, cita.fecha_fin)} />
-              {cita.enlace_reunion && (
-                <div className="flex items-start gap-2">
-                  <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Enlace de reunión</div>
-                    <a href={cita.enlace_reunion} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{cita.enlace_reunion}</a>
-                  </div>
-                </div>
-              )}
-              {cita.ubicacion && <CitaPreviewRow icon={MapPin} label="Ubicación" value={cita.ubicacion} />}
-              <CitaPreviewRow icon={UserPlus} label="Asignado a" value={cita.assigned_name ?? "Sin asignar"} />
-              <div className="flex items-start gap-2">
-                <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Contacto</div>
-                  {cita.contact_name ? (
-                    <Link to={`/admin/portal-crm/ventas/contactos/${cita.id_entidad_relacionada}`} className="text-primary hover:underline">{cita.contact_name}</Link>
-                  ) : <span className="text-muted-foreground">Sin contacto</span>}
-                </div>
-              </div>
-              {cita.descripcion && (
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Agenda / notas</div>
-                  <p className="text-foreground whitespace-pre-wrap">{cita.descripcion}</p>
-                </div>
-              )}
-              {cita.resultado && (
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Resultado</div>
-                  <p className="text-foreground whitespace-pre-wrap">{cita.resultado}</p>
-                </div>
-              )}
-
-              <Separator />
-              <div className="space-y-2">
-                {abierta && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" className="gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/5" onClick={() => onUpdateStatus("realizada")}><Check className="h-3.5 w-3.5" />Realizada</Button>
-                    <Button size="sm" variant="outline" className="gap-1 border-amber-500/30 text-amber-600 hover:bg-amber-500/5" onClick={() => onUpdateStatus("no_asistio")}><TriangleAlert className="h-3.5 w-3.5" />No asistió</Button>
-                    <Button size="sm" variant="outline" className="gap-1 text-muted-foreground" onClick={() => onUpdateStatus("cancelada")}><X className="h-3.5 w-3.5" />Cancelar</Button>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  {cita.contact_name ? (
-                    <Button size="sm" variant="ghost" className="gap-1 text-primary" asChild>
-                      <Link to={`/admin/portal-crm/ventas/contactos/${cita.id_entidad_relacionada}`}><ExternalLink className="h-3.5 w-3.5" />Ver contacto</Link>
-                    </Button>
-                  ) : <span />}
-                  <Button size="sm" variant="ghost" className="gap-1 text-destructive hover:text-destructive" onClick={onDelete}><Trash2 className="h-3.5 w-3.5" />Eliminar</Button>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-// ─── CrmTasks (globales) ────────────────────────────────────────────────────
-// Todas las tareas de todos los contactos. Lee/escribe el esquema real
-// `crm_tareas` (español); resuelve nombre de contacto y de usuario asignado
-// por waterfall. No usa `crm_tasks`/`contacts` (esquema ficticio inexistente).
-
-const TASK_TYPE_META: Record<string, { label: string; icon: typeof ClipboardList }> = {
-  seguimiento: { label: "Seguimiento", icon: ClipboardList },
-  llamada: { label: "Llamada", icon: Phone },
-  email: { label: "Email", icon: Mail },
-  whatsapp: { label: "WhatsApp", icon: MessageSquare },
-  visita: { label: "Visita", icon: Calendar },
-};
-const TASK_PRIORITY_META: Record<string, { label: string; cls: string; order: number }> = {
-  urgente: { label: "Urgente", cls: "bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400", order: 0 },
-  alta: { label: "Alta", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400", order: 1 },
-  normal: { label: "Normal", cls: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400", order: 2 },
-  baja: { label: "Baja", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", order: 3 },
-};
-
-// Presets de recordatorio (minutos antes del vencimiento). El valor absoluto
-// (fecha_recordatorio) lo dispara el cron `crm-recordatorios-tareas`.
-const TASK_REMINDER_OPTIONS: { id: string; label: string; minutes: number | null }[] = [
-  { id: "none", label: "Sin recordatorio", minutes: null },
-  { id: "at", label: "A la hora del vencimiento", minutes: 0 },
-  { id: "15m", label: "15 minutos antes", minutes: 15 },
-  { id: "1h", label: "1 hora antes", minutes: 60 },
-  { id: "1d", label: "1 día antes", minutes: 1440 },
-];
-const TASK_RECURRENCE_OPTIONS: { id: string; label: string }[] = [
-  { id: "none", label: "No se repite" },
-  { id: "diaria", label: "Diaria" },
-  { id: "semanal", label: "Semanal" },
-  { id: "quincenal", label: "Quincenal" },
-  { id: "mensual", label: "Mensual" },
-  { id: "anual", label: "Anual" },
-];
-const RECURRENCE_LABEL: Record<string, string> = Object.fromEntries(TASK_RECURRENCE_OPTIONS.map((o) => [o.id, o.label]));
-
-// Estado local unificado del formulario de tarea (global y por contacto).
-type TaskFormState = {
-  titulo: string; tipo: string; prioridad: string;
-  fecha: string; hora: string; recordatorio: string; recurrencia: string;
-  descripcion: string; assigned_to: string;
-};
-const emptyTaskForm = (assignee = ""): TaskFormState => ({
-  titulo: "", tipo: "seguimiento", prioridad: "normal",
-  fecha: "", hora: "08:00", recordatorio: "none", recurrencia: "none",
-  descripcion: "", assigned_to: assignee,
-});
-
-// Construye el payload de INSERT a crm_tareas desde el estado del formulario.
-function buildTaskInsert(form: TaskFormState, contactId: number) {
-  const dueIso = form.fecha ? new Date(`${form.fecha}T${form.hora || "08:00"}:00`).toISOString() : null;
-  let recIso: string | null = null;
-  if (dueIso && form.recordatorio !== "none") {
-    const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === form.recordatorio)?.minutes;
-    if (mins != null) recIso = new Date(new Date(dueIso).getTime() - mins * 60000).toISOString();
-  }
-  return {
-    id_entidad_relacionada: contactId,
-    titulo: form.titulo.trim(),
-    tipo: form.tipo,
-    prioridad: form.prioridad,
-    descripcion: form.descripcion.trim() || null,
-    fecha_vencimiento: dueIso,
-    fecha_recordatorio: recIso,
-    recurrencia: form.recurrencia === "none" ? null : form.recurrencia,
-    id_usuario_asignado: form.assigned_to || null,
-    estatus: "pendiente",
-  };
-}
-
-function advanceByRecurrence(d: Date, rec: string): Date {
-  switch (rec) {
-    case "diaria": return addDays(d, 1);
-    case "semanal": return addWeeks(d, 1);
-    case "quincenal": return addWeeks(d, 2);
-    case "mensual": return addMonths(d, 1);
-    case "anual": return addYears(d, 1);
-    default: return d;
-  }
-}
-
-// Al completar una tarea recurrente, genera la siguiente ocurrencia (mismo offset de
-// recordatorio respecto al vencimiento). Se llama tras marcarla completada.
-async function regenerateRecurringTask(t: {
-  recurrencia?: string | null; fecha_vencimiento?: string | null; fecha_recordatorio?: string | null;
-  id_entidad_relacionada: number; id_usuario_asignado?: string | null;
-  titulo: string; tipo: string; prioridad: string; descripcion?: string | null;
-}) {
-  if (!t.recurrencia || !t.fecha_vencimiento) return;
-  const nextDue = advanceByRecurrence(parseISO(t.fecha_vencimiento), t.recurrencia);
-  let nextRec: string | null = null;
-  if (t.fecha_recordatorio) {
-    const offsetMs = parseISO(t.fecha_vencimiento).getTime() - parseISO(t.fecha_recordatorio).getTime();
-    nextRec = new Date(nextDue.getTime() - offsetMs).toISOString();
-  }
-  await (supabase as any).from("crm_tareas").insert({
-    id_entidad_relacionada: t.id_entidad_relacionada,
-    id_usuario_asignado: t.id_usuario_asignado ?? null,
-    titulo: t.titulo, tipo: t.tipo, prioridad: t.prioridad,
-    descripcion: t.descripcion ?? null,
-    fecha_vencimiento: nextDue.toISOString(),
-    fecha_recordatorio: nextRec,
-    recurrencia: t.recurrencia,
-    estatus: "pendiente",
-  });
-}
-
-// Formato de vencimiento con hora cuando no es medianoche.
-function fmtDueDateTime(iso: string): string {
-  const d = parseISO(iso);
-  const base = isToday(d) ? "Hoy" : fmtDateFns(d, "dd MMM yyyy");
-  return d.getHours() === 0 && d.getMinutes() === 0 ? base : `${base} · ${fmtDateFns(d, "HH:mm")}`;
-}
-
-// Campos compartidos del formulario de tarea (título, tipo, prioridad, vencimiento+hora,
-// recordatorio, recurrencia, asignado, notas). El contacto lo maneja cada diálogo.
-function TaskFormFields({ form, setForm, owners }: {
-  form: TaskFormState;
-  setForm: (f: TaskFormState) => void;
-  owners: { id: string; full_name: string; email: string }[];
-}) {
-  return (
-    <>
-      <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Llamar al prospecto" /></div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Tipo</Label>
-          <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div><Label>Prioridad</Label>
-          <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Fecha de vencimiento</Label><Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></div>
-        <div><Label>Hora</Label><Input type="time" value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} disabled={!form.fecha} /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Recordatorio</Label>
-          <Select value={form.recordatorio} onValueChange={(v) => setForm({ ...form, recordatorio: v })} disabled={!form.fecha}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TASK_REMINDER_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div><Label>Repetir</Label>
-          <Select value={form.recurrencia} onValueChange={(v) => setForm({ ...form, recurrencia: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TASK_RECURRENCE_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div><Label>Asignar a</Label>
-        <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-          <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
-      <div><Label>Notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Detalles de la tarea…" rows={3} /></div>
-    </>
-  );
-}
-
-// ─── Citas (reuniones) — máquina compartida ─────────────────────────────────
-// Actividad nativa del CRM (tabla real `crm_citas`, español), espejo de crm_tareas
-// pero con ventana de tiempo, lugar/enlace y resultado. Se muestra en la ficha del
-// contacto, en la del negocio (vía su contacto) y en la vista global de Citas.
-// En HubSpot esto es "Reuniones"; aquí seguimos el vocabulario del embudo ("cita").
-
-const CITA_TYPE_META: Record<string, { label: string; icon: typeof CalendarClock }> = {
-  presencial: { label: "Presencial", icon: MapPin },
-  videollamada: { label: "Videollamada", icon: Video },
-  llamada: { label: "Llamada", icon: Phone },
-  visita_obra: { label: "Visita a obra", icon: Building2 },
-  showroom: { label: "Showroom", icon: Store },
-};
-const CITA_STATUS_META: Record<string, { label: string; cls: string; dot: string }> = {
-  programada: { label: "Programada", cls: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400", dot: "bg-blue-500" },
-  reprogramada: { label: "Reprogramada", cls: "bg-violet-500/10 text-violet-600 border-violet-500/30 dark:text-violet-400", dot: "bg-violet-500" },
-  realizada: { label: "Realizada", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400", dot: "bg-emerald-500" },
-  no_asistio: { label: "No asistió", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400", dot: "bg-amber-500" },
-  cancelada: { label: "Cancelada", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", dot: "bg-slate-400" },
-};
-// Orden de presentación en selects (embudo natural de la cita).
-const CITA_STATUS_ORDER = ["programada", "reprogramada", "realizada", "no_asistio", "cancelada"];
-const CITA_DURATIONS: { id: string; label: string; minutes: number }[] = [
-  { id: "15", label: "15 minutos", minutes: 15 },
-  { id: "30", label: "30 minutos", minutes: 30 },
-  { id: "45", label: "45 minutos", minutes: 45 },
-  { id: "60", label: "1 hora", minutes: 60 },
-  { id: "90", label: "1 h 30 min", minutes: 90 },
-  { id: "120", label: "2 horas", minutes: 120 },
-];
-
-// Estado local unificado del formulario de cita (global y por contacto/negocio).
-type CitaFormState = {
-  titulo: string; tipo: string; estatus: string;
-  fecha: string; hora: string; duracion: string;
-  ubicacion: string; enlace_reunion: string;
-  recordatorio: string; descripcion: string; resultado: string; assigned_to: string;
-};
-const emptyCitaForm = (assignee = ""): CitaFormState => ({
-  titulo: "", tipo: "presencial", estatus: "programada",
-  fecha: "", hora: "09:00", duracion: "30",
-  ubicacion: "", enlace_reunion: "",
-  recordatorio: "none", descripcion: "", resultado: "", assigned_to: assignee,
-});
-
-// Construye el payload de INSERT a crm_citas desde el estado del formulario.
-function buildCitaInsert(form: CitaFormState, contactId: number) {
-  const startIso = form.fecha ? new Date(`${form.fecha}T${form.hora || "09:00"}:00`).toISOString() : null;
-  let endIso: string | null = null;
-  if (startIso) {
-    const mins = Number(form.duracion) || 30;
-    endIso = new Date(new Date(startIso).getTime() + mins * 60000).toISOString();
-  }
-  let recIso: string | null = null;
-  if (startIso && form.recordatorio !== "none") {
-    const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === form.recordatorio)?.minutes;
-    if (mins != null) recIso = new Date(new Date(startIso).getTime() - mins * 60000).toISOString();
-  }
-  return {
-    id_entidad_relacionada: contactId,
-    titulo: form.titulo.trim(),
-    tipo: form.tipo,
-    estatus: form.estatus,
-    fecha_inicio: startIso,
-    fecha_fin: endIso,
-    ubicacion: form.ubicacion.trim() || null,
-    enlace_reunion: form.enlace_reunion.trim() || null,
-    descripcion: form.descripcion.trim() || null,
-    resultado: form.resultado.trim() || null,
-    fecha_recordatorio: recIso,
-    id_usuario_asignado: form.assigned_to || null,
-  };
-}
-
-// Formato de fecha/hora de la cita: "Hoy · 09:00–09:30" o "12 ago 2026 · 11:00".
-function fmtCitaWhen(inicio?: string | null, fin?: string | null): string {
-  if (!inicio) return "Sin fecha";
-  const di = parseISO(inicio);
-  if (isNaN(di.getTime())) return "Sin fecha";
-  const base = isToday(di) ? "Hoy" : fmtDateFns(di, "dd MMM yyyy");
-  const hi = fmtDateFns(di, "HH:mm");
-  if (fin) {
-    const df = parseISO(fin);
-    if (!isNaN(df.getTime())) return `${base} · ${hi}–${fmtDateFns(df, "HH:mm")}`;
-  }
-  return `${base} · ${hi}`;
-}
-
-// Campos compartidos del formulario de cita. El contacto lo maneja cada diálogo.
-function CitaFormFields({ form, setForm, owners }: {
-  form: CitaFormState;
-  setForm: (f: CitaFormState) => void;
-  owners: { id: string; full_name: string; email: string }[];
-}) {
-  const esVirtual = form.tipo === "videollamada" || form.tipo === "llamada";
-  return (
-    <>
-      <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Recorrido en showroom" /></div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Tipo</Label>
-          <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(CITA_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div><Label>Estatus</Label>
-          <Select value={form.estatus} onValueChange={(v) => setForm({ ...form, estatus: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{CITA_STATUS_ORDER.map((k) => <SelectItem key={k} value={k}>{CITA_STATUS_META[k].label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div><Label>Fecha</Label><Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></div>
-        <div><Label>Hora</Label><Input type="time" value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} disabled={!form.fecha} /></div>
-        <div><Label>Duración</Label>
-          <Select value={form.duracion} onValueChange={(v) => setForm({ ...form, duracion: v })} disabled={!form.fecha}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{CITA_DURATIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      {esVirtual ? (
-        <div><Label>Enlace de reunión</Label><Input value={form.enlace_reunion} onChange={(e) => setForm({ ...form, enlace_reunion: e.target.value })} placeholder="https://meet.google.com/…" /></div>
-      ) : (
-        <div><Label>Ubicación</Label><Input value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} placeholder="Showroom / dirección" /></div>
-      )}
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Recordatorio</Label>
-          <Select value={form.recordatorio} onValueChange={(v) => setForm({ ...form, recordatorio: v })} disabled={!form.fecha}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TASK_REMINDER_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div><Label>Asignar a</Label>
-          <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-            <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div><Label>Agenda / notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Temas a tratar…" rows={2} /></div>
-      {(form.estatus === "realizada" || form.estatus === "no_asistio") && (
-        <div><Label>Resultado</Label><Textarea value={form.resultado} onChange={(e) => setForm({ ...form, resultado: e.target.value })} placeholder="Resumen y siguientes pasos…" rows={2} /></div>
-      )}
-    </>
-  );
-}
 
 type GlobalTask = {
   id: number;
@@ -5452,762 +3124,3 @@ export function CrmTasks() {
   );
 }
 
-// Diálogo "Nueva tarea" global: selector de contacto con búsqueda + campos reales.
-function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCreated }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  owners: { id: string; full_name: string; email: string }[];
-  defaultAssignee: string;
-  onCreated: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
-  const [contactSearch, setContactSearch] = useState("");
-  const [form, setForm] = useState<TaskFormState>(emptyTaskForm(defaultAssignee));
-
-  const { data: contactResults = [], isFetching } = useQuery({
-    queryKey: ["crm-task-contact-search", contactSearch],
-    enabled: open && contactSearch.trim().length >= 2,
-    queryFn: async () => {
-      const term = contactSearch.trim();
-      const { data: personas } = await (supabase as any).from("personas")
-        .select("id, nombre_legal, nombre_comercial")
-        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
-        .eq("activo", true).limit(20);
-      const pIds = (personas ?? []).map((p: any) => p.id);
-      if (!pIds.length) return [];
-      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
-      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
-      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
-    },
-  });
-
-  const reset = () => { setForm(emptyTaskForm(defaultAssignee)); setContact(null); setContactSearch(""); };
-
-  const save = async () => {
-    if (!form.titulo.trim() || !contact) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, contact.id));
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Tarea creada");
-    reset();
-    onOpenChange(false);
-    onCreated();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-1">
-          <div>
-            <Label>Contacto asociado</Label>
-            {contact ? (
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span className="font-medium">{contact.name}</span>
-                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
-                </div>
-                {contactSearch.trim().length >= 2 && (
-                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
-                    {isFetching ? (
-                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
-                    ) : contactResults.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
-                    ) : contactResults.map((c) => (
-                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          <TaskFormFields form={form} setForm={setForm} owners={owners} />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={save} disabled={saving || !form.titulo.trim() || !contact} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Crear tarea"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── CrmSequences ─────────────────────────────────────────────────────────────
-
-export function CrmSequences() {
-  const [activeSeq, setActiveSeq] = useState(SEQUENCES[0].id);
-  const seq = SEQUENCES.find(s => s.id === activeSeq) ?? SEQUENCES[0];
-
-  const CHANNEL_ICON: Record<string, React.ReactNode> = {
-    call: <Phone className="w-3.5 h-3.5 text-blue-500" />,
-    whatsapp_mock: <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />,
-    email_mock: <Mail className="w-3.5 h-3.5 text-violet-500" />,
-    task: <ClipboardList className="w-3.5 h-3.5 text-amber-500" />,
-  };
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Secuencias" subtitle="Cadencias de seguimiento por stage del lead" />
-      <div className="flex gap-4">
-        <div className="w-52 shrink-0 space-y-1">
-          {SEQUENCES.map(s => (
-            <button key={s.id} onClick={() => setActiveSeq(s.id)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeSeq === s.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-              <div className="font-medium truncate">{s.name}</div>
-              <div className="text-[11px] opacity-70 truncate">{s.stage}</div>
-            </button>
-          ))}
-        </div>
-        <Card className="flex-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{seq.name}</CardTitle>
-            <p className="text-xs text-muted-foreground">{seq.objective}</p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {seq.steps.map((step, i) => (
-                <div key={i} className="flex gap-3 items-start p-3 rounded-lg bg-muted/40 border">
-                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-background border text-[11px] font-semibold shrink-0">{i + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {CHANNEL_ICON[step.channel]}
-                      <span className="text-xs font-medium capitalize">{step.channel.replace("_mock","").replace("_"," ")}</span>
-                      <span className="ml-auto text-[11px] text-muted-foreground">{step.timing}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{step.copy}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1 italic">Objetivo: {step.objective}</p>
-                  </div>
-                  <button onClick={() => { navigator.clipboard.writeText(step.copy); toast.success("Copiado"); }}
-                    className="shrink-0 p-1 hover:bg-background rounded transition-colors">
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmRouting ───────────────────────────────────────────────────────────────
-
-export function CrmRouting() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: unassigned = [], isLoading } = useQuery({
-    queryKey: ["crm-unassigned", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,source_name,created_at").eq("organization_id", orgId)
-        .is("contact_owner", null).order("created_at", { ascending: true }).limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const MOCK_ADVISORS: AdvisorLoad[] = [
-    { user_id: "a1", name: "Ana García", active_leads: 12, pending_tasks: 3, lead_to_appt_rate: 0.32, appt_to_reservation_rate: 0.21 },
-    { user_id: "a2", name: "Carlos López", active_leads: 8, pending_tasks: 1, lead_to_appt_rate: 0.41, appt_to_reservation_rate: 0.18 },
-    { user_id: "a3", name: "María Torres", active_leads: 19, pending_tasks: 7, lead_to_appt_rate: 0.28, appt_to_reservation_rate: 0.25 },
-  ];
-
-  const assign = useMutation({
-    mutationFn: async ({ contactId, advisorId }: { contactId: string; advisorId: string }) => {
-      await (supabase as any).from("crm_contacts").update({ contact_owner: advisorId }).eq("id", contactId);
-      await (supabase as any).from("lead_assignment_history").insert({ contact_id: contactId, assigned_to: advisorId, organization_id: orgId, reason: "manual_routing" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-unassigned", orgId] }); toast.success("Lead asignado"); },
-  });
-
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Routing" subtitle="Asignación de leads no asignados a asesores" />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {MOCK_ADVISORS.map(a => (
-          <Card key={a.user_id} className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold">{a.name[0]}</div>
-              <div><p className="text-sm font-medium">{a.name}</p></div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>Leads activos</span><span className="text-right font-medium text-foreground">{a.active_leads}</span>
-              <span>Lead→Cita</span><span className="text-right font-medium text-foreground">{fmtPct(a.lead_to_appt_rate)}</span>
-              <span>Cita→Apart.</span><span className="text-right font-medium text-foreground">{fmtPct(a.appt_to_reservation_rate)}</span>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Estatus</TableHead>
-            <TableHead>Fuente</TableHead>
-            <TableHead>Creado</TableHead>
-            <TableHead>Recomendado</TableHead>
-            <TableHead>Asignar a</TableHead>
-            <TableHead></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
-            ) : unassigned.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin leads sin asignar</TableCell></TableRow>
-            ) : unassigned.map((c: any) => {
-              const rec = recommendOwner(c, MOCK_ADVISORS);
-              const selectedAdvisor = overrides[c.id] ?? rec?.recommended_owner_id ?? "";
-              return (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.full_name}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{leadStatusLabel[c.lead_status] ?? c.lead_status}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{c.source_name ?? "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{relTime(c.created_at)}</TableCell>
-                  <TableCell className="text-xs">{rec ? <span title={rec.reason}>{rec.recommended_owner_name}</span> : "—"}</TableCell>
-                  <TableCell>
-                    <Select value={selectedAdvisor} onValueChange={v => setOverrides(prev => ({ ...prev, [c.id]: v }))}>
-                      <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Elegir" /></SelectTrigger>
-                      <SelectContent>{MOCK_ADVISORS.map(a => <SelectItem key={a.user_id} value={a.user_id}>{a.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => selectedAdvisor && assign.mutate({ contactId: c.id, advisorId: selectedAdvisor })}
-                      disabled={!selectedAdvisor || assign.isPending}>
-                      <UserPlus className="w-3.5 h-3.5 mr-1" />Asignar
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmAutomationRules ───────────────────────────────────────────────────────
-
-export function CrmAutomationRules() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: dbRules = [], isLoading } = useQuery({
-    queryKey: ["crm-automation-rules", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_automation_rules")
-        .select("*").eq("organization_id", orgId).order("created_at");
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const seedDefaults = useMutation({
-    mutationFn: async () => {
-      if (!orgId) return;
-      const rows = DEFAULT_AUTOMATION_RULES.map(r => ({ ...r, organization_id: orgId, is_active: true }));
-      await (supabase as any).from("crm_automation_rules").upsert(rows, { onConflict: "organization_id,name" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-automation-rules", orgId] }); toast.success("Reglas base sembradas"); },
-  });
-
-  const toggleActive = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      await (supabase as any).from("crm_automation_rules").update({ is_active }).eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-automation-rules", orgId] }),
-  });
-
-  const PRIORITY_TONE: Record<string, string> = {
-    urgent: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    normal: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-
-  const displayRules = dbRules.length ? dbRules : DEFAULT_AUTOMATION_RULES.map((r, i) => ({ ...r, id: `mock-${i}`, is_active: true, isMock: true }));
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Reglas de automatización" subtitle="Triggers automáticos para acciones del CRM">
-        <Button size="sm" variant="outline" onClick={() => seedDefaults.mutate()} disabled={seedDefaults.isPending}>
-          <Zap className="w-4 h-4 mr-1" />{seedDefaults.isPending ? "Sembrando…" : "Sembrar defaults"}
-        </Button>
-      </PageHeader>
-
-      {dbRules.length === 0 && (
-        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
-          <TriangleAlert className="w-4 h-4 shrink-0" />
-          Mostrando reglas de ejemplo. Presiona "Sembrar defaults" para guardarlas en BD.
-        </div>
-      )}
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Nombre</TableHead>
-            <TableHead>Trigger</TableHead>
-            <TableHead>Acción</TableHead>
-            <TableHead>Prioridad</TableHead>
-            <TableHead>Activa</TableHead>
-            <TableHead></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : displayRules.map((rule: any) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium text-sm">{rule.name}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{rule.trigger_type?.replace(/_/g," ")}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{rule.action_type?.replace(/_/g," ")}</TableCell>
-                <TableCell><Badge className={`text-xs ${PRIORITY_TONE[rule.priority ?? "normal"]}`}>{rule.priority ?? "normal"}</Badge></TableCell>
-                <TableCell>
-                  <button onClick={() => !rule.isMock && toggleActive.mutate({ id: rule.id, is_active: !rule.is_active })}
-                    className={`w-9 h-5 rounded-full transition-colors ${rule.is_active ? "bg-emerald-500" : "bg-muted"}`} title={rule.isMock ? "Sembrar para activar" : ""}>
-                    <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ${rule.is_active ? "translate-x-4" : "translate-x-0"}`} />
-                  </button>
-                </TableCell>
-                <TableCell>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.info(`Simulando: ${rule.name}`)}>
-                    <PlayCircle className="w-3.5 h-3.5 mr-1" />Simular
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmEscalations ───────────────────────────────────────────────────────────
-
-export function CrmEscalations() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: escalations = [], isLoading } = useQuery({
-    queryKey: ["crm-escalations", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_escalations")
-        .select("id,title,severity,status,created_at,resolved_at,contacts(full_name)").eq("organization_id", orgId)
-        .order("created_at", { ascending: false }).limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const patch: any = { status };
-      if (status === "resolved") patch.resolved_at = new Date().toISOString();
-      await (supabase as any).from("crm_escalations").update(patch).eq("id", id);
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-escalations", orgId] }); toast.success("Escalación actualizada"); },
-  });
-
-  const SEVERITY_TONE: Record<string, string> = {
-    critical: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    warning: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    info: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-  const STATUS_TONE: Record<string, string> = {
-    open: "bg-red-500/15 text-red-700 dark:text-red-400",
-    acknowledged: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    resolved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-    dismissed: "bg-muted text-muted-foreground",
-  };
-
-  const MOCK_ESC = [
-    { id: "m1", title: "Lead hot sin contacto >4h", severity: "critical", status: "open", created_at: new Date(Date.now()-5*3600000).toISOString(), contacts: { full_name: "Jorge M." } },
-    { id: "m2", title: "Asesor con +10 tareas vencidas", severity: "warning", status: "acknowledged", created_at: new Date(Date.now()-2*3600000).toISOString(), contacts: null },
-    { id: "m3", title: "Deal sin next-task >48h", severity: "high", status: "open", created_at: new Date(Date.now()-26*3600000).toISOString(), contacts: { full_name: "Ana Ruiz" } },
-  ];
-
-  const display = escalations.length ? escalations : MOCK_ESC;
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Escalaciones" subtitle="SLA incumplidos y alertas del equipo" />
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Escalación</TableHead>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Severidad</TableHead>
-            <TableHead>Estatus</TableHead>
-            <TableHead>Creada</TableHead>
-            <TableHead>Acciones</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : display.map((e: any) => (
-              <TableRow key={e.id}>
-                <TableCell className="font-medium text-sm max-w-[200px] truncate">{e.title}</TableCell>
-                <TableCell className="text-sm">{e.contacts?.full_name ?? "—"}</TableCell>
-                <TableCell><Badge className={`text-xs ${SEVERITY_TONE[e.severity ?? "info"]}`}><ShieldAlert className="w-3 h-3 mr-1" />{e.severity}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${STATUS_TONE[e.status ?? "open"]}`}>{e.status}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground">{relTime(e.created_at)}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    {e.status === "open" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatus.mutate({ id: e.id, status: "acknowledged" })}>
-                        <Bell className="w-3 h-3 mr-1" />Ack
-                      </Button>
-                    )}
-                    {e.status !== "resolved" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatus.mutate({ id: e.id, status: "resolved" })}>
-                        <CheckCircle2 className="w-3 h-3 mr-1" />Resolver
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => updateStatus.mutate({ id: e.id, status: "dismissed" })}>
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmLeadIntelligence ──────────────────────────────────────────────────────
-
-export function CrmLeadIntelligence() {
-  const orgId = useCrmOrgId();
-  const [activeTab, setActiveTab] = useState<"hot" | "at_risk" | "tracking" | "sales_ready">("hot");
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-lead-intel-global", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,lifecycle_stage,last_contacted_at,last_activity_at,created_at,buying_intent,budget_range,development_id,contact_owner")
-        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(200);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const scored = useMemo(() => contacts.map((c: any) => ({ c, intel: computeLeadIntelligence({ contact: c }) })), [contacts]);
-
-  const hot = scored.filter(({ intel }) => intel.label === "Hot" || intel.label === "High intent");
-  const atRisk = scored.filter(({ intel }) => intel.label === "At risk");
-  const tracking = scored.filter(({ intel }) => intel.label === "Tracking issue");
-  const salesReady = scored.filter(({ intel }) => intel.label === "Sales ready");
-
-  const KPIs = [
-    { label: "Hot / High intent", value: hot.length, tone: "text-red-600 dark:text-red-400" },
-    { label: "En riesgo", value: atRisk.length, tone: "text-rose-600 dark:text-rose-400" },
-    { label: "Tracking issue", value: tracking.length, tone: "text-violet-600 dark:text-violet-400" },
-    { label: "Sales ready", value: salesReady.length, tone: "text-emerald-600 dark:text-emerald-400" },
-    { label: "Total analizados", value: scored.length, tone: "text-foreground" },
-    { label: "Score promedio", value: fmtNum(scored.reduce((s, x) => s + x.intel.final_score, 0) / Math.max(1, scored.length)), tone: "text-foreground" },
-  ];
-
-  const BUCKETS: Record<typeof activeTab, typeof scored> = { hot, at_risk: atRisk, tracking, sales_ready: salesReady };
-  const bucket = BUCKETS[activeTab];
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Lead Intelligence Global" subtitle="Scoring automatizado de toda la base" />
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {KPIs.map(k => (
-          <Card key={k.label} className="p-3">
-            <p className="text-xs text-muted-foreground">{k.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${k.tone}`}>{isLoading ? "…" : k.value}</p>
-          </Card>
-        ))}
-      </div>
-
-      <Tabs value={activeTab} onValueChange={v => setActiveTab(v as typeof activeTab)}>
-        <TabsList>
-          <TabsTrigger value="hot">Hot <span className="ml-1 text-[10px]">({hot.length})</span></TabsTrigger>
-          <TabsTrigger value="at_risk">En riesgo <span className="ml-1 text-[10px]">({atRisk.length})</span></TabsTrigger>
-          <TabsTrigger value="tracking">Tracking issue <span className="ml-1 text-[10px]">({tracking.length})</span></TabsTrigger>
-          <TabsTrigger value="sales_ready">Sales ready <span className="ml-1 text-[10px]">({salesReady.length})</span></TabsTrigger>
-        </TabsList>
-        {(["hot","at_risk","tracking","sales_ready"] as const).map(t => (
-          <TabsContent key={t} value={t}>
-            {isLoading ? <Skeleton className="h-40 w-full mt-2" /> : bucket.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sin leads en esta categoría</p>
-            ) : (
-              <div className="rounded-md border overflow-auto mt-2">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Contacto</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Fit</TableHead>
-                    <TableHead>Engagement</TableHead>
-                    <TableHead>Recomendación</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {bucket.slice(0, 30).map(({ c, intel }) => (
-                      <TableRow key={c.id}>
-                        <TableCell>
-                          <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
-                        </TableCell>
-                        <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold">{intel.final_score}</span>
-                            <Progress value={intel.final_score} className="w-16 h-1.5" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{intel.fit.score} · {intel.fit.label}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{intel.engagement.score} · {intel.engagement.label}</TableCell>
-                        <TableCell className="text-xs max-w-[200px] truncate text-muted-foreground">{intel.recommendation}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
-  );
-}
-
-// ─── CrmAgentPerformance ──────────────────────────────────────────────────────
-
-export function CrmAgentPerformance() {
-  const orgId = useCrmOrgId();
-  const [range, setRange] = useState<DateRange>("30d");
-
-  const since = useMemo(() => rangeToSince(range), [range]);
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-agent-perf-contacts", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,contact_owner,lead_status,lifecycle_stage,created_at,last_contacted_at,crm_deals(deal_stage,value)")
-        .eq("organization_id", orgId).gte("created_at", since).limit(500);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const { data: tasks = [] } = useQuery({
-    queryKey: ["crm-agent-perf-tasks", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_tasks")
-        .select("assigned_to,status,due_date").eq("organization_id", orgId).gte("created_at", since).limit(2000);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const perf = useMemo(() => aggregateAgentPerf(contacts, [], [], tasks, []), [contacts, tasks]);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Desempeño de asesores"
-        description="Métricas de conversión por asesor"
-        actions={
-          <Select value={range} onValueChange={v => setRange(v as DateRange)}>
-            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{(Object.entries(RANGE_LABEL) as [DateRange,string][]).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-          </Select>
-        }
-      />
-
-      {isLoading ? <Skeleton className="h-40 w-full" /> : perf.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-10">Sin datos para el período</p>
-      ) : (
-        <div className="rounded-md border overflow-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>Asesor</TableHead>
-              <TableHead className="text-right">Leads</TableHead>
-              <TableHead className="text-right">Contactados</TableHead>
-              <TableHead className="text-right">Citas</TableHead>
-              <TableHead className="text-right">Reservas</TableHead>
-              <TableHead className="text-right">Lead→Cita</TableHead>
-              <TableHead className="text-right">Cita→Reserva</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">Vencidas</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {perf.map(a => (
-                <TableRow key={a.user_id}>
-                  <TableCell className="font-medium text-sm">{a.name ?? "Sin asesor"}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_assigned)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_contacted)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.appointments_scheduled)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.reservations)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.lead_to_appt_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.appt_to_reservation_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.revenue)}</TableCell>
-                  <TableCell className="text-right text-sm">
-                    <span className={a.overdue_tasks > 3 ? "text-red-500 font-medium" : ""}>{fmtNum(a.overdue_tasks)}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── CrmSalesOperations ───────────────────────────────────────────────────────
-
-export function CrmSalesOperations() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-  const [msgOpen, setMsgOpen] = useState(false);
-  const [msgContact, setMsgContact] = useState<any>(null);
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-sales-ops-queue", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,lifecycle_stage,last_contacted_at,last_activity_at,created_at,buying_intent,development_id,contact_owner,crm_tasks(status,due_date)")
-        .eq("organization_id", orgId).neq("lead_status", "lost").order("last_activity_at", { ascending: true }).limit(60);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const queue = useMemo(() => {
-    return contacts.map((c: any) => {
-      const intel = computeLeadIntelligence({ contact: c, tasks: c.crm_tasks ?? [] });
-      const sla = calculateSlaStatus(c, { intelLabel: intel.label });
-      const priority = getFollowUpPriority(sla, intel.label);
-      return { c, intel, sla, priority };
-    }).sort((a, b) => {
-      const order = { P0: 0, P1: 1, P2: 2, P3: 3 };
-      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-    });
-  }, [contacts]);
-
-  const PRIORITY_TONE: Record<string, string> = {
-    P0: "bg-red-500/15 text-red-700 dark:text-red-400 font-bold",
-    P1: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    P2: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    P3: "bg-muted text-muted-foreground",
-  };
-
-  const createTask = useMutation({
-    mutationFn: async (contactId: string) => {
-      if (!orgId) return;
-      await (supabase as any).from("crm_tasks").insert({ organization_id: orgId, contact_id: contactId, title: "Seguimiento urgente (sales ops)", priority: "high", status: "pending" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-sales-ops-queue", orgId] }); toast.success("Tarea creada"); },
-  });
-
-  const selectedMsg = useMemo(() => {
-    if (!msgContact) return null;
-    const intel = computeLeadIntelligence({ contact: msgContact });
-    return generateMessage(intel.label === "Hot" || intel.label === "High intent" ? "whatsapp_hot_lead" : "whatsapp_new_lead", {
-      contact_name: msgContact.full_name,
-      advisor_name: "tu asesor",
-    });
-  }, [msgContact]);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Sales Operations" subtitle="Cola de seguimiento por prioridad SLA" />
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>SLA</TableHead>
-            <TableHead>Prioridad</TableHead>
-            <TableHead>Regla SLA</TableHead>
-            <TableHead>Recomendación</TableHead>
-            <TableHead>Acciones</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : queue.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Sin leads en cola</TableCell></TableRow>
-            ) : queue.map(({ c, intel, sla, priority }) => (
-              <TableRow key={c.id}>
-                <TableCell>
-                  <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
-                </TableCell>
-                <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${SLA_TONE[sla.status]}`}>{sla.status.replace(/_/g," ")}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${PRIORITY_TONE[priority]}`}>{priority}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">{sla.reason}</TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{sla.recommendation}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => createTask.mutate(c.id)}>
-                      <ClipboardList className="w-3 h-3 mr-1" />Tarea
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setMsgContact(c); setMsgOpen(true); }}>
-                      <MessageSquare className="w-3 h-3 mr-1" />Msg
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog open={msgOpen} onOpenChange={setMsgOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Mensaje generado — {msgContact?.full_name}</DialogTitle></DialogHeader>
-          {selectedMsg && (
-            <div className="space-y-3 py-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MessageSquare className="w-4 h-4" />{selectedMsg.channel.replace("_mock","")}
-              </div>
-              <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">{selectedMsg.body}</div>
-              <p className="text-xs text-amber-600 dark:text-amber-400">{selectedMsg.disclaimer}</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { navigator.clipboard.writeText(selectedMsg?.body ?? ""); toast.success("Copiado"); }}>
-              <Copy className="w-4 h-4 mr-1" />Copiar
-            </Button>
-            <Button onClick={() => setMsgOpen(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}

@@ -233,8 +233,8 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 
     const [productosRes, productPagosRes] = await Promise.all([
       productoIds.length
-        ? supabase.from("productos_servicios").select("id, nombre, descripcion").in("id", productoIds)
-        : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null }[] }),
+        ? supabase.from("productos_servicios").select("id, nombre, descripcion, id_categoria").in("id", productoIds)
+        : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null; id_categoria: number | null }[] }),
       supabase
         .from("pagos")
         .select("id_cuenta_cobranza, monto")
@@ -242,11 +242,15 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
         .eq("activo", true),
     ]);
 
-    const productosMap: Record<number, { nombre: string; descripcion: string | null }> =
+    const productosMap: Record<number, { nombre: string; descripcion: string | null; categoriaId: number | null }> =
       Object.fromEntries(
         (productosRes.data ?? []).map((p) => [
           p.id as number,
-          { nombre: String(p.nombre), descripcion: p.descripcion ? String(p.descripcion) : null },
+          {
+            nombre: String(p.nombre),
+            descripcion: p.descripcion ? String(p.descripcion) : null,
+            categoriaId: (p as any).id_categoria ?? null,
+          },
         ]),
       );
 
@@ -275,6 +279,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
       const prod: AdditionalProduct = {
         id: String(cc.id),
         name: ps?.nombre ?? "Producto",
+        categoriaId: ps?.categoriaId ?? null,
         description: ps?.descripcion ?? undefined,
         totalPrice,
         totalPaid,
