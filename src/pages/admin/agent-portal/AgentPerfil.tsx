@@ -15,13 +15,14 @@ import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/ho
 import {
   FileText, Receipt, Landmark, GraduationCap,
   Check, AlertTriangle, Loader2,
-  Camera, Trash2, Upload, ArrowLeft, Eye, EyeOff, Pencil, Plus, UploadCloud, RotateCcw
+  Camera, Trash2, Upload, ArrowLeft, Eye, EyeOff, Pencil, Plus, UploadCloud, PenLine
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { FIELD_LABEL_CLS, FIELD_INPUT_CLS, BTN_SECONDARY_CLS, BTN_PRIMARY_CLS, Req, ModalHeader, MODAL_TITLE_CLS } from "@/components/ui/form-standard";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
@@ -78,12 +79,12 @@ const ACTIVATION_BLOCKS = [
 ];
 
 // Documentos del expediente del agente (tipos reales en `documentos`)
-const EXPEDIENTE_DOCS: { nombre: string; emisor: string; hint: string; tipos: number[]; step: OnboardingStep['id']; kind: 'camera' | 'pdf' }[] = [
+const EXPEDIENTE_DOCS: { nombre: string; emisor: string; hint: string; tipos: number[]; step: OnboardingStep['id']; kind: 'camera' | 'pdf' | 'firma' }[] = [
   { nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], step: 'fiscal', kind: 'pdf' },
   { nombre: 'INE - Frente', emisor: 'INE', hint: 'Lado con foto', tipos: [2], step: 'basic', kind: 'camera' },
   { nombre: 'INE - Reverso', emisor: 'INE', hint: 'Lado con domicilio', tipos: [3], step: 'basic', kind: 'camera' },
   { nombre: 'Pasaporte', emisor: 'SRE', hint: 'Página de datos (vigente)', tipos: [4], step: 'basic', kind: 'camera' },
-  { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Documento generado y firmado con SOZU', tipos: [48], step: 'basic', kind: 'pdf' },
+  { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], step: 'basic', kind: 'firma' },
 ];
 
 const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'> = {
@@ -151,192 +152,6 @@ function DocDropzone({ accept, uploading, onFile }: { accept: string; uploading:
         <p className="mt-1 text-[12px] font-medium text-[#9AA3AD]">o haz clic para seleccionar · Solo PDF</p>
       </div>
     </div>
-  );
-}
-// Captura de documento con cámara (sin IA). Recorta SOLO el recuadro de guía.
-// Soporta varios pasos (INE: frente + reverso) o uno solo (pasaporte).
-function SimpleCameraCaptureDialog({ open, onOpenChange, personaId, titulo, steps, onUploaded }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  personaId: number | null | undefined;
-  titulo: string;
-  steps: { tipo: number; label: string }[];
-  onUploaded: () => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const blobsRef = useRef<Record<number, Blob>>({});
-  const [ready, setReady] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
-  const [uploading, setUploading] = useState(false);
-
-  const current = steps[stepIndex] || { tipo: 0, label: '' };
-  const subLabel = steps.length > 1 && current.label ? `${titulo} - ${current.label}` : titulo;
-
-  const stop = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setReady(false);
-  };
-  const start = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setReady(true);
-    } catch {
-      toast.error('No se pudo acceder a la cámara. Verifica los permisos.');
-    }
-  };
-
-  useEffect(() => {
-    if (open) {
-      blobsRef.current = {};
-      setStepIndex(0);
-      setPreview(null);
-      setPendingBlob(null);
-      start();
-    } else {
-      stop();
-      blobsRef.current = {};
-      setStepIndex(0);
-      setPreview(null);
-      setPendingBlob(null);
-    }
-    return () => stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  // Captura recortando EXACTO al recuadro de guía (inset-5 = 20px) considerando object-cover.
-  const capture = () => {
-    const v = videoRef.current, c = canvasRef.current;
-    if (!v || !c) return;
-    const ctx = c.getContext('2d');
-    if (!ctx) return;
-    const cW = v.clientWidth, cH = v.clientHeight, vW = v.videoWidth, vH = v.videoHeight;
-    if (!vW || !vH || !cW || !cH) {
-      c.width = vW; c.height = vH;
-      ctx.drawImage(v, 0, 0);
-    } else {
-      const scale = Math.max(cW / vW, cH / vH);
-      const offX = (vW - cW / scale) / 2;
-      const offY = (vH - cH / scale) / 2;
-      const inset = 20; // inset-5
-      const sx = Math.max(0, offX + inset / scale);
-      const sy = Math.max(0, offY + inset / scale);
-      const sw = Math.min((cW - 2 * inset) / scale, vW - sx);
-      const sh = Math.min((cH - 2 * inset) / scale, vH - sy);
-      c.width = Math.round(sw);
-      c.height = Math.round(sh);
-      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
-    }
-    c.toBlob((blob) => {
-      if (!blob) return;
-      setPendingBlob(blob);
-      setPreview(URL.createObjectURL(blob));
-      stop();
-    }, 'image/jpeg', 0.9);
-  };
-
-  const repeat = () => { setPreview(null); setPendingBlob(null); start(); };
-
-  const uploadOne = async (tipo: number, blob: Blob) => {
-    const file = new File([blob], `doctype${tipo}_${Date.now()}.jpg`, { type: 'image/jpeg' });
-    const path = `expediente/${personaId}/${tipo}_${Date.now()}.jpg`;
-    const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
-    if (upErr) throw upErr;
-    const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
-    await (supabase as any).from('documentos').update({ activo: false })
-      .eq('id_persona', personaId).eq('id_tipo_documento', tipo).eq('activo', true);
-    const { error: insErr } = await (supabase as any).from('documentos').insert({
-      url: publicUrl, id_tipo_documento: tipo, id_persona: personaId, activo: true, id_estatus_verificacion: 1,
-    });
-    if (insErr) throw insErr;
-  };
-
-  const cont = async () => {
-    if (!pendingBlob) return;
-    blobsRef.current[current.tipo] = pendingBlob;
-    // Avanzar de paso NO requiere persona (solo la subida final).
-    if (stepIndex < steps.length - 1) {
-      setStepIndex((i) => i + 1);
-      setPreview(null);
-      setPendingBlob(null);
-      start();
-      return;
-    }
-    if (!personaId) {
-      toast.error('Tu usuario no tiene un perfil de persona asociado, no se puede guardar el documento.');
-      return;
-    }
-    setUploading(true);
-    try {
-      for (const st of steps) {
-        const b = blobsRef.current[st.tipo];
-        if (b) await uploadOne(st.tipo, b);
-      }
-      toast.success('Documento guardado. Queda pendiente de validación.');
-      onUploaded();
-      onOpenChange(false);
-    } catch (e: any) {
-      toast.error(e?.message || 'No se pudo guardar el documento.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-white p-0 gap-0 overflow-hidden">
-        <DialogHeader className="border-b border-[#ECEEF0] px-5 py-4 space-y-0 pr-10">
-          <DialogTitle className="text-[16px] font-bold text-[#171A1D]">Captura de tu documento</DialogTitle>
-          <p className="mt-0.5 text-[12.5px] font-medium text-[#9AA3AD]">
-            {subLabel}{steps.length > 1 ? ` · Paso ${stepIndex + 1} de ${steps.length}` : ''}
-          </p>
-        </DialogHeader>
-        <div className="p-4">
-          <p className="mb-2 text-center text-[13px] font-medium text-[#6B7280]">
-            {preview ? 'Revisa que se vea completo y legible.' : 'Encuadra el documento y captura.'}
-          </p>
-          <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-black">
-            {preview ? (
-              <img src={preview} alt="Captura" className="h-full w-full object-contain" />
-            ) : (
-              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-            )}
-            {!preview && <div className="pointer-events-none absolute inset-5 rounded-md border-2 border-white/70" />}
-            <canvas ref={canvasRef} className="hidden" />
-            {!ready && !preview && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            )}
-          </div>
-          <div className="mt-3 flex gap-2">
-            {preview ? (
-              <>
-                <button onClick={repeat} disabled={uploading}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[#ECEEF0] px-4 py-2.5 text-[13px] font-semibold text-[#6B7280] hover:bg-[#F6F7F8] disabled:opacity-50">
-                  <RotateCcw className="h-4 w-4" /> Repetir
-                </button>
-                <button onClick={cont} disabled={uploading}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50">
-                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" strokeWidth={2.5} />} Continuar
-                </button>
-              </>
-            ) : (
-              <button onClick={capture} disabled={!ready}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50">
-                <Camera className="h-4 w-4" /> Capturar
-              </button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 const AgentPerfil = () => {
@@ -665,16 +480,6 @@ const AgentPerfil = () => {
   };
 
   // Subida directa de PDF (constancia fiscal) → documentos, pendiente de validación.
-  const [cameraDoc, setCameraDoc] = useState<{ titulo: string; steps: { tipo: number; label: string }[] } | null>(null);
-  // INE = frente(2)+reverso(3) en un solo flujo. Pasaporte(4) independiente.
-  const openCameraForDoc = (tipos: number[], nombre: string) => {
-    const t = tipos[0];
-    if (t === 2 || t === 3) {
-      setCameraDoc({ titulo: 'INE', steps: [{ tipo: 2, label: 'Frente' }, { tipo: 3, label: 'Reverso' }] });
-    } else {
-      setCameraDoc({ titulo: nombre, steps: [{ tipo: t, label: '' }] });
-    }
-  };
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const uploadDocPdf = async (file: File, tipo: number, opts?: { estatus?: number; personaUpdates?: Record<string, string> }) => {
     if (!personaId) { toast.error('Tu usuario no tiene un perfil de persona asociado.'); return; }
@@ -854,18 +659,25 @@ const AgentPerfil = () => {
     staleTime: 30_000,
   });
 
-  // Estatus agregado de Documentos (para la fila "Documentos" en Secciones)
+  // Estatus agregado de Documentos (para la fila "Documentos" en Secciones).
+  // Identidad = INE (frente+reverso) O pasaporte — no se exigen ambos.
   const docsStatus = (() => {
-    const total = EXPEDIENTE_DOCS.length;
-    let validated = 0, uploaded = 0;
-    EXPEDIENTE_DOCS.forEach((d) => {
-      const rows = expedienteDocs.filter((x: any) => d.tipos.includes(x.id_tipo_documento));
-      if (rows.some((x: any) => x.id_estatus_verificacion === 2)) validated++;
-      else if (rows.length > 0) uploaded++;
-    });
-    if (total > 0 && validated === total) return 'complete';
-    if (validated + uploaded > 0) return 'partial';
-    return 'pending';
+    const state = (tipos: number[]) => {
+      const rows = expedienteDocs.filter((x: any) => tipos.includes(x.id_tipo_documento));
+      if (rows.some((x: any) => x.id_estatus_verificacion === 2)) return 'validated';
+      if (rows.length > 0) return 'uploaded';
+      return 'none';
+    };
+    const ineValidated = state([2]) === 'validated' && state([3]) === 'validated';
+    const pasValidated = state([4]) === 'validated';
+    const identidadValidated = ineValidated || pasValidated;
+    const csf = state([6]);
+    const carta = state([48]);
+
+    const complete = identidadValidated && csf === 'validated' && carta === 'validated';
+    if (complete) return 'complete';
+    const anyProgress = [2, 3, 4, 6, 48].some((t) => state([t]) !== 'none');
+    return anyProgress ? 'partial' : 'pending';
   })();
 
   // Desarrollos ASIGNADOS al agente (solo los suyos, nunca el catálogo completo).
@@ -1402,13 +1214,38 @@ const AgentPerfil = () => {
       </>)}
 
       {/* ===== VISTA: EXPEDIENTE ===== */}
-      {profileView === 'expediente' && (
+      {profileView === 'expediente' && (() => {
+        // Identidad = INE (frente+reverso) O pasaporte, nunca ambos.
+        // Todo documento de identidad se captura desde la Carta de comercialización
+        // (flujo de onboarding), por lo que aquí es solo-vista.
+        const tieneTipo = (t: number) => expedienteDocs.some((d: any) => d.id_tipo_documento === t);
+        const hasINE = tieneTipo(2) || tieneTipo(3);
+        const hasPasaporte = tieneTipo(4);
+        const hasIdentidad = hasINE || hasPasaporte;
+        // Sin identidad → mostrar INE frente+reverso como "sin cargar".
+        const identidadTipos = hasPasaporte && !hasINE ? [4] : [2, 3];
+        const esDocIdentidad = (tipos: number[]) => tipos.some((t) => [2, 3, 4].includes(t));
+        const visibleDocs = EXPEDIENTE_DOCS.filter((d) =>
+          !esDocIdentidad(d.tipos) || d.tipos.some((t) => identidadTipos.includes(t))
+        );
+        const ordered = [...visibleDocs].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        return (
         <div>
+          {/* Leyenda: solo cuando no hay ninguna identificación cargada */}
+          {!hasIdentidad && (
+            <div className="mb-2.5 rounded-md border border-[#FBEFD9] bg-[#FEF9EF] px-4 py-3">
+              <p className="text-[12.5px] font-medium leading-relaxed text-[#B5730A]">
+                Aún no has registrado tu identificación oficial. Captura tu INE (frente y reverso) o tu pasaporte
+                desde la <span className="font-bold">Carta de comercialización</span> para completar tu expediente.
+              </p>
+            </div>
+          )}
           <div className="flex flex-col gap-2.5">
-            {[...EXPEDIENTE_DOCS].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((doc, i) => {
+            {ordered.map((doc, i) => {
               const rows = expedienteDocs.filter((d: any) => doc.tipos.includes(d.id_tipo_documento));
               const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);
               const exists = rows.length > 0;
+              const esIdentidad = esDocIdentidad(doc.tipos);
               const estado = approved ? 'validado' : exists ? 'revision' : 'pendiente';
               const badge =
                 estado === 'validado'
@@ -1417,6 +1254,9 @@ const AgentPerfil = () => {
                   ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
                   : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
               const url = rows.find((d: any) => d.url)?.url || null;
+              // Los documentos de identidad no se suben aquí: solo se pueden ver.
+              // La carta (firma) no se regenera si ya existe: solo se ve.
+              const showAction = !esIdentidad && perfilPerms.canUpdate && (doc.kind === 'firma' ? !exists : true);
               return (
                 <div
                   key={doc.nombre}
@@ -1437,13 +1277,13 @@ const AgentPerfil = () => {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {perfilPerms.canUpdate && (
+                    {showAction && (
                       <button
-                        title={doc.kind === 'camera' ? 'Tomar foto' : 'Subir documento'}
-                        onClick={() => doc.kind === 'camera' ? openCameraForDoc(doc.tipos, doc.nombre) : setDocDetail(doc)}
+                        title={doc.kind === 'firma' ? 'Firmar carta' : 'Subir documento'}
+                        onClick={() => doc.kind === 'firma' ? setActiveStep(doc.step) : setDocDetail(doc)}
                         className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                       >
-                        {doc.kind === 'camera' ? <Camera className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                        {doc.kind === 'firma' ? <PenLine className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
                       </button>
                     )}
                     {url && (
@@ -1461,7 +1301,8 @@ const AgentPerfil = () => {
             })}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ===== VISTA: IDENTIDAD ===== */}
       {profileView === 'identidad' && (() => {
@@ -1534,7 +1375,7 @@ const AgentPerfil = () => {
                   value={personaDatos?.uso_cfdi || ''}
                   disabled={!perfilPerms.canUpdate || savingCfdi}
                   onChange={(e) => saveUsoCfdi(e.target.value)}
-                  className="min-w-[240px] cursor-pointer rounded-[9px] border border-[#ECEEF0] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#171A1D] outline-none disabled:opacity-60"
+                  className={cn(FIELD_INPUT_CLS, "w-auto min-w-[240px] cursor-pointer")}
                 >
                   <option value="">Selecciona…</option>
                   {usoCfdiCatalog.map((u: any) => (
@@ -1678,7 +1519,7 @@ const AgentPerfil = () => {
       <Dialog open={!!csfConfirm} onOpenChange={(o) => { if (!o && !savingCsf) setCsfConfirm(null); }}>
         <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
           <DialogHeader className="space-y-1 border-b border-[#F0F2F4] px-5 py-4 text-left">
-            <DialogTitle className="text-[16px] font-bold tracking-[-0.2px] text-[#171A1D]">Confirma tus datos fiscales</DialogTitle>
+            <DialogTitle className={MODAL_TITLE_CLS}>Confirma tus datos fiscales</DialogTitle>
             <p className="text-[12px] font-medium leading-relaxed text-[#9AA3AD]">
               Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal; se guardarán en tu perfil y el documento quedará validado.
             </p>
@@ -1686,11 +1527,11 @@ const AgentPerfil = () => {
           <div className="max-h-[52vh] space-y-3 overflow-y-auto px-5 py-4">
             {csfConfirm?.fields.map((f) => (
               <div key={f.key}>
-                <div className="mb-1 text-[11.5px] font-semibold text-[#4B5563]">{f.label}</div>
+                <div className={FIELD_LABEL_CLS}>{f.label}</div>
                 <input
                   value={csfEdit[f.key] ?? f.value}
                   onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))}
-                  className="w-full rounded-md border border-[#ECEEF0] px-3 py-2.5 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                  className={FIELD_INPUT_CLS}
                 />
               </div>
             ))}
@@ -1717,7 +1558,7 @@ const AgentPerfil = () => {
       {/* Modal cambiar contraseña */}
       <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwShow({ current: false, nueva: false, confirm: false }); } }}>
         <DialogContent className="max-w-[400px] bg-white p-[26px]">
-          <DialogTitle className="text-[17px] font-bold text-[#171A1D]">Cambiar contraseña</DialogTitle>
+          <DialogTitle className={MODAL_TITLE_CLS}>Cambiar contraseña</DialogTitle>
           <p className="-mt-1 text-[12px] font-medium leading-relaxed text-[#6B7280]">
             Tu nueva contraseña debe tener al menos 6 caracteres.
           </p>
@@ -1728,13 +1569,13 @@ const AgentPerfil = () => {
               { key: 'confirm', label: 'Confirmar nueva contraseña', val: pwConfirm, set: setPwConfirm },
             ] as const).map((f) => (
               <div key={f.label}>
-                <div className="mb-1.5 text-[11.5px] font-medium text-[#9AA3AD]">{f.label}</div>
+                <div className={FIELD_LABEL_CLS}>{f.label}</div>
                 <div className="relative">
                   <input
                     type={pwShow[f.key] ? 'text' : 'password'}
                     value={f.val}
                     onChange={(e) => f.set(e.target.value)}
-                    className="w-full rounded-md border border-[#ECEEF0] px-3 py-2.5 pr-10 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                    className={cn(FIELD_INPUT_CLS, "pr-10")}
                   />
                   <button
                     type="button"
@@ -1792,31 +1633,29 @@ const AgentPerfil = () => {
 
       {/* Modal editar información de Identidad */}
       <Dialog open={identEditOpen} onOpenChange={(o) => { if (!o) setIdentEditOpen(false); }}>
-        <DialogContent className="max-w-[520px] w-[92vw] bg-white p-0 gap-0 overflow-hidden">
-          <DialogHeader className="border-b border-[#ECEEF0] px-5 py-4">
-            <DialogTitle className="text-[16px] font-bold text-[#171A1D]">Editar información</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-[540px] w-[92vw] bg-white p-0 gap-0 overflow-hidden">
+          <ModalHeader title="Editar información" />
           <div className="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-3.5">
             {(() => {
-              const lbl = "mb-1 block text-[11px] font-semibold text-[#6B7280]";
-              const inp = "w-full rounded-md border border-[#ECEEF0] px-3 py-2 text-[13px] font-semibold text-[#171A1D] outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30";
+              const lbl = FIELD_LABEL_CLS;
+              const inp = FIELD_INPUT_CLS;
               return (
                 <>
                   <div>
                     <label className={lbl}>Email · solo lectura</label>
-                    <input value={personaDatos?.email || agentEmail || ''} disabled className={cn(inp, "bg-[#F6F7F8] text-[#9AA3AD]")} />
+                    <input value={personaDatos?.email || agentEmail || ''} disabled className={inp} />
                   </div>
                   <div>
-                    <label className={lbl}>Nombre completo *</label>
-                    <input value={identForm.nombre_legal || ''} onChange={(e) => setIdent('nombre_legal', e.target.value)} placeholder="Nombre y apellidos" className={inp} />
+                    <label className={lbl}>Nombre completo <Req /></label>
+                    <input value={identForm.nombre_legal || ''} onChange={(e) => setIdent('nombre_legal', e.target.value)} placeholder="Juan Pérez García" className={inp} />
                   </div>
                   <div>
-                    <label className={lbl}>Teléfono *</label>
-                    <input inputMode="numeric" value={identForm.telefono || ''} onChange={(e) => setIdent('telefono', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10 dígitos" className={cn(inp, "tabular-nums")} />
+                    <label className={lbl}>Teléfono <Req /></label>
+                    <input inputMode="numeric" value={identForm.telefono || ''} onChange={(e) => setIdent('telefono', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="5512345678" className={cn(inp, "tabular-nums")} />
                   </div>
                   <div>
-                    <label className={lbl}>CURP *</label>
-                    <input value={identForm.curp || ''} maxLength={18} onChange={(e) => setIdent('curp', e.target.value.toUpperCase())} placeholder="18 caracteres" className={cn(inp, "uppercase tabular-nums")} />
+                    <label className={lbl}>CURP <Req /></label>
+                    <input value={identForm.curp || ''} maxLength={18} onChange={(e) => setIdent('curp', e.target.value.toUpperCase())} placeholder="GARC850101HDFRRL09" className={cn(inp, "uppercase tabular-nums")} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1836,21 +1675,21 @@ const AgentPerfil = () => {
                   <div>
                     <label className={lbl}>Dirección particular</label>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input value={identForm.direccion_calle || ''} onChange={(e) => setIdent('direccion_calle', e.target.value)} placeholder="Calle" className={inp} />
-                      <input value={identForm.direccion_num_ext || ''} onChange={(e) => setIdent('direccion_num_ext', e.target.value)} placeholder="Número exterior" className={inp} />
-                      <input value={identForm.direccion_colonia || ''} onChange={(e) => setIdent('direccion_colonia', e.target.value)} placeholder="Colonia" className={inp} />
-                      <input inputMode="numeric" maxLength={5} value={identForm.direccion_codigo_postal || ''} onChange={(e) => setIdent('direccion_codigo_postal', e.target.value.replace(/\D/g, '').slice(0, 5))} placeholder="C.P." className={cn(inp, "tabular-nums")} />
+                      <input value={identForm.direccion_calle || ''} onChange={(e) => setIdent('direccion_calle', e.target.value)} placeholder="Av. Insurgentes Sur" className={inp} />
+                      <input value={identForm.direccion_num_ext || ''} onChange={(e) => setIdent('direccion_num_ext', e.target.value)} placeholder="1234" className={inp} />
+                      <input value={identForm.direccion_colonia || ''} onChange={(e) => setIdent('direccion_colonia', e.target.value)} placeholder="Del Valle" className={inp} />
+                      <input inputMode="numeric" maxLength={5} value={identForm.direccion_codigo_postal || ''} onChange={(e) => setIdent('direccion_codigo_postal', e.target.value.replace(/\D/g, '').slice(0, 5))} placeholder="03100" className={cn(inp, "tabular-nums")} />
                     </div>
                   </div>
                 </>
               );
             })()}
           </div>
-          <div className="flex justify-end gap-2 border-t border-[#ECEEF0] px-5 py-3.5">
-            <button onClick={() => setIdentEditOpen(false)} disabled={savingIdent} className="inline-flex items-center rounded-md border border-[#ECEEF0] px-4 py-2 text-[12.5px] font-semibold text-[#6B7280] hover:bg-[#F6F7F8] disabled:opacity-50">
+          <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
+            <button onClick={() => setIdentEditOpen(false)} disabled={savingIdent} className={BTN_SECONDARY_CLS}>
               Cancelar
             </button>
-            <button onClick={saveIdent} disabled={savingIdent} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-bold text-[hsl(158_64%_38%)] hover:bg-[#F0FAF4] disabled:opacity-50">
+            <button onClick={saveIdent} disabled={savingIdent} className={BTN_PRIMARY_CLS}>
               {savingIdent && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Guardar
             </button>
@@ -1893,7 +1732,7 @@ const AgentPerfil = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3 pr-7">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <DialogTitle className="text-[18px] font-bold text-[#171A1D]">{docDetail.nombre}</DialogTitle>
+                      <DialogTitle className={MODAL_TITLE_CLS}>{docDetail.nombre}</DialogTitle>
                       <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>
                         {badge.label}
                       </span>
@@ -1948,21 +1787,6 @@ const AgentPerfil = () => {
           }}
         />
       )}
-
-      {/* Captura simple con cámara (sin IA) para documentos de identidad */}
-      <SimpleCameraCaptureDialog
-        open={!!cameraDoc}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCameraDoc(null);
-            queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
-          }
-        }}
-        personaId={personaId}
-        titulo={cameraDoc?.titulo ?? 'Documento'}
-        steps={cameraDoc?.steps ?? []}
-        onUploaded={() => queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] })}
-      />
 
       </div>
     </div>
