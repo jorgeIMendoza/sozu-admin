@@ -1007,6 +1007,70 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 // ─── Rich Note Editor ─────────────────────────────────────────────────────────
 
 
+// Nombre editable en la ficha: lápiz para editar, auto-guarda al perder foco (blur/Enter).
+function EditableContactName({ personaId, name, onSaved }: { personaId: number; name: string; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setValue(name); }, [name]);
+
+  const save = async () => {
+    setEditing(false);
+    const nuevo = value.trim();
+    if (!nuevo) { setValue(name); toast.error("El nombre no puede quedar vacío"); return; }
+    if (nuevo === name) return;
+    setSaving(true);
+    try {
+      const { error } = await (supabase as any).from("personas")
+        .update({ nombre_legal: nuevo, fecha_actualizacion: new Date().toISOString() })
+        .eq("id", personaId);
+      if (error) throw error;
+      toast.success("Nombre actualizado");
+      onSaved();
+    } catch (e: any) {
+      toast.error(mensajeErrorContacto(e));
+      setValue(name);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+          else if (e.key === "Escape") { setValue(name); setEditing(false); }
+        }}
+        className="h-7 text-sm font-semibold text-center"
+      />
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1.5 group/name">
+      <h2 className="font-semibold text-sm leading-tight">{value}</h2>
+      {saving ? (
+        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Editar nombre"
+          title="Editar nombre"
+          className="shrink-0 text-muted-foreground/50 hover:text-primary transition-colors"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
   const orgId = useCrmOrgId();
@@ -1314,7 +1378,7 @@ export function CrmContactDetail() {
               {initials}
             </div>
             <div className="text-center">
-              <h2 className="font-semibold text-sm leading-tight">{contact.full_name}</h2>
+              <EditableContactName personaId={contact.id_persona} name={contact.full_name} onSaved={invalidateAll} />
               {contact.email && (
                 <div className="flex items-center justify-center gap-1 mt-1 text-xs text-primary">
                   <span className="truncate max-w-[130px]">{contact.email}</span>
