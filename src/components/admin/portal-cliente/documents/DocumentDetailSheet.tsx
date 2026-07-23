@@ -105,6 +105,9 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
   const inv = portfolio.find((p) => p.property.id === document.propertyId);
   const hasRealUrl = !!document.url && document.url !== "#";
   const isImage = document.fileExtension === "jpg" || document.fileExtension === "png";
+  // Solo los documentos que sube el cliente pueden subirse/reemplazarse desde aquí.
+  // Los generados por SOZU o terceros (contrato, factura, escritura) son de solo lectura.
+  const canUpload = document.origin === "client_uploaded";
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -196,6 +199,26 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
     </>
   );
 
+  const renderUploadAction = (label: string) => (
+    <>
+      {renderUploadZone()}
+      <button
+        onClick={handleUpload}
+        disabled={!uploadedFile || submitting}
+        className="w-full h-12 rounded-md bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
+      >
+        {submitting ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Subiendo...
+          </>
+        ) : (
+          label
+        )}
+      </button>
+    </>
+  );
+
   const renderMetadata = () => {
     if (!document.fileName) return null;
     return (
@@ -236,37 +259,34 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
       {/* Status-specific blocks */}
       {document.status === "pendiente" && (
         <>
-          {document.origin === "client_uploaded" && (
-            <>
-              {renderUploadZone()}
-              <button
-                onClick={handleUpload}
-                disabled={!uploadedFile || submitting}
-                className="w-full h-12 rounded-md bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Subiendo...
-                  </>
-                ) : (
-                  "Subir documento"
-                )}
-              </button>
-            </>
-          )}
+          {canUpload && renderUploadAction("Subir documento")}
+        </>
+      )}
+
+      {document.status === "vencido" && (
+        <>
+          <div className="rounded-md bg-amber-50 border border-amber-200 p-3 mb-4 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-700 leading-relaxed">
+              Este documento venció. Sube una versión vigente para volver a validarlo.
+            </p>
+          </div>
+          {renderMetadata()}
+          {canUpload && renderUploadAction("Subir documento vigente")}
         </>
       )}
 
       {document.status === "recibido" && (
         <>
           {renderMetadata()}
+          {canUpload && renderUploadAction("Reemplazar documento")}
         </>
       )}
 
       {document.status === "validado" && (
         <>
           {renderMetadata()}
+          {canUpload && renderUploadAction("Reemplazar documento")}
         </>
       )}
 
