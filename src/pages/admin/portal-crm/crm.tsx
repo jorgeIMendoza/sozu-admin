@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
+import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
 import { useCrmOrgId } from "@/hooks/useCrmOrgId";
 import { PageHeader, EmptyState, ComingSoon, ARow, DField } from "@/components/admin/portal-crm/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2053,6 +2054,7 @@ export function CrmDealDetail() {
   const [form, setForm] = useState<any | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const canDelete = useCrmCanDelete("/admin/portal-crm/ventas/negocios");
   const [deleting, setDeleting] = useState(false);
   const [centerTab, setCenterTab] = useState("descripcion");
   const [actSearch, setActSearch] = useState("");
@@ -2291,14 +2293,16 @@ export function CrmDealDetail() {
           <span className="text-muted-foreground/40 text-sm">/</span>
           <span className="text-sm font-medium text-foreground truncate max-w-[220px]">{deal.nombre}</span>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5"><MoreHorizontal className="h-4 w-4" />Acciones</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={() => setConfirmDeleteOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar negocio</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {canDelete && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5"><MoreHorizontal className="h-4 w-4" />Acciones</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => setConfirmDeleteOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar negocio</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* 3-column body — estilo HubSpot; cada columna scrollea por su cuenta */}
