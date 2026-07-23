@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Inbox, Workflow, BarChart3, Users, Landmark, ArrowLeft, LogOut, Menu, LucideIcon,
+  Inbox, Workflow, BarChart3, Users, Landmark, ScrollText, ArrowLeft, LogOut, Menu, LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -23,17 +23,20 @@ const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-bancos/tablero":  BarChart3,
   "/admin/portal-bancos/equipo":   Users,
   "/admin/portal-bancos/bancos":   Landmark,
+  "/admin/portal-bancos/notarias": ScrollText,
 };
 
-// Ítems de administración garantizados aunque el submenu aún no exista en BD
-// (la navegación del portal se lee de `submenus`).
+// Ítems garantizados aunque el submenu aún no exista en BD (la navegación del
+// portal se lee de `submenus`).
 const ADMIN_ITEMS: PortalNavItem[] = [
   { path: "/admin/portal-bancos/equipo", label: "Equipo", icon: Users },
   { path: "/admin/portal-bancos/bancos", label: "Bancos", icon: Landmark },
+  { path: "/admin/portal-bancos/notarias", label: "Notarías", icon: ScrollText },
 ];
 
 const EQUIPO_PATH = "/admin/portal-bancos/equipo";
 const BANCOS_PATH = "/admin/portal-bancos/bancos";
+const NOTARIAS_PATH = "/admin/portal-bancos/notarias";
 
 export const PortalBancosLayout = () => {
   const location = useLocation();
@@ -65,7 +68,9 @@ export const PortalBancosLayout = () => {
   const guaranteed = ADMIN_ITEMS.filter(
     (a) =>
       (a.path === EQUIPO_PATH && canSeeEquipo) ||
-      (a.path === BANCOS_PATH && canSeeBancos),
+      (a.path === BANCOS_PATH && canSeeBancos) ||
+      // Notarías: directorio de contacto visible para todos los roles del portal.
+      a.path === NOTARIAS_PATH,
   );
   // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
   const NAV = [
