@@ -64,14 +64,7 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? plans[0];
   if (!selectedPlan) return null;
 
-  const installmentsSublabel = selectedPlan.installments?.endDate
-    ? `Hasta ${new Date(selectedPlan.installments.endDate).toLocaleDateString("es-MX", {
-        month: "long",
-        year: "numeric",
-      })}`
-    : selectedPlan.installments
-    ? `${selectedPlan.installments.count} pagos mensuales`
-    : "";
+  const installmentsSublabel = selectedPlan.installments ? "hasta la escritura" : "";
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 md:p-6">
