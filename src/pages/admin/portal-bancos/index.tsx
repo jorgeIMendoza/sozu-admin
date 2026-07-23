@@ -50,6 +50,8 @@ import {
 import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 import { PropiedadDetalleSheet } from "@/components/admin/portal-bancos/PropiedadDetalleSheet";
 
+export { BancosNotarias } from "./BancosNotarias";
+
 // ------------------------------ Helpers UI ------------------------------
 /** Fecha + hora local (es-MX) para la Bitácora, p. ej. "16 jul 2026, 14:03". */
 function fmtDateTime(iso?: string | null): string {
