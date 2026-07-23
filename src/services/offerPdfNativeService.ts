@@ -850,7 +850,7 @@ export class OfertaPdfNativeService {
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
           pdf.text(
-            `${escalonadoDisplay.totalMeses} mensualidades:`,
+            "Mensualidades hasta la escritura:",
             schemeX + schemePadding,
             lineY
           );
@@ -862,21 +862,6 @@ export class OfertaPdfNativeService {
             lineY,
             { align: "right" }
           );
-          lineY += 3;
-
-          // Date sub-line
-          if (escalonadoDisplay.fechaFinalText) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6);
-            pdf.setTextColor(grayColor);
-            pdf.text(
-              escalonadoDisplay.fechaFinalText,
-              schemeX + schemeWidth - schemePadding,
-              lineY,
-              { align: "right" }
-            );
-            pdf.setFontSize(8);
-          }
           lineY += 4;
 
           // Delivery row
@@ -900,7 +885,7 @@ export class OfertaPdfNativeService {
             pdf.setFont("helvetica", "normal");
             pdf.setTextColor(grayColor);
             pdf.text(
-              `${amounts.meses} mensualidades (${amounts.porcentajeMensualidades.toFixed(1)}%):`,
+              "Mensualidades hasta la escritura:",
               schemeX + schemePadding,
               lineY
             );
