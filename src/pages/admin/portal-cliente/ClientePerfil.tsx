@@ -398,6 +398,8 @@ const ClientePerfil = () => {
   /* Captura por cámara (INE frente+reverso o pasaporte, sin subir archivos) */
   const [ineCaptureOpen, setIneCaptureOpen] = useState(false);
   const [cameraMode, setCameraMode] = useState<"ine" | "pasaporte">("ine");
+  // Persona destino de la captura por cámara (titular en sesión o representante legal).
+  const [cameraPersonaId, setCameraPersonaId] = useState<number | null>(null);
   const pendingAfterPwRef = useRef<(() => void) | null>(null);
   const justAuthedRef = useRef(false);
   const clienteEmail = isImpersonating ? (impersonatedClienteEmail ?? null) : (profile?.email ?? null);
@@ -622,14 +624,14 @@ const ClientePerfil = () => {
 
   type DocSlot = {
     key: string; label: string; tipoIds: number[]; primaryTipoId: number;
-    required: boolean; cat: string; owner: "self" | "rep";
+    required: boolean; cat: string; owner: "self" | "rep"; camera?: boolean;
   };
 
   // Persona física (comportamiento actual, sin cambios). owner siempre 'self'.
   const PF_SLOTS: DocSlot[] = [
-    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],  primaryTipoId: 2,  required: true,  cat: "personal",   owner: "self" },
-    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],  primaryTipoId: 3,  required: true,  cat: "personal",   owner: "self" },
-    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],  primaryTipoId: 4,  required: false, cat: "personal",   owner: "self" },
+    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],  primaryTipoId: 2,  required: true,  cat: "personal",   owner: "self", camera: true },
+    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],  primaryTipoId: 3,  required: true,  cat: "personal",   owner: "self", camera: true },
+    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],  primaryTipoId: 4,  required: false, cat: "personal",   owner: "self", camera: true },
     { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],  primaryTipoId: 1,  required: false, cat: "personal",   owner: "self" },
     { key: "curp",            label: "CURP",                           tipoIds: [5],  primaryTipoId: 5,  required: true,  cat: "personal",   owner: "self" },
     { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],  primaryTipoId: 6,  required: true,  cat: "financiero", owner: "self" },
@@ -648,9 +650,13 @@ const ClientePerfil = () => {
     { key: "csf_empresa",       label: "Constancia de situación fiscal (empresa)",                   tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "empresa",  owner: "self" },
     { key: "domicilio_empresa", label: "Comprobante de domicilio fiscal (empresa)",                  tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "empresa",  owner: "self" },
     // Representante legal
-    { key: "poder_notarial",    label: "Poder notarial del representante legal",                     tipoIds: [9],                 primaryTipoId: 9,                 required: true,  cat: "replegal", owner: "rep" },
-    { key: "identificacion_rep",label: "Identificación oficial del representante legal",             tipoIds: [53, 2, 4],          primaryTipoId: 53,                required: true,  cat: "replegal", owner: "rep" },
-    { key: "curp_rep",          label: "CURP del representante legal",                               tipoIds: [5],                 primaryTipoId: 5,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "poder_notarial",     label: "Poder notarial del representante legal",                    tipoIds: [9],                 primaryTipoId: 9,                 required: true,  cat: "replegal", owner: "rep" },
+    // Identificación oficial del rep legal = mismo estándar que PF: INE frente+reverso
+    // (cámara) o pasaporte. Satisface con INE (frente+reverso) o pasaporte.
+    { key: "ine_frente_rep",     label: "INE Frente (representante legal)",                          tipoIds: [2],                 primaryTipoId: 2,                 required: true,  cat: "replegal", owner: "rep", camera: true },
+    { key: "ine_reverso_rep",    label: "INE Reverso (representante legal)",                         tipoIds: [3],                 primaryTipoId: 3,                 required: true,  cat: "replegal", owner: "rep", camera: true },
+    { key: "pasaporte_rep",      label: "Pasaporte (representante legal)",                           tipoIds: [4],                 primaryTipoId: 4,                 required: false, cat: "replegal", owner: "rep", camera: true },
+    { key: "curp_rep",           label: "CURP del representante legal",                              tipoIds: [5],                 primaryTipoId: 5,                 required: true,  cat: "replegal", owner: "rep" },
     { key: "csf_rep",           label: "Constancia de situación fiscal del representante legal",     tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "replegal", owner: "rep" },
     { key: "domicilio_rep",     label: "Comprobante de domicilio del representante legal",           tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "replegal", owner: "rep" },
   ];
@@ -1557,7 +1563,7 @@ const ClientePerfil = () => {
                         const status = best?.status ?? 'missing';
                         const isUploading = uploadingSlot === slot.key;
                         const hasFile = !!best?.url;
-                        const isCamera = slot.key === 'ine_frente' || slot.key === 'ine_reverso' || slot.key === 'pasaporte';
+                        const isCamera = !!slot.camera;
                         // Slot del representante legal sin persona vinculada → no se puede subir aquí.
                         const repMissing = slot.owner === 'rep' && !repLegalPersonaId;
                         const slotPersonaId = slot.owner === 'rep' ? repLegalPersonaId : effectivePersonaId;
@@ -1585,7 +1591,7 @@ const ClientePerfil = () => {
                               />
                               {/* INE frente/reverso y pasaporte → captura por cámara. Resto → subir archivo. */}
                               <button
-                                onClick={() => { if (isCamera) { setCameraMode(slot.key === 'pasaporte' ? 'pasaporte' : 'ine'); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
+                                onClick={() => { if (isCamera) { setCameraMode(slot.key.startsWith('pasaporte') ? 'pasaporte' : 'ine'); setCameraPersonaId(slotPersonaId ?? effectivePersonaId); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
                                 disabled={isUploading || repMissing}
                                 title={repMissing ? 'Primero captura al representante legal' : isCamera ? 'Capturar con cámara' : hasFile ? 'Reemplazar documento' : 'Subir documento'}
                                 className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
@@ -2486,10 +2492,13 @@ const ClientePerfil = () => {
           <ClienteINECameraCapture
             open={ineCaptureOpen}
             onOpenChange={setIneCaptureOpen}
-            personaId={effectivePersonaId}
+            personaId={cameraPersonaId ?? effectivePersonaId}
             isDesktop={isDesktop}
             mode={cameraMode}
-            onCompleted={() => queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] })}
+            onCompleted={() => {
+              queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] });
+              queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs-rep", cameraPersonaId] });
+            }}
           />
         )}
       </div>
