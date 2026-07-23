@@ -644,21 +644,20 @@ const ClientePerfil = () => {
   // en ambos owners → el match filtra por tipoId + owner.
   const PM_SLOTS: DocSlot[] = [
     // Empresa
-    { key: "acta_constitutiva", label: "Acta constitutiva",                                          tipoIds: [7],                 primaryTipoId: 7,                 required: true,  cat: "empresa",  owner: "self" },
-    { key: "registro_comercio", label: "Registro Público de Comercio",                               tipoIds: [10],                primaryTipoId: 10,                required: true,  cat: "empresa",  owner: "self" },
-    { key: "reformas",          label: "Reformas / protocolizaciones",                               tipoIds: [REFORMAS_TIPO_ID],  primaryTipoId: REFORMAS_TIPO_ID,  required: false, cat: "empresa",  owner: "self" },
-    { key: "csf_empresa",       label: "Constancia de situación fiscal (empresa)",                   tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "empresa",  owner: "self" },
-    { key: "domicilio_empresa", label: "Comprobante de domicilio fiscal (empresa)",                  tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "empresa",  owner: "self" },
-    // Representante legal
-    { key: "poder_notarial",     label: "Poder notarial del representante legal",                    tipoIds: [9],                 primaryTipoId: 9,                 required: true,  cat: "replegal", owner: "rep" },
-    // Identificación oficial del rep legal = mismo estándar que PF: INE frente+reverso
-    // (cámara) o pasaporte. Satisface con INE (frente+reverso) o pasaporte.
-    { key: "ine_frente_rep",     label: "INE Frente (representante legal)",                          tipoIds: [2],                 primaryTipoId: 2,                 required: true,  cat: "replegal", owner: "rep", camera: true },
-    { key: "ine_reverso_rep",    label: "INE Reverso (representante legal)",                         tipoIds: [3],                 primaryTipoId: 3,                 required: true,  cat: "replegal", owner: "rep", camera: true },
-    { key: "pasaporte_rep",      label: "Pasaporte (representante legal)",                           tipoIds: [4],                 primaryTipoId: 4,                 required: false, cat: "replegal", owner: "rep", camera: true },
-    { key: "curp_rep",           label: "CURP del representante legal",                              tipoIds: [5],                 primaryTipoId: 5,                 required: true,  cat: "replegal", owner: "rep" },
-    { key: "csf_rep",           label: "Constancia de situación fiscal del representante legal",     tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "replegal", owner: "rep" },
-    { key: "domicilio_rep",     label: "Comprobante de domicilio del representante legal",           tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "acta_constitutiva", label: "Acta constitutiva",                 tipoIds: [7],                 primaryTipoId: 7,                 required: true,  cat: "empresa",  owner: "self" },
+    { key: "registro_comercio", label: "Registro Público de Comercio",      tipoIds: [10],                primaryTipoId: 10,                required: true,  cat: "empresa",  owner: "self" },
+    { key: "reformas",          label: "Reformas / protocolizaciones",      tipoIds: [REFORMAS_TIPO_ID],  primaryTipoId: REFORMAS_TIPO_ID,  required: false, cat: "empresa",  owner: "self" },
+    { key: "csf_empresa",       label: "Constancia de situación fiscal",    tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "empresa",  owner: "self" },
+    { key: "domicilio_empresa", label: "Comprobante de domicilio fiscal",   tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "empresa",  owner: "self" },
+    // Representante legal (la sección ya indica de quién son → labels cortas).
+    // Identificación oficial = mismo estándar que PF: INE frente+reverso (cámara) o pasaporte.
+    { key: "poder_notarial",     label: "Poder notarial",                   tipoIds: [9],                 primaryTipoId: 9,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "ine_frente_rep",     label: "INE Frente",                       tipoIds: [2],                 primaryTipoId: 2,                 required: true,  cat: "replegal", owner: "rep", camera: true },
+    { key: "ine_reverso_rep",    label: "INE Reverso",                      tipoIds: [3],                 primaryTipoId: 3,                 required: true,  cat: "replegal", owner: "rep", camera: true },
+    { key: "pasaporte_rep",      label: "Pasaporte",                        tipoIds: [4],                 primaryTipoId: 4,                 required: false, cat: "replegal", owner: "rep", camera: true },
+    { key: "curp_rep",           label: "CURP",                             tipoIds: [5],                 primaryTipoId: 5,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "csf_rep",            label: "Constancia de situación fiscal",   tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "replegal", owner: "rep" },
+    { key: "domicilio_rep",      label: "Comprobante de domicilio",         tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "replegal", owner: "rep" },
   ];
 
   const SLOTS: DocSlot[] = isPM ? PM_SLOTS : PF_SLOTS;
