@@ -15,8 +15,11 @@ import { ENVIRONMENT } from "@/lib/config";
  *   5. cuentas_cobranza.precio_final > 0
  *   6. cuentas_cobranza.porcentaje_comision_venta > 0
  *   7. propiedades.id_estatus_disponibilidad = 5 (Vendida)
- *   8. propiedades.id_entidad_relacionada_dueno IS NOT NULL (entidad dueña configurada)
- *   9. entidades_relacionadas.facturar_comision_sozu = true (flag activado ← clave)
+ *   8. Entidad dueña configurada según el TIPO de cuenta:
+ *        - Producto/Servicio → productos_servicios.id_entidad_relacionada_dueno
+ *        - Propiedad         → propiedades.id_entidad_relacionada_dueno
+ *   9. entidades_relacionadas.facturar_comision_sozu = true del dueño resuelto en
+ *      el paso 8 (flag activado ← clave). Mismo criterio que la vista Comisiones.
  *  10. monto_comision (precio × pct, con IVA si aplica) > 0
  *  11. No existe ya una factura timbrada (url real presente y es_draft=false ⇒ excluida)
  *
@@ -198,7 +201,7 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     ? ((await (supabase as any)
         .from("productos_servicios")
         .select(
-          "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+          "id, nombre, id_categoria, id_entidad_relacionada_dueno, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
         )
         .in("id", productoIds)) as any)
     : { data: [] };
@@ -208,11 +211,15 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
 
   // 9) Entidades relacionadas (dueño + STP comisión + datos fiscales del receptor).
   //    Se embed la persona completa con sus campos fiscales (rfc, regimen, uso_cfdi).
+  //    Incluye tanto dueños de PROPIEDAD como dueños de PRODUCTO: en cuentas de
+  //    Producto/Servicio la comisión se factura al dueño del producto, no al de
+  //    la propiedad (mismo criterio que la vista Comisiones).
   const entIds = Array.from(
     new Set(
-      (props || [])
-        .map((p: any) => p.id_entidad_relacionada_dueno)
-        .filter((x: any): x is number => !!x),
+      [
+        ...(props || []).map((p: any) => p.id_entidad_relacionada_dueno),
+        ...(prodsRaw || []).map((pr: any) => pr.id_entidad_relacionada_dueno),
+      ].filter((x: any): x is number => !!x),
     ),
   );
   const { data: ents } = entIds.length
@@ -286,10 +293,27 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     const edificio = em?.id_edificio ? edMap.get(em.id_edificio) : null;
     const proyectoNombre = edificio?.id_proyecto ? projMap.get(edificio.id_proyecto) : null;
     const producto = oferta?.id_producto ? prodMap.get(oferta.id_producto) : null;
-    const entidad = propiedad?.id_entidad_relacionada_dueno
-      ? entMap.get(propiedad.id_entidad_relacionada_dueno)
-      : null;
     const persona = oferta?.id_persona_lead ? persMap.get(oferta.id_persona_lead) : null;
+
+    // Tipo primero — determina de quién se lee el dueño y su flag de facturación.
+    let tipo: FacturaComisionSozuPorGenerar["tipo"] = "Propiedad";
+    if (oferta?.id_producto && producto) {
+      const cat = (producto.categorias_producto?.nombre || "").toLowerCase();
+      tipo = cat === "servicios" ? "Servicio" : "Producto";
+    }
+
+    // Dueño (y su flag facturar_comision_sozu / STP / datos fiscales) según el tipo:
+    //  - Producto/Servicio: dueño del PRODUCTO (productos_servicios.id_entidad_relacionada_dueno)
+    //  - Propiedad: dueño de la PROPIEDAD
+    // Debe coincidir con la vista Comisiones (que ya usa el dueño del producto)
+    // y con la edge function generar-factura-comision-sozu. Antes se leía siempre
+    // el dueño de la propiedad, lo que ocultaba de la Bandeja las cuentas de
+    // producto cuyo dueño real (p. ej. paquetes amueblados) sí requiere facturación.
+    const duenoEntidadId =
+      tipo === "Producto" || tipo === "Servicio"
+        ? (producto?.id_entidad_relacionada_dueno ?? propiedad?.id_entidad_relacionada_dueno ?? null)
+        : (propiedad?.id_entidad_relacionada_dueno ?? null);
+    const entidad = duenoEntidadId ? entMap.get(duenoEntidadId) : null;
 
     // Gates en JS (campos que viven en tablas anidadas, no en cuentas_cobranza).
     // — Propiedad debe estar Vendida.
@@ -297,12 +321,6 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     // — Entidad dueña configurada + flag de facturación activo (regla clave).
     if (!entidad) continue;
     if (!entidad.facturar_comision_sozu) continue;
-
-    let tipo: FacturaComisionSozuPorGenerar["tipo"] = "Propiedad";
-    if (oferta?.id_producto && producto) {
-      const cat = (producto.categorias_producto?.nombre || "").toLowerCase();
-      tipo = cat === "servicios" ? "Servicio" : "Producto";
-    }
 
     const precio = Number(c.precio_final ?? 0);
     const pct = Number(c.porcentaje_comision_venta ?? 0);
