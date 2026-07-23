@@ -34,12 +34,17 @@ export const useExportToExcel = () => {
 
       if (response.error) throw response.error;
 
-      // Descargar el CSV
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      // Descargar el .xlsx (la Edge Function ahora devuelve OOXML, no CSV).
+      // supabase-js decodifica por Content-Type: si es el MIME xlsx llega como
+      // Blob; en otros casos envolvemos el buffer con el MIME correcto.
+      const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: XLSX_MIME });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
