@@ -8,6 +8,7 @@ function estatusToStatus(id: number): DocumentStatus {
   switch (id) {
     case 2: return "validado";
     case 3: return "rechazado";
+    case 4: return "vencido"; // documento expirado → debe subirse de nuevo
     default: return "recibido"; // 1=pendiente de revisión en ops = ya subido
   }
 }

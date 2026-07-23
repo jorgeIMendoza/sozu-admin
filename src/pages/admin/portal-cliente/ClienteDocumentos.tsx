@@ -273,10 +273,11 @@ const FacturaDetailModal = ({
 
 const statusPriority: Record<DocumentStatus, number> = {
   rechazado: 0,
-  pendiente: 1,
-  recibido: 2,
-  validado: 3,
-  firmado: 4,
+  vencido: 1,
+  pendiente: 2,
+  recibido: 3,
+  validado: 4,
+  firmado: 5,
 };
 
 function sortByActionPriority(a: DocumentRecord, b: DocumentRecord): number {
@@ -487,6 +488,7 @@ const ClienteDocumentos = () => {
     if (groupBy === "status") {
       const order: DocumentStatus[] = [
         "rechazado",
+        "vencido",
         "pendiente",
         "recibido",
         "validado",
