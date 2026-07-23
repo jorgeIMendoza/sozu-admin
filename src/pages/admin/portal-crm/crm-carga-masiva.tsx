@@ -22,7 +22,7 @@ import {
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { fetchCrmCategorias } from "@/hooks/useCrmCatalogos";
+import { fetchCrmCategorias, fetchCrmOwners } from "@/hooks/useCrmCatalogos";
 import { PERSONA_EMAIL_RE, PERSONA_PHONE_RE } from "@/lib/crm-validaciones";
 
 // Campos del CRM a los que se puede mapear una columna del archivo.
@@ -34,6 +34,7 @@ const CRM_FIELDS = [
   { key: "origen_agente", label: "Agente/Inmobiliaria", required: false },
   { key: "lead_status", label: "Estado del lead", required: false },
   { key: "etapa_ciclo_vida", label: "Etapa ciclo de vida", required: false },
+  { key: "propietario", label: "Propietario", required: false },
 ] as const;
 type FieldKey = typeof CRM_FIELDS[number]["key"];
 
@@ -46,6 +47,7 @@ const HEADER_SYNONYMS: Record<FieldKey, string[]> = {
   lead_status: ["estado del lead", "estado", "status", "lead status", "estatus"],
   origen_agente: ["agente", "inmobiliaria", "agente independiente", "agente independiente/inmobiliaria", "independiente", "procedencia", "agente externo"],
   etapa_ciclo_vida: ["etapa del ciclo de vida", "ciclo de vida", "lifecycle", "lifecycle stage", "etapa ciclo"],
+  propietario: ["propietario", "propietario del contacto", "owner", "contact owner", "asesor", "responsable"],
 };
 
 const norm = (s: unknown) =>
@@ -61,6 +63,7 @@ type ParsedRow = {
   origen_agente: string;
   lead_status: string;
   etapa_ciclo_vida: string;
+  propietario: string;
   errors: string[];
 };
 
@@ -74,7 +77,7 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [dataRows, setDataRows] = useState<unknown[][]>([]);
-  const [mapping, setMapping] = useState<Record<FieldKey, number>>({ nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1 });
+  const [mapping, setMapping] = useState<Record<FieldKey, number>>({ nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1, propietario: -1 });
   const [catFija, setCatFija] = useState<string>(""); // id de categoría fija para todo el lote ("" = ninguna)
 
   const [importing, setImporting] = useState(false);
@@ -82,10 +85,11 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
   const [result, setResult] = useState<ImportResult | null>(null);
 
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const reset = () => {
     setStep(1); setFileName(""); setHeaders([]); setDataRows([]);
-    setMapping({ nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1 });
+    setMapping({ nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1, propietario: -1 });
     setCatFija(""); setImporting(false); setProgress(0); setResult(null);
   };
 
@@ -93,7 +97,11 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
   const onFile = async (file: File) => {
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      // CSV: decodificar como UTF-8 para no romper acentos (mojibake). Excel binario va tal cual.
+      const isCsv = /\.csv$/i.test(file.name);
+      const wb = isCsv
+        ? XLSX.read(new TextDecoder("utf-8").decode(buf), { type: "string" })
+        : XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false }) as unknown[][];
       if (!matrix.length) { toast.error("El archivo está vacío"); return; }
@@ -101,7 +109,7 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
       const rows = matrix.slice(1).filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
       if (!rows.length) { toast.error("El archivo no tiene filas de datos"); return; }
       // Auto-sugerir mapeo por nombre de encabezado.
-      const auto: Record<FieldKey, number> = { nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1 };
+      const auto: Record<FieldKey, number> = { nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1, propietario: -1 };
       for (const f of CRM_FIELDS) {
         const idx = hs.findIndex((h) => HEADER_SYNONYMS[f.key].some((syn) => norm(h) === syn || norm(h).includes(syn)));
         auto[f.key] = idx;
@@ -129,7 +137,7 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
       if (!correo && !telefono) errors.push("Sin correo ni teléfono");
       if (correo && !PERSONA_EMAIL_RE.test(correo)) errors.push("Correo inválido");
       if (telefono && !PERSONA_PHONE_RE.test(telefono)) errors.push("Teléfono inválido");
-      return { rowNum: i + 2, nombre_legal, correo, telefono, origen_agente: cell(row, "origen_agente"), lead_status: cell(row, "lead_status"), etapa_ciclo_vida: cell(row, "etapa_ciclo_vida"), errors };
+      return { rowNum: i + 2, nombre_legal, correo, telefono, origen_agente: cell(row, "origen_agente"), lead_status: cell(row, "lead_status"), etapa_ciclo_vida: cell(row, "etapa_ciclo_vida"), propietario: cell(row, "propietario"), errors };
     });
   }, [dataRows, mapping]);
 
@@ -157,6 +165,13 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
       }
     } catch { /* si falla la pre-carga, seguimos sin dedup contra BD */ }
 
+    // Índice de propietarios por nombre/correo, para respetar el propietario del archivo.
+    const ownerByKey = new Map<string, string>();
+    for (const o of (owners as any[])) {
+      if (o.full_name) ownerByKey.set(norm(o.full_name), o.id);
+      if (o.email) ownerByKey.set(norm(o.email), o.id);
+    }
+
     const enArchivo = new Set<string>(); // dedup dentro del propio archivo
     for (let i = 0; i < validRows.length; i++) {
       const c = validRows[i];
@@ -175,7 +190,8 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
         // Estado del CRM + propietario (best-effort).
         await (supabase as any).from("crm_leads_atribucion").insert({
           id_entidad_relacionada: er.id, estatus_lead: c.lead_status || "nuevo",
-          etapa_ciclo_vida: c.etapa_ciclo_vida || "lead", id_propietario: user?.id ?? null,
+          etapa_ciclo_vida: c.etapa_ciclo_vida || "lead",
+          id_propietario: (c.propietario && ownerByKey.get(norm(c.propietario))) || user?.id || null,
           origen_agente: c.origen_agente || null,
         });
         // Categoría fija del lote (best-effort).

@@ -19,6 +19,8 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
 import { useCrmOrgId } from "@/hooks/useCrmOrgId";
 import { PageHeader, EmptyState, ComingSoon, ARow, DField } from "@/components/admin/portal-crm/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -268,9 +270,44 @@ export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
+  const { canDelete: realCanDelete } = usePagePermissions("/admin/portal-crm/ventas/contactos");
+
+  // ¿El rol impersonado es Super Admin? Para que "Ver como" a un super admin muestre todo.
+  const { data: impIsSuper } = useQuery({
+    queryKey: ["crm-imp-role-super", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("roles").select("nombre").eq("id", impersonatedCrmUserRolId).maybeSingle();
+      return data?.nombre === "Super Administrador";
+    },
+  });
+
+  // Permiso de eliminar del ROL impersonado (cuando se usa "Ver como"). permiso_id 4 = eliminar.
+  const { data: impCanDelete } = useQuery({
+    queryKey: ["crm-contactos-imp-candelete", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data: sub } = await (supabase as any).from("submenus")
+        .select("id").eq("vista_front_end", "/admin/portal-crm/ventas/contactos").eq("activo", true).maybeSingle();
+      if (!sub) return false;
+      const { data: sp } = await (supabase as any).from("submenus_permisos")
+        .select("id").eq("submenu_id", sub.id).eq("rol_id", impersonatedCrmUserRolId).eq("permiso_id", 4).eq("activo", true).maybeSingle();
+      return !!sp;
+    },
+  });
+
+  // Bajo "Ver como" todo se evalúa con el rol/usuario impersonado (no con el usuario real).
+  const canDelete = isImpersonating ? (impIsSuper ? true : (impCanDelete ?? false)) : realCanDelete;
+  const isSuperAdmin = isImpersonating ? (impIsSuper ?? false) : (profile?.rol_nombre === "Super Administrador");
+  const effUserId = isImpersonating ? impersonatedCrmUserId : (user?.id ?? null);
 
   const [stageTab, setStageTab] = useState<StageTab>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState<ContactRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState("");
   const [filterDev, setFilterDev] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -319,7 +356,7 @@ export function CrmContacts() {
   );
 
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, page],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, page, isSuperAdmin, effUserId],
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -362,6 +399,15 @@ export function CrmContacts() {
         if (!catErIds.length) return { rows: [], count: 0 };
       }
 
+      // Visibilidad: quien NO es superadmin solo ve SUS contactos (por propietario).
+      let ownedErIds: number[] | null = null;
+      if (!isSuperAdmin) {
+        const { data: mine } = await (supabase as any).from("crm_leads_atribucion")
+          .select("id_entidad_relacionada").eq("activo", true).eq("id_propietario", effUserId ?? "");
+        ownedErIds = (mine ?? []).map((r: any) => Number(r.id_entidad_relacionada));
+        if (!ownedErIds.length) return { rows: [], count: 0 };
+      }
+
       const buildQ = (sel: string, opts?: Record<string, unknown>) => {
         let q = (supabase as any).from("entidades_relacionadas").select(sel, opts ?? {});
         q = q.in("id_tipo_entidad", tipoFilter).eq("activo", true);
@@ -369,6 +415,7 @@ export function CrmContacts() {
         if (searchPersonaIds) q = q.in("id_persona", searchPersonaIds);
         if (sourceErIds) q = q.in("id", sourceErIds);
         if (catErIds) q = q.in("id", catErIds);
+        if (ownedErIds) q = q.in("id", ownedErIds);
         if (excludeErIds.length) q = q.not("id", "in", `(${excludeErIds.join(",")})`);
         return q;
       };
@@ -456,11 +503,12 @@ export function CrmContacts() {
     },
   });
 
+  const effectiveTab: StageTab = isSuperAdmin ? stageTab : "mine";
   const allRows = contacts?.rows ?? [];
   const rows = allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
-    if (stageTab === "mine" && c.contact_owner !== user?.id) return false;
-    if (stageTab === "unassigned" && c.contact_owner !== null) return false;
+    if (effectiveTab === "mine" && c.contact_owner !== effUserId) return false;
+    if (effectiveTab === "unassigned" && c.contact_owner !== null) return false;
     return true;
   });
   const totalCount = contacts?.count ?? 0;
@@ -469,11 +517,26 @@ export function CrmContacts() {
   const rangeEnd = Math.min(page * pageSize + pageSize, totalCount);
   const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? null;
 
-  const CONTACT_TABS = [
-    { id: "all" as StageTab, label: "Todos contactos" },
-    { id: "mine" as StageTab, label: "Mis contactos" },
-    { id: "unassigned" as StageTab, label: "Contactos no asignados" },
-  ];
+  const doDelete = async () => {
+    const ids = rowToDelete ? [rowToDelete.id] : Array.from(selectedIds);
+    if (!ids.length) return;
+    setDeleting(true);
+    const { error } = await (supabase as any).from("entidades_relacionadas")
+      .update({ activo: false }).in("id", ids.map(Number));
+    setDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(ids.length > 1 ? `${ids.length} contactos eliminados` : "Contacto eliminado");
+    setSelectedIds(new Set()); setRowToDelete(null); setDeleteOpen(false);
+    qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+  };
+
+  const CONTACT_TABS = isSuperAdmin
+    ? [
+        { id: "all" as StageTab, label: "Todos contactos" },
+        { id: "mine" as StageTab, label: "Mis contactos" },
+        { id: "unassigned" as StageTab, label: "Contactos no asignados" },
+      ]
+    : [{ id: "mine" as StageTab, label: "Mis contactos" }];
 
   return (
     <div className="space-y-4">
@@ -486,6 +549,11 @@ export function CrmContacts() {
           </h1>
         </div>
         <div className="flex gap-2">
+          {canDelete && selectedIds.size > 0 && (
+            <Button size="sm" variant="destructive" onClick={() => { setRowToDelete(null); setDeleteOpen(true); }}>
+              <Trash2 className="h-4 w-4 mr-1" />Eliminar ({selectedIds.size})
+            </Button>
+          )}
           <CargaMasivaDialog onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
           <CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
         </div>
@@ -497,7 +565,7 @@ export function CrmContacts() {
           <button
             key={t.id}
             onClick={() => { setStageTab(t.id); setPage(0); }}
-            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${stageTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
+            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${effectiveTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
           >
             {t.label}
           </button>
@@ -543,7 +611,14 @@ export function CrmContacts() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
                 <tr>
-                  <th className="px-3 py-2.5 text-left w-8"><Checkbox /></th>
+                  <th className="px-3 py-2.5 text-left w-8">
+                    {canDelete && (
+                      <Checkbox
+                        checked={rows.length > 0 && rows.every((r) => selectedIds.has(r.id))}
+                        onCheckedChange={(v) => setSelectedIds(v ? new Set(rows.map((r) => r.id)) : new Set())}
+                      />
+                    )}
+                  </th>
                   {visibleColumns.map((col) => (
                     <th key={col.id} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{col.label}</th>
                   ))}
@@ -557,7 +632,14 @@ export function CrmContacts() {
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
                     className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
                   >
-                    <td className="p-3" onClick={(e) => e.stopPropagation()}><Checkbox /></td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      {canDelete && (
+                        <Checkbox
+                          checked={selectedIds.has(c.id)}
+                          onCheckedChange={(v) => setSelectedIds((prev) => { const n = new Set(prev); if (v) n.add(c.id); else n.delete(c.id); return n; })}
+                        />
+                      )}
+                    </td>
                     {visibleColumns.map((col) => {
                       switch (col.id) {
                         case "name":
@@ -703,7 +785,14 @@ export function CrmContacts() {
                           return null;
                       }
                     })}
-                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {canDelete && (
+                        <Button size="icon" variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/5 opacity-0 group-hover:opacity-100 transition-all duration-150"
+                          onClick={(e) => { e.stopPropagation(); setRowToDelete(c); setDeleteOpen(true); }} aria-label="Eliminar contacto">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100 transition-all duration-150" asChild>
                         <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} aria-label="Ver detalle">
                           <ChevronRight className="h-4 w-4" />
@@ -754,6 +843,24 @@ export function CrmContacts() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deleteOpen} onOpenChange={(v) => { setDeleteOpen(v); if (!v) setRowToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{rowToDelete ? "¿Eliminar este contacto?" : `¿Eliminar ${selectedIds.size} contactos?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se ocultarán del CRM (borrado lógico, reversible en base de datos). No borra la persona subyacente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); doDelete(); }} disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? "Eliminando…" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
