@@ -214,7 +214,7 @@ function DateChip({ date }: { date: string | null }) {
 
 
 // Categoría del contacto en la ficha (select único; persiste al instante).
-function ContactCategories({ contactId }: { contactId: number }) {
+function ContactCategories({ contactId, disabled = false }: { contactId: number; disabled?: boolean }) {
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
@@ -257,7 +257,7 @@ function ContactCategories({ contactId }: { contactId: number }) {
   return (
     <CField label="Categoría">
       <div className="flex items-center gap-2">
-        <Select value={current != null ? String(current) : ""} onValueChange={setCategoria}>
+        <Select value={current != null ? String(current) : ""} onValueChange={setCategoria} disabled={disabled}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin categoría" /></SelectTrigger>
           <SelectContent>{catalog.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}</SelectContent>
         </Select>
@@ -400,14 +400,8 @@ export function CrmContacts() {
         if (!catErIds.length) return { rows: [], count: 0 };
       }
 
-      // Visibilidad: quien NO es superadmin solo ve SUS contactos (por propietario).
-      let ownedErIds: number[] | null = null;
-      if (!isSuperAdmin) {
-        const { data: mine } = await (supabase as any).from("crm_leads_atribucion")
-          .select("id_entidad_relacionada").eq("activo", true).eq("id_propietario", effUserId ?? "");
-        ownedErIds = (mine ?? []).map((r: any) => Number(r.id_entidad_relacionada));
-        if (!ownedErIds.length) return { rows: [], count: 0 };
-      }
+      // Pool de contactos: TODOS ven todos los contactos (la visibilidad ya NO depende
+      // del propietario). "Mis contactos" pasa a ser solo un filtro/vista client-side.
 
       const buildQ = (sel: string, opts?: Record<string, unknown>) => {
         let q = (supabase as any).from("entidades_relacionadas").select(sel, opts ?? {});
@@ -416,7 +410,6 @@ export function CrmContacts() {
         if (searchPersonaIds) q = q.in("id_persona", searchPersonaIds);
         if (sourceErIds) q = q.in("id", sourceErIds);
         if (catErIds) q = q.in("id", catErIds);
-        if (ownedErIds) q = q.in("id", ownedErIds);
         if (excludeErIds.length) q = q.not("id", "in", `(${excludeErIds.join(",")})`);
         return q;
       };
@@ -504,7 +497,7 @@ export function CrmContacts() {
     },
   });
 
-  const effectiveTab: StageTab = isSuperAdmin ? stageTab : "mine";
+  const effectiveTab: StageTab = stageTab;
   const allRows = contacts?.rows ?? [];
   const rows = allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
@@ -531,13 +524,11 @@ export function CrmContacts() {
     qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
   };
 
-  const CONTACT_TABS = isSuperAdmin
-    ? [
-        { id: "all" as StageTab, label: "Todos contactos" },
-        { id: "mine" as StageTab, label: "Mis contactos" },
-        { id: "unassigned" as StageTab, label: "Contactos no asignados" },
-      ]
-    : [{ id: "mine" as StageTab, label: "Mis contactos" }];
+  const CONTACT_TABS = [
+    { id: "all" as StageTab, label: "Todos contactos" },
+    { id: "mine" as StageTab, label: "Mis contactos" },
+    { id: "unassigned" as StageTab, label: "Contactos no asignados" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -1008,7 +999,7 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 
 
 // Nombre editable en la ficha: lápiz para editar, auto-guarda al perder foco (blur/Enter).
-function EditableContactName({ personaId, name, onSaved }: { personaId: number; name: string; onSaved: () => void }) {
+function EditableContactName({ personaId, name, onSaved, canEdit = true }: { personaId: number; name: string; onSaved: () => void; canEdit?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
   const [saving, setSaving] = useState(false);
@@ -1054,7 +1045,7 @@ function EditableContactName({ personaId, name, onSaved }: { personaId: number; 
   return (
     <div className="flex items-center justify-center gap-1.5 group/name">
       <h2 className="font-semibold text-sm leading-tight">{value}</h2>
-      {saving ? (
+      {canEdit && (saving ? (
         <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
       ) : (
         <button
@@ -1066,7 +1057,7 @@ function EditableContactName({ personaId, name, onSaved }: { personaId: number; 
         >
           <Pencil className="h-3 w-3" />
         </button>
-      )}
+      ))}
     </div>
   );
 }
@@ -1074,7 +1065,8 @@ function EditableContactName({ personaId, name, onSaved }: { personaId: number; 
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
   const orgId = useCrmOrgId();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
   const qc = useQueryClient();
 
   // Solo en esta vista: acotar el <main> del layout al alto visible exacto para que
@@ -1350,6 +1342,15 @@ export function CrmContactDetail() {
 
   const initials = contact.full_name.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p[0]).join("").toUpperCase() || "?";
 
+  // Pool de contactos: todos ven, pero solo el DUEÑO (o Super Admin, o si no tiene dueño)
+  // puede editar el contacto y registrar actividad.
+  // Con "Ver como" (impersonación) evaluamos el permiso como el usuario impersonado,
+  // para poder demostrar el modo solo-lectura sin cerrar sesión.
+  const effRolId = isImpersonating ? impersonatedCrmUserRolId : profile?.rol_id;
+  const effUserId = isImpersonating ? impersonatedCrmUserId : user?.id;
+  const isCrmAdmin = effRolId === 1;
+  const canEdit = isCrmAdmin || !contact.contact_owner || contact.contact_owner === effUserId;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header bar */}
@@ -1361,12 +1362,21 @@ export function CrmContactDetail() {
           <span className="text-muted-foreground/40 text-sm">/</span>
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{contact.full_name}</span>
         </div>
-        <div className="flex gap-2">
-          <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
-          <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
-          <CitaDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
-        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
+            <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
+            <CitaDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
+          </div>
+        )}
       </div>
+
+      {!canEdit && (
+        <div className="px-4 lg:px-8 py-1.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-1.5 shrink-0">
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+          Solo el dueño puede editar este contacto. Estás viéndolo en modo de solo lectura.
+        </div>
+      )}
 
       {/* 3-column body — llena el alto restante; cada columna scrollea por su cuenta (estilo HubSpot) */}
       <div className="grid grid-cols-12 flex-1 min-h-0 overflow-hidden">
@@ -1378,7 +1388,7 @@ export function CrmContactDetail() {
               {initials}
             </div>
             <div className="text-center">
-              <EditableContactName personaId={contact.id_persona} name={contact.full_name} onSaved={invalidateAll} />
+              <EditableContactName personaId={contact.id_persona} name={contact.full_name} onSaved={invalidateAll} canEdit={canEdit} />
               {contact.email && (
                 <div className="flex items-center justify-center gap-1 mt-1 text-xs text-primary">
                   <span className="truncate max-w-[130px]">{contact.email}</span>
@@ -1396,7 +1406,8 @@ export function CrmContactDetail() {
             </div>
           </div>
 
-          {/* Quick action icons */}
+          {/* Quick action icons — solo el dueño (o admin / sin dueño) registra actividad */}
+          {canEdit && (
           <div className="grid grid-cols-3 gap-1">
             <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll}
               trigger={
@@ -1426,6 +1437,7 @@ export function CrmContactDetail() {
                 </button>
               } />
           </div>
+          )}
 
           {/* Accordion: Acerca de este contacto */}
           <Accordion type="single" collapsible defaultValue="info">
@@ -1434,7 +1446,7 @@ export function CrmContactDetail() {
                 Acerca de este contacto
               </AccordionTrigger>
               <AccordionContent className="pt-1 pb-0">
-                <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} />
+                <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} canEdit={canEdit} />
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -1452,6 +1464,7 @@ export function CrmContactDetail() {
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <DescriptionPanel
+                canEdit={canEdit}
                 contact={contact} notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
                 onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
@@ -1459,6 +1472,7 @@ export function CrmContactDetail() {
             </TabsContent>
             <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <ActivityPanel
+                canEdit={canEdit}
                 contactId={contactId!} userId={user?.id} owners={owners ?? []} contact={contact}
                 notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
@@ -1512,7 +1526,7 @@ export function CrmContactDetail() {
   );
 }
 
-function LeftPanel({ contact, developments, owners, onSaved }: any) {
+function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: any) {
   const [form, setForm] = useState({
     email: contact.email ?? "", phone: contact.phone ?? "",
     lead_status: contact.lead_status ?? "nuevo", lifecycle_stage: contact.lifecycle_stage ?? "lead",
@@ -1564,25 +1578,25 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
 
   return (
     <div className="space-y-3 text-sm">
-      {contact.id ? <ContactCategories contactId={Number(contact.id)} /> : null}
+      {contact.id ? <ContactCategories contactId={Number(contact.id)} disabled={!canEdit} /> : null}
       <CField label="Correo electrónico">
         <Input className="h-8 text-sm" type="email" value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
-          onBlur={persistPersona} placeholder="correo@ejemplo.com" />
+          onBlur={persistPersona} placeholder="correo@ejemplo.com" disabled={!canEdit} />
       </CField>
       <CField label="Número de móvil">
         <Input className="h-8 text-sm" type="tel" value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          onBlur={persistPersona} placeholder="+52 55 0000 0000" />
+          onBlur={persistPersona} placeholder="+52 55 0000 0000" disabled={!canEdit} />
       </CField>
       <CField label="Proyecto">
-        <Select value={form.development_id} onValueChange={(v) => { setForm({ ...form, development_id: v }); persistProyecto(v); }}>
+        <Select value={form.development_id} onValueChange={(v) => { setForm({ ...form, development_id: v }); persistProyecto(v); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin proyecto" /></SelectTrigger>
           <SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
       <CField label="Estado del lead">
-        <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }}>
+        <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             {leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
@@ -1590,13 +1604,13 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
         </Select>
       </CField>
       <CField label="Etapa del ciclo de vida">
-        <Select value={form.lifecycle_stage} onValueChange={(v) => { setForm({ ...form, lifecycle_stage: v }); persistAtribucion({ lifecycle_stage: v }); }}>
+        <Select value={form.lifecycle_stage} onValueChange={(v) => { setForm({ ...form, lifecycle_stage: v }); persistAtribucion({ lifecycle_stage: v }); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
       <CField label="Propietario del contacto">
-        <Select value={form.contact_owner} onValueChange={(v) => { setForm({ ...form, contact_owner: v }); persistAtribucion({ contact_owner: v }); }}>
+        <Select value={form.contact_owner} onValueChange={(v) => { setForm({ ...form, contact_owner: v }); persistAtribucion({ contact_owner: v }); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
           <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
         </Select>
@@ -1634,7 +1648,7 @@ function AssocCard({ title }: { title: string }) {
   );
 }
 
-function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita }: any) {
+function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, canEdit = true }: any) {
   const lastActivity = (() => {
     const dates: string[] = [
       ...(notes ?? []).map((n: any) => n.created_at),
@@ -1672,7 +1686,7 @@ function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onComple
         <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
         <Timeline
           notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} deals={[]} pipelineEvents={[]} conversionEvents={[]}
-          contact={contact}
+          contact={contact} canEdit={canEdit}
           onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
           onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
         />
@@ -1696,9 +1710,11 @@ function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onComple
                     <div className="text-sm font-medium truncate">{c.title}</div>
                     <div className="text-xs text-muted-foreground">{fmtCitaWhen(c.start_at, c.end_at)}</div>
                   </div>
+                  {canEdit && (
                   <button onClick={() => onUpdateCita?.(c.id, "realizada")} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 opacity-0 group-hover/up:opacity-100 transition-opacity shrink-0">
                     <Check className="h-3 w-3" />Realizada
                   </button>
+                  )}
                 </div>
               );
             })}
@@ -1711,9 +1727,11 @@ function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onComple
                   <div className="text-sm font-medium truncate">{t.title}</div>
                   <div className="text-xs text-muted-foreground">Pendiente: {fmtDate(t.due_date)}</div>
                 </div>
+                {canEdit && (
                 <button onClick={() => onCompleteTask?.(t.id)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 opacity-0 group-hover/up:opacity-100 transition-opacity shrink-0">
                   <Check className="h-3 w-3" />Completar
                 </button>
+                )}
               </div>
             ))}
           </div>
