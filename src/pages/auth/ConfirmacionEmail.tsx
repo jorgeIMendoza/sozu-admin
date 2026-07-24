@@ -29,6 +29,17 @@ const getPortalUrl = (portal: string | null, destination: string | null) => {
   return `${host}${path}`;
 };
 
+// El token de confirmación es de un solo uso: si se arrastra en un redirect, el
+// segundo intento de verifyOtp falla y muestra "enlace expirado" aunque la
+// confirmación ya haya ocurrido. Lo eliminamos antes de cualquier navegación.
+const stripOtpParams = (url: URL) => {
+  url.searchParams.delete('token_hash');
+  url.searchParams.delete('type');
+  return url;
+};
+
+const confirmedFlagKey = (email: string) => `sozu-email-confirmado:${email.toLowerCase()}`;
+
 const getOtpType = (type: string | null): EmailOtpType => {
   switch (type) {
     case 'signup':
@@ -78,6 +89,8 @@ export default function ConfirmacionEmail() {
     }
 
     const processConfirmation = async () => {
+      let verified = false;
+
       if (tokenHash) {
         const { error: verifyError } = await supabase.auth.verifyOtp({
           token_hash: tokenHash,
@@ -86,9 +99,26 @@ export default function ConfirmacionEmail() {
 
         if (verifyError) {
           console.error('Email confirmation verify error:', verifyError);
-          setErrorMsg('El enlace de confirmación expiró o ya fue utilizado. Pide al administrador que reenvíe la confirmación.');
-          setStatus('error');
-          return;
+
+          // El token pudo consumirse en una carga previa de esta misma pantalla
+          // (p. ej. tras un redirect). Si ya hay sesión o marca de éxito para
+          // este correo, la confirmación sí ocurrió: seguimos el flujo.
+          const { data: sessionData } = await supabase.auth.getSession();
+          const sessionEmail = sessionData?.session?.user?.email?.toLowerCase() ?? null;
+          const alreadyConfirmed = Boolean(
+            email && (
+              sessionEmail === email.toLowerCase() ||
+              sessionStorage.getItem(confirmedFlagKey(email))
+            )
+          );
+
+          if (!alreadyConfirmed) {
+            setErrorMsg('El enlace de confirmación expiró o ya fue utilizado. Pide al administrador que reenvíe la confirmación.');
+            setStatus('error');
+            return;
+          }
+        } else {
+          verified = true;
         }
       }
 
@@ -96,6 +126,14 @@ export default function ConfirmacionEmail() {
         setErrorMsg('No pudimos identificar tu correo desde el enlace. Pide al administrador que reenvíe la confirmación.');
         setStatus('error');
         return;
+      }
+
+      if (verified) {
+        try {
+          sessionStorage.setItem(confirmedFlagKey(email), '1');
+        } catch {
+          // sessionStorage puede no estar disponible (modo privado); no es crítico.
+        }
       }
 
       const { data, error } = await supabase.functions.invoke('post-confirmacion-registro', {
@@ -109,22 +147,28 @@ export default function ConfirmacionEmail() {
         return;
       }
 
-      const resolvedCtaUrl = data?.ctaUrl || getPortalUrl(portal, destination);
-      const resolvedExpectedHost = data?.portalHost ? new URL(data.portalHost).hostname : null;
+      // Cuando el enlace ya trae `portal`, ese valor manda: es el portal del
+      // registro y respeta el ambiente (dev/prod). El host que devuelve la edge
+      // function es siempre de producción y puede no cubrir todos los roles, así
+      // que sólo lo usamos como fallback para enlaces legacy sin `portal`.
+      const resolvedCtaUrl = (portal ? null : data?.ctaUrl) || getPortalUrl(portal, destination);
+      const resolvedExpectedHost = !portal && data?.portalHost
+        ? new URL(data.portalHost).hostname
+        : null;
 
       if (resolvedExpectedHost && resolvedExpectedHost !== currentHost) {
-        const nextUrl = new URL(window.location.href);
+        const nextUrl = stripOtpParams(new URL(window.location.href));
         nextUrl.protocol = 'https:';
         nextUrl.host = resolvedExpectedHost;
         window.location.replace(nextUrl.toString());
         return;
       }
 
-      if (data?.ctaUrl) {
+      if (!portal && data?.ctaUrl) {
         setCtaUrl(data.ctaUrl);
       }
 
-      if (data?.ctaLabel) {
+      if (!portal && data?.ctaLabel) {
         setCtaLabel(data.ctaLabel);
       }
 
