@@ -2013,7 +2013,13 @@ const Propiedades = () => {
             es_aprobado,
             id_edificio_modelo,
             id_vista
-          `, { count: 'exact' })
+          `, { count: 'estimated' })
+          // count:'estimated' — con `exact`, PostgREST emite COUNT(*) OVER() en la misma
+          // query que trae las 15 columnas, materializando las ~54k filas activas por el heap
+          // (spill a temp) → excede el statement_timeout (8s) del rol authenticated → la query
+          // caía al catch y devolvía count 0 → tab "Activos (0)" en blanco. El estimado del
+          // planner es exacto al ~0.1% en esta tabla y no escanea. Al aplicar filtros el set se
+          // reduce (o se usa el conteo local del branch needsFullFetch), así que no afecta ahí.
           .eq('activo', true)
           .eq('es_aprobado', true);
         // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
