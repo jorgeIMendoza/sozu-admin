@@ -267,6 +267,32 @@ function ContactCategories({ contactId, disabled = false }: { contactId: number;
   );
 }
 
+// Persistencia de filtros de la lista de Contactos, POR USUARIO (mismo patrón que Negocios).
+// Filtros → localStorage (permanecen entre sesiones); buscador → sessionStorage (solo sesión).
+const CONTACTS_FILTERS_KEY = "sozu:contacts:filters:v1";
+const CONTACTS_SEARCH_KEY = "sozu:contacts:search:v1";
+type ContactsFiltersPersist = { stageTab: StageTab; filterDev: string; filterStatus: string; filterLifecycle: string; filterSource: string; filterCategoria: string };
+
+function loadContactsFilters(uid: string): Partial<ContactsFiltersPersist> {
+  if (typeof window === "undefined" || !uid) return {};
+  try {
+    const raw = window.localStorage.getItem(`${CONTACTS_FILTERS_KEY}:${uid}`);
+    return raw ? (JSON.parse(raw) as Partial<ContactsFiltersPersist>) : {};
+  } catch { return {}; }
+}
+function saveContactsFilters(uid: string, v: ContactsFiltersPersist) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.localStorage.setItem(`${CONTACTS_FILTERS_KEY}:${uid}`, JSON.stringify(v)); } catch { /* ignore */ }
+}
+function loadContactsSearch(uid: string): string {
+  if (typeof window === "undefined" || !uid) return "";
+  try { return window.sessionStorage.getItem(`${CONTACTS_SEARCH_KEY}:${uid}`) ?? ""; } catch { return ""; }
+}
+function saveContactsSearch(uid: string, s: string) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.sessionStorage.setItem(`${CONTACTS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
+}
+
 export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
@@ -274,6 +300,7 @@ export function CrmContacts() {
   const { user, profile } = useAuth();
   const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
   const { canDelete: realCanDelete } = usePagePermissions("/admin/portal-crm/ventas/contactos");
+  const uid = user?.id ?? "";
 
   // ¿El rol impersonado es Super Admin? Para que "Ver como" a un super admin muestre todo.
   const { data: impIsSuper } = useQuery({
@@ -335,6 +362,30 @@ export function CrmContacts() {
     persistColumns(next);
   };
   const visibleColumns = columns.filter((c) => c.visible);
+
+  // Recordar filtros por usuario: hidratar una sola vez (cuando ya hay usuario)…
+  const hydratedContacts = useRef(false);
+  useEffect(() => {
+    if (!uid || hydratedContacts.current) return;
+    const f = loadContactsFilters(uid);
+    if (f.stageTab) setStageTab(f.stageTab);
+    if (f.filterDev) setFilterDev(f.filterDev);
+    if (f.filterStatus) setFilterStatus(f.filterStatus);
+    if (f.filterLifecycle) setFilterLifecycle(f.filterLifecycle);
+    if (f.filterSource) setFilterSource(f.filterSource);
+    if (f.filterCategoria) setFilterCategoria(f.filterCategoria);
+    setSearch(loadContactsSearch(uid));
+    hydratedContacts.current = true;
+  }, [uid]);
+  // …y persistir al cambiar (solo tras hidratar, para no pisar lo guardado con los defaults).
+  useEffect(() => {
+    if (!hydratedContacts.current || !uid) return;
+    saveContactsFilters(uid, { stageTab, filterDev, filterStatus, filterLifecycle, filterSource, filterCategoria });
+  }, [uid, stageTab, filterDev, filterStatus, filterLifecycle, filterSource, filterCategoria]);
+  useEffect(() => {
+    if (!hydratedContacts.current || !uid) return;
+    saveContactsSearch(uid, search);
+  }, [uid, search]);
 
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
