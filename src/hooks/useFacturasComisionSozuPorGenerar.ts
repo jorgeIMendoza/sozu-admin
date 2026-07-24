@@ -329,8 +329,11 @@ async function fetchFacturasComisionSozuPorGenerar(): Promise<FacturaComisionSoz
     // — Monto de comisión > 0 (defensa adicional al filtro de precio×pct en BD).
     if (total <= 0) continue;
 
+    // "Entidad Dueña" = empresa Vendedora de la cuenta → nombre legal (mismo valor
+    // que el campo "Vendedor" del detalle de la cuenta de cobranza; p. ej. Komakai,
+    // no el nombre comercial Daiku).
     const entidadDuena =
-      entidad?.personas?.nombre_comercial || entidad?.personas?.nombre_legal || null;
+      entidad?.personas?.nombre_legal || entidad?.personas?.nombre_comercial || null;
 
     const url: string | null = c.url_factura_comision ?? null;
     const urlPendiente = !!url && /pendiente-de-generar/i.test(url);

@@ -233,7 +233,9 @@ async function fetchDispersionesInternasPendientes(): Promise<DispersionInternaP
   const entidadDuenoMap = new Map<number, string>(
     ((entidadesDuenas || []) as Array<any>).map((e) => [
       e.id,
-      (e.personas?.nombre_comercial || e.personas?.nombre_legal || "") as string,
+      // Entidad Dueña = empresa Vendedora → nombre legal (consistente con el detalle
+      // de la cuenta y con las demás secciones de la Bandeja).
+      (e.personas?.nombre_legal || e.personas?.nombre_comercial || "") as string,
     ]),
   );
 
