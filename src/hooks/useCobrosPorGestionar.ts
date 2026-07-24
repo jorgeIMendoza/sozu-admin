@@ -22,8 +22,11 @@ import { supabase } from "@/integrations/supabase/client";
  *   6.  cuentas_cobranza.es_draft_factura_comision = false  (ya timbrada, no draft)
  *   7.  cuentas_cobranza.es_pagada_comision_venta = false   (aún no cobrada al desarrollador)
  *   8.  propiedades.id_estatus_disponibilidad = 5           (Vendida)
- *   9.  propiedades.id_entidad_relacionada_dueno IS NOT NULL (entidad dueña configurada)
- *   10. entidades_relacionadas.facturar_comision_sozu = true (flag activado ← clave)
+ *   9.  Entidad dueña configurada según el TIPO de cuenta:
+ *         - Producto/Servicio → productos_servicios.id_entidad_relacionada_dueno
+ *         - Propiedad         → propiedades.id_entidad_relacionada_dueno
+ *   10. entidades_relacionadas.facturar_comision_sozu = true del dueño del paso 9
+ *       (flag activado ← clave). Mismo criterio que la vista Comisiones.
  *   11. monto_comision (precio × pct, con IVA si aplica) > 0
  */
 
@@ -201,18 +204,21 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
     ? ((await (supabase as any)
         .from("productos_servicios")
         .select(
-          "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
+          "id, nombre, id_categoria, id_entidad_relacionada_dueno, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
         )
         .in("id", productoIds)) as any)
     : { data: [] };
   const prodMap = new Map<number, any>((prodsRaw || []).map((p: any) => [p.id, p]));
 
   // 7) Entidad dueña + datos fiscales del receptor (persona dueña) + STP comisión.
+  //    Incluye dueños de PROPIEDAD y de PRODUCTO: en cuentas de Producto/Servicio
+  //    la comisión se factura al dueño del producto (mismo criterio que Comisiones).
   const entIds = Array.from(
     new Set(
-      (props || [])
-        .map((p: any) => p.id_entidad_relacionada_dueno)
-        .filter((x: any): x is number => !!x),
+      [
+        ...(props || []).map((p: any) => p.id_entidad_relacionada_dueno),
+        ...(prodsRaw || []).map((pr: any) => pr.id_entidad_relacionada_dueno),
+      ].filter((x: any): x is number => !!x),
     ),
   );
   const { data: ents } = entIds.length
@@ -282,12 +288,8 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
     const oferta = c.id_oferta ? ofMap.get(c.id_oferta) : null;
     const idPropEfectivo: number | null = c.id_propiedad ?? oferta?.id_propiedad ?? null;
     const propiedad = idPropEfectivo ? propMap.get(idPropEfectivo) : null;
+    // Propiedad debe estar Vendida.
     if (propiedad?.id_estatus_disponibilidad !== 5) continue;
-    // Entidad dueña configurada + flag de facturación activo (regla clave).
-    if (!propiedad?.id_entidad_relacionada_dueno) continue;
-    const entidad = entMap.get(propiedad.id_entidad_relacionada_dueno);
-    if (!entidad) continue;
-    if (!entidad.facturar_comision_sozu) continue;
 
     const em = propiedad?.id_edificio_modelo ? emMap.get(propiedad.id_edificio_modelo) : null;
     const edificio = em?.id_edificio ? edMap.get(em.id_edificio) : null;
@@ -300,6 +302,22 @@ async function fetchCobrosPorGestionar(): Promise<CobroPorGestionar[]> {
       const cat = (producto.categorias_producto?.nombre || "").toLowerCase();
       tipo = cat === "servicios" ? "Servicio" : "Producto";
     }
+
+    // Entidad dueña (flag facturar_comision_sozu / STP / receptor fiscal) según el tipo:
+    //  - Producto/Servicio → dueño del producto (productos_servicios.id_entidad_relacionada_dueno)
+    //  - Propiedad         → dueño de la propiedad
+    // Mismo criterio que Comisiones.tsx y useFacturasComisionSozuPorGenerar. Antes se
+    // leía siempre el dueño de la propiedad, ocultando de Cobros por gestionar las
+    // cuentas de producto ya timbradas cuyo dueño real sí requiere facturación.
+    const duenoEntidadId =
+      tipo === "Producto" || tipo === "Servicio"
+        ? (producto?.id_entidad_relacionada_dueno ?? propiedad?.id_entidad_relacionada_dueno ?? null)
+        : (propiedad?.id_entidad_relacionada_dueno ?? null);
+    // Entidad dueña configurada + flag de facturación activo (regla clave).
+    if (!duenoEntidadId) continue;
+    const entidad = entMap.get(duenoEntidadId);
+    if (!entidad) continue;
+    if (!entidad.facturar_comision_sozu) continue;
 
     const precio = Number(c.precio_final ?? 0);
     const pct = Number(c.porcentaje_comision_venta ?? 0);
