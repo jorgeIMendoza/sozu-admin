@@ -10,6 +10,7 @@ import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
+import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
 import { Badge } from "@/components/ui/badge";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import {
@@ -1615,21 +1616,15 @@ const AgentPerfil = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Visor de documento (in-app) */}
-      <Dialog open={!!viewer} onOpenChange={(o) => { if (!o) setViewer(null); }}>
-        <DialogContent className="max-w-4xl w-[92vw] h-[85vh] p-0 gap-0 bg-white flex flex-col overflow-hidden">
-          <div className="flex items-center gap-3 border-b border-[#ECEEF0] px-4 py-3 pr-12">
-            <DialogTitle className="truncate text-[14px] font-bold text-[#171A1D]">{viewer?.nombre}</DialogTitle>
-          </div>
-          {viewer && (
-            <iframe
-              src={viewer.url}
-              title={viewer.nombre}
-              className="w-full flex-1 border-0 bg-[#F6F7F8]"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Visor de documento (in-app). PdfViewerDialog resuelve rutas del bucket
+          privado `firmas-digitales` (carta firmada) a signed URL y documentos Mifiel
+          vía Edge Function; los demás docs traen URL pública completa. */}
+      <PdfViewerDialog
+        open={!!viewer}
+        onOpenChange={(o) => { if (!o) setViewer(null); }}
+        url={viewer?.url || ""}
+        title={viewer?.nombre}
+      />
 
       {/* Modal editar información de Identidad */}
       <Dialog open={identEditOpen} onOpenChange={(o) => { if (!o) setIdentEditOpen(false); }}>

@@ -2,8 +2,17 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { FileText, Download, Loader2, AlertCircle } from "lucide-react";
+import { Download, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import {
+  BTN_SECONDARY_CLS,
+  BTN_PRIMARY_CLS,
+  MODAL_HEADER_CLS,
+  MODAL_TITLE_CLS,
+  MODAL_SUBTITLE_CLS,
+  MODAL_FOOTER_CLS,
+} from "@/components/ui/form-standard";
 
 interface PdfViewerDialogProps {
   open: boolean;
@@ -81,7 +90,16 @@ export function PdfViewerDialog({
       .createSignedUrl(storageInfo.path, 3600)
       .then(({ data, error: err }) => {
         if (err || !data?.signedUrl) {
-          setSignedUrl(url);
+          // Si la url original es pública/absoluta, sirve como fallback. Si es una
+          // ruta relativa de un bucket privado (p. ej. la carta en firmas-digitales)
+          // y falla la firma —típico si el archivo no existe en este ambiente— NO
+          // cargar la ruta cruda: resolvería contra el SPA y mostraría un 404.
+          if (/^https?:\/\//i.test(url)) {
+            setSignedUrl(url);
+          } else {
+            setSignedUrl(null);
+            setError("No se pudo abrir el documento.");
+          }
         } else {
           setSignedUrl(data.signedUrl);
         }
@@ -93,11 +111,10 @@ export function PdfViewerDialog({
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i.test(url);
 
   const header = (
-    <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border shrink-0">
-      <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <h3 className="font-bold text-foreground text-sm leading-tight truncate">{title}</h3>
-        <p className="text-xs text-muted-foreground">Vista previa del documento</p>
+    <div className={cn(MODAL_HEADER_CLS, "shrink-0")}>
+      <div className="min-w-0 pr-6">
+        <h3 className={cn(MODAL_TITLE_CLS, "truncate")}>{title}</h3>
+        <p className={MODAL_SUBTITLE_CLS}>Vista previa del documento</p>
       </div>
     </div>
   );
@@ -129,25 +146,22 @@ export function PdfViewerDialog({
   );
 
   const footer = (
-    <div className="px-5 pb-6 pt-4 border-t border-border/50 space-y-2 shrink-0">
+    <div className={cn(MODAL_FOOTER_CLS, "shrink-0")}>
+      <button onClick={() => onOpenChange(false)} className={BTN_SECONDARY_CLS}>
+        Cerrar
+      </button>
       {effectiveUrl && !loading && (
         <a
           href={effectiveUrl}
           download
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full h-10 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl transition-colors"
+          className={cn(BTN_PRIMARY_CLS, "gap-1.5")}
         >
           <Download className="w-4 h-4" />
           Descargar
         </a>
       )}
-      <button
-        onClick={() => onOpenChange(false)}
-        className="w-full h-10 text-sm font-medium text-red-500 bg-red-500/10 hover:bg-red-500/15 rounded-xl transition-colors"
-      >
-        Cerrar
-      </button>
     </div>
   );
 
@@ -156,7 +170,7 @@ export function PdfViewerDialog({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="bottom"
-          className="h-[90vh] p-0 rounded-t-2xl flex flex-col [&>button:last-child]:hidden"
+          className="h-[90vh] p-0 rounded-t-2xl flex flex-col"
         >
           {header}
           {viewer}
@@ -168,7 +182,7 @@ export function PdfViewerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-full max-h-[90vh] h-[90vh] p-0 flex flex-col overflow-hidden [&>button:last-child]:hidden">
+      <DialogContent className="max-w-3xl w-full max-h-[90vh] h-[90vh] p-0 flex flex-col overflow-hidden">
         {header}
         {viewer}
         {footer}

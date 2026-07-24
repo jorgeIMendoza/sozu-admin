@@ -1343,12 +1343,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                 </div>
 
                 <div className="flex gap-2">
-                  {/* View PDF if available */}
-                  {(pdfUrl || doc?.url) && (
+                  {/* Ver PDF: firmado completo (bucket privado) o carta subida a mano.
+                      En 'enviado'/'firmado_parcial' no se ofrece el PDF. */}
+                  {((firmaCompletada && pdfUrl) || doc?.url) && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCartaPdfViewerUrl(pdfUrl || doc?.url || null)}
+                      onClick={() => setCartaPdfViewerUrl((firmaCompletada && pdfUrl) ? pdfUrl : (doc?.url || null))}
                       className="h-10 px-3 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]"
                     >
                       <FileText className="h-3.5 w-3.5" />

@@ -24,9 +24,10 @@ export const FIELD_SELECT_TRIGGER_CLS =
 export const SECTION_HEADER_CLS =
   "mb-3 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[#9AA3AD]";
 
-// Botón secundario (Cancelar / Atrás).
+// Botón secundario (Cancelar / Atrás / Cerrar). Hover → texto y borde rojos
+// (acción de descarte). Sin cambiar el fondo.
 export const BTN_SECONDARY_CLS =
-  "rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]";
+  "rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:border-red-300 hover:text-red-600";
 
 // Botón primario (Guardar / Siguiente / Finalizar): outline verde, hover se rellena.
 export const BTN_PRIMARY_CLS =
