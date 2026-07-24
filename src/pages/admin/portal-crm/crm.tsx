@@ -1767,9 +1767,40 @@ function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onComple
 // Colores de columna del tablero (etapas dinámicas): ganado=verde, perdido=rojo,
 // el resto cicla una paleta por índice.
 
+// Persistencia de filtros de la vista de Negocios, POR USUARIO.
+// Filtros (pipeline/propietario/vista) → localStorage (permanecen entre sesiones:
+// cada usuario conserva su pipeline). Buscador → sessionStorage (sobrevive el
+// back-nav pero arranca vacío en una sesión nueva). Mismo patrón que las columnas
+// de Contactos (loadContactColumns).
+const DEALS_FILTERS_KEY = "sozu:deals:filters:v1";
+const DEALS_SEARCH_KEY = "sozu:deals:search:v1";
+type DealsFiltersPersist = { view: "list" | "board"; pipelineFilter: string; boardPipeline: string; ownerFilter: string };
+
+function loadDealsFilters(uid: string): Partial<DealsFiltersPersist> {
+  if (typeof window === "undefined" || !uid) return {};
+  try {
+    const raw = window.localStorage.getItem(`${DEALS_FILTERS_KEY}:${uid}`);
+    return raw ? (JSON.parse(raw) as Partial<DealsFiltersPersist>) : {};
+  } catch { return {}; }
+}
+function saveDealsFilters(uid: string, v: DealsFiltersPersist) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.localStorage.setItem(`${DEALS_FILTERS_KEY}:${uid}`, JSON.stringify(v)); } catch { /* ignore */ }
+}
+function loadDealsSearch(uid: string): string {
+  if (typeof window === "undefined" || !uid) return "";
+  try { return window.sessionStorage.getItem(`${DEALS_SEARCH_KEY}:${uid}`) ?? ""; } catch { return ""; }
+}
+function saveDealsSearch(uid: string, s: string) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.sessionStorage.setItem(`${DEALS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
+}
+
 export function CrmDeals() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
   const [view, setView] = useState<"list" | "board">("board");
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -1783,6 +1814,28 @@ export function CrmDeals() {
   const [deleting, setDeleting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // Recordar filtros por usuario: hidratar una sola vez (cuando ya hay usuario)…
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (!uid || hydrated.current) return;
+    const f = loadDealsFilters(uid);
+    if (f.view) setView(f.view);
+    if (f.pipelineFilter) setPipelineFilter(f.pipelineFilter);
+    if (f.boardPipeline) setBoardPipeline(f.boardPipeline);
+    if (f.ownerFilter) setOwnerFilter(f.ownerFilter);
+    setSearch(loadDealsSearch(uid));
+    hydrated.current = true;
+  }, [uid]);
+  // …y persistir al cambiar (solo tras hidratar, para no pisar lo guardado con los defaults).
+  useEffect(() => {
+    if (!hydrated.current || !uid) return;
+    saveDealsFilters(uid, { view, pipelineFilter, boardPipeline, ownerFilter });
+  }, [uid, view, pipelineFilter, boardPipeline, ownerFilter]);
+  useEffect(() => {
+    if (!hydrated.current || !uid) return;
+    saveDealsSearch(uid, search);
+  }, [uid, search]);
 
   const { data: pipelines } = useQuery({
     queryKey: ["deals-pipelines"],
