@@ -69,6 +69,10 @@ export default {
           DEFAULT: "hsl(var(--info, 217 91% 60%))",
           bg: "hsl(var(--info-bg, 214 95% 93%))",
         },
+        "state-review": "hsl(var(--state-review))",
+        "state-valid": "hsl(var(--state-valid))",
+        "state-reject": "hsl(var(--state-reject))",
+        "state-pending": "hsl(var(--state-pending))",
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
