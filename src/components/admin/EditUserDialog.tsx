@@ -56,6 +56,7 @@ const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_INMOBILIARIA = 4;
 const ROLE_NOTARIO = 6;
+const ROLE_EMBAJADOR = 25;
 
 // Roles del Portal Bancos que requieren banco vinculado (detección por nombre
 // porque sus ids pueden diferir entre ambientes)
@@ -88,7 +89,9 @@ export function EditUserDialog({
   const isInmobiliariaRole = userRoleId === ROLE_INMOBILIARIA;
   const isNotarioRole = userRoleId === ROLE_NOTARIO;
   const needsInmobiliaria = isAgentRole || isInmobiliariaRole;
-  const showEmailConfirmation = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_INMOBILIARIA;
+  const showEmailConfirmation = userRoleId === ROLE_AGENTE_INMOBILIARIO
+    || userRoleId === ROLE_INMOBILIARIA
+    || userRoleId === ROLE_EMBAJADOR;
 
   // Notaría vinculada (usuarios.id_notario) — su email se sincroniza al cambiar el del usuario
   const { data: notarioVinculado } = useQuery({

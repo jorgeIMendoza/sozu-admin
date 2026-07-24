@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock, Check, ChevronsUpDown, Pencil, Building2 } from "lucide-react";
+import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock, Check, ChevronsUpDown, Pencil, Building2, Mail } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,13 +65,20 @@ const ROLE_AGENTE_INTERNO = 9;
 const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_INMOBILIARIA = 4;
 const ROLE_NOTARIO = 6;
+const ROLE_EMBAJADOR = 25;
 
 // Roles del Portal Bancos que requieren banco vinculado (detección por nombre
 // porque sus ids pueden diferir entre ambientes; se crean por seed/UI de roles)
 const BANCO_ROLE_NAMES = ["Supervisor Banco", "Operador Banco"];
 
-// Roles that Administrador de Proyecto can manage
-const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
+// Roles que el Administrador de Proyecto puede LISTAR. Debe coincidir con el
+// filtro de la edge function list-system-users, que es quien recorta los datos.
+const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA, ROLE_EMBAJADOR];
+
+// Roles que el Administrador de Proyecto puede ASIGNAR al crear o cambiar rol.
+// Los embajadores se listan pero no se dan de alta aquí: su alta necesita
+// entidad_relacionada + embajadores_config, que solo crea el módulo Embajadores.
+const ROLES_ADMINISTRADOR_PROYECTO_PUEDE_ASIGNAR = [ROLE_AGENTE_INMOBILIARIO, ROLE_INMOBILIARIA];
 
 // Sozu inmobiliaria ID (Real Estate Ventures)
 const SOZU_INMOBILIARIA_ID = 186;
@@ -87,6 +94,8 @@ interface UsersTableProps {
   onDeactivate: (email: string) => void;
   onChangeRole: (email: string, name: string, roleId: number | null) => void;
   onEditUser: (email: string, name: string, roleId: number | null, personaId: number | null) => void;
+  onResendConfirmation: (email: string) => void;
+  isResendingConfirmation: boolean;
   isInactiveTab?: boolean;
 }
 
@@ -100,7 +109,9 @@ function UsersTable({
   onDeactivate,
   onChangeRole,
   onEditUser,
-  isInactiveTab 
+  onResendConfirmation,
+  isResendingConfirmation,
+  isInactiveTab
 }: UsersTableProps) {
   // Check if current user is Administrador de Proyecto (hide Rol button for this role)
   const isAdminProyecto = currentUserRoleId === ROLE_ADMINISTRADOR_PROYECTO;
@@ -113,6 +124,7 @@ function UsersTable({
             <TableHead className="font-semibold text-foreground">Usuario</TableHead>
             <TableHead className="font-semibold text-foreground">Email</TableHead>
             <TableHead className="font-semibold text-foreground">Rol</TableHead>
+            <TableHead className="font-semibold text-foreground">Email Confirmado</TableHead>
             {!isInactiveTab && (
               <TableHead className="font-semibold text-foreground">Contraseña</TableHead>
             )}
@@ -195,12 +207,19 @@ function UsersTable({
                     >
                       {usuario.roles?.nombre || 'Sin rol'}
                     </Badge>
-                    {(usuario.rol_id === ROLE_AGENTE_INMOBILIARIO || usuario.rol_id === ROLE_INMOBILIARIA) && usuario.email_confirmado === false && (
-                      <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/20 text-[10px] px-1.5">
-                        ✉ Pendiente
-                      </Badge>
-                    )}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {usuario.email_confirmado === false ? (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      <Mail className="h-3 w-3 mr-1" />
+                      Pendiente
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+                      Confirmado
+                    </Badge>
+                  )}
                 </TableCell>
                 {!isInactiveTab && (
                   <TableCell>
@@ -255,9 +274,26 @@ function UsersTable({
                             )}
                           </>
                         )}
+                        {!isInactiveTab && usuario.email_confirmado === false && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onResendConfirmation(usuario.email)}
+                            disabled={isResendingConfirmation}
+                            title="Reenviar correo de confirmación"
+                            className="hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-600"
+                          >
+                            {isResendingConfirmation ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Mail className="h-3 w-3 mr-1" />
+                            )}
+                            Reenviar Confirmación
+                          </Button>
+                        )}
                         {isInactiveTab ? (
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
                             onClick={() => onActivate(usuario.email)}
                             className="hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
@@ -566,10 +602,18 @@ export default function Usuarios() {
     },
   });
 
-  // Filter roles based on current user's role
+  // Roles que el usuario puede ver en el listado y en el filtro por rol
   const availableRoles = useMemo(() => {
     if (isAdministradorProyecto) {
       return roles.filter(rol => ROLES_ADMINISTRADOR_PROYECTO_PUEDE_VER.includes(rol.id));
+    }
+    return roles;
+  }, [roles, isAdministradorProyecto]);
+
+  // Roles que el usuario puede asignar al crear un usuario o cambiar su rol
+  const assignableRoles = useMemo(() => {
+    if (isAdministradorProyecto) {
+      return roles.filter(rol => ROLES_ADMINISTRADOR_PROYECTO_PUEDE_ASIGNAR.includes(rol.id));
     }
     return roles;
   }, [roles, isAdministradorProyecto]);
@@ -584,7 +628,7 @@ export default function Usuarios() {
   );
 
   // Rol seleccionado en el formulario de nuevo usuario (por nombre)
-  const selectedRolNombre = availableRoles.find(r => r.id.toString() === newUserForm.rol_id)?.nombre ?? "";
+  const selectedRolNombre = assignableRoles.find(r => r.id.toString() === newUserForm.rol_id)?.nombre ?? "";
   const isBancoRoleSelected = BANCO_ROLE_NAMES.includes(selectedRolNombre);
   // Igual que bancos: cualquier rol cuyo nombre contenga "Notario" requiere notaría
   const isNotarioRoleSelected = selectedRolNombre.includes('Notario');
@@ -820,6 +864,35 @@ export default function Usuarios() {
   });
 
   // Reset password mutation
+  // Reenvío del correo de confirmación (mismo flujo que Usuarios Clientes)
+  const resendConfirmationMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const response = await supabase.functions.invoke('reenviar-confirmacion-email', {
+        body: { email },
+      });
+
+      if (response.error) throw new Error(response.error.message);
+      if (response.data && !response.data.success) {
+        throw new Error(response.data.message || 'Error al reenviar');
+      }
+
+      return response.data;
+    },
+    onSuccess: (_data, email) => {
+      toast({
+        title: "Correo Enviado",
+        description: `Se reenvió el correo de confirmación a ${email}`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Error al reenviar confirmación: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetPasswordMutation = useMutation({
     mutationFn: async (email: string) => {
       const response = await supabase.functions.invoke('reset-user-password', {
@@ -1197,7 +1270,7 @@ export default function Usuarios() {
   // Handle role change to auto-set inmobiliaria for Agente Interno
   const handleRoleChange = (roleId: string) => {
     const newRolId = parseInt(roleId);
-    const newRolNombre = availableRoles.find(r => r.id.toString() === roleId)?.nombre ?? "";
+    const newRolNombre = assignableRoles.find(r => r.id.toString() === roleId)?.nombre ?? "";
 
     if (newRolId === ROLE_AGENTE_INTERNO) {
       // Preselect Sozu and LOCK the field
@@ -1466,6 +1539,8 @@ export default function Usuarios() {
                         setSelectedUserPersonaId(personaId || null);
                         setIsEditUserDialogOpen(true);
                       }}
+                      onResendConfirmation={(email) => resendConfirmationMutation.mutate(email)}
+                      isResendingConfirmation={resendConfirmationMutation.isPending}
                     />
                     {totalPagesActive > 1 && (
                       <div className="flex items-center justify-between mt-4">
@@ -1545,6 +1620,8 @@ export default function Usuarios() {
                         setSelectedUserPersonaId(personaId || null);
                         setIsEditUserDialogOpen(true);
                       }}
+                      onResendConfirmation={(email) => resendConfirmationMutation.mutate(email)}
+                      isResendingConfirmation={resendConfirmationMutation.isPending}
                       isInactiveTab
                     />
                     {totalPagesInactive > 1 && (
@@ -1632,7 +1709,7 @@ export default function Usuarios() {
                     )}
                   >
                     {newUserForm.rol_id
-                      ? availableRoles.find((role) => role.id.toString() === newUserForm.rol_id)?.nombre
+                      ? assignableRoles.find((role) => role.id.toString() === newUserForm.rol_id)?.nombre
                       : "Seleccionar rol..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -1643,7 +1720,7 @@ export default function Usuarios() {
                     <CommandList>
                       <CommandEmpty>No se encontró el rol.</CommandEmpty>
                       <CommandGroup>
-                        {availableRoles.map((role) => (
+                        {assignableRoles.map((role) => (
                           <CommandItem
                             key={role.id}
                             value={role.nombre}
