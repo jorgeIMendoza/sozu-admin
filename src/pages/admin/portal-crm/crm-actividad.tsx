@@ -19,7 +19,7 @@ import { stripHtml, fmtCitaWhen } from "@/lib/crm-format";
 // ─── (símbolos extraídos abajo; se les añade `export` automáticamente) ──────────
 export type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean; attachments?: any[] };
 
-export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, includeSystem = true }: any) {
+export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, includeSystem = true, canEdit = true }: any) {
   const [filter, setFilter] = useState<"all" | "note" | "task" | "cita">("all");
   const [search, setSearch] = useState("");
   const TABS: { id: "all" | "note" | "task" | "cita"; label: string }[] = [
@@ -45,7 +45,7 @@ export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks
 
       {/* Compositor contextual: nota solo en "Notas", crear tarea/cita solo en su pestaña.
           "Todas las actividades" es solo el recap (sin compositor). */}
-      {filter === "note" && (
+      {filter === "note" && canEdit && (
         <InlineNoteForm contactId={contactId} userId={userId} onSaved={onSaved} />
       )}
       {/* Barra: buscador (izq) + acción contextual (der) */}
@@ -54,7 +54,7 @@ export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks
           <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
         </div>
-        {filter === "task" && (
+        {filter === "task" && canEdit && (
           <TaskDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
             trigger={
               <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30">
@@ -62,7 +62,7 @@ export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks
               </Button>
             } />
         )}
-        {filter === "cita" && (
+        {filter === "cita" && canEdit && (
           <CitaDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
             trigger={
               <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0 border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30">
@@ -73,6 +73,7 @@ export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks
       </div>
 
       <Timeline
+        canEdit={canEdit}
         notes={showNotes ? notes : []}
         tasks={showTasks ? tasks : []}
         citas={showCitas ? citas : []}
@@ -85,7 +86,7 @@ export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks
   );
 }
 
-export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, onEdited }: any) {
+export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, onEdited, canEdit = true }: any) {
   const synthetic: TLItem = {
     id: "contact-created",
     ts: contact.created_at,
@@ -147,7 +148,7 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
           if (it.type === "note") {
             return (
               <div key={it.id} className="pb-4 last:pb-0">
-                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado, attachments: it.attachments ?? [] }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
+                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado, attachments: it.attachments ?? [] }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} canEdit={canEdit} />
               </div>
             );
           }
@@ -176,7 +177,7 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
                     {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
                   </>
                 )}
-                {it.type === "task" && (
+                {it.type === "task" && canEdit && (
                   <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
                     {it.status !== "completada" && (
                       <button onClick={() => onCompleteTask?.(it.rawId)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1">
@@ -188,7 +189,7 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
                     </button>
                   </div>
                 )}
-                {it.type === "cita" && (
+                {it.type === "cita" && canEdit && (
                   <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
                     {(it.status === "programada" || it.status === "reprogramada") && (
                       <>
