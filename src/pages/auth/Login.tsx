@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users, Eye, EyeOff } from 'lucide-react';
+import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users, Eye, EyeOff, KeyRound, ArrowRight } from 'lucide-react';
 import { z } from 'zod';
 import { checkForUpdates, clearCacheAndReload } from '@/utils/versionUtils';
 import { APP_VERSION } from '@/lib/config';
@@ -432,6 +432,38 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
             ¿Olvidaste tu contraseña?
           </Link>
         </div>
+
+        {/* Registro de dueño → onboarding "Registrar mi propiedad" (solo Portal Clientes) */}
+        {portalContext === 'clientes' && (
+          <>
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">o</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <Link
+              to="/registrar-propiedad"
+              className="group flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 transition hover:bg-primary/10"
+            >
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <KeyRound className="h-[1.125rem] w-[1.125rem]" />
+              </span>
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-foreground">
+                  ¿Ya eres dueño de una propiedad en un desarrollo SOZU?
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Regístrala para activar tu portal de dueño y los beneficios de tu torre.
+                </p>
+                <div className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                  Registrar mi propiedad
+                  <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </div>
+              </div>
+            </Link>
+          </>
+        )}
 
         <div className="login-separator mt-5 text-center">
           <span className="login-version">{APP_VERSION}</span>
