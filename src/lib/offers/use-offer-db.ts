@@ -314,7 +314,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     (oferta as any).id_persona_lead
       ? supabase
           .from("personas")
-          .select("email, rfc")
+          .select("email, rfc, nombre_legal, telefono, clave_pais_telefono")
           .eq("id", (oferta as any).id_persona_lead)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -879,6 +879,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     paymentPlans,
     selectedPlanId: selectedId != null ? String(selectedId) : undefined,
     prospectEmail: (leadPersona as any)?.email ?? undefined,
+    prospectName: (leadPersona as any)?.nombre_legal ?? undefined,
+    prospectPhone: ((leadPersona as any)?.telefono ?? "").replace(/\D/g, "") || undefined,
+    prospectDialCode: (leadPersona as any)?.telefono
+      ? `+${toDialCode((leadPersona as any)?.clave_pais_telefono)}`
+      : undefined,
     generatedAt: oferta.fecha_generacion ?? new Date().toISOString(),
     generatedBy: oferta.email_creador ?? "SOZU",
     agentId,

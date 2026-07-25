@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Lock, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, ShieldCheck } from "lucide-react";
 import type { OfertaComercial } from "@/lib/offers/offer-data";
 
 const COUNTRY_CODES = [
@@ -17,8 +17,17 @@ interface Props {
   agentName?: string;
   context: "pre_reservation" | "formal_direct";
   defaultEmail?: string;
+  defaultFullName?: string;
+  defaultPhone?: string;
+  defaultDialCode?: string;
   onBack?: () => void;
   onComplete: (data: { fullName: string; email: string; phone: string }) => void;
+  /**
+   * Si se provee, activa el flujo de dos pasos: primero "Actualizar datos"
+   * (persiste nombre/teléfono en BD y confirma que son correctos), luego "Continuar".
+   * Debe devolver true si el guardado fue exitoso.
+   */
+  onSaveData?: (data: { fullName: string; phoneDigits: string; countryCode: string }) => Promise<boolean>;
 }
 
 const Field = ({
@@ -61,15 +70,23 @@ const Field = ({
   </div>
 );
 
-const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, onBack, onComplete }: Props) => {
+const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultFullName, defaultPhone, defaultDialCode, onBack, onComplete, onSaveData }: Props) => {
   const isFormal = context === "formal_direct";
   const emailLocked = isFormal || Boolean(defaultEmail);
+  const twoStep = typeof onSaveData === "function";
 
-  const [fullName, setFullName] = useState("");
+  const [fullName, setFullName] = useState(defaultFullName ?? "");
   const [email] = useState(defaultEmail ?? "");
-  const [countryCode, setCountryCode] = useState("+52");
-  const [phoneDigits, setPhoneDigits] = useState("");
+  const [countryCode, setCountryCode] = useState(defaultDialCode ?? "+52");
+  const [phoneDigits, setPhoneDigits] = useState((defaultPhone ?? "").replace(/\D/g, "").slice(0, 10));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Flujo dos pasos: confirmar/guardar datos antes de continuar.
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Cualquier edición invalida la confirmación previa (obliga a re-guardar).
+  const markDirty = () => { if (twoStep) { setConfirmed(false); setSaveError(null); } };
 
   const validatePhone = (digits: string) => {
     const clean = digits.replace(/\D/g, "");
@@ -97,6 +114,29 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, onBack, 
       email: email.trim().toLowerCase(),
       phone: countryCode + phoneDigits.replace(/\D/g, ""),
     });
+  };
+
+  // Paso 1 (two-step): confirma + persiste nombre/teléfono en BD.
+  const handleSave = async () => {
+    if (!isValid || !onSaveData || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const ok = await onSaveData({
+        fullName: fullName.trim(),
+        phoneDigits: phoneDigits.replace(/\D/g, ""),
+        countryCode,
+      });
+      // Aunque falle el guardado en BD, los datos ya viajan en memoria al flujo;
+      // se marca confirmado para no bloquear, pero se avisa del fallo.
+      if (!ok) setSaveError("Tus datos se aplicarán al continuar con tu solicitud.");
+      setConfirmed(true);
+    } catch {
+      setSaveError("Tus datos se aplicarán al continuar con tu solicitud.");
+      setConfirmed(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -135,7 +175,7 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, onBack, 
         <Field
           label="Nombre completo"
           value={fullName}
-          onChange={setFullName}
+          onChange={(v) => { setFullName(v); markDirty(); }}
           placeholder="Juan Pérez García"
           required
         />
@@ -169,7 +209,7 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, onBack, 
           <div className="flex gap-2">
             <select
               value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value)}
+              onChange={(e) => { setCountryCode(e.target.value); markDirty(); }}
               className="h-11 pl-2 pr-1 rounded-lg bg-card border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:border-primary focus:ring-primary/15 transition-colors shrink-0"
             >
               {COUNTRY_CODES.map((c) => (
@@ -185,6 +225,7 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, onBack, 
               onChange={(e) => {
                 const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
                 setPhoneDigits(digits);
+                markDirty();
               }}
               onBlur={() => validatePhone(phoneDigits)}
               placeholder="3312345678"
@@ -210,15 +251,52 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, onBack, 
 
       {/* CTA */}
       <div className="space-y-2">
-        <button
-          type="button"
-          disabled={!isValid}
-          onClick={handleSubmit}
-          className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-        >
-          {isFormal ? "Continuar con la reserva" : "Continuar"}
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        {twoStep && !confirmed ? (
+          <>
+            <button
+              type="button"
+              disabled={!isValid || saving}
+              onClick={handleSave}
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <><Loader2 className="w-4 h-4 motion-safe:animate-spin" />Guardando…</>
+              ) : (
+                "Actualizar datos"
+              )}
+            </button>
+            <p className="text-[10px] text-muted-foreground/50 text-center">
+              Confirma que tu nombre y teléfono son correctos antes de continuar.
+            </p>
+          </>
+        ) : twoStep ? (
+          <>
+            <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-success">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Datos confirmados
+            </div>
+            {saveError && (
+              <p className="text-[11px] text-muted-foreground text-center leading-relaxed">{saveError}</p>
+            )}
+            <button
+              type="button"
+              disabled={!isValid}
+              onClick={handleSubmit}
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center"
+            >
+              Continuar
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={!isValid}
+            onClick={handleSubmit}
+            className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center"
+          >
+            Continuar
+          </button>
+        )}
         <p className="text-[10px] text-muted-foreground/50 text-center">
           Al continuar aceptas el Aviso de Privacidad y los Términos de SOZU.
         </p>
