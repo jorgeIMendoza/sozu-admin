@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* Cifras/IDs con espaciado tabular (portado del onboarding "Registrar mi propiedad") */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
 All colors MUST be HSL.
 */
@@ -48,6 +56,12 @@ All colors MUST be HSL.
 
     --warning: 43 96% 56%;
     --warning-foreground: 30 25% 20%;
+
+    /* Onboarding "Registrar mi propiedad" — estados de documento/verificación */
+    --state-review: 217 91% 60%;
+    --state-valid: 158 64% 38%;
+    --state-reject: 0 84% 60%;
+    --state-pending: 43 96% 56%;
 
     --border: 214.3 31.8% 91.4%;
     --border-soft: 214.3 31.8% 93.5%;

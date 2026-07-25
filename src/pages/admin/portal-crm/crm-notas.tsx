@@ -323,7 +323,7 @@ export function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSave
   );
 }
 
-export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpanded = true }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void; defaultExpanded?: boolean }) {
+export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpanded = true, canEdit = true }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void; defaultExpanded?: boolean; canEdit?: boolean }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -395,6 +395,7 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
               {pinned && <span className="ml-2 text-[10px] font-medium text-primary align-middle">📌 Anclada</span>}
             </span>
             <div className="flex items-center gap-3 shrink-0">
+              {canEdit && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
@@ -409,6 +410,7 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
                   <DropdownMenuItem onClick={() => onDelete(note.id)} className="text-destructive focus:text-destructive">Eliminar</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              )}
               <span className="text-xs text-muted-foreground/70 tabular-nums">{fmtDateTime(note.created_at)}</span>
             </div>
           </div>
@@ -451,11 +453,15 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
                       <div className="text-foreground">{c.text}</div>
                     </div>
                   ))}
+                  {canEdit && (
+                  <>
                   <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Deja un comentario…" className="text-sm min-h-[60px]" />
                   <div className="flex items-center gap-2">
                     <Button size="sm" onClick={addComment} disabled={saving || !draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">{saving ? "Guardando…" : "Comentar"}</Button>
                     <Button size="sm" variant="ghost" onClick={() => { setDraft(""); setShowComments(false); }}>Cancelar</Button>
                   </div>
+                  </>
+                  )}
                 </div>
               )}
             </>

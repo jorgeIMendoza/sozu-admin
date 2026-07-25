@@ -258,7 +258,9 @@ export function useComisionesExternas() {
       const entidadDuenoMap = new Map<number, string>(
         ((entidadesDuenas || []) as Array<{ id: number; personas: { nombre_legal: string | null; nombre_comercial: string | null } | null }>).map((e) => [
           e.id,
-          e.personas?.nombre_comercial || e.personas?.nombre_legal || "",
+          // Entidad Dueña = empresa Vendedora → nombre legal (consistente con el
+          // detalle de la cuenta y con las demás secciones de la Bandeja).
+          e.personas?.nombre_legal || e.personas?.nombre_comercial || "",
         ]),
       );
 

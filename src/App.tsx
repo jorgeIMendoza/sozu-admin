@@ -164,6 +164,9 @@ const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/
 const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
 const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
 
+// Onboarding "Registrar mi propiedad" (público — Fase 1 mock)
+const RegistrarPropiedadPage = lazyRetry(() => import("./pages/public/RegistrarPropiedadPage"));
+
 // Portal Cobranza pages
 const CollectionDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionDashboard"));
 const CollectionInbox = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionInbox"));
@@ -650,6 +653,7 @@ const App = () => (
                   <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
                   <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />
                   <Route path="/reservar/:apartadoId/confirmacion" element={<ConfirmacionApartadoPage />} />
+                  <Route path="/registrar-propiedad" element={<RegistrarPropiedadPage />} />
                   <Route path="/" element={<Navigate to="/login" replace />} />
                   <Route path="/admin" element={
                     <ProtectedRoute>
@@ -694,6 +698,7 @@ const App = () => (
                 {/* Public Routes */}
                 <Route path="/registro" element={<Registro />} />
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
+                <Route path="/registrar-propiedad" element={<RegistrarPropiedadPage />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
                 <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
                 <Route path="/oferta/:offerId" element={<OfferPage />} />
