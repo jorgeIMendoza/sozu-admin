@@ -384,6 +384,7 @@ const CrmMarketingDevelopments  = lazyRetry(() => import("./pages/admin/portal-c
 const CrmMarketingFunnel        = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingFunnel })));
 const CrmMarketingCampaignMapping = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingCampaignMapping })));
 const CrmMarketingSyncJobs      = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingSyncJobs })));
+const MetaAdsModule             = lazyRetry(() => import("./pages/admin/portal-crm/meta-ads").then(m => ({ default: m.MetaAdsModule })));
 
 // Portal CRM Sozu — Inteligencia de ingresos
 const CrmExecutiveKpis     = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmExecutiveKpis })));
@@ -986,7 +987,7 @@ const App = () => (
                   <Route path="portal-crm/marketing/atribucion"      element={<CrmAttribution />} />
                   <Route path="portal-crm/marketing/campanas"        element={<CrmCampaigns />} />
                   <Route path="portal-crm/marketing/creativos"        element={<CrmCreatives />} />
-                  <Route path="portal-crm/marketing/meta"             element={<CrmMetaAds />} />
+                  <Route path="portal-crm/marketing/meta"             element={<MetaAdsModule />} />
                   <Route path="portal-crm/marketing/google"           element={<CrmGoogleAds />} />
                   <Route path="portal-crm/marketing/desarrollos"     element={<CrmMarketingDevelopments />} />
                   <Route path="portal-crm/marketing/embudo"           element={<CrmMarketingFunnel />} />

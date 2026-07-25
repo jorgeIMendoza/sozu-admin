@@ -1512,6 +1512,22 @@ export function CrmContactDetail() {
   );
 }
 
+// Fallback si la tabla crm_meta_conversion_stages aún no existe. El mapa real
+// (etapa CRM → event_name de Meta) se administra desde /marketing/meta → Eventos.
+const CAPI_STAGE_FALLBACK: Record<string, string> = { mql: "mql" };
+
+// Lee las etapas ACTIVAS de crm_meta_conversion_stages y arma el mapa etapa→event_name.
+const fetchCapiStageMap = async (): Promise<Record<string, string>> => {
+  const { data, error } = await (supabase as any)
+    .from("crm_meta_conversion_stages")
+    .select("etapa_ciclo_vida, meta_event_name, activo")
+    .eq("activo", true);
+  if (error || !data || !data.length) return CAPI_STAGE_FALLBACK;
+  const map: Record<string, string> = {};
+  for (const r of data) map[r.etapa_ciclo_vida] = r.meta_event_name;
+  return map;
+};
+
 function LeftPanel({ contact, developments, owners, onSaved }: any) {
   const [form, setForm] = useState({
     email: contact.email ?? "", phone: contact.phone ?? "",
@@ -1520,6 +1536,7 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
   });
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
+  const { data: capiStageMap = CAPI_STAGE_FALLBACK } = useQuery({ queryKey: ["crm-capi-stage-map"], queryFn: fetchCapiStageMap });
 
   // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
   const run = async (fn: () => Promise<{ error: any }>) => {
@@ -1555,12 +1572,25 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
     }).eq("id", Number(contact.id)));
 
   const persistAtribucion = (override: { lead_status?: string; lifecycle_stage?: string; contact_owner?: string }) =>
-    run(() => (supabase as any).from("crm_leads_atribucion").upsert({
-      id_entidad_relacionada: Number(contact.id),
-      estatus_lead: override.lead_status ?? form.lead_status,
-      etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
-      id_propietario: (override.contact_owner ?? form.contact_owner) || null,
-    }, { onConflict: "id_entidad_relacionada" }));
+    run(async () => {
+      const resp = await (supabase as any).from("crm_leads_atribucion").upsert({
+        id_entidad_relacionada: Number(contact.id),
+        estatus_lead: override.lead_status ?? form.lead_status,
+        etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
+        id_propietario: (override.contact_owner ?? form.contact_owner) || null,
+      }, { onConflict: "id_entidad_relacionada" });
+      // Señal a Meta (Conversions API for Leads) cuando la etapa entra a una mapeada (ej. MQL).
+      // Fire-and-forget: no bloquea el guardado; la Edge Function omite leads que no vinieron de Meta.
+      const stage = override.lifecycle_stage;
+      if (!resp.error && stage && capiStageMap[stage]) {
+        (supabase as any).functions
+          .invoke("meta-capi-lead-stage", {
+            body: { id_entidad_relacionada: Number(contact.id), event_name: capiStageMap[stage] },
+          })
+          .catch((e: any) => console.warn("meta-capi-lead-stage:", e?.message ?? e));
+      }
+      return resp;
+    });
 
   return (
     <div className="space-y-3 text-sm">
