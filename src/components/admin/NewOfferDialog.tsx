@@ -1467,7 +1467,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         )}
       </DialogTrigger>
       <DialogContent aria-describedby={undefined} className={cn("sm:max-w-[600px] max-h-[90vh] overflow-y-auto", forceLight && "light")}>
-        <DialogHeader>
+        <DialogHeader className="border-b border-border pb-4">
           <DialogTitle>Configurar Oferta</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Propiedad <span className="font-semibold">{propertyNumber}</span>
@@ -1798,7 +1798,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_enganche"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Enganche (%) *</FormLabel>
+                          <FormLabel>Porcentaje Enganche (%) <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1813,7 +1813,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         name="numero_pagos_enganche"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Número de Pagos de Enganche *</FormLabel>
+                            <FormLabel>Número de Pagos de Enganche <span className="text-destructive">*</span></FormLabel>
                             <FormControl>
                               <Input 
                                 type="number" 
@@ -1848,7 +1848,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Mensualidades (%) *</FormLabel>
+                          <FormLabel>Porcentaje Mensualidades (%) <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1904,7 +1904,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="numero_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Número de Mensualidades *</FormLabel>
+                          <FormLabel>Número de Mensualidades <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="12" {...field} />
                           </FormControl>
@@ -2315,14 +2315,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="tipo_persona"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tipo de Persona *</FormLabel>
+                      <FormLabel>Tipo de Persona <span className="text-destructive">*</span></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
                         disabled={selectedPerson !== null}
                       >
                         <FormControl>
-                          <SelectTrigger className="neu-input h-auto">
+                          <SelectTrigger>
                             <SelectValue placeholder="Seleccionar" />
                           </SelectTrigger>
                         </FormControl>
@@ -2342,13 +2342,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {selectedPersonType === "pm" ? "Razón Social *" : "Nombre Completo *"}
+                        {selectedPersonType === "pm" ? "Razón Social" : "Nombre Completo"} <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input 
                           placeholder={selectedPersonType === "pm" ? "Ingresa la razón social" : "Ingresa el nombre completo"} 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field} 
                         />
                       </FormControl>
@@ -2364,13 +2363,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email *</FormLabel>
+                      <FormLabel>Email <span className="text-destructive">*</span></FormLabel>
                       <FormControl>
                         <Input 
                           type="email" 
                           placeholder="Ingresa el email" 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field} 
                         />
                       </FormControl>
@@ -2384,14 +2382,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="clave_pais_telefono"
                   render={({ field }) => (
                     <FormItem className="w-24">
-                      <FormLabel>País *</FormLabel>
+                      <FormLabel>País <span className="text-destructive">*</span></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
                         disabled={selectedPerson !== null}
                       >
                         <FormControl>
-                          <SelectTrigger className="neu-input h-auto">
+                          <SelectTrigger>
                             <SelectValue placeholder="--" />
                           </SelectTrigger>
                         </FormControl>
@@ -2411,12 +2409,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="telefono"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Teléfono *</FormLabel>
+                      <FormLabel>Teléfono <span className="text-destructive">*</span></FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="10 dígitos" 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field}
                           onChange={(e) => {
                             const value = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -2443,7 +2440,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                placeholder="Ingresa el RFC (Ej: ABC123456DEF)" 
                                maxLength={13}
                                disabled={selectedPerson !== null}
-                               className="neu-input h-auto"
                                {...field} 
                              />
                            </FormControl>
@@ -2464,7 +2460,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                   placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" 
                                   maxLength={18}
                                   disabled={selectedPerson !== null}
-                                  className="neu-input h-auto"
                                   {...field} 
                                 />
                               </FormControl>

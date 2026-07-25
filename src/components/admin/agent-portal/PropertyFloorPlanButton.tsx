@@ -133,7 +133,7 @@ const FloorPlanCanvas = ({
 
   return (
     <div ref={containerRef} className="w-full">
-      <canvas ref={canvasRef} className="mx-auto block max-h-[60vh] max-w-full rounded-lg" />
+      <canvas ref={canvasRef} className="mx-auto block max-h-full max-w-full rounded-lg" />
     </div>
   );
 };
@@ -509,8 +509,8 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="space-y-0 border-b border-border px-6 py-5 text-left">
+        <DialogContent aria-describedby={undefined} className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 space-y-0 border-b border-border px-6 py-5 text-left">
             <DialogTitle className="text-lg font-bold text-foreground">
               Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
             </DialogTitle>
@@ -520,7 +520,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
           </DialogHeader>
 
           <Tabs defaultValue="ubicacion" className="flex min-h-0 flex-1 flex-col">
-            <TabsList className="mx-6 mt-4 w-auto">
+            <TabsList className="mx-6 mt-4 w-auto shrink-0">
               <TabsTrigger value="ubicacion" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <MapPin className="mr-1.5 h-3.5 w-3.5" />
                 Ubicación
@@ -531,7 +531,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="ubicacion" className="min-h-[62vh] flex-1 overflow-auto p-6">
+            <TabsContent value="ubicacion" className="min-h-0 flex-1 overflow-auto p-6">
               {planData.planoUbicacionUrl ? (
                 <div className="flex flex-col items-center">
                   <FloorPlanCanvas
@@ -552,12 +552,12 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
               )}
             </TabsContent>
 
-            <TabsContent value="arquitectonico" className="flex min-h-[62vh] flex-1 items-center justify-center overflow-auto p-6">
+            <TabsContent value="arquitectonico" className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">
               {planData.planoArqUrl ? (
                 <img
                   src={planData.planoArqUrl}
                   alt="Plano arquitectónico"
-                  className="mx-auto max-h-[60vh] w-auto max-w-full rounded-lg object-contain"
+                  className="mx-auto max-h-full w-auto max-w-full rounded-lg object-contain"
                   crossOrigin="anonymous"
                 />
               ) : (
@@ -569,7 +569,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
             </TabsContent>
           </Tabs>
 
-          <div className={MODAL_FOOTER_CLS}>
+          <div className={`${MODAL_FOOTER_CLS} shrink-0`}>
             <Button variant="cancel" onClick={() => setOpen(false)}>Cerrar</Button>
             <Button variant="primary-outline" onClick={handleDownloadPdf} disabled={generatingPdf}>
               {generatingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
