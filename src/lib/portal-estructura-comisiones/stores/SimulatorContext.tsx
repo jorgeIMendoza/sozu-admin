@@ -7,7 +7,7 @@ import {
 } from '../utils/seed-data';
 import {
   fetchCanalesReales, seedCanalesReales, insertCanalRemoto, updateCanalRemoto, deleteCanalRemoto,
-  fetchReglasComisionReales, insertReglaComisionRemota, insertReglasComisionRemotas,
+  fetchReglasComisionReales, insertReglasComisionRemotas,
   updateReglaComisionRemota, deleteReglaComisionRemota,
   fetchMotorConfigReal, updateMotorConfigRemoto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
@@ -40,14 +40,26 @@ interface SimulatorContextType extends AppState {
   /** Proyecto (desarrollo real) para el que el Motor de Comisiones está configurando la matriz y el Modo/Total. `null` = ninguno seleccionado todavía. */
   motorProjectId: number | null;
   setMotorProjectId: (id: number | null) => void;
-  /** Matriz de comisión canal × puesto del proyecto seleccionado (`motorProjectId`). */
-  addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project') => Promise<void>;
+  /** true mientras se está cargando la matriz/config del proyecto seleccionado desde el servidor. */
+  motorLoading: boolean;
+  /** true si hay cambios locales (reglas o Comisión Total) sin guardar todavía en el servidor. */
+  motorDirty: boolean;
+  /** true mientras `saveMotorComisiones` está en vuelo. */
+  motorSaving: boolean;
+  /**
+   * Matriz de comisión canal × puesto del proyecto seleccionado (`motorProjectId`).
+   * Estas 3 acciones son 100% locales — no tocan el servidor. Los cambios se
+   * acumulan en memoria hasta llamar `saveMotorComisiones`.
+   */
+  addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project') => void;
   updateCommissionRule: (rule: CommissionRule) => void;
   deleteCommissionRule: (id: string) => void;
-  /** Crea las combinaciones canal×puesto que falten para los roles que participan en comisión, en el proyecto seleccionado. */
-  syncMissingCommissionRules: () => Promise<number>;
-  /** Config real del Motor de Comisiones (Modo A/B + Comisión Total) del proyecto seleccionado. */
+  /** Agrega localmente las combinaciones canal×puesto que falten para los roles que participan en comisión. No persiste — requiere `saveMotorComisiones`. */
+  syncMissingCommissionRules: () => number;
+  /** Config real del Motor de Comisiones (Modo A/B + Comisión Total) del proyecto seleccionado. Local únicamente. */
   updateMotorConfig: (config: MotorConfig) => void;
+  /** Persiste en el servidor todos los cambios locales acumulados (reglas agregadas/editadas/eliminadas + Comisión Total) para el proyecto seleccionado. */
+  saveMotorComisiones: () => Promise<boolean>;
 }
 
 const SimulatorContext = createContext<SimulatorContextType | null>(null);
@@ -100,6 +112,11 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(MOTOR_PROJECT_KEY);
     return stored ? Number(stored) : null;
   });
+  const [motorLoading, setMotorLoading] = useState(false);
+  const [motorDirty, setMotorDirty] = useState(false);
+  const [motorSaving, setMotorSaving] = useState(false);
+  /** Ids reales (no `local-`) de reglas eliminadas localmente, pendientes de borrar en el servidor al guardar. */
+  const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
 
   const setMotorProjectId = useCallback((id: number | null) => {
@@ -128,11 +145,22 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   // La matriz de Comisiones (canal × puesto) y la config del motor (Modo/Total)
   // son por proyecto — se recargan cada vez que cambia `motorProjectId`. Sin
   // proyecto seleccionado, quedan vacías/en default (nada que editar todavía).
+  //
+  // `motorLoading` marca la ventana en la que este fetch está en vuelo.
+  // Es importante para que otros efectos (ej. el auto-sync de roles nuevos en
+  // `CommissionsTab.tsx`) no operen sobre `commissionRules` todavía obsoleto
+  // (del proyecto anterior) mientras este fetch no haya resuelto — hacerlo
+  // causaba que se intentaran crear reglas que ya existían en el proyecto
+  // nuevo, y Postgres rechazaba el insert con `23505 duplicate key`.
   useEffect(() => {
+    setMotorDirty(false);
+    setPendingDeletes([]);
     if (motorProjectId == null) {
       setState(prev => ({ ...prev, commissionRules: [], motorConfig: DEFAULT_MOTOR_CONFIG }));
+      setMotorLoading(false);
       return;
     }
+    setMotorLoading(true);
     (async () => {
       const [remoteRules, remoteMotorConfig] = await Promise.all([
         fetchReglasComisionReales(motorProjectId), fetchMotorConfigReal(motorProjectId),
@@ -142,6 +170,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
         commissionRules: remoteRules ?? [],
         motorConfig: remoteMotorConfig ?? DEFAULT_MOTOR_CONFIG,
       }));
+      setMotorLoading(false);
     })();
   }, [motorProjectId]);
 
@@ -241,30 +270,40 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       update(s => ({ ...s, scenarios: [...s.scenarios, dup] }));
     },
     updateCommercialPolicies: (cp) => update(s => ({ ...s, commercialPolicies: cp })),
-    addCommissionRule: async (channelId, roleId, pool) => {
+    motorLoading,
+    motorDirty,
+    motorSaving,
+    // Las siguientes 4 acciones (addCommissionRule, updateCommissionRule,
+    // deleteCommissionRule, updateMotorConfig) son 100% locales — ya no
+    // llaman al servidor en cada cambio (antes cada tecleo de un % disparaba
+    // un request). Solo marcan `motorDirty` y acumulan el cambio en memoria;
+    // `saveMotorComisiones` es quien persiste todo junto cuando el usuario
+    // presiona "Guardar cambios".
+    addCommissionRule: (channelId, roleId, pool) => {
       if (motorProjectId == null) return;
-      const draft: CommissionRule = { id: '', scenarioId: '', channelId, roleId, percentage: 0, pool };
-      const { rule: created, tableMissing } = await insertReglaComisionRemota(draft, motorProjectId);
-      if (!created) {
-        if (!tableMissing) toast.error('No se pudo guardar la regla de comisión en el servidor.');
-        update(s => ({ ...s, commissionRules: [...s.commissionRules, { ...draft, id: `local-${crypto.randomUUID()}` }] }));
-        return;
-      }
-      update(s => ({ ...s, commissionRules: [...s.commissionRules, created] }));
+      const draft: CommissionRule = { id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId, roleId, percentage: 0, pool };
+      update(s => ({ ...s, commissionRules: [...s.commissionRules, draft] }));
+      setMotorDirty(true);
     },
     updateCommissionRule: (rule) => {
       update(s => ({ ...s, commissionRules: s.commissionRules.map(r => r.id === rule.id ? rule : r) }));
-      updateReglaComisionRemota(rule).then(({ ok, tableMissing }) => {
-        if (!ok && !tableMissing) toast.error('No se pudo guardar la regla de comisión en el servidor.');
-      });
+      setMotorDirty(true);
     },
     deleteCommissionRule: (id) => {
       update(s => ({ ...s, commissionRules: s.commissionRules.filter(r => r.id !== id) }));
-      deleteReglaComisionRemota(id).then(({ ok, tableMissing }) => {
-        if (!ok && !tableMissing) toast.error('No se pudo eliminar la regla de comisión en el servidor.');
-      });
+      if (!id.startsWith('local-')) setPendingDeletes(prev => [...prev, id]);
+      setMotorDirty(true);
     },
-    syncMissingCommissionRules: async () => {
+    // Agrega localmente (sin tocar el servidor) las combinaciones canal×puesto
+    // que falten para los roles que participan en comisión. Antes esto
+    // insertaba directo en la BD y se disparaba automáticamente al cambiar de
+    // proyecto (ver efecto de `motorProjectId` arriba) — si ese insert
+    // corría con `commissionRules` todavía del proyecto anterior (fetch en
+    // vuelo), calculaba "faltantes" que en realidad ya existían para el
+    // proyecto nuevo, y el INSERT completo fallaba con `23505 duplicate key`.
+    // Al ser ahora 100% local, ese fetch en vuelo ya no puede reventar nada;
+    // el usuario guarda con el botón cuando quiere persistir.
+    syncMissingCommissionRules: () => {
       if (motorProjectId == null) return 0;
       const commRoles = state.roles.filter(r => r.participatesInCommission);
       const missing: CommissionRule[] = [];
@@ -273,27 +312,75 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
           const exists = state.commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id);
           if (!exists) {
             missing.push({
-              id: '', scenarioId: '', channelId: ch.id, roleId: role.id, percentage: 0,
+              id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId: ch.id, roleId: role.id, percentage: 0,
               pool: role.belongsTo === 'sozu_central' ? 'sozu' : 'project',
             });
           }
         });
       });
       if (missing.length === 0) return 0;
-      const { rules: created, tableMissing } = await insertReglasComisionRemotas(missing, motorProjectId);
-      if (created.length === 0 && !tableMissing) {
-        toast.error('No se pudieron sincronizar las reglas de comisión en el servidor.');
-      }
-      const toAdd = created.length > 0 ? created : missing.map(r => ({ ...r, id: `local-${crypto.randomUUID()}` }));
-      update(s => ({ ...s, commissionRules: [...s.commissionRules, ...toAdd] }));
-      return toAdd.length;
+      update(s => ({ ...s, commissionRules: [...s.commissionRules, ...missing] }));
+      setMotorDirty(true);
+      return missing.length;
     },
     updateMotorConfig: (config) => {
       if (motorProjectId == null) return;
       update(s => ({ ...s, motorConfig: config }));
-      updateMotorConfigRemoto(config, motorProjectId).then(({ ok, tableMissing }) => {
-        if (!ok && !tableMissing) toast.error('No se pudo guardar la configuración del motor en el servidor.');
-      });
+      setMotorDirty(true);
+    },
+    saveMotorComisiones: async () => {
+      if (motorProjectId == null) return false;
+      setMotorSaving(true);
+      try {
+        const toInsert = state.commissionRules.filter(r => r.id.startsWith('local-'));
+        const toUpdate = state.commissionRules.filter(r => !r.id.startsWith('local-'));
+        let hadError = false;
+        let hadDuplicate = false;
+
+        const [deleteResults, updateResults, insertResult, motorConfigResult] = await Promise.all([
+          Promise.all(pendingDeletes.map(id => deleteReglaComisionRemota(id))),
+          Promise.all(toUpdate.map(r => updateReglaComisionRemota(r))),
+          insertReglasComisionRemotas(toInsert, motorProjectId),
+          updateMotorConfigRemoto(state.motorConfig, motorProjectId),
+        ]);
+
+        deleteResults.forEach(({ ok, tableMissing }) => { if (!ok && !tableMissing) hadError = true; });
+        updateResults.forEach(({ ok, tableMissing, duplicate }) => {
+          if (!ok && !tableMissing) { hadError = true; if (duplicate) hadDuplicate = true; }
+        });
+        if (toInsert.length > 0 && insertResult.rules.length !== toInsert.length && !insertResult.tableMissing) {
+          hadError = true;
+        }
+        if (!motorConfigResult.ok && !motorConfigResult.tableMissing) hadError = true;
+
+        if (hadError) {
+          toast.error(
+            hadDuplicate
+              ? 'No se pudo guardar: dos reglas quedaron con el mismo rol para el mismo canal. Ajusta el rol duplicado e inténtalo de nuevo.'
+              : 'No se pudieron guardar todos los cambios del Motor de Comisiones. Intenta de nuevo.'
+          );
+          return false;
+        }
+
+        // Reemplaza los ids `local-` recién insertados por los ids reales que asignó la BD.
+        if (insertResult.rules.length > 0) {
+          update(s => ({
+            ...s,
+            commissionRules: s.commissionRules.map(r => {
+              if (!r.id.startsWith('local-')) return r;
+              const created = insertResult.rules.find(c => c.channelId === r.channelId && c.roleId === r.roleId);
+              return created ?? r;
+            }),
+          }));
+        }
+
+        setPendingDeletes([]);
+        setMotorDirty(false);
+        toast.success('Cambios del Motor de Comisiones guardados.');
+        return true;
+      } finally {
+        setMotorSaving(false);
+      }
     },
     resetToDefaults: () => setState({
       projects: defaultProjects, roles: defaultRoles, channels: defaultChannels,
