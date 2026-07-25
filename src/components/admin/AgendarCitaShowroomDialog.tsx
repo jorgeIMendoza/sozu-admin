@@ -442,6 +442,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
           resetear su estado) para no apilar dos overlays; reaparece al cerrar aquélla. */}
       <Dialog open={open && !addProspectoOpen} onOpenChange={(v) => { if (!v && !addProspectoOpen) handleClose(); }}>
         <DialogContent
+          aria-describedby={undefined}
           className="max-w-[480px] gap-0 overflow-hidden rounded-md p-0"
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >

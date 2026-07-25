@@ -1029,6 +1029,7 @@ const AgentPerfil = () => {
       {/* Photo modal - phase 1: options / phase 2: preview & confirm */}
       <Dialog open={showPhotoModal} onOpenChange={(open) => { if (!open) closePhotoModal(); }}>
         <DialogContent
+          aria-describedby={undefined}
           style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}
           className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[360px] p-0 overflow-hidden rounded-md border-0 shadow-2xl [&>button]:text-white/80 [&>button:hover]:text-white"
         >
@@ -1622,7 +1623,7 @@ const AgentPerfil = () => {
 
       {/* Modal confirmar datos de la Constancia (CSF) */}
       <Dialog open={!!csfConfirm} onOpenChange={(o) => { if (!o && !savingCsf) setCsfConfirm(null); }}>
-        <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+        <DialogContent aria-describedby={undefined} className="max-w-md gap-0 overflow-hidden p-0">
           <DialogHeader className="space-y-1 border-b border-[#F0F2F4] px-5 py-4 text-left">
             <DialogTitle className={MODAL_TITLE_CLS}>Confirma tus datos fiscales</DialogTitle>
             <p className="text-[12px] font-medium leading-relaxed text-[#9AA3AD]">
@@ -1654,7 +1655,7 @@ const AgentPerfil = () => {
 
       {/* Modal cambiar contraseña */}
       <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwShow({ current: false, nueva: false, confirm: false }); } }}>
-        <DialogContent className="max-w-[400px] bg-white p-[26px]">
+        <DialogContent aria-describedby={undefined} className="max-w-[400px] bg-white p-[26px]">
           <DialogTitle className={MODAL_TITLE_CLS}>Cambiar contraseña</DialogTitle>
           <p className="-mt-1 text-[12px] font-medium leading-relaxed text-[#6B7280]">
             Tu nueva contraseña debe tener al menos 6 caracteres.
@@ -1816,7 +1817,7 @@ const AgentPerfil = () => {
 
       {/* Modal detalle de documento */}
       <Dialog open={!!docDetail} onOpenChange={(o) => { if (!o) setDocDetail(null); }}>
-        <DialogContent className="max-w-[520px] bg-white p-0 gap-0 overflow-hidden" style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}>
+        <DialogContent aria-describedby={undefined} className="max-w-[520px] bg-white p-0 gap-0 overflow-hidden" style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}>
           {docDetail && (() => {
             const rows = expedienteDocs.filter((d: any) => docDetail.tipos.includes(d.id_tipo_documento));
             const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);

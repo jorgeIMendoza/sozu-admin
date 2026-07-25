@@ -429,32 +429,34 @@ const AgentInicio = () => {
                 <Card
                   key={cita.id}
                   onClick={() => setSelectedCita(cita)}
-                  className="flex cursor-pointer items-start gap-4 p-4 transition-colors hover:bg-accent"
+                  className="flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-accent sm:gap-4"
                 >
                   <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", citaIconClasses(cita))}>
                     <Calendar className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <div className="min-w-0 flex-1 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-foreground">
+                      <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                         {cita.configuracion_citas_usuarios?.nombre || [cita.tipos_cita?.nombre, cita.proyectos?.nombre].filter(Boolean).join(' ') || 'Cita'}
                       </p>
-                      <Badge variant="secondary" className="shrink-0 bg-primary/10 text-primary hover:bg-primary/10">
+                      <span className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/10">
                         {cita.tipos_cita?.nombre || 'Cita'}
                       </Badge>
+                      {cita.personas?.nombre_legal && (
+                        <span className="truncate text-sm text-muted-foreground">{cita.personas.nombre_legal}</span>
+                      )}
                     </div>
-                    {cita.personas?.nombre_legal && (
-                      <p className="truncate text-sm text-muted-foreground">{cita.personas.nombre_legal}</p>
-                    )}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <Clock className="h-3.5 w-3.5 shrink-0" />
                       {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}{time ? ` · ${time}` : ''}
                       {cita.ubicacion && <span className="truncate">· {cita.ubicacion}</span>}
                     </div>
                   </div>
-                  <span className={`shrink-0 self-start whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${badge.className}`}>
-                    {badge.label}
-                  </span>
                 </Card>
               );
             })}

@@ -49,9 +49,13 @@ export function ModalFormHeader({
     <DialogHeader className={MODAL_HEADER_CLS}>
       <div className="min-w-0 pr-6">
         <DialogTitle className={MODAL_TITLE_CLS}>{title}</DialogTitle>
+        {/* Siempre se rinde una Description (a11y + evita el warning de Radix).
+            Si no hay subtítulo, va oculta con el título como texto accesible. */}
         {subtitle ? (
           <DialogDescription className={MODAL_SUBTITLE_CLS}>{subtitle}</DialogDescription>
-        ) : null}
+        ) : (
+          <DialogDescription className="sr-only">{typeof title === "string" ? title : "Detalle"}</DialogDescription>
+        )}
       </div>
     </DialogHeader>
   );

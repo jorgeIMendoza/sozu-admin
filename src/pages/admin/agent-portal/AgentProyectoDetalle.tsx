@@ -1063,6 +1063,7 @@ const AgentProyectoDetalle = () => {
       {/* Visor in-app de material comercial (PDF) sin salir de la plataforma. */}
       <Dialog open={!!previewFile} onOpenChange={(o) => !o && setPreviewFile(null)}>
         <DialogContent
+          aria-describedby={undefined}
           className="max-w-4xl gap-0 overflow-hidden rounded-md p-0"
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >

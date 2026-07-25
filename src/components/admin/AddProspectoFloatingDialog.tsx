@@ -470,6 +470,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
+        aria-describedby={undefined}
         className="max-w-[540px] gap-0 overflow-hidden rounded-md p-0"
         style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
       >

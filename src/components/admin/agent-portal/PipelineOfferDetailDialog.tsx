@@ -240,6 +240,7 @@ export function PipelineOfferDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        aria-describedby={undefined}
         className="light max-w-[480px] mx-auto p-0 gap-0 rounded-md overflow-hidden max-h-[90vh]"
         style={{ fontFamily: MODAL_FONT }}
       >

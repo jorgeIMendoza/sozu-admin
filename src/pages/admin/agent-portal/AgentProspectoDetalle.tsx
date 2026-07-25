@@ -460,6 +460,7 @@ const AgentProspectoDetalle = () => {
       {/* Nota interna: ver detalle / editar / eliminar */}
       <Dialog open={!!notaModal} onOpenChange={(o) => !o && setNotaModal(null)}>
         <DialogContent
+          aria-describedby={undefined}
           className="max-w-[560px] gap-0 overflow-hidden rounded-md p-0"
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >
