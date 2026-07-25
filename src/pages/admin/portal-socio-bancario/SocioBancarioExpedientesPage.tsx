@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet, FileSpreadsheet } from 'lucide-react';
+import { Eye, FileCheck2, Loader2, Search, Warehouse, ExternalLink, Car, Sofa, StickyNote, Plus, MessageSquare, AlertTriangle, Handshake, Bell, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows, fetchInBatches, fetchInBatchesPaged } from '@/utils/supabasePagination';
 import { useToast } from '@/hooks/use-toast';
 import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBitacoraCuentaCobranza';
-import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { CompradorDetalleSheet } from '@/components/admin/portal-socio-bancario/CompradorDetalleSheet';
 import { ExpedienteDocumentos } from '@/components/admin/portal-socio-bancario/ExpedienteDocumentos';
 import { DesarrolloNoAsignado } from '@/components/admin/portal-socio-bancario/EmptyStates';
@@ -1101,16 +1100,8 @@ function BodegasModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; 
 
 export default function SocioBancarioExpedientes() {
   const [search, setSearch] = useState('');
-  const [bodegaFilter, setBodegaFilter] = useState(ALL_VALUE);
-  const [paqueteFilter, setPaqueteFilter] = useState(ALL_VALUE);
-  const [condensadoraFilter, setCondensadoraFilter] = useState(ALL_VALUE);
   const [modelFilter, setModelFilter] = useState(ALL_VALUE);
-  const [floorFilter, setFloorFilter] = useState(ALL_VALUE);
-  const [ownerFilter, setOwnerFilter] = useState(ALL_VALUE);
-  const [compradorFilter, setCompradorFilter] = useState(ALL_VALUE);
-  const [docsFilter, setDocsFilter] = useState(ALL_VALUE);
   const [selected, setSelected] = useState<ExpedienteRow | null>(null);
-  const { exportToExcel, isExporting } = useExportToExcel();
 
   // Scope obligatorio: solo el desarrollo del socio. Nunca "todos", nunca default.
   const { idProyecto, noAsignado } = useSocioProyecto();
@@ -1125,75 +1116,22 @@ export default function SocioBancarioExpedientes() {
   });
 
   const options = useMemo(() => {
-    const projects = uniqueOptions(rows.map((row) => ({ id: String(row.proyectoId ?? ''), label: row.proyecto })).filter((o) => o.id));
     const models = uniqueOptions(rows.map((row) => ({ id: String(row.modeloId ?? ''), label: row.modelo })).filter((o) => o.id));
-    const floors = uniqueOptions(rows.map((row) => ({ id: row.piso || '', label: row.piso || 'Sin piso' })).filter((o) => o.id));
-    const owners = uniqueOptions(rows.map((row) => ({ id: row.propietario, label: row.propietario })).filter((o) => o.id));
-    return { projects, models, floors, owners };
+    return { models };
   }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (modelFilter !== ALL_VALUE && String(row.modeloId) !== modelFilter) return false;
-      if (floorFilter !== ALL_VALUE && row.piso !== floorFilter) return false;
-      if (ownerFilter !== ALL_VALUE && row.propietario !== ownerFilter) return false;
-      if (bodegaFilter === 'with' && row.bodegas.length === 0) return false;
-      if (bodegaFilter === 'without' && row.bodegas.length > 0) return false;
-      if (paqueteFilter === 'with' && row.paquetes.length === 0) return false;
-      if (paqueteFilter === 'without' && row.paquetes.length > 0) return false;
-      if (condensadoraFilter === 'with' && !row.tieneCondensadora) return false;
-      if (condensadoraFilter === 'without' && row.tieneCondensadora) return false;
-      if (compradorFilter === 'completo' && (row.compradores.length === 0 || row.compradorFaltante.incompleto)) return false;
-      if (compradorFilter === 'incompleto' && !row.compradorFaltante.incompleto) return false;
-      if (docsFilter !== ALL_VALUE && row.docsObligatorios.completos !== Number(docsFilter)) return false;
       if (!q) return true;
+      // Búsqueda solo por Comprador y por Unidad.
       return [
-        row.cuentaLabel,
-        String(row.cuentaId),
         row.unidad,
-        row.proyecto,
-        row.modelo,
-        row.propietario,
-        ...row.productos,
         ...row.compradores.map((buyer) => buyer.nombre_legal || ''),
       ].join(' ').toLowerCase().includes(q);
     });
-  }, [rows, search, modelFilter, floorFilter, ownerFilter, bodegaFilter, paqueteFilter, condensadoraFilter, compradorFilter, docsFilter]);
-
-  // Exporta a Excel (CSV) los expedientes según los filtros activos.
-  const handleExport = () => {
-    const exportData = filtered.map((row) => {
-      const totalBodegas = row.bodegas.filter((b) => b.tieneCuenta).reduce((s, b) => s + b.precioFinal, 0);
-      const totalEstac = row.estacionamientos
-        .filter((e) => !e.esIncluido && e.tieneCuenta)
-        .reduce((s, e) => s + e.precioFinal, 0);
-      const valorEscrituracion = row.precioFinal + totalBodegas + totalEstac;
-      return {
-        'ID Cuenta': row.cuentaLabel,
-        'Compradores': row.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', '),
-        'Propietario': row.propietario,
-        'Tipo': row.tipo,
-        'Estatus': row.estatus,
-        'Unidad': row.unidad,
-        'Proyecto': row.proyecto,
-        'Edificio': row.edificio,
-        'Modelo': row.modelo,
-        'Fecha venta': fmtDate(row.fechaVenta),
-        'Estacionamientos': row.estacionamientos.map((e) => e.nombre).join(', '),
-        'Bodegas': row.bodegas.map((b) => b.nombre).join(', '),
-        'Muebles': row.paquetes.length ? 'Sí' : 'No',
-        'Condensadora': row.tieneCondensadora ? 'Sí' : 'No',
-        'Docs obligatorios': `${row.docsObligatorios.completos}/${row.docsObligatorios.total}`,
-        'Datos comprador': row.compradores.length === 0
-          ? '—'
-          : (row.compradorFaltante.incompleto ? `Incompleto (${row.compradorFaltante.secciones.join(', ')})` : 'Completo'),
-        'Precio final propiedad': row.precioFinal,
-        'Valor de escrituración': valorEscrituracion,
-      };
-    });
-    exportToExcel({ data: exportData, filename: 'escrituracion_expedientes' });
-  };
+  }, [rows, search, modelFilter]);
 
   if (noAsignado) {
     return (
@@ -1223,72 +1161,22 @@ export default function SocioBancarioExpedientes() {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por ID Cuenta, No. Departamento, Producto, Compradores..."
+            placeholder="Buscar por Comprador o Unidad..."
             className="h-[38px] rounded-lg bg-card pl-10 text-[13px]"
           />
         </div>
         {/* El Proyecto queda FIJO al desarrollo del socio (sin selector). */}
-        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Propietario" /></SelectTrigger>
-          <SelectContent><SelectItem value={ALL_VALUE}>Todos los propietarios</SelectItem>{options.owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={bodegaFilter} onValueChange={setBodegaFilter}>
-          <SelectTrigger className="h-[38px] w-[160px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Bodega" /></SelectTrigger>
-          <SelectContent><SelectItem value={ALL_VALUE}>Todas</SelectItem><SelectItem value="with">Con bodega</SelectItem><SelectItem value="without">Sin bodega</SelectItem></SelectContent>
-        </Select>
-        <Select value={paqueteFilter} onValueChange={setPaqueteFilter}>
-          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Paquete de muebles" /></SelectTrigger>
-          <SelectContent><SelectItem value={ALL_VALUE}>Todos</SelectItem><SelectItem value="with">Con paquete de muebles</SelectItem><SelectItem value="without">Sin paquete de muebles</SelectItem></SelectContent>
-        </Select>
-        <Select value={condensadoraFilter} onValueChange={setCondensadoraFilter}>
-          <SelectTrigger className="h-[38px] w-[180px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Condensadora" /></SelectTrigger>
-          <SelectContent><SelectItem value={ALL_VALUE}>Todas</SelectItem><SelectItem value="with">Con condensadora</SelectItem><SelectItem value="without">Sin condensadora</SelectItem></SelectContent>
-        </Select>
         <Select value={modelFilter} onValueChange={setModelFilter}>
           <SelectTrigger className="h-[38px] w-[190px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Modelo" /></SelectTrigger>
           <SelectContent><SelectItem value={ALL_VALUE}>Todos los modelos</SelectItem>{options.models.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
         </Select>
-        <Select value={floorFilter} onValueChange={setFloorFilter}>
-          <SelectTrigger className="h-[38px] w-[150px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Piso" /></SelectTrigger>
-          <SelectContent><SelectItem value={ALL_VALUE}>Todos los pisos</SelectItem>{options.floors.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={compradorFilter} onValueChange={setCompradorFilter}>
-          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Datos comprador" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_VALUE}>Datos comprador: todos</SelectItem>
-            <SelectItem value="completo">Comprador completo</SelectItem>
-            <SelectItem value="incompleto">Comprador incompleto</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={docsFilter} onValueChange={setDocsFilter}>
-          <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Docs obligatorios" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_VALUE}>Docs obligatorios: todos</SelectItem>
-            <SelectItem value="0">0 / 5 obligatorios</SelectItem>
-            <SelectItem value="1">1 / 5 obligatorios</SelectItem>
-            <SelectItem value="2">2 / 5 obligatorios</SelectItem>
-            <SelectItem value="3">3 / 5 obligatorios</SelectItem>
-            <SelectItem value="4">4 / 5 obligatorios</SelectItem>
-            <SelectItem value="5">5 / 5 (completos)</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          variant="outline"
-          className="ml-auto h-[38px] gap-2 text-[13px]"
-          onClick={handleExport}
-          disabled={isExporting || filtered.length === 0}
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          {isExporting ? 'Exportando…' : 'Exportar a Excel'}
-        </Button>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="panel overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1560px]">
+          <table className="w-full min-w-[860px]">
             <thead>
               <tr className="border-b text-left">
-                <th className="table-head whitespace-nowrap">ID Cuenta</th>
                 <th className="table-head whitespace-nowrap">Compradores</th>
                 <th className="table-head whitespace-nowrap">Propietario</th>
                 <th className="table-head whitespace-nowrap">Tipo</th>
@@ -1297,25 +1185,18 @@ export default function SocioBancarioExpedientes() {
                 <th className="table-head whitespace-nowrap">Proyecto</th>
                 <th className="table-head whitespace-nowrap">Modelo</th>
                 <th className="table-head whitespace-nowrap">Fecha venta</th>
-                <th className="table-head whitespace-nowrap">Estacionamientos</th>
-                <th className="table-head whitespace-nowrap">Bodegas</th>
-                <th className="table-head whitespace-nowrap">Muebles</th>
-                <th className="table-head whitespace-nowrap">Condensadora</th>
-                <th className="table-head whitespace-nowrap">Docs obligatorios</th>
-                <th className="table-head whitespace-nowrap">Datos comprador</th>
                 <th className="table-head whitespace-nowrap text-right">Acción</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
+                <tr><td colSpan={9} className="px-5 py-20 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Cargando expedientes...</td></tr>
               ) : error ? (
-                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
+                <tr><td colSpan={9} className="px-5 py-20 text-center text-sm text-destructive">No se pudieron cargar los expedientes: {(error as Error).message}</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={16} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
+                <tr><td colSpan={9} className="px-5 py-20 text-center text-sm text-muted-foreground">Sin expedientes que coincidan con los filtros.</td></tr>
               ) : filtered.map((row) => (
                 <tr key={row.cuentaId} className="border-t border-border/50 table-row-hover">
-                  <td className="table-cell font-mono text-[12px] text-muted-foreground">{row.cuentaLabel}</td>
                   <td className="table-cell text-[13px]">{row.compradores.map((b) => b.nombre_legal).filter(Boolean).join(', ') || '—'}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.propietario}</td>
                   <td className="table-cell text-[13px]">{row.tipo}</td>
@@ -1324,58 +1205,6 @@ export default function SocioBancarioExpedientes() {
                   <td className="table-cell text-[13px]">{row.proyecto}</td>
                   <td className="table-cell text-[13px] text-muted-foreground">{row.modelo}</td>
                   <td className="table-cell text-[13px] tabular-nums text-muted-foreground">{fmtDate(row.fechaVenta)}</td>
-                  <td className="table-cell text-[13px] text-muted-foreground">{row.estacionamientos.length ? row.estacionamientos.map((e) => e.nombre).join(', ') : '—'}</td>
-                  <td className="table-cell text-[13px] text-muted-foreground">{row.bodegas.length ? row.bodegas.map((b) => b.nombre).join(', ') : '—'}</td>
-                  <td className="table-cell text-[13px]">
-                    {row.paquetes.length ? (
-                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
-                    )}
-                  </td>
-                  <td className="table-cell text-[13px]">
-                    {row.tieneCondensadora ? (
-                      <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Sí</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">No</span>
-                    )}
-                  </td>
-                  <td className="table-cell text-[13px]">
-                    {(() => {
-                      const { completos, total } = row.docsObligatorios;
-                      const done = completos >= total;
-                      return (
-                        <span
-                          className="inline-flex items-center gap-1.5"
-                          title={`${completos} de ${total} documentos obligatorios validados`}
-                        >
-                          <span className={cn('h-2.5 w-2.5 rounded-full', done ? 'bg-emerald-500' : completos > 0 ? 'bg-amber-500' : 'bg-muted-foreground/40')} />
-                          <span className="tabular-nums text-muted-foreground">{completos}/{total}</span>
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="table-cell text-[13px]">
-                    {row.compradores.length === 0 ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : row.compradorFaltante.incompleto ? (
-                      <span
-                        className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400"
-                        title={`Faltan datos en: ${row.compradorFaltante.secciones.join(', ')}`}
-                      >
-                        <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                        <span className="text-[12px] font-medium">Incompleto</span>
-                      </span>
-                    ) : (
-                      <span
-                        className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
-                        title="Datos básicos, dirección y fiscal completos"
-                      >
-                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                        <span className="text-[12px] font-medium">Completo</span>
-                      </span>
-                    )}
-                  </td>
                   <td className="table-cell text-right">
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[12px]" onClick={() => setSelected(row)}>
                       <Eye className="h-3.5 w-3.5" /> Ver detalle
