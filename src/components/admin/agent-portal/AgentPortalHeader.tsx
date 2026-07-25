@@ -1,6 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { Badge } from "@/components/ui/badge";
+import { OptImg } from "@/components/ui/OptImg";
 import { CheckCircle2, User } from "lucide-react";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 
@@ -44,8 +45,11 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
           <div className="flex items-center gap-2.5">
             {showAgentName && (
               photoUrl ? (
-                <img
+                <OptImg
                   src={photoUrl}
+                  w={72}
+                  h={72}
+                  resize="cover"
                   alt={nombreCompleto}
                   className="h-9 w-9 rounded-full object-cover shrink-0"
                 />

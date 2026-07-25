@@ -12,6 +12,7 @@ import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloat
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
 import SectionCard from "@/components/offer/SectionCard";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { OptImg } from "@/components/ui/OptImg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -526,8 +527,9 @@ const AgentProspectoDetalle = () => {
 
           <div className="bg-[#F6F7F8] p-4">
             {previewIsImage ? (
-              <img
-                src={previewFile?.url}
+              <OptImg
+                src={previewFile?.url || ""}
+                w={1600}
                 alt={previewFile?.name || "Adjunto"}
                 className="mx-auto max-h-[70vh] w-auto max-w-full rounded-md border border-gray-200 bg-white object-contain"
               />

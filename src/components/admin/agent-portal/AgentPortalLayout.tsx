@@ -1,4 +1,5 @@
 import { useState, useLayoutEffect, useRef } from "react";
+import { OptImg } from "@/components/ui/OptImg";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import {
   Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon,
@@ -151,8 +152,11 @@ export const AgentPortalLayout = () => {
   // Render fn (no componente inline) para evitar remontar el <img> en cada render.
   const renderAvatar = (size: string, text: string) =>
     photoUrl ? (
-      <img
+      <OptImg
         src={photoUrl}
+        w={96}
+        h={96}
+        resize="cover"
         alt={userName}
         className={cn(size, "rounded-full object-cover shrink-0")}
       />

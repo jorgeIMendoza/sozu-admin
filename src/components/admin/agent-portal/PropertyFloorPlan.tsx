@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { OptImg } from "@/components/ui/OptImg";
 import { Loader2 } from "lucide-react";
 
 interface PropertyFloorPlanProps {
@@ -68,7 +69,7 @@ export function PropertyFloorPlan({ propertyId }: PropertyFloorPlanProps) {
     <div className="space-y-1.5">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Planta</p>
       <div className="rounded-xl overflow-hidden border border-gray-100">
-        <img src={planUrl} alt="Plano de planta" className="w-full object-contain max-h-64" loading="lazy" />
+        <OptImg src={planUrl} w={1200} alt="Plano de planta" className="w-full object-contain max-h-64" />
       </div>
     </div>
   );

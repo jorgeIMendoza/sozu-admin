@@ -116,7 +116,7 @@ export function ModalViewer({ open, onOpenChange, url, title = "Documento" }: Mo
         </div>
       ) : (
         <iframe
-          src={effectiveUrl ? `${effectiveUrl}#toolbar=0&navpanes=0` : ""}
+          src={effectiveUrl}
           className="h-full w-full border-0"
           title={title}
           loading="lazy"

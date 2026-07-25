@@ -119,7 +119,7 @@ export function ModalViewerDetail({
         </div>
       ) : (
         <iframe
-          src={`${url}#toolbar=0&navpanes=0`}
+          src={url}
           className="h-full min-h-[60vh] w-full border-0"
           title={typeof title === "string" ? title : "Recurso"}
           loading="lazy"

@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
+import { OptImg } from "@/components/ui/OptImg";
 import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -842,8 +843,11 @@ const AgentPerfil = () => {
           aria-label={canEdit ? "Cambiar foto de perfil" : "Foto de perfil"}
         >
           {perfilExtra?.foto_perfil_url ? (
-            <img
+            <OptImg
               src={normalizeAvatarUrl(perfilExtra.foto_perfil_url)}
+              w={208}
+              h={208}
+              resize="cover"
               alt={displayName || "Avatar"}
               className="h-[104px] w-[104px] rounded-full object-cover"
             />
@@ -1043,8 +1047,11 @@ const AgentPerfil = () => {
                 </DialogTitle>
                 <div className="mt-2 sm:mt-3 relative">
                   {perfilExtra?.foto_perfil_url ? (
-                    <img
+                    <OptImg
                       src={perfilExtra.foto_perfil_url}
+                      w={160}
+                      h={160}
+                      resize="cover"
                       alt={displayName || "Avatar"}
                       className="h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl"
                     />
@@ -1743,7 +1750,7 @@ const AgentPerfil = () => {
           <ModalHeader title="INE" subtitle="Frente y reverso" />
           <div className="max-h-[75vh] overflow-y-auto px-[22px] py-[22px] space-y-4">
             {[ineViewer?.frente, ineViewer?.reverso].filter(Boolean).map((url, i) => (
-              <img key={i} src={url as string} alt="INE" className="w-full rounded-md border border-[#ECEEF0]" />
+              <OptImg key={i} src={url as string} w={1000} alt="INE" className="w-full rounded-md border border-[#ECEEF0]" />
             ))}
           </div>
         </DialogContent>

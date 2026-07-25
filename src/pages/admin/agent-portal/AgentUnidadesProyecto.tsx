@@ -23,7 +23,6 @@ import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
-import { optimizedImage } from "@/utils/optimizedImage";
 import { OptImg } from "@/components/ui/OptImg";
 
 const PAGE_SIZE = 30;
@@ -846,7 +845,7 @@ const UnitCardImage = ({ images }: { images: any[] }) => {
       </div>
     );
   }
-  return <img src={optimizedImage(images[0].url, { width: 480, resize: "cover" })} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />;
+  return <OptImg src={images[0].url} w={480} resize="cover" alt="" className="w-full h-full object-cover" />;
 };
 
 // Detail carousel
