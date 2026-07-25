@@ -8,9 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, X, Layers, Car, Search, SlidersHorizontal, Package } from "lucide-react";
+import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, X, Layers, Car, Search, SlidersHorizontal, Package, Warehouse } from "lucide-react";
 import { cn } from "@/lib/utils";
-import bodegaIcon from "@/assets/icons/bodega.png";
 import useEmblaCarousel from "embla-carousel-react";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -642,7 +641,7 @@ const AgentUnidadesProyecto = () => {
                   {selectedProperty.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.recamaras} rec.</span>}
                   {selectedProperty.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.banos} baño{selectedProperty.banos > 1 ? "s" : ""}</span>}
                   {selectedProperty.medio_bano > 0 && <span className="flex items-center gap-1.5"><ShowerHead className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.medio_bano} ½ baño</span>}
-                  {selectedProperty.bodegas_count > 0 && <span className="flex items-center gap-1.5"><img src={bodegaIcon} alt="" className="h-4 w-4 opacity-70" /> {selectedProperty.bodegas_count} bodega{selectedProperty.bodegas_count > 1 ? "s" : ""}</span>}
+                  {selectedProperty.bodegas_count > 0 && <span className="flex items-center gap-1.5"><Warehouse className="h-4 w-4 text-primary" /> {selectedProperty.bodegas_count} bodega{selectedProperty.bodegas_count > 1 ? "s" : ""}</span>}
                   {selectedProperty.estacionamientos_count > 0 && <span className="flex items-center gap-1.5"><Car className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.estacionamientos_count} estac.{selectedProperty.estacionamientos_tipos?.length > 0 && <span className="text-[#9AA3AD]"> ({[...new Set(selectedProperty.estacionamientos_tipos as string[])].join(", ")})</span>}</span>}
                 </div>
 
@@ -828,7 +827,7 @@ const UnitCard = React.memo(({ prop, formatPrice, onClick }: {
         {prop.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-primary" /> {prop.m2_total.toFixed(1)} m²</span>}
         {prop.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-primary" /> {prop.recamaras}</span>}
         {prop.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-primary" /> {prop.banos}</span>}
-        {prop.bodegas_count > 0 && <span className="flex items-center gap-1.5"><img src={bodegaIcon} alt="" className="h-4 w-4 opacity-60" /> {prop.bodegas_count}</span>}
+        {prop.bodegas_count > 0 && <span className="flex items-center gap-1.5"><Warehouse className="h-4 w-4 text-primary" /> {prop.bodegas_count}</span>}
         {prop.estacionamientos_count > 0 && <span className="flex items-center gap-1.5"><Car className="h-4 w-4 text-primary" /> {prop.estacionamientos_count}</span>}
       </div>
     </div>
@@ -845,7 +844,7 @@ const UnitCardImage = ({ images }: { images: any[] }) => {
       </div>
     );
   }
-  return <OptImg src={images[0].url} w={480} resize="cover" alt="" className="w-full h-full object-cover" />;
+  return <OptImg src={images[0].url} w={640} h={360} resize="cover" alt="" className="h-full w-full object-cover" />;
 };
 
 // Detail carousel

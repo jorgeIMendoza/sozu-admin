@@ -508,47 +508,45 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle className="text-base">
-                  Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
-                </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadPdf}
-                disabled={generatingPdf}
-                className="gap-1.5 shrink-0"
-              >
-                {generatingPdf ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-                {generatingPdf ? "Generando..." : "Descargar PDF"}
-              </Button>
+        <DialogContent aria-describedby={undefined} className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="flex-row items-start justify-between space-y-0 border-b border-border px-6 py-5">
+            <div className="min-w-0 pr-4">
+              <DialogTitle className="text-lg font-bold text-foreground">
+                Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
+              </DialogTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
+              </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadPdf}
+              disabled={generatingPdf}
+              className="mr-6 shrink-0 gap-1.5"
+            >
+              {generatingPdf ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {generatingPdf ? "Generando..." : "Descargar PDF"}
+            </Button>
           </DialogHeader>
 
-          <Tabs defaultValue="ubicacion" className="w-full">
-            <TabsList className="w-full">
-              <TabsTrigger value="ubicacion" className="flex-1 text-xs data-[state=active]:bg-[hsl(158_64%_38%)] data-[state=active]:text-white">
-                <MapPin className="h-3.5 w-3.5 mr-1.5" />
+          <Tabs defaultValue="ubicacion" className="flex min-h-0 flex-1 flex-col">
+            <TabsList className="mx-6 mt-4 w-auto">
+              <TabsTrigger value="ubicacion" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <MapPin className="mr-1.5 h-3.5 w-3.5" />
                 Ubicación
               </TabsTrigger>
-              <TabsTrigger value="arquitectonico" className="flex-1 text-xs data-[state=active]:bg-[hsl(158_64%_38%)] data-[state=active]:text-white">
-                <FileImage className="h-3.5 w-3.5 mr-1.5" />
+              <TabsTrigger value="arquitectonico" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <FileImage className="mr-1.5 h-3.5 w-3.5" />
                 Arquitectónico
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="ubicacion" className="mt-3">
+            <TabsContent value="ubicacion" className="min-h-0 flex-1 overflow-auto p-6">
               {planData.planoUbicacionUrl ? (
                 <div className="flex flex-col items-center">
                   <FloorPlanCanvas
@@ -557,29 +555,29 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
                     highlightUnit={planData.numeroDepa}
                     fullPropertyNumber={planData.rawPropertyNumber}
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Nivel {planData.numeroPiso} - Depto. <span className="font-semibold text-foreground">{planData.numeroDepa}</span>
                   </p>
                 </div>
               ) : (
-                <div className="text-center py-10 text-muted-foreground text-sm">
-                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  <MapPin className="mx-auto mb-2 h-8 w-8 opacity-30" />
                   No hay plano de ubicación configurado para este nivel
                 </div>
               )}
             </TabsContent>
 
-            <TabsContent value="arquitectonico" className="mt-3">
+            <TabsContent value="arquitectonico" className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">
               {planData.planoArqUrl ? (
                 <img
                   src={planData.planoArqUrl}
                   alt="Plano arquitectónico"
-                  className="w-full rounded-lg"
+                  className="mx-auto max-h-full w-auto max-w-full rounded-lg object-contain"
                   crossOrigin="anonymous"
                 />
               ) : (
-                <div className="text-center py-10 text-muted-foreground text-sm">
-                  <FileImage className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  <FileImage className="mx-auto mb-2 h-8 w-8 opacity-30" />
                   No hay plano arquitectónico configurado para esta unidad
                 </div>
               )}

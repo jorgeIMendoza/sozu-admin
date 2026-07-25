@@ -282,6 +282,7 @@ const ProjectCard = memo(function ProjectCard({
             <OptImg
               src={proyecto.imagen_url}
               w={640}
+              h={360}
               resize="cover"
               alt={proyecto.nombre}
               className="h-full w-full transform-gpu object-cover object-[center_75%] [content-visibility:auto]"
