@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, FileImage, MapPin, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -132,7 +133,7 @@ const FloorPlanCanvas = ({
 
   return (
     <div ref={containerRef} className="w-full">
-      <canvas ref={canvasRef} className="w-full rounded-lg" />
+      <canvas ref={canvasRef} className="mx-auto block max-h-[60vh] max-w-full rounded-lg" />
     </div>
   );
 };
@@ -509,29 +510,13 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent aria-describedby={undefined} className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="flex-row items-start justify-between space-y-0 border-b border-border px-6 py-5">
-            <div className="min-w-0 pr-4">
-              <DialogTitle className="text-lg font-bold text-foreground">
-                Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
-              </DialogTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadPdf}
-              disabled={generatingPdf}
-              className="mr-6 shrink-0 gap-1.5"
-            >
-              {generatingPdf ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              {generatingPdf ? "Generando..." : "Descargar PDF"}
-            </Button>
+          <DialogHeader className="space-y-0 border-b border-border px-6 py-5 text-left">
+            <DialogTitle className="text-lg font-bold text-foreground">
+              Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
+            </DialogTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
+            </p>
           </DialogHeader>
 
           <Tabs defaultValue="ubicacion" className="flex min-h-0 flex-1 flex-col">
@@ -572,7 +557,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
                 <img
                   src={planData.planoArqUrl}
                   alt="Plano arquitectónico"
-                  className="mx-auto max-h-full w-auto max-w-full rounded-lg object-contain"
+                  className="mx-auto max-h-[60vh] w-auto max-w-full rounded-lg object-contain"
                   crossOrigin="anonymous"
                 />
               ) : (
@@ -583,6 +568,14 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
               )}
             </TabsContent>
           </Tabs>
+
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setOpen(false)}>Cerrar</Button>
+            <Button variant="primary-outline" onClick={handleDownloadPdf} disabled={generatingPdf}>
+              {generatingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {generatingPdf ? "Generando..." : "Descargar PDF"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>

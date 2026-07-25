@@ -1473,7 +1473,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             Propiedad <span className="font-semibold">{propertyNumber}</span>
             {projectName && <span className="font-semibold"> de {projectName}</span>}
           </p>
-          
+        </DialogHeader>
+
+        {/* Plan / precio / productos — en el body, no en el header */}
+        <div className="space-y-3">
           {/* Plan Selector - unified */}
           {selectedMode !== "manual" && propertyPaymentSchemes && propertyPaymentSchemes.length > 0 && (
             <div className={`mt-2 rounded-lg border p-2.5 transition-colors ${
@@ -1724,7 +1727,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </>
             )}
           </div>
-        </DialogHeader>
+        </div>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Mode Selection - Manual available for all roles except Agente Inmobiliario, hidden if hideManualMode is true */}
@@ -2545,32 +2548,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              )}
 
-            <div className="flex justify-end space-x-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-                className="rounded-2xl px-6"
-              >
+            <div className="flex flex-wrap justify-end gap-2.5 border-t border-border pt-4">
+              <Button type="button" variant="cancel" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <button
+              <Button
                 type="submit"
+                variant="primary-outline"
                 disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                 onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
-                className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
-              </button>
+              </Button>
               {enableDigitalOffer && (
-                <button
+                <Button
                   type="button"
                   disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                   onClick={() => { setPendingButton('digital'); form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
-                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {createOfferMutation.isPending && pendingButton === 'digital' ? "Generando..." : "Generar Oferta Digital"}
-                </button>
+                </Button>
               )}
             </div>
           </form>
