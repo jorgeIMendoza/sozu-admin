@@ -1479,22 +1479,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         <div className="space-y-3">
           {/* Plan Selector - unified */}
           {selectedMode !== "manual" && propertyPaymentSchemes && propertyPaymentSchemes.length > 0 && (
-            <div className={`mt-2 rounded-lg border p-2.5 transition-colors ${
-              selectedSchemeDetails
-                ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800"
-                : "bg-muted/40 border-border/60"
-            }`}>
-              <div className="flex items-center gap-2">
-                <FileText className={`h-3.5 w-3.5 shrink-0 ${selectedSchemeDetails ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`} />
+            <div className="mt-2 space-y-2">
                 <Select
                   value={localSchemeId?.toString() || "none"}
                   onValueChange={(value) => {
                     setLocalSchemeId(value === "none" ? null : parseInt(value));
                   }}
                 >
-                  <SelectTrigger className={`h-8 text-xs border-0 shadow-none bg-transparent px-1 ${
-                    selectedSchemeDetails ? "text-emerald-700 font-medium dark:text-emerald-300" : "text-muted-foreground"
-                  }`}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Seleccionar plan de pago..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -1534,25 +1526,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedSchemeDetails?.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails?.porcentaje_descuento_aumento != null && (
-                  <Badge variant="outline" className={`text-[10px] shrink-0 ${
-                    selectedSchemeDetails.porcentaje_descuento_aumento < 0
-                      ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}>
-                    {selectedSchemeDetails.porcentaje_descuento_aumento > 0 ? "+" : ""}{selectedSchemeDetails.porcentaje_descuento_aumento}%
-                  </Badge>
-                )}
                 {selectedSchemeDetails && (
-                  <button
-                    type="button"
-                    onClick={() => setLocalSchemeId(null)}
-                    className="ml-auto text-muted-foreground hover:text-foreground shrink-0"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedSchemeDetails.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails.porcentaje_descuento_aumento != null && (
+                      <Badge variant="outline" className={`text-[10px] ${
+                        selectedSchemeDetails.porcentaje_descuento_aumento < 0
+                          ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "border-destructive/30 bg-destructive/10 text-destructive"
+                      }`}>
+                        {selectedSchemeDetails.porcentaje_descuento_aumento > 0 ? "+" : ""}{selectedSchemeDetails.porcentaje_descuento_aumento}%
+                      </Badge>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLocalSchemeId(null)}
+                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" /> Quitar plan
+                    </button>
+                  </div>
                 )}
-              </div>
             </div>
           )}
           {selectedMode !== "manual" && (!propertyPaymentSchemes || propertyPaymentSchemes.length === 0) && (
@@ -2239,7 +2232,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
+                    <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
                       <Command>
                         <CommandInput 
                           placeholder="Buscar persona..." 
@@ -2346,7 +2339,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       </FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder={selectedPersonType === "pm" ? "Ingresa la razón social" : "Ingresa el nombre completo"} 
+                          placeholder={selectedPersonType === "pm" ? "Constructora del Valle S.A. de C.V." : "Juan Pérez García"} 
                           disabled={selectedPerson !== null}
                           {...field} 
                         />
@@ -2367,7 +2360,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       <FormControl>
                         <Input 
                           type="email" 
-                          placeholder="Ingresa el email" 
+                          placeholder="juan.perez@correo.com" 
                           disabled={selectedPerson !== null}
                           {...field} 
                         />
@@ -2437,7 +2430,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             <FormLabel>RFC</FormLabel>
                              <FormControl>
                              <Input 
-                               placeholder="Ingresa el RFC (Ej: ABC123456DEF)" 
+                               placeholder="PEGJ850101H2A" 
                                maxLength={13}
                                disabled={selectedPerson !== null}
                                {...field} 
@@ -2457,7 +2450,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                              <FormLabel>CURP</FormLabel>
                               <FormControl>
                                 <Input 
-                                  placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" 
+                                  placeholder="PEGJ850101HDFRRN09" 
                                   maxLength={18}
                                   disabled={selectedPerson !== null}
                                   {...field} 
