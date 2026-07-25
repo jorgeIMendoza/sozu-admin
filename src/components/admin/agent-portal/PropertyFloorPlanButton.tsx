@@ -531,7 +531,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="ubicacion" className="min-h-0 flex-1 overflow-auto p-6">
+            <TabsContent value="ubicacion" className="min-h-[62vh] flex-1 overflow-auto p-6">
               {planData.planoUbicacionUrl ? (
                 <div className="flex flex-col items-center">
                   <FloorPlanCanvas
@@ -552,7 +552,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
               )}
             </TabsContent>
 
-            <TabsContent value="arquitectonico" className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">
+            <TabsContent value="arquitectonico" className="flex min-h-[62vh] flex-1 items-center justify-center overflow-auto p-6">
               {planData.planoArqUrl ? (
                 <img
                   src={planData.planoArqUrl}
