@@ -603,7 +603,7 @@ const AgentProyectoDetalle = () => {
 
   if (loadingProject) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
       </div>
@@ -612,7 +612,7 @@ const AgentProyectoDetalle = () => {
 
   if (!project) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="text-center py-12 text-sm text-muted-foreground">Proyecto no encontrado</div>
       </div>
@@ -637,7 +637,7 @@ const AgentProyectoDetalle = () => {
   const showroomAddr = (showroom as any)?.descripcion_direccion || null;
 
   return (
-    <div className="pb-24 bg-background">
+    <div className="bg-background">
       {/* Portada = carrusel de galería */}
       {galleryImages.length > 0 ? (
         <HeroGallery

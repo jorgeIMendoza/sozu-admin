@@ -265,7 +265,7 @@ const AgentPipeline = () => {
   };
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
       {/* Toolbar */}

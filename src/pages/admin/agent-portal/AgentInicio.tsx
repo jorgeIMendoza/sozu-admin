@@ -283,7 +283,7 @@ const AgentInicio = () => {
   });
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader>
         <div className="mx-auto w-full max-w-[1040px]">
           <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl">{fullName}</h1>

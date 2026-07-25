@@ -3,8 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Returns true if the logged-in agent has a linked inmobiliaria
- * (entidades_relacionadas with id_tipo_entidad = 19).
+ * Devuelve true si el agente pertenece a una inmobiliaria (agente DEPENDIENTE).
+ *
+ * TODOS los agentes tienen una fila en `entidades_relacionadas` con
+ * `id_tipo_entidad = 19`; el discriminador real es `id_persona_duena_lead`:
+ *   - NO nulo  → apunta a la persona de la inmobiliaria → DEPENDIENTE (true)
+ *   - nulo     → agente INDEPENDIENTE (false)
+ * Sin el predicado `id_persona_duena_lead not null` esto daría true para todos.
  */
 export function useAgentHasInmobiliaria() {
   const { profile } = useAuth();
@@ -20,6 +25,7 @@ export function useAgentHasInmobiliaria() {
         .eq("id_persona", personaId)
         .eq("id_tipo_entidad", 19)
         .eq("activo", true)
+        .not("id_persona_duena_lead", "is", null)
         .limit(1);
       return (data && data.length > 0) || false;
     },

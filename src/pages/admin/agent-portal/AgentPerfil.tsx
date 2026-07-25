@@ -1,39 +1,39 @@
-import { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { useAuth } from "@/contexts/AuthContext";
+import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
+import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
+import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
+import { ActionButton } from "@/components/ui/action-button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { FIELD_LABEL_CLS, MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalForm, ModalFormHeader, Req } from "@/components/ui/modal-form";
+import { ModalViewer } from "@/components/ui/modal-viewer";
+import { OptImg } from "@/components/ui/opt-img";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useAgentOnboardingStatus, type OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
-import { useProjectAccess } from "@/hooks/useProjectAccess";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
-import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
-import { ModalViewer } from "@/components/ui/modal-viewer";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { Badge } from "@/components/ui/badge";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
-import { FileText, Receipt, Landmark, GraduationCap, Check, AlertTriangle, Loader2, Camera, Trash2, Upload, ArrowLeft, Eye, EyeOff, Pencil, Plus, UploadCloud, PenLine, CalendarDays } from "lucide-react";
-import { Link } from "react-router-dom";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import { FIELD_LABEL_CLS, Req, ModalForm, ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
-import { Input } from "@/components/ui/input";
-import { matchRegimenId } from "@/utils/regimenMatch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { ActionButton } from "@/components/ui/action-button";
-import { toast } from "sonner";
-import confetti from "canvas-confetti";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { supabase } from "@/integrations/supabase/client";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
-import { OptImg } from "@/components/ui/opt-img";
-import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
+import { cn } from "@/lib/utils";
+import { extractCSFFields } from "@/utils/pdfDocumentExtractors";
+import { validateCSFPdf } from "@/utils/pdfDocumentValidators";
+import { matchRegimenId } from "@/utils/regimenMatch";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
+import { AlertTriangle, ArrowLeft, CalendarDays, Camera, Check, Eye, EyeOff, FileText, GraduationCap, Landmark, Loader2, PenLine, Pencil, Plus, Receipt, Trash2, Upload, UploadCloud } from "lucide-react";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { validateCSFPdf } from "@/utils/pdfDocumentValidators";
-import { extractCSFFields } from "@/utils/pdfDocumentExtractors";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
@@ -51,30 +51,30 @@ async function extractPdfText(file: File): Promise<string> {
 }
 
 const ACTIVATION_BLOCKS = [
-  { 
-    stepId: 'basic' as const, 
-    label: 'Identidad', 
+  {
+    stepId: 'basic' as const,
+    label: 'Identidad',
     description: 'Datos personales, dirección e INE',
     icon: FileText,
     relatedSteps: ['basic'] as const,
   },
-  { 
-    stepId: 'fiscal' as const, 
-    label: 'Información fiscal', 
+  {
+    stepId: 'fiscal' as const,
+    label: 'Información fiscal',
     description: 'RFC, régimen fiscal y constancia',
     icon: Receipt,
     relatedSteps: ['fiscal'] as const,
   },
-  { 
-    stepId: 'bank-accounts' as const, 
-    label: 'Cuenta bancaria', 
+  {
+    stepId: 'bank-accounts' as const,
+    label: 'Cuenta bancaria',
     description: 'Banco, CLABE y titular',
     icon: Landmark,
     relatedSteps: ['bank-accounts'] as const,
   },
-  { 
-    stepId: 'training' as const, 
-    label: 'Capacitación', 
+  {
+    stepId: 'training' as const,
+    label: 'Capacitación',
     description: 'Agenda y completa tu capacitación',
     icon: GraduationCap,
     relatedSteps: ['training'] as const,
@@ -792,7 +792,7 @@ const AgentPerfil = () => {
   }
 
   return (
-    <div className="pb-24 relative">
+    <div className="relative">
       <AgentPortalHeader>
         {profileView !== 'overview' && (
           <div className="flex items-center gap-3 pt-0.5">
@@ -1388,7 +1388,7 @@ const AgentPerfil = () => {
         return (
           <div>
             {/* Información personal (texto + editar) */}
-            <div className="mb-3 rounded-md border border-border bg-card p-5">
+            <div className="rounded-md border border-border bg-card p-5">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Información personal</span>
                 {canEditInfo && (

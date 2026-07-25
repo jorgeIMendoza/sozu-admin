@@ -1,26 +1,25 @@
-import { useState, useMemo, useEffect, memo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useProjectAccess } from "@/hooks/useProjectAccess";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
-import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ui/action-button";
-import { Loader2, Search, Building2, MapPin, Eye, Share2, Mail, Copy, Globe } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ModalFormHeader, MODAL_BODY_CLS } from "@/components/ui/modal-form";
-import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { desarrolloUrl } from "@/utils/desarrolloUrl";
-import { mapEstatusCatalog } from "@/utils/avanceObra";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { MODAL_BODY_CLS, ModalFormHeader } from "@/components/ui/modal-form";
 import { OptImg } from "@/components/ui/opt-img";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import { mapEstatusCatalog } from "@/utils/avanceObra";
+import { desarrolloUrl } from "@/utils/desarrolloUrl";
+import { useQuery } from "@tanstack/react-query";
+import { Building2, Copy, Eye, Globe, Loader2, Mail, MapPin, Search, Share2 } from "lucide-react";
+import { memo, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface ProyectoCard {
   id: number;
@@ -176,7 +175,7 @@ const AgentInventario = () => {
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v);
 
   return (
-    <div className="mx-auto max-w-[1040px] pb-8">
+    <div className="mx-auto max-w-[1040px]">
       {/* Search bar (título vive en el header del portal) */}
       <div className="sticky top-16 z-10 -mx-1 bg-background px-1 py-1">
         <div className="relative flex items-center">

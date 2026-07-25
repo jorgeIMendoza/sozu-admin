@@ -114,7 +114,7 @@ const AgentProspectos = () => {
   };
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
       <div className="mx-auto max-w-[1040px] pt-1 space-y-4">

@@ -1,26 +1,26 @@
-import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
-import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
+import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
+import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
 import SectionCard from "@/components/offer/SectionCard";
+import { ActionButton } from "@/components/ui/action-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ActionButton } from "@/components/ui/action-button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalFormHeader } from "@/components/ui/modal-form";
 import { ModalViewer } from "@/components/ui/modal-viewer";
-import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
-import { Loader2, ArrowLeft, Check, MessageSquare, Pencil, CalendarPlus, FileText } from "lucide-react";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarPlus, Check, FileText, Loader2, MessageSquare, Pencil } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 interface TimelineItem {
@@ -242,10 +242,10 @@ const AgentProspectoDetalle = () => {
   });
 
   if (loadingPersona) {
-    return <div className="pb-24"><AgentPortalHeader /><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" /></div></div>;
+    return <div ><AgentPortalHeader /><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" /></div></div>;
   }
   if (!persona) {
-    return <div className="pb-24"><AgentPortalHeader /><div className="py-16 text-center text-sm text-muted-foreground">Prospecto no encontrado</div></div>;
+    return <div ><AgentPortalHeader /><div className="py-16 text-center text-sm text-muted-foreground">Prospecto no encontrado</div></div>;
   }
 
   const initials = (persona.nombre_legal || persona.email || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w.charAt(0).toUpperCase()).join("") || "?";
@@ -259,10 +259,10 @@ const AgentProspectoDetalle = () => {
   ];
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
-      <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
+      <div className="mx-auto max-w-[1040px] space-y-4">
         <button
           onClick={() => navigate("/admin/agent/prospectos")}
           title="Prospectos"

@@ -1,86 +1,33 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
-import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Badge } from "@/components/ui/badge";
+import { ComisionesTable, comisionEstatus, COMISION_ESTATUS_LABEL, type ComisionEstatus } from "@/components/admin/comisiones/ComisionesTable";
 import { Button } from "@/components/ui/button";
-import { ModalViewer } from "@/components/ui/modal-viewer";
-import { Loader2, Lock, CheckCircle2, AlertCircle, FileText, EyeOff, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { MODAL_BODY_CLS, ModalFormHeader } from "@/components/ui/modal-form";
 import { Input } from "@/components/ui/input";
 import { FILTER_LABEL_CLS } from "@/components/ui/modal-filters";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { IconButton } from "@/components/ui/icon-button";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
-
-type ClienteInfo = { nombre: string; email: string; porcentaje: number };
-
-// Celda de cliente estilo portal cobranza: nombre + correo debajo; si hay
-// copropiedad, se indica cuántos más.
-function ClienteCell({ clientes }: { clientes: ClienteInfo[] }) {
-  if (!clientes || clientes.length === 0) return <span className="text-xs text-muted-foreground/60">Sin cliente</span>;
-  const first = clientes[0];
-  const extra = clientes.length - 1;
-  return (
-    <div className="min-w-0">
-      <p className="text-xs font-medium truncate" title={first.nombre}>
-        {first.nombre || 'Sin nombre'}{extra > 0 && <span className="text-muted-foreground font-normal"> +{extra}</span>}
-      </p>
-      {first.email && <p className="text-xs text-muted-foreground truncate" title={first.email}>{first.email}</p>}
-    </div>
-  );
-}
-
-// Estatus → badge (mismos rótulos que portal inmobiliarias).
-const ESTATUS_LABEL: Record<string, string> = {
-  pagada: 'Pagada',
-  programada: 'Programada a pago',
-  factura_requerida: 'Pendiente factura',
-  en_revision: 'En revisión',
-  pendiente: 'Pendiente',
-};
-function EstatusBadgeTabla({ status }: { status: string }) {
-  const label = ESTATUS_LABEL[status] || 'Pendiente';
-  const cls =
-    status === 'pagada' ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-    : status === 'factura_requerida' ? 'bg-red-100 text-red-700 border-red-200'
-    : 'border-border text-muted-foreground';
-  return <Badge variant="outline" className={cn('font-medium whitespace-nowrap', cls)}>{label}</Badge>;
-}
-
-// Orden de columnas (client-side), estilo portal cobranza.
-type SortKey = 'account' | 'project' | 'client' | 'price' | 'commission' | 'date';
-function SortHeader({ label, sortKey, sort, onSort, align = 'left', thClass }: {
-  label: string; sortKey: SortKey; sort: { key: SortKey | null; dir: 'asc' | 'desc' }; onSort: (k: SortKey) => void; align?: 'left' | 'right' | 'center'; thClass?: string;
-}) {
-  const active = sort.key === sortKey;
-  return (
-    <TableHead className={cn('h-9 whitespace-nowrap', align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left', thClass)}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn('inline-flex items-center gap-1 uppercase tracking-wide whitespace-nowrap text-xs font-semibold select-none transition-colors',
-          align === 'right' && 'flex-row-reverse',
-          active ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
-      >
-        {label}
-        <ArrowUpDown strokeWidth={2.25} className={cn('size-3 shrink-0', active ? 'text-primary' : 'text-muted-foreground/50')} />
-      </button>
-    </TableHead>
-  );
-}
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, CheckCircle2, EyeOff, Upload, UploadCloud, Loader2, Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const AgentComisiones = () => {
   const { profile, user } = useAuth();
   const { impersonatedAgentEmail, impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
@@ -90,9 +37,6 @@ const AgentComisiones = () => {
   const [searchCliente, setSearchCliente] = useState<string>('');
   const [filterEstatus, setFilterEstatus] = useState<string>('todos');
   const [viewerDoc, setViewerDoc] = useState<{ url: string; title: string } | null>(null);
-  const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: null, dir: 'asc' });
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 15;
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
 
@@ -132,13 +76,13 @@ const AgentComisiones = () => {
         if (cuentas) {
           const ofertaIds = cuentas.map((c: any) => c.id_oferta).filter(Boolean);
           let ofertaMap = new Map<number, any>();
-          
+
           if (ofertaIds.length > 0) {
             const { data: ofertas } = await (supabase as any)
               .from('ofertas')
               .select('id, id_propiedad, id_producto')
               .in('id', ofertaIds);
-            
+
             const propIds = (ofertas || []).map((o: any) => o.id_propiedad).filter(Boolean);
             const prodIds = [...new Set((ofertas || []).map((o: any) => o.id_producto).filter(Boolean))] as number[];
             let propMap = new Map<number, any>();
@@ -151,16 +95,16 @@ const AgentComisiones = () => {
                 .in('id', prodIds);
               (prods || []).forEach((p: any) => prodMap.set(p.id, p.nombre));
             }
-            
+
             if (propIds.length > 0) {
               const { data: props } = await (supabase as any)
                 .from('propiedades')
                 .select('id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad')
                 .in('id', propIds);
-              
+
               const emIds = [...new Set((props || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
               let propToProject = new Map<number, string>();
-              
+
               if (emIds.length > 0) {
                 const { data: ems } = await (supabase as any).from('edificios_modelos').select('id, id_edificio').in('id', emIds);
                 const edIds = [...new Set((ems || []).map((em: any) => em.id_edificio).filter(Boolean))];
@@ -180,10 +124,10 @@ const AgentComisiones = () => {
                   }
                 }
               }
-              
+
               (props || []).forEach((p: any) => propMap.set(p.id, { ...p, proyecto: propToProject.get(p.id) || '' }));
             }
-            
+
             (ofertas || []).forEach((o: any) => {
               const prop = propMap.get(o.id_propiedad);
               const productoNombre = o.id_producto ? prodMap.get(o.id_producto) || '' : '';
@@ -191,14 +135,14 @@ const AgentComisiones = () => {
               ofertaMap.set(o.id, { ...prop, productoNombre, tipoDerivado });
             });
           }
-          
+
           cuentas.forEach((c: any) => {
             const info = ofertaMap.get(c.id_oferta);
-            cuentaMap.set(c.id, { 
-              ...c, 
-              propiedad: info?.numero_propiedad, 
-              proyecto: info?.proyecto, 
-              precio_final: c.precio_final, 
+            cuentaMap.set(c.id, {
+              ...c,
+              propiedad: info?.numero_propiedad,
+              proyecto: info?.proyecto,
+              precio_final: c.precio_final,
               tipo: info?.tipoDerivado || 'Propiedad',
               productoNombre: info?.productoNombre || '',
               id_estatus_disponibilidad: info?.id_estatus_disponibilidad,
@@ -290,17 +234,6 @@ const AgentComisiones = () => {
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
-  const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const formatFechaPago = (fecha: string | null) => {
-    if (!fecha) return '';
-    // Fecha solo-día (YYYY-MM-DD): usar componentes directos para no correrse por zona horaria.
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha);
-    if (m) return `${Number(m[3])} ${MESES_CORTOS[Number(m[2]) - 1]} ${m[1]}`; // "24 jul 2026"
-    const d = new Date(fecha);
-    if (isNaN(d.getTime())) return '';
-    return `${d.getDate()} ${MESES_CORTOS[d.getMonth()]} ${d.getFullYear()}`;
-  };
-
   const totalCobrado = comisiones
     .filter((c: any) => c.detailed_status === 'pagada')
     .reduce((sum: number, c: any) => sum + (c.monto_comision || 0), 0);
@@ -311,11 +244,11 @@ const AgentComisiones = () => {
 
   // Opciones de filtro derivadas de los datos.
   const proyectoOptions = [...new Set(comisiones.map((c: any) => c.proyecto).filter(Boolean))].sort() as string[];
-  const estatusOptions = [...new Set(comisiones.map((c: any) => c.detailed_status).filter(Boolean))] as string[];
+  const estatusOptions = [...new Set(comisiones.map((c: any) => comisionEstatus(c.detailed_status)))] as ComisionEstatus[];
 
   const filteredComisiones = comisiones.filter((c: any) => {
     if (filterProyecto !== 'todos' && c.proyecto !== filterProyecto) return false;
-    if (filterEstatus !== 'todos' && c.detailed_status !== filterEstatus) return false;
+    if (filterEstatus !== 'todos' && comisionEstatus(c.detailed_status) !== filterEstatus) return false;
     if (searchCliente.trim()) {
       const q = searchCliente.trim().toLowerCase();
       const hit = (c.clientes || []).some((cl: any) =>
@@ -325,51 +258,10 @@ const AgentComisiones = () => {
     return true;
   });
 
-  // Orden (client-side, estilo portal cobranza)
-  const sortedComisiones = (() => {
-    if (!sort.key) return filteredComisiones;
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    const val = (c: any) => {
-      switch (sort.key) {
-        case 'account': return c.id_cuenta_cobranza || 0;
-        case 'project': return (c.proyecto || '').toLowerCase();
-        case 'client': return (c.clientes?.[0]?.nombre || '').toLowerCase();
-        case 'price': return c.precio_final || 0;
-        case 'commission': return c.monto_comision || 0;
-        case 'date': return c.fecha_pago ? new Date(c.fecha_pago).getTime() : 0;
-        default: return 0;
-      }
-    };
-    return [...filteredComisiones].sort((a: any, b: any) => {
-      const va = val(a), vb = val(b);
-      if (va < vb) return -1 * dir;
-      if (va > vb) return 1 * dir;
-      return 0;
-    });
-  })();
-
-  // Paginación (estilo portal cobranza)
-  const total = sortedComisiones.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginatedComisiones = sortedComisiones.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1)
-    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-    .reduce<(number | '...')[]>((acc, p, i, arr) => {
-      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
-      acc.push(p);
-      return acc;
-    }, []);
-
-  const toggleSort = (key: SortKey) => {
-    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
-    setPage(1);
-  };
-
   // Blocked state - only for Agente Inmobiliario role
   if (isAgentRole && !onboardingLoading && !canReceivePayments) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
         <div className="rounded-md border border-border bg-card p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
@@ -407,7 +299,7 @@ const AgentComisiones = () => {
   }
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
       <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
@@ -441,7 +333,7 @@ const AgentComisiones = () => {
       <div className="grid grid-cols-2 gap-3 items-end sm:flex sm:flex-wrap sm:gap-3">
         <div className="flex flex-col gap-1.5">
           <span className={FILTER_LABEL_CLS}>Proyecto</span>
-          <Select value={filterProyecto} onValueChange={(v) => { setFilterProyecto(v); setPage(1); }}>
+          <Select value={filterProyecto} onValueChange={setFilterProyecto}>
             <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
@@ -453,118 +345,61 @@ const AgentComisiones = () => {
           <span className={FILTER_LABEL_CLS}>Cliente</span>
           <Input
             value={searchCliente}
-            onChange={(e) => { setSearchCliente(e.target.value); setPage(1); }}
+            onChange={(e) => setSearchCliente(e.target.value)}
             placeholder="Nombre o correo"
             className="w-full sm:w-[180px]"
           />
         </div>
         <div className="flex flex-col gap-1.5">
           <span className={FILTER_LABEL_CLS}>Estatus</span>
-          <Select value={filterEstatus} onValueChange={(v) => { setFilterEstatus(v); setPage(1); }}>
+          <Select value={filterEstatus} onValueChange={setFilterEstatus}>
             <SelectTrigger className="w-full sm:w-[170px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los estatus</SelectItem>
-              {estatusOptions.map((s) => <SelectItem key={s} value={s}>{ESTATUS_LABEL[s] || s}</SelectItem>)}
+              {estatusOptions.map((s) => <SelectItem key={s} value={s}>{COMISION_ESTATUS_LABEL[s]}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Tabla (estilo portal cobranza) */}
+      {/* Tabla de comisiones (componente global reutilizable) */}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
         </div>
-      ) : total === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">
-          {comisiones.length === 0 ? 'Aún no tienes comisiones' : 'Sin comisiones con estos filtros'}
-        </div>
       ) : (
-        <div className="space-y-3">
-          <div className="rounded-md border border-border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table className="min-w-[1180px] table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <SortHeader label="Cuenta" sortKey="account" sort={sort} onSort={toggleSort} thClass="w-[150px]" />
-                    <SortHeader label="Proyecto" sortKey="project" sort={sort} onSort={toggleSort} thClass="w-[170px]" />
-                    <SortHeader label="Cliente" sortKey="client" sort={sort} onSort={toggleSort} thClass="w-[190px]" />
-                    <SortHeader label="Venta" sortKey="price" sort={sort} onSort={toggleSort} align="center" thClass="w-[130px]" />
-                    <SortHeader label="Comisión +IVA" sortKey="commission" sort={sort} onSort={toggleSort} align="center" thClass="w-[150px]" />
-                    <TableHead className="w-[130px] h-9 text-center uppercase tracking-wide whitespace-nowrap text-xs font-semibold text-muted-foreground">Estatus</TableHead>
-                    <SortHeader label="F. Pago" sortKey="date" sort={sort} onSort={toggleSort} align="center" thClass="w-[140px]" />
-                    <TableHead className="w-[120px] h-9 text-center uppercase tracking-wide whitespace-nowrap text-xs font-semibold text-muted-foreground">Comprobante</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedComisiones.map((c: any, idx: number) => {
-                    const rowNum = (currentPage - 1) * PAGE_SIZE + idx + 1;
-                    const unidad = c.propiedad || c.productoNombre || '';
-                    const tieneComprobante = c.detailed_status === 'pagada' && !!c.url_evidencia_pago;
-                    return (
-                      <TableRow key={`${c.id_cuenta_cobranza}-${idx}`} className="h-[52px]">
-                        <TableCell className="pl-3 pr-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-xs font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">{rowNum}</span>
-                            <span className="text-xs font-mono font-semibold tabular-nums truncate" title={c.cuenta_cobranza_label}>{c.cuenta_cobranza_label}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-xs font-medium truncate" title={c.proyecto}>{c.proyecto || 'Sin proyecto'}</p>
-                          {unidad && <p className="text-xs text-muted-foreground truncate" title={unidad}>{unidad}</p>}
-                        </TableCell>
-                        <TableCell><ClienteCell clientes={c.clientes} /></TableCell>
-                        <TableCell className="text-center tabular-nums text-xs">{mask(formatCurrency(c.precio_final || 0))}</TableCell>
-                        <TableCell className="text-center tabular-nums text-xs font-semibold">{mask(formatCurrency(c.monto_comision || 0))}</TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex justify-center"><EstatusBadgeTabla status={c.detailed_status} /></div>
-                        </TableCell>
-                        <TableCell className="text-center text-xs whitespace-nowrap truncate">{c.fecha_pago ? formatFechaPago(c.fecha_pago) : ''}</TableCell>
-                        <TableCell className="text-center">
-                          <button
-                            type="button"
-                            title={tieneComprobante ? 'Ver comprobante' : 'Sin comprobante'}
-                            disabled={!tieneComprobante}
-                            onClick={() => tieneComprobante && setViewerDoc({ url: c.url_evidencia_pago, title: `Comprobante · ${c.cuenta_cobranza_label}` })}
-                            className={cn(
-                              'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors',
-                              tieneComprobante ? 'text-emerald-600 hover:bg-emerald-50 cursor-pointer' : 'text-muted-foreground/40 cursor-default'
-                            )}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          {/* Footer: conteo + paginación */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs text-muted-foreground">
-              {`${((currentPage - 1) * PAGE_SIZE + 1).toLocaleString('es-MX')} a ${Math.min(currentPage * PAGE_SIZE, total).toLocaleString('es-MX')} de ${total.toLocaleString('es-MX')} comisiones`}
-            </p>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={currentPage === 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                {pageNumbers.map((p, i) => p === '...' ? (
-                  <span key={`e-${i}`} className="px-1.5 text-xs text-muted-foreground">…</span>
-                ) : (
-                  <Button key={p} variant={p === currentPage ? 'default' : 'outline'} size="icon" className="h-7 w-7 text-xs" onClick={() => setPage(p as number)}> {p}
-                  </Button>
-                ))}
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={currentPage === totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
+        <ComisionesTable
+          rows={filteredComisiones}
+          mask={mask}
+          onView={(url, title) => setViewerDoc({ url, title })}
+          emptyLabel={comisiones.length === 0 ? 'Aún no tienes comisiones' : 'Sin comisiones con estos filtros'}
+          renderFacturaUpload={(row) => {
+            // Puede subir su factura si la comisión está APROBADA o PAGADA (y aún no hay factura).
+            const est = comisionEstatus(row.detailed_status);
+            return (est === 'aprobado' || est === 'pagada') && agentEmail && personaId ? (
+              <AgentDocUploadButton
+                title="Factura de comisión"
+                subtitle="Sube el PDF de tu factura"
+                tooltip="Subir factura (PDF)"
+                elementId="btn_subir_factura_agent"
+                pdfOnly
+                track={track}
+                cuentaId={row.id_cuenta_cobranza}
+                onUpload={async (file) => {
+                  const path = `facturas-comision/${row.id_cuenta_cobranza}/${crypto.randomUUID()}-${file.name}`;
+                  const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
+                  if (upErr) throw upErr;
+                  const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+                  const { error: insErr } = await (supabase as any).from('documentos').insert({
+                    id_cuenta_cobranza: row.id_cuenta_cobranza, id_tipo_documento: 46, url: publicUrl, id_persona: personaId, numero: agentEmail, activo: true,
+                  });
+                  if (insErr) throw insErr;
+                  queryClient.invalidateQueries({ queryKey: ['agent-comisiones', agentEmail] });
+                }}
+              />
+            ) : null;
+          }}
+        />
       )}
       </div>
 
@@ -578,6 +413,85 @@ const AgentComisiones = () => {
     </div>
   );
 };
+
+// Botón compacto que abre un modal con dropzone para subir un documento (factura o
+// evidencia de pago). El guardado se inyecta con `onUpload`; acepta PDF (y opcional imagen).
+function AgentDocUploadButton({ title, subtitle, tooltip, elementId, cuentaId, pdfOnly, onUpload, track }: {
+  title: string; subtitle: string; tooltip: string; elementId: string; cuentaId: number;
+  pdfOnly?: boolean; onUpload: (file: File) => Promise<void>; track: ReturnType<typeof useCtaTracker>['track'];
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [drag, setDrag] = useState(false);
+
+  const accept = pdfOnly ? '.pdf' : '.pdf,image/*';
+  const hint = pdfOnly ? 'Solo PDF' : 'PDF o imagen';
+
+  const pick = (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+    const isImg = f.type.startsWith('image/');
+    if (pdfOnly ? !isPdf : !(isPdf || isImg)) {
+      toast.error(pdfOnly ? 'Solo se permiten archivos PDF.' : 'Solo se permiten PDF o imágenes.');
+      return;
+    }
+    doUpload(f);
+  };
+
+  const doUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      await onUpload(file);
+      toast.success('Documento subido correctamente');
+      setOpen(false);
+    } catch (err: any) {
+      console.error('Error al subir documento:', err);
+      toast.error('Error al subir: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <>
+      <IconButton
+        icon={Upload}
+        tooltip={tooltip}
+        onClick={() => { track({ page: 'agent_comisiones', elementId, elementLabel: tooltip, metadata: { cuentaId } }); setOpen(true); }}
+      />
+
+      {/* Modal de subida con dropzone (mismo estilo que CSF del perfil) */}
+      <Dialog open={open} onOpenChange={(o) => { if (!uploading) setOpen(o); }}>
+        <DialogContent className="flex max-h-[90vh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-md bg-card p-0">
+          <ModalFormHeader title={title} subtitle={subtitle} />
+          <div className={MODAL_BODY_CLS}>
+            <input ref={fileRef} type="file" accept={accept} className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
+            <div
+              role="button"
+              tabIndex={0}
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
+              onClick={() => !uploading && fileRef.current?.click()}
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-8 text-center transition-colors",
+                drag ? "border-primary bg-primary/5" : "border-border bg-muted hover:border-primary"
+              )}
+            >
+              {uploading ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="h-8 w-8 text-primary" strokeWidth={1.6} />}
+              <div>
+                <p className="text-sm font-bold text-foreground">{uploading ? 'Subiendo…' : 'Arrastra el archivo aquí'}</p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground/70">o haz clic para seleccionar · {hint}</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function CheckItem({ label, done }: { label: string; done: boolean }) {
   return (
