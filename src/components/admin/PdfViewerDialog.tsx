@@ -6,7 +6,7 @@ import { Download, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
-  BTN_SECONDARY_CLS,
+  BTN_CANCEL_CLS,
   BTN_PRIMARY_CLS,
   MODAL_HEADER_CLS,
   MODAL_TITLE_CLS,
@@ -147,7 +147,7 @@ export function PdfViewerDialog({
 
   const footer = (
     <div className={cn(MODAL_FOOTER_CLS, "shrink-0")}>
-      <button onClick={() => onOpenChange(false)} className={BTN_SECONDARY_CLS}>
+      <button onClick={() => onOpenChange(false)} className={BTN_CANCEL_CLS}>
         Cerrar
       </button>
       {effectiveUrl && !loading && (

@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,9 +14,6 @@ import { ENVIRONMENT } from "@/lib/config";
 import { toast } from "sonner";
 
 const MODAL_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-// Botón de acción invertido: blanco + verde, al hover invierte a verde + blanco.
-const GREEN_ACTION_BTN =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 
 interface PipelineOfferDetailDialogProps {
   open: boolean;
@@ -447,32 +446,21 @@ export function PipelineOfferDetailDialog({
           </div>
         </div>
 
-        {/* Sticky save button */}
-        {!alreadyHasScheme && selectedSchemeId && (
-          <div className="border-t border-[#ECEEF0] px-[22px] py-4 bg-background">
-            <button
-              type="button"
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
-              className={cn(GREEN_ACTION_BTN, "w-full h-11")}
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              Guardar plan seleccionado
-            </button>
-          </div>
-        )}
-
-        {alreadyHasScheme && (
-          <div className="border-t border-[#ECEEF0] p-3 bg-background text-center">
-            <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+        {/* Footer estándar: nota informativa a la izquierda + acciones a la derecha */}
+        <div className={cn(MODAL_FOOTER_CLS, "items-center bg-background")}>
+          {alreadyHasScheme && (
+            <p className="mr-auto flex items-center gap-1 text-[10px] text-muted-foreground">
               <Lock className="h-3 w-3" /> Plan ya seleccionado - no se puede cambiar
             </p>
-          </div>
-        )}
+          )}
+          <Button variant="cancel" onClick={() => onOpenChange(false)}>Cerrar</Button>
+          {!alreadyHasScheme && selectedSchemeId && (
+            <Button variant="primary-outline" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Guardar plan seleccionado
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

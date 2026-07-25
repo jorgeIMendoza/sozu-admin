@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // Color palette for projects
@@ -690,21 +691,17 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
 
           {/* Footer */}
           <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
+            <Button type="button" variant="cancel" onClick={handleClose}>
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary-outline"
               onClick={() => { track({ page: "modal_cita", elementId: "modal_cita_guardar" }); createMutation.mutate(); }}
               disabled={createMutation.isPending || !selectedProspecto || !selectedProyectoId || !selectedDate || !selectedHour || !selectedConfigId}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando…</> : isRescheduling ? "Reagendar Cita" : "Agendar Cita"}
-            </button>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

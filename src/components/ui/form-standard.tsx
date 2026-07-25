@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 /**
  * Estándar de formularios/modales (base: modal "Nuevo Prospecto").
@@ -24,9 +24,13 @@ export const FIELD_SELECT_TRIGGER_CLS =
 export const SECTION_HEADER_CLS =
   "mb-3 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[#9AA3AD]";
 
-// Botón secundario (Cancelar / Atrás / Cerrar). Hover → texto y borde rojos
-// (acción de descarte). Sin cambiar el fondo.
+// Botón secundario neutro (Atrás / acciones no destructivas). Hover gris suave.
 export const BTN_SECONDARY_CLS =
+  "rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]";
+
+// Botón de descarte (Cancelar / Cerrar). Hover → texto y borde rojos.
+// Usar SOLO en botones que cancelan/cierran, no en "Atrás".
+export const BTN_CANCEL_CLS =
   "rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:border-red-300 hover:text-red-600";
 
 // Botón primario (Guardar / Siguiente / Finalizar): outline verde, hover se rellena.
@@ -76,6 +80,49 @@ export function ModalHeader({
         ) : null}
       </div>
     </DialogHeader>
+  );
+}
+
+/**
+ * Modal estándar del portal: estructura fija header / body / footer sobre el
+ * Dialog de shadcn. El header estandariza título + subtítulo (+ X de cierre que
+ * trae DialogContent). El body admite cualquier contenido; el footer, cualquier
+ * acción (botones estándar `variant="cancel"` / `variant="primary-outline"`).
+ *
+ * Uso:
+ *   <StandardDialog open={open} onOpenChange={setOpen} title="Nuevo Prospecto"
+ *     subtitle="..." footer={<><Button variant="cancel">Cancelar</Button>
+ *       <Button variant="primary-outline">Guardar</Button></>}>
+ *     ...campos...
+ *   </StandardDialog>
+ */
+export function StandardDialog({
+  open,
+  onOpenChange,
+  title,
+  subtitle,
+  children,
+  footer,
+  className,
+  bodyClassName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  className?: string; // ancho/estilos del contenedor (p. ej. "max-w-lg")
+  bodyClassName?: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className={cn("flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0", className)}>
+        <ModalHeader title={title} subtitle={subtitle} />
+        <div className={cn(MODAL_BODY_CLS, "flex-1", bodyClassName)}>{children}</div>
+        {footer ? <div className={MODAL_FOOTER_CLS}>{footer}</div> : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 

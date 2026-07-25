@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ModalHeader, MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
 import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
 import { Loader2, ArrowLeft, Pencil, CalendarPlus, Check, FileText, MessageSquare, Download, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -496,22 +497,22 @@ const AgentProspectoDetalle = () => {
               {deleteNota.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Eliminar
             </button>
             {notaModal?.mode === "view" ? (
-              <button
+              <Button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                variant="primary-outline"
                 onClick={() => setNotaModal((m) => (m ? { ...m, mode: "edit" } : m))}
               >
                 <Pencil className="h-3.5 w-3.5" /> Editar
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                variant="primary-outline"
                 disabled={updateNota.isPending || !notaModal || (!notaModal.contenido.replace(/<[^>]+>/g, "").trim() && !/<img/i.test(notaModal.contenido))}
                 onClick={() => notaModal && updateNota.mutate({ id: notaModal.id, contenido: notaModal.contenido })}
               >
                 {updateNota.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Guardar
-              </button>
+              </Button>
             )}
           </div>
         </DialogContent>
@@ -520,11 +521,7 @@ const AgentProspectoDetalle = () => {
       {/* Visor in-app de adjuntos: imagen / PDF sin salir de la plataforma. */}
       <Dialog open={!!previewFile} onOpenChange={(o) => !o && setPreviewFile(null)}>
         <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
-          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#F0F2F4] px-5 py-4 text-left">
-            <DialogTitle className="truncate pr-8 text-[15px] font-bold tracking-[-0.2px] text-[#171A1D]">
-              {previewFile?.name || "Adjunto"}
-            </DialogTitle>
-          </DialogHeader>
+          <ModalHeader title={previewFile?.name || "Adjunto"} />
 
           <div className="bg-[#F6F7F8] p-4">
             {previewIsImage ? (
@@ -548,24 +545,18 @@ const AgentProspectoDetalle = () => {
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
-            <a
-              href={previewFile?.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Abrir en pestaña
-            </a>
-            <a
-              href={previewFile?.url}
-              download={previewFile?.name}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
-            >
-              <Download className="h-3.5 w-3.5" /> Descargar
-            </a>
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setPreviewFile(null)}>Cerrar</Button>
+            <Button variant="outline" asChild>
+              <a href={previewFile?.url} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" /> Abrir en pestaña
+              </a>
+            </Button>
+            <Button variant="primary-outline" asChild>
+              <a href={previewFile?.url} download={previewFile?.name} target="_blank" rel="noopener noreferrer">
+                <Download className="h-3.5 w-3.5" /> Descargar
+              </a>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

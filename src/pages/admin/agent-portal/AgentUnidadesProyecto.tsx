@@ -758,11 +758,12 @@ const AgentUnidadesProyecto = () => {
                   </div>
                 )}
               </div>
-              <div className="shrink-0 px-[22px] py-4 border-t border-[#ECEEF0] bg-background">
+              <div className="shrink-0 flex items-center justify-end gap-2.5 px-[22px] py-4 border-t border-[#ECEEF0] bg-background">
+                <Button variant="cancel" onClick={() => setSelectedProperty(null)}>Cerrar</Button>
                 {canGenerateOffer && (
                   isAgentRole && !hasTrainingComplete ? (
-                    <Button className="w-full gap-2 rounded-md" size="lg" disabled>
-                      <FileText className="h-5 w-5" /> Completa tu capacitación para generar ofertas
+                    <Button variant="primary-outline" disabled>
+                      <FileText className="h-4 w-4" /> Completa tu capacitación
                     </Button>
                   ) : (
                   <div onClick={(e) => { e.stopPropagation(); handleConfigureOffer(); }}>
@@ -776,15 +777,13 @@ const AgentUnidadesProyecto = () => {
                       forceLight={true}
                       enableDigitalOffer={canGenerateDigitalOffer}
                       customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-semibold text-sm hover:bg-[hsl(158_64%_38%)] hover:text-white active:scale-[0.98] transition-all">
-                          <FileText className="h-5 w-5" />
-                          <span>
-                            Configurar Oferta
-                            {selectedSchemeId && (
-                              <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
-                            )}
-                          </span>
-                        </button>
+                        <Button variant="primary-outline">
+                          <FileText className="h-4 w-4" />
+                          Configurar Oferta
+                          {selectedSchemeId && (
+                            <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
+                          )}
+                        </Button>
                       }
                     />
                   </div>

@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/ui/combobox";
 import { Loader2, X, Search, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -698,22 +700,18 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-          >
+        <div className={MODAL_FOOTER_CLS}>
+          <Button type="button" variant="cancel" onClick={handleClose}>
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary-outline"
             onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
             disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : isEditMode ? "Actualizar" : "Guardar"}
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

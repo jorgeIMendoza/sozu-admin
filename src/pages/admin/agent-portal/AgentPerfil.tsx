@@ -10,7 +10,9 @@ import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
-import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
+import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
+import { ModalViewer } from "@/components/ui/ModalViewer";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import {
@@ -23,7 +25,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { FIELD_LABEL_CLS, FIELD_INPUT_CLS, BTN_SECONDARY_CLS, BTN_PRIMARY_CLS, Req, ModalHeader, MODAL_TITLE_CLS } from "@/components/ui/form-standard";
+import { FIELD_LABEL_CLS, FIELD_INPUT_CLS, Req, ModalHeader, MODAL_TITLE_CLS, MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
@@ -79,14 +82,15 @@ const ACTIVATION_BLOCKS = [
   },
 ];
 
-// Documentos del expediente del agente (tipos reales en `documentos`)
-const EXPEDIENTE_DOCS: { nombre: string; emisor: string; hint: string; tipos: number[]; step: OnboardingStep['id']; kind: 'camera' | 'pdf' | 'firma' }[] = [
-  { nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], step: 'fiscal', kind: 'pdf' },
-  { nombre: 'INE - Frente', emisor: 'INE', hint: 'Lado con foto', tipos: [2], step: 'basic', kind: 'camera' },
-  { nombre: 'INE - Reverso', emisor: 'INE', hint: 'Lado con domicilio', tipos: [3], step: 'basic', kind: 'camera' },
-  { nombre: 'Pasaporte', emisor: 'SRE', hint: 'Página de datos (vigente)', tipos: [4], step: 'basic', kind: 'camera' },
-  { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], step: 'basic', kind: 'firma' },
-];
+// Documentos del expediente del agente (tipos reales en `documentos`).
+// La identidad es UN solo documento: INE (frente+reverso, tipos 2+3) O pasaporte
+// (tipo 4) — nunca ambos; se elige con un selector. El INE se captura en una sola
+// pasada (frente y luego reverso).
+type ExpDoc = { nombre: string; emisor: string; hint: string; tipos: number[]; kind: 'camera' | 'pdf' | 'firma'; mode?: 'ine' | 'pasaporte' };
+const INE_DOC: ExpDoc = { nombre: 'INE', emisor: 'INE', hint: 'Frente y reverso', tipos: [2, 3], kind: 'camera', mode: 'ine' };
+const PASAPORTE_DOC: ExpDoc = { nombre: 'Pasaporte', emisor: 'SRE', hint: 'Página de datos (vigente)', tipos: [4], kind: 'camera', mode: 'pasaporte' };
+const CSF_DOC: ExpDoc = { nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], kind: 'pdf' };
+const CARTA_DOC: ExpDoc = { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], kind: 'firma' };
 
 const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'> = {
   basic: 'identidad',
@@ -370,9 +374,20 @@ const AgentPerfil = () => {
     staleTime: 60_000,
   });
 
+  const isMobile = useIsMobile();
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
+  // Pestaña inicial del modal de paso (p. ej. 'address' para ir directo a firmar la carta).
+  const [activeStepTab, setActiveStepTab] = useState<string | undefined>(undefined);
+  // Captura por cámara de identidad (INE frente+reverso o pasaporte) directo desde
+  // el expediente. Reutiliza el componente del portal cliente.
+  const [ineCaptureOpen, setIneCaptureOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'ine' | 'pasaporte'>('ine');
   const [profileView, setProfileView] = useState<'overview' | 'expediente' | 'identidad' | 'fiscal' | 'bank' | 'training'>('overview');
-  const [docDetail, setDocDetail] = useState<typeof EXPEDIENTE_DOCS[number] | null>(null);
+  const [docDetail, setDocDetail] = useState<ExpDoc | null>(null);
+  // Selector de identidad (INE | Pasaporte). Solo se muestra hasta que se sube uno válido.
+  const [identitySel, setIdentitySel] = useState<'ine' | 'pasaporte'>('ine');
+  // Visor del INE (dos caras apiladas).
+  const [ineViewer, setIneViewer] = useState<{ frente: string | null; reverso: string | null } | null>(null);
   const [viewer, setViewer] = useState<{ url: string; nombre: string } | null>(null);
   // CSF: datos extraídos para confirmar/editar antes de guardar
   const [csfConfirm, setCsfConfirm] = useState<{ file: File; fields: { key: string; label: string; value: string; personaCol: string | null }[] } | null>(null);
@@ -514,7 +529,7 @@ const AgentPerfil = () => {
 
   // Manejo de archivo del expediente. La CSF (tipo 6) se procesa: extrae datos → modal de
   // confirmación editable → guarda documento (validado) + datos fiscales en el perfil.
-  const handleDocFile = async (file: File, doc: typeof EXPEDIENTE_DOCS[number]) => {
+  const handleDocFile = async (file: File, doc: ExpDoc) => {
     const tipo = doc.tipos[0];
     if (!doc.tipos.includes(6)) { uploadDocPdf(file, tipo); return; }
     setUploadingDoc(true);
@@ -660,6 +675,28 @@ const AgentPerfil = () => {
     staleTime: 30_000,
   });
 
+  // ¿El agente pertenece a una inmobiliaria (dependiente)? Discriminador:
+  // entidades_relacionadas tipo 19 con id_persona_duena_lead NO nulo. La Carta de
+  // comercialización (tipo 48) SOLO aplica a agentes independientes (sin inmobiliaria).
+  const { data: hasInmobiliaria = false } = useQuery({
+    queryKey: ['agent-perfil-inmo', personaId],
+    queryFn: async () => {
+      if (!personaId) return false;
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .not('id_persona_duena_lead', 'is', null)
+        .limit(1);
+      return (data && data.length > 0) || false;
+    },
+    enabled: !!personaId,
+    staleTime: 60_000,
+  });
+  const esIndependiente = !hasInmobiliaria;
+
   // Estatus agregado de Documentos (para la fila "Documentos" en Secciones).
   // Identidad = INE (frente+reverso) O pasaporte — no se exigen ambos.
   const docsStatus = (() => {
@@ -675,9 +712,12 @@ const AgentPerfil = () => {
     const csf = state([6]);
     const carta = state([48]);
 
-    const complete = identidadValidated && csf === 'validated' && carta === 'validated';
+    // La carta solo se exige a agentes independientes; los dependientes no la firman.
+    const cartaOk = !esIndependiente || carta === 'validated';
+    const complete = identidadValidated && csf === 'validated' && cartaOk;
     if (complete) return 'complete';
-    const anyProgress = [2, 3, 4, 6, 48].some((t) => state([t]) !== 'none');
+    const relevantTipos = esIndependiente ? [2, 3, 4, 6, 48] : [2, 3, 4, 6];
+    const anyProgress = relevantTipos.some((t) => state([t]) !== 'none');
     return anyProgress ? 'partial' : 'pending';
   })();
 
@@ -880,14 +920,14 @@ const AgentPerfil = () => {
                       <button
                         onClick={() => setEditingFrase(false)}
                         disabled={savingFrase}
-                        className="inline-flex items-center rounded-md border border-[#ECEEF0] px-3.5 py-1.5 text-[11.5px] font-semibold text-[#6B7280] hover:bg-[#F6F7F8] disabled:opacity-50"
+                        className="inline-flex items-center rounded-md border border-[#ECEEF0] px-3.5 py-1.5 text-[11.5px] font-semibold text-[#6B7280] transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50"
                       >
                         Cancelar
                       </button>
                       <button
                         onClick={handleFraseSave}
                         disabled={savingFrase}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-3.5 py-1.5 text-[11.5px] font-bold text-[hsl(158_64%_38%)] hover:bg-[#F0FAF4] disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-3.5 py-1.5 text-[11.5px] font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[#F0FAF4] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {savingFrase && <Loader2 className="h-3 w-3 animate-spin" />}
                         Guardar
@@ -1216,48 +1256,112 @@ const AgentPerfil = () => {
 
       {/* ===== VISTA: EXPEDIENTE ===== */}
       {profileView === 'expediente' && (() => {
-        // Identidad = INE (frente+reverso) O pasaporte, nunca ambos.
-        // Todo documento de identidad se captura desde la Carta de comercialización
-        // (flujo de onboarding), por lo que aquí es solo-vista.
-        const tieneTipo = (t: number) => expedienteDocs.some((d: any) => d.id_tipo_documento === t);
-        const hasINE = tieneTipo(2) || tieneTipo(3);
-        const hasPasaporte = tieneTipo(4);
-        const hasIdentidad = hasINE || hasPasaporte;
-        // Sin identidad → mostrar INE frente+reverso como "sin cargar".
-        const identidadTipos = hasPasaporte && !hasINE ? [4] : [2, 3];
-        const esDocIdentidad = (tipos: number[]) => tipos.some((t) => [2, 3, 4].includes(t));
-        const visibleDocs = EXPEDIENTE_DOCS.filter((d) =>
-          !esDocIdentidad(d.tipos) || d.tipos.some((t) => identidadTipos.includes(t))
-        );
-        const ordered = [...visibleDocs].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+        // La identidad es UN documento: INE (frente+reverso) O pasaporte. Se elige
+        // con un selector que se oculta al subir una identidad vigente. La carta
+        // (solo independientes) se firma con Mifiel; la CSF es PDF.
+        // Prioridad de estatus por tipo: validado > en revisión > rechazado > expirado
+        // (una recaptura marca el registro anterior como expirado, hay que ignorarlo).
+        const rank = (ev: number | null | undefined) => ev === 2 ? 4 : (ev == null || ev === 1) ? 3 : ev === 3 ? 2 : 1;
+        const tipoRow = (t: number) => {
+          const rws = expedienteDocs.filter((d: any) => d.id_tipo_documento === t);
+          if (!rws.length) return null;
+          return rws.slice().sort((a: any, b: any) => rank(b.id_estatus_verificacion) - rank(a.id_estatus_verificacion))[0];
+        };
+        const tipoEstado = (t: number): 'none' | 'validado' | 'revision' | 'rechazado' | 'expirado' => {
+          const r = tipoRow(t);
+          if (!r) return 'none';
+          const ev = r.id_estatus_verificacion;
+          return ev === 2 ? 'validado' : ev === 3 ? 'rechazado' : ev === 4 ? 'expirado' : 'revision';
+        };
+
+        const ineEstados = [tipoEstado(2), tipoEstado(3)];
+        const hasINE = ineEstados.every((e) => e !== 'none');           // ambas caras
+        const pasEstado = tipoEstado(4);
+        const hasPasaporte = pasEstado !== 'none';
+        const ineVigente = hasINE && !ineEstados.includes('expirado');
+        const pasVigente = hasPasaporte && pasEstado !== 'expirado';
+        const identityVigente = ineVigente || pasVigente;
+
+        // Doc de identidad a mostrar: el que ya se subió; si no, el del selector.
+        const identityDoc = hasPasaporte ? PASAPORTE_DOC : hasINE ? INE_DOC : (identitySel === 'pasaporte' ? PASAPORTE_DOC : INE_DOC);
+        const showSelector = !identityVigente; // se oculta una vez subida una identidad vigente
+
+        const visibleDocs: ExpDoc[] = [identityDoc, CSF_DOC, ...(esIndependiente ? [CARTA_DOC] : [])];
+
+        // Estado combinado del doc (el INE combina sus dos caras).
+        const docEstado = (doc: ExpDoc): 'pendiente' | 'validado' | 'revision' | 'rechazado' | 'expirado' => {
+          const estados = doc.tipos.map(tipoEstado);
+          if (estados.some((e) => e === 'none')) return 'pendiente';
+          if (estados.every((e) => e === 'validado')) return 'validado';
+          if (estados.some((e) => e === 'expirado')) return 'expirado';
+          if (estados.some((e) => e === 'rechazado')) return 'rechazado';
+          return 'revision';
+        };
+
         return (
         <div>
-          {/* Leyenda: solo cuando no hay ninguna identificación cargada */}
-          {!hasIdentidad && (
+          {/* Leyenda: solo mientras no haya una identidad vigente */}
+          {!identityVigente && (
             <div className="mb-2.5 rounded-md border border-[#FBEFD9] bg-[#FEF9EF] px-4 py-3">
               <p className="text-[12.5px] font-medium leading-relaxed text-[#B5730A]">
-                Aún no has registrado tu identificación oficial. Captura tu INE (frente y reverso) o tu pasaporte
-                desde la <span className="font-bold">Carta de comercialización</span> para completar tu expediente.
+                Aún no has registrado tu identificación oficial. Elige y captura tu <span className="font-bold">INE</span> (frente y reverso) o tu <span className="font-bold">pasaporte</span> para completar tu expediente.
               </p>
             </div>
           )}
+
+          {/* Selector INE | Pasaporte (solo hasta subir una identidad vigente) */}
+          {showSelector && perfilPerms.canUpdate && (
+            <div className="mb-2.5 inline-flex rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-1">
+              {([['ine', 'INE'], ['pasaporte', 'Pasaporte']] as const).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setIdentitySel(m)}
+                  className={cn(
+                    "rounded-[5px] px-4 py-1.5 text-[12px] font-bold transition-colors",
+                    identitySel === m ? "bg-white text-[hsl(158_64%_38%)] shadow-sm" : "text-[#6B7280]"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2.5">
-            {ordered.map((doc, i) => {
-              const rows = expedienteDocs.filter((d: any) => doc.tipos.includes(d.id_tipo_documento));
-              const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);
-              const exists = rows.length > 0;
-              const esIdentidad = esDocIdentidad(doc.tipos);
-              const estado = approved ? 'validado' : exists ? 'revision' : 'pendiente';
+            {visibleDocs.map((doc, i) => {
+              const isFirma = doc.kind === 'firma';
+              const isCamera = doc.kind === 'camera';
+              const isINE = doc.tipos.length === 2; // INE = frente + reverso
+              const estado = docEstado(doc);
+              const exists = estado !== 'pendiente';
               const badge =
-                estado === 'validado'
-                  ? { label: 'Validado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
-                  : estado === 'revision'
-                  ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
-                  : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
-              const url = rows.find((d: any) => d.url)?.url || null;
-              // Los documentos de identidad no se suben aquí: solo se pueden ver.
-              // La carta (firma) no se regenera si ya existe: solo se ve.
-              const showAction = !esIdentidad && perfilPerms.canUpdate && (doc.kind === 'firma' ? !exists : true);
+                estado === 'validado'  ? { label: 'Validado',    color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
+                : estado === 'revision' ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
+                : estado === 'rechazado'? { label: 'Rechazado',   color: 'text-[#B84A3C]', bg: 'bg-[#FBE9E7]' }
+                : estado === 'expirado' ? { label: 'Expirado',    color: 'text-[#6B7280]', bg: 'bg-[#F2F4F5]' }
+                : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
+              // ¿Requiere capturar/subir uno nuevo? (falta, expiró o fue rechazado).
+              // Si ya está cargado y válido/en revisión → lápiz (reemplazar por si se equivocaron).
+              const needsUpload = !exists || estado === 'expirado' || estado === 'rechazado';
+              const showAction = perfilPerms.canUpdate && (isFirma ? !exists : true);
+              const ineFrente = tipoRow(2)?.url || null;
+              const ineReverso = tipoRow(3)?.url || null;
+              const singleUrl = doc.tipos.map(tipoRow).find((r: any) => r?.url)?.url || null;
+              const canView = isINE ? !!(ineFrente || ineReverso) : !!singleUrl;
+              const handleAction = () => {
+                // Carta: abre el modal Identidad directo en Dirección (ahí está la firma + datos por completar).
+                if (isFirma) { setActiveStepTab('address'); setActiveStep('basic'); return; }
+                if (isCamera) { setCameraMode(doc.mode || 'ine'); setIneCaptureOpen(true); return; } // INE/pasaporte
+                setDocDetail(doc);                                          // CSF (PDF)
+              };
+              const handleView = () => {
+                if (isINE) { setIneViewer({ frente: ineFrente, reverso: ineReverso }); return; }
+                if (singleUrl) setViewer({ url: singleUrl, nombre: doc.nombre });
+              };
+              const ActionIcon = isFirma ? PenLine : needsUpload ? (isCamera ? Camera : Upload) : Pencil;
+              const actionTitle = isFirma ? 'Firmar carta'
+                : needsUpload ? (isCamera ? 'Capturar documento' : 'Subir documento')
+                : 'Reemplazar documento';
               return (
                 <div
                   key={doc.nombre}
@@ -1280,17 +1384,17 @@ const AgentPerfil = () => {
                   <div className="flex shrink-0 items-center gap-2">
                     {showAction && (
                       <button
-                        title={doc.kind === 'firma' ? 'Firmar carta' : 'Subir documento'}
-                        onClick={() => doc.kind === 'firma' ? setActiveStep(doc.step) : setDocDetail(doc)}
+                        title={actionTitle}
+                        onClick={handleAction}
                         className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                       >
-                        {doc.kind === 'firma' ? <PenLine className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                        <ActionIcon className="h-4 w-4" />
                       </button>
                     )}
-                    {url && (
+                    {canView && (
                       <button
                         title="Ver documento"
-                        onClick={() => setViewer({ url, nombre: doc.nombre })}
+                        onClick={handleView}
                         className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
                       >
                         <Eye className="h-4 w-4" />
@@ -1537,21 +1641,13 @@ const AgentPerfil = () => {
               </div>
             ))}
           </div>
-          <div className="flex gap-2.5 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
-            <button
-              onClick={() => setCsfConfirm(null)}
-              disabled={savingCsf}
-              className="flex-1 rounded-md border border-[#E4E7EA] bg-white py-2.5 text-[13px] font-bold text-[#4B5563] disabled:opacity-50"
-            >
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setCsfConfirm(null)} disabled={savingCsf}>
               Cancelar
-            </button>
-            <button
-              onClick={handleConfirmCsf}
-              disabled={savingCsf}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="primary-outline" onClick={handleConfirmCsf} disabled={savingCsf}>
               {savingCsf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Sí, es correcta
-            </button>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1597,34 +1693,60 @@ const AgentPerfil = () => {
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
-          <div className="mt-[18px] flex gap-2.5">
-            <button
-              onClick={() => setSecurityOpen(false)}
-              className="shrink-0 rounded-md border border-[#E4E7EA] bg-white px-4 py-2.5 text-[12.5px] font-bold text-[#4B5563]"
-            >
+          <div className="mt-[18px] flex justify-end gap-2.5">
+            <Button variant="cancel" onClick={() => setSecurityOpen(false)}>
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary-outline"
               onClick={changePassword}
               disabled={savingPw || !pwCurrent || !pwNew || !pwConfirm}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50"
             >
               {savingPw && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar contraseña
-            </button>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Visor de documento (in-app). PdfViewerDialog resuelve rutas del bucket
-          privado `firmas-digitales` (carta firmada) a signed URL y documentos Mifiel
-          vía Edge Function; los demás docs traen URL pública completa. */}
-      <PdfViewerDialog
+      {/* Visor de documento (in-app). ModalViewer resuelve rutas del bucket privado
+          `firmas-digitales` (carta firmada) a signed URL y documentos Mifiel vía
+          Edge Function; los demás docs traen URL pública completa. */}
+      <ModalViewer
         open={!!viewer}
         onOpenChange={(o) => { if (!o) setViewer(null); }}
         url={viewer?.url || ""}
-        title={viewer?.nombre}
+        title={viewer?.nombre || "Documento"}
       />
+
+      {/* Captura por cámara de identidad (INE frente+reverso o pasaporte) directo
+          desde el expediente. Sube a `documentos` (tipo 2/3/4) en estatus En revisión. */}
+      {personaId && (
+        <ClienteINECameraCapture
+          open={ineCaptureOpen}
+          onOpenChange={setIneCaptureOpen}
+          personaId={personaId}
+          isDesktop={!isMobile}
+          mode={cameraMode}
+          onCompleted={() => {
+            setIneCaptureOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
+            queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs', personaId] });
+          }}
+        />
+      )}
+
+      {/* Visor del INE: frente y reverso apilados vertical (como dos hojas). */}
+      <Dialog open={!!ineViewer} onOpenChange={(o) => { if (!o) setIneViewer(null); }}>
+        <DialogContent className="max-w-[560px] w-[92vw] bg-white p-0 gap-0 overflow-hidden">
+          <ModalHeader title="INE" subtitle="Frente y reverso" />
+          <div className="max-h-[75vh] overflow-y-auto px-[22px] py-[22px] space-y-4">
+            {[ineViewer?.frente, ineViewer?.reverso].filter(Boolean).map((url, i) => (
+              <img key={i} src={url as string} alt="INE" className="w-full rounded-md border border-[#ECEEF0]" />
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal editar información de Identidad */}
       <Dialog open={identEditOpen} onOpenChange={(o) => { if (!o) setIdentEditOpen(false); }}>
@@ -1680,14 +1802,14 @@ const AgentPerfil = () => {
               );
             })()}
           </div>
-          <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-            <button onClick={() => setIdentEditOpen(false)} disabled={savingIdent} className={BTN_SECONDARY_CLS}>
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setIdentEditOpen(false)} disabled={savingIdent}>
               Cancelar
-            </button>
-            <button onClick={saveIdent} disabled={savingIdent} className={BTN_PRIMARY_CLS}>
+            </Button>
+            <Button variant="primary-outline" onClick={saveIdent} disabled={savingIdent}>
               {savingIdent && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Guardar
-            </button>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1773,10 +1895,12 @@ const AgentPerfil = () => {
         <AgentOnboardingStepDialog
           step={activeStep}
           personaId={personaId}
+          initialTab={activeStepTab}
           open={!!activeStep}
           onOpenChange={(open) => {
             if (!open) {
               setActiveStep(null);
+              setActiveStepTab(undefined);
               queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
             }
           }}

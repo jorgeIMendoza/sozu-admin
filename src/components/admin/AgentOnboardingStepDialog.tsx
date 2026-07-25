@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MifielSigningDialog } from "@/components/admin/MifielSigningDialog";
-import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
+import { ModalViewer } from "@/components/ui/ModalViewer";
 import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,28 +53,28 @@ interface AgentOnboardingStepDialogProps {
   personaId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Pestaña inicial dentro del paso (p. ej. 'address' para ir directo a firmar la carta). */
+  initialTab?: string;
 }
 
 const STEP_TITLES: Record<string, string> = {
   basic: 'Identidad',
   address: 'Dirección',
   fiscal: 'Información Fiscal',
-  documents: 'Documentos',
+  documents: 'Carta de comercialización',
   'bank-accounts': 'Cuenta Bancaria',
   training: 'Capacitación',
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
-  basic: 'Datos personales, dirección e INE',
+  basic: 'Datos personales y dirección',
   address: 'Tu dirección física completa',
   fiscal: 'RFC, régimen fiscal, constancia y dirección fiscal',
-  documents: 'INE y Constancia',
+  documents: 'Firma digital de tu Carta de comercialización',
   'bank-accounts': 'Agrega tu cuenta bancaria',
   training: 'Agenda tu cita de capacitación presencial',
 };
 
-// Required document types for basic step (INE frente=2, INE reverso=3, Pasaporte=4, Carta comercialización=48)
-const BASIC_DOC_TYPES = [2, 3, 4, 48];
 // Constancia de situación fiscal (type 6) for fiscal step
 const FISCAL_DOC_TYPES = [6];
 // All required doc types for onboarding queries
@@ -88,34 +88,12 @@ const PASAPORTE_DOC_TYPE = 4;
 // Selfie document type
 const SELFIE_DOC_TYPE = 49;
 
-export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange }: AgentOnboardingStepDialogProps) {
+export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange, initialTab }: AgentOnboardingStepDialogProps) {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { track } = useCtaTracker();
   const { hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
   const hasTrackedFieldChange = useRef(false);
-
-  // Check if agent belongs to an inmobiliaria (to hide doc 48)
-  const { data: hasInmobiliaria } = useQuery({
-    queryKey: ['agent-step-dialog-inmo', personaId],
-    queryFn: async () => {
-      if (!personaId) return false;
-      const { data } = await supabase
-        .from('entidades_relacionadas')
-        .select('id')
-        .eq('id_persona', personaId)
-        .eq('id_tipo_entidad', 19)
-        .eq('activo', true)
-        .not('id_persona_duena_lead', 'is', null)
-        .limit(1);
-      return (data && data.length > 0) || false;
-    },
-    enabled: !!personaId,
-  });
-
-  // Filter out doc type 48 for agents with inmobiliaria
-  const effectiveBasicDocTypes = hasInmobiliaria ? BASIC_DOC_TYPES.filter(t => t !== 48) : BASIC_DOC_TYPES;
-  const effectiveRequiredDocTypes = hasInmobiliaria ? REQUIRED_DOC_TYPES.filter(t => t !== 48) : REQUIRED_DOC_TYPES;
 
   // Track opening the step
   useEffect(() => {
@@ -158,8 +136,11 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       <Loader2 className="h-6 w-6 animate-spin text-primary" />
     </div>
   ) : step === 'documents' ? (
+    // El paso "documents" quedó dedicado exclusivamente a la firma de la Carta de
+    // comercialización (tipo 48). La identidad (INE/pasaporte) y la CSF se suben
+    // desde el Expediente / paso fiscal. Solo aplica a agentes independientes.
     <div className="px-1">
-      <AgentDocumentsStep personaId={personaId} filterDocTypes={effectiveRequiredDocTypes} onTrackFieldChange={() => {
+      <AgentDocumentsStep personaId={personaId} filterDocTypes={[48]} onTrackFieldChange={() => {
         if (!hasTrackedFieldChange.current) {
           hasTrackedFieldChange.current = true;
           track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -185,7 +166,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       }} />
     </div>
   ) : (
-    <StepForm step={step} persona={persona} personaId={personaId} onSaved={handleSaved} onClose={() => onOpenChange(false)} basicDocTypes={effectiveBasicDocTypes} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
+    <StepForm step={step} persona={persona} personaId={personaId} initialTab={initialTab} onSaved={handleSaved} onClose={() => onOpenChange(false)} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
       if (!hasTrackedFieldChange.current) {
         hasTrackedFieldChange.current = true;
         track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -1488,16 +1469,16 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         />
       )}
 
-      <PdfViewerDialog
+      <ModalViewer
         open={!!cartaPdfViewerUrl}
         onOpenChange={(open) => { if (!open) setCartaPdfViewerUrl(null); }}
         url={cartaPdfViewerUrl || ""}
         title="Carta de Cumplimiento"
       />
 
-      {/* Visor interno del expediente: PDF → PdfViewerDialog; imagen → visor propio */}
+      {/* Visor interno del expediente: PDF → ModalViewer; imagen → visor propio */}
       {docView && /\.pdf(\?|$)/i.test(docView.url) ? (
-        <PdfViewerDialog
+        <ModalViewer
           open
           onOpenChange={(open) => { if (!open) setDocView(null); }}
           url={docView.url}
@@ -2189,13 +2170,15 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                 </div>
               )}
 
-              <button
-                onClick={handleSchedule}
-                disabled={saving || !selectedDate || !selectedSlot}
-                className="w-full py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm tracking-wide transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : "Agendar Cita"}
-              </button>
+              <div className="flex justify-end pt-1">
+                <Button
+                  variant="primary-outline"
+                  onClick={handleSchedule}
+                  disabled={saving || !selectedDate || !selectedSlot}
+                >
+                  {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : "Agendar Cita"}
+                </Button>
+              </div>
             </>
           )}
         </>
@@ -2213,13 +2196,36 @@ interface StepFormProps {
   onClose?: () => void;
   onTrackSave?: () => void;
   onTrackFieldChange?: () => void;
-  basicDocTypes?: number[];
+  initialTab?: string;
 }
 
-function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onTrackFieldChange, basicDocTypes }: StepFormProps) {
+function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onTrackFieldChange, initialTab }: StepFormProps) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState(step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '');
+  const [activeTab, setActiveTab] = useState(
+    initialTab || (step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '')
+  );
+
+  // ¿Agente independiente? (sin inmobiliaria). Solo a ellos se les pide la Carta
+  // de comercialización, que se firma al final del paso Identidad (tab Dirección).
+  const { data: hasInmobiliaria = false } = useQuery({
+    queryKey: ['stepform-inmo', personaId],
+    queryFn: async () => {
+      if (!personaId) return false;
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .not('id_persona_duena_lead', 'is', null)
+        .limit(1);
+      return (data && data.length > 0) || false;
+    },
+    enabled: !!personaId,
+    staleTime: 60_000,
+  });
+  const esIndependiente = !hasInmobiliaria;
 
   // Basic fields
   const [nombre, setNombre] = useState('');
@@ -2522,48 +2528,55 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
         <Label className={FIELD_LABEL_CLS}>Colonia <Req /></Label>
         <Input value={coloniaVal} onChange={(e) => setColoniaVal(e.target.value)} placeholder="Del Valle" className={FIELD_INPUT_CLS} />
       </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>Código Postal <Req /></Label>
-        <Input value={cpVal} onChange={(e) => setCpVal(e.target.value)} placeholder="03100" className={FIELD_INPUT_CLS} maxLength={5} />
+      {/* Desktop: CP + País en una fila, Estado + Municipio en la siguiente. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <Label className={FIELD_LABEL_CLS}>Código Postal <Req /></Label>
+          <Input value={cpVal} onChange={(e) => setCpVal(e.target.value)} placeholder="03100" className={FIELD_INPUT_CLS} maxLength={5} />
+        </div>
+        <div>
+          <Label className={FIELD_LABEL_CLS}>País <Req /></Label>
+          <Select value={paisVal} onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
+            <SelectContent>
+              {paises.map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>País <Req /></Label>
-        <Select value={paisVal} onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
-          <SelectContent>
-            {paises.map((p: any) => (
-              <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>Estado <Req /></Label>
-        <Select value={estadoVal} onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
-          <SelectContent>
-            {filteredEstados(paisVal).map((e: any) => (
-              <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>Municipio <Req /></Label>
-        <Select value={municipioVal} onValueChange={setMunicipioVal}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
-          <SelectContent>
-            {filteredMunicipios(estadoVal).map((m: any) => (
-              <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <Label className={FIELD_LABEL_CLS}>Estado <Req /></Label>
+          <Select value={estadoVal} onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
+            <SelectContent>
+              {filteredEstados(paisVal).map((e: any) => (
+                <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className={FIELD_LABEL_CLS}>Municipio <Req /></Label>
+          <Select value={municipioVal} onValueChange={setMunicipioVal}>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
+            <SelectContent>
+              {filteredMunicipios(estadoVal).map((m: any) => (
+                <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );
 
-  const basicTabs = ['personal', 'address', 'documents'] as const;
-  const basicTabLabels = ['Datos personales', 'Dirección', 'Documentos'];
+  // La identidad (INE/pasaporte) ya no se captura aquí: se sube desde el Expediente.
+  // El paso "Identidad" solo recoge datos personales + dirección.
+  const basicTabs = ['personal', 'address'] as const;
+  const basicTabLabels = ['Datos personales', 'Dirección'];
   const fiscalTabs = ['datos', 'direccion', 'constancia'] as const;
   const fiscalTabLabels = ['Datos', 'Dirección', 'Constancia'];
 
@@ -2652,10 +2665,9 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
     <div className="space-y-5 pb-4">
       {step === 'basic' && (
         <Tabs value={activeTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="personal" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Datos personales</TabsTrigger>
             <TabsTrigger value="address" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Dirección</TabsTrigger>
-            <TabsTrigger value="documents" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Documentos</TabsTrigger>
           </TabsList>
 
           {/* Indicador de progreso (solo visual, no navega) */}
@@ -2708,9 +2720,14 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
               'dir', calle, setCalle, numExt, setNumExt, numInt, setNumInt,
               colonia, setColonia, cp, setCp, idPais, setIdPais, idEstado, setIdEstado, idMunicipio, setIdMunicipio
             )}
-          </TabsContent>
-          <TabsContent value="documents" className="space-y-4">
-            <AgentDocumentsStep personaId={personaId} filterDocTypes={basicDocTypes || BASIC_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
+            {/* Carta de comercialización (firma Mifiel): solo agentes independientes.
+                La identidad (INE/pasaporte) NO se captura aquí; va en el Expediente. */}
+            {esIndependiente && (
+              <div className="border-t border-[#ECEEF0] pt-4">
+                <div className="mb-2 text-[13px] font-bold text-[#171A1D]">Carta de comercialización</div>
+                <AgentDocumentsStep personaId={personaId} filterDocTypes={[48]} onTrackFieldChange={onTrackFieldChange} />
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       )}
