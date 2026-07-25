@@ -512,11 +512,8 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
         <DialogContent aria-describedby={undefined} className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 space-y-0 border-b border-border px-6 py-5 text-left">
             <DialogTitle className="text-lg font-bold text-foreground">
-              Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
+              Planos - {planData.modelo}
             </DialogTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
-            </p>
           </DialogHeader>
 
           <Tabs defaultValue="ubicacion" className="flex min-h-0 flex-1 flex-col">

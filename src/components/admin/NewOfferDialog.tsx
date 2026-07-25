@@ -1467,8 +1467,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         )}
       </DialogTrigger>
       <DialogContent aria-describedby={undefined} className={cn("sm:max-w-[600px] max-h-[90vh] overflow-y-auto", forceLight && "light")}>
-        <DialogHeader className="border-b border-border pb-4">
-          <DialogTitle>Configurar Oferta</DialogTitle>
+        <DialogHeader className="border-b border-border pb-4 text-left">
+          <DialogTitle className="text-lg font-bold text-foreground">Configurar Oferta</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Propiedad <span className="font-semibold">{propertyNumber}</span>
             {projectName && <span className="font-semibold"> de {projectName}</span>}
