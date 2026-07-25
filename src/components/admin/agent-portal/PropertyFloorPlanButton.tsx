@@ -511,7 +511,7 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent aria-describedby={undefined} className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 space-y-0 border-b border-border px-6 py-5 text-left">
-            <DialogTitle className="text-lg font-bold text-foreground">
+            <DialogTitle>
               Planos - {planData.modelo}
             </DialogTitle>
           </DialogHeader>

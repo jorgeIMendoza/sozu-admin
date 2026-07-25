@@ -1467,8 +1467,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         )}
       </DialogTrigger>
       <DialogContent aria-describedby={undefined} className={cn("sm:max-w-[600px] max-h-[90vh] overflow-y-auto", forceLight && "light")}>
-        <DialogHeader className="border-b border-border pb-4 text-left">
-          <DialogTitle className="text-lg font-bold text-foreground">Configurar Oferta</DialogTitle>
+        <DialogHeader className="-mx-6 -mt-6 border-b border-border px-6 pb-4 pt-6 text-left">
+          <DialogTitle>Configurar Oferta</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Propiedad <span className="font-semibold">{propertyNumber}</span>
             {projectName && <span className="font-semibold"> de {projectName}</span>}
@@ -2543,7 +2543,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              )}
 
-            <div className="flex flex-wrap justify-end gap-2.5 border-t border-border pt-4">
+            <div className="-mx-6 -mb-6 mt-2 flex flex-wrap justify-end gap-2.5 border-t border-border px-6 pb-6 pt-4">
               <Button type="button" variant="cancel" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
