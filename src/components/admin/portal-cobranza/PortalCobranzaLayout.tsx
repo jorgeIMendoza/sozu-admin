@@ -16,7 +16,7 @@ import { useCobranzaImpersonation } from "@/contexts/CobranzaImpersonationContex
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { CobranzaImpersonationSelector } from "./CobranzaImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 interface NavLeaf {
   label: string;

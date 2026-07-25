@@ -1,7 +1,6 @@
 import * as React from "react";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -9,6 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SELECT_TRIGGER_CLS } from "@/components/ui/select";
 
 interface ComboboxProps {
   value: string;
@@ -68,22 +68,18 @@ export function Combobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
+        <button
+          type="button"
           role="combobox"
           aria-expanded={open}
-          className={cn(
-            "w-full justify-between",
-            !value && "text-muted-foreground",
-            className
-          )}
+          className={cn(SELECT_TRIGGER_CLS, !value && "font-normal text-muted-foreground", className)}
           disabled={disabled}
         >
           <span className="truncate text-left">
             {displayLabel}
           </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <div className="flex flex-col">

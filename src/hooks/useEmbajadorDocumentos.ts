@@ -19,7 +19,7 @@ export const EMBAJADOR_DOC_TYPES: EmbajadorDocType[] = [
   { key: 'convenio', nombre: 'Convenio de Embajador firmado', requiresApproval: true },
   { key: 'id', nombre: 'Identificación oficial', requiresApproval: true },
   { key: 'rfc', nombre: 'Constancia de situación fiscal', requiresApproval: true },
-  { key: 'bancarios', nombre: 'Datos bancarios', requiresApproval: false },
+  { key: 'bancarios', nombre: 'Carátula Estado de Cuenta Bancario', requiresApproval: true },
 ];
 
 // id_estatus_verificacion: 1 Pendiente, 2 Validado, 3 Rechazado, 4 Expirado

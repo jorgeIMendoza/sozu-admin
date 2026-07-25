@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ModalFormHeader, Req, FIELD_LABEL_CLS, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, CalendarDays, Plus, Clock, AlertCircle, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // Color palette for projects
@@ -431,9 +433,8 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
 
   const isRescheduling = !!existingCitaForProject;
 
-  const labelCls = "mb-1.5 block text-[13px] font-medium text-[#4B5563]";
-  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[14px] font-medium text-[#171A1D] data-[placeholder]:font-normal data-[placeholder]:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
-  const readonlyBoxCls = "flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-[#F6F7F8] px-3 py-2.5 text-[14px] font-medium text-[#171A1D]";
+  const labelCls = FIELD_LABEL_CLS;
+  const readonlyBoxCls = "flex items-center gap-1.5 rounded-md border border-border bg-muted px-3 py-2.5 text-sm font-medium text-foreground";
 
   return (
     <>
@@ -444,16 +445,12 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
           className="max-w-[480px] gap-0 overflow-hidden rounded-md p-0"
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >
-          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
-            <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
-              {rescheduleData ? "Reagendar Cita" : "Agendar Cita al Showroom"}
-            </DialogTitle>
-          </DialogHeader>
+          <ModalFormHeader title={rescheduleData ? "Reagendar Cita" : "Agendar Cita al Showroom"} />
 
-          <div className="flex max-h-[calc(90vh-9rem)] flex-col gap-4 overflow-y-auto px-[22px] py-[22px]">
+          <div className={cn(MODAL_BODY_CLS, "max-h-[calc(90vh-9rem)]")}>
             {/* Prospecto */}
             <div>
-              <div className={labelCls}>Prospecto <span className="text-red-500">*</span></div>
+              <div className={labelCls}>Prospecto <Req /></div>
               {rescheduleData ? (
                 <div className={readonlyBoxCls}>
                   {rescheduleData.prospectoName || 'Prospecto'}
@@ -471,7 +468,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                     />
                   ) : (
                     <Select value={selectedProspecto} onValueChange={handleSelectProspecto}>
-                      <SelectTrigger className={triggerCls}>
+                      <SelectTrigger>
                         <SelectValue placeholder="Seleccionar prospecto…" />
                       </SelectTrigger>
                       <SelectContent>
@@ -486,7 +483,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                   <button
                     type="button"
                     onClick={() => setAddProspectoOpen(true)}
-                    className="mt-2 flex items-center gap-1 text-[12px] font-semibold text-[hsl(158_64%_38%)] hover:underline"
+                    className="mt-2 flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Crear prospecto
@@ -507,7 +504,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                         <CalendarCheck className="h-3.5 w-3.5" />
                         Cita existente{projName ? ` - ${projName}` : ""}
                       </div>
-                      <p className={cn("text-[11px]", color.text)}>
+                      <p className={cn("text-xs", color.text)}>
                         {format(new Date(cita.fecha + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })} a las {cita.hora_inicio?.slice(0, 5)}
                         {cita.notas && <span className="block mt-0.5 opacity-80">Notas: {cita.notas}</span>}
                       </p>
@@ -520,7 +517,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
             {/* Project selector (dropdown) */}
             {selectedProspecto && (rescheduleData || (selectedProspectoData && selectedProspectoData.proyectos.length > 0)) && (
               <div>
-                <div className={labelCls}>Desarrollo para la cita <span className="text-red-500">*</span></div>
+                <div className={labelCls}>Desarrollo para la cita <Req /></div>
                 {rescheduleData ? (
                   <div className={readonlyBoxCls}>
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -542,7 +539,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                     value={selectedProyectoId?.toString() || ""}
                     onValueChange={(v) => handleSelectProject(parseInt(v))}
                   >
-                    <SelectTrigger className={triggerCls}>
+                    <SelectTrigger>
                       <SelectValue placeholder="Selecciona desarrollo…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -627,7 +624,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
 
             {/* Existing cita banner for selected project */}
             {existingCitaForProject && (
-              <p className="text-[10px] text-muted-foreground">Selecciona nueva fecha y horario para reagendar esta cita.</p>
+              <p className="text-xs text-muted-foreground">Selecciona nueva fecha y horario para reagendar esta cita.</p>
             )}
 
             {/* Time slots */}
@@ -660,8 +657,8 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                               className={cn(
                                 "px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors",
                                 selectedHour === String(slot.hour) && selectedConfigId === configId
-                                  ? "bg-[hsl(158_64%_38%)] text-white border-[hsl(158_64%_38%)]"
-                                  : "bg-white text-[#171A1D] border-[#E4E7EA] hover:border-[hsl(158_64%_38%)] hover:text-[hsl(158_64%_38%)]"
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-card text-foreground border-border hover:border-primary hover:text-primary"
                               )}
                             >
                               {String(slot.hour).padStart(2, "0")}:00
@@ -683,28 +680,23 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                 value={notas}
                 onChange={(e) => { setNotas(e.target.value); trackFieldFill(); }}
                 rows={6}
-                className="resize-none rounded-md border-[#ECEEF0] text-[14px] placeholder:font-normal placeholder:text-[#9AA3AD] focus-visible:border-[hsl(158_64%_38%)] focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)]/15 focus-visible:ring-offset-0"
+                className="resize-none rounded-md border-border text-sm placeholder:font-normal placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15 focus-visible:ring-offset-0"
               />
             </div>
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
+          <div className={MODAL_FOOTER_CLS}>
+            <Button type="button" variant="cancel" onClick={handleClose}>
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary-outline"
               onClick={() => { track({ page: "modal_cita", elementId: "modal_cita_guardar" }); createMutation.mutate(); }}
               disabled={createMutation.isPending || !selectedProspecto || !selectedProyectoId || !selectedDate || !selectedHour || !selectedConfigId}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando…</> : isRescheduling ? "Reagendar Cita" : "Agendar Cita"}
-            </button>
+            > {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando…</> : isRescheduling ? "Reagendar Cita" : "Agendar Cita"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

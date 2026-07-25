@@ -47,6 +47,7 @@ Ejecuciones_manuales/*
 .playwright-mcp/
 *.png
 !src/assets/*.png
+!src/assets/onboarding/*.png
 !public/*.png
 
 # Reportes semanales (generados localmente, no subir al repo)

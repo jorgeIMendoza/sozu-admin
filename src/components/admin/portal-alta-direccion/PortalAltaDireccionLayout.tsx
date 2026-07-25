@@ -28,7 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 import { AltaDireccionFiltersProvider } from "@/contexts/AltaDireccionFiltersContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { GlobalFilterBar } from "./GlobalFilterBar";

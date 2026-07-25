@@ -24,7 +24,7 @@ export interface ImageTransformOpts {
   width?: number;
   /** Alto objetivo en px. */
   height?: number;
-  /** Calidad 20–100. Default 90. */
+  /** Calidad 20–100. Default 75 (balance peso/calidad; el endpoint entrega WebP). */
   quality?: number;
   /** Modo de reescalado. Default "contain" = preserva aspect ratio (no deforma). */
   resize?: "cover" | "contain" | "fill";
@@ -44,7 +44,7 @@ export function optimizedImage(url?: string | null, opts: ImageTransformOpts = {
   // Con solo `width` devolvía WxH_original (p.ej. 640x2037 en vez de 640x290),
   // deformando la imagen a vertical. `resize=contain` escala proporcional dentro
   // del bounding box. Por eso el default es "contain".
-  const { width, height, quality = 90, resize = "contain" } = opts;
+  const { width, height, quality = 75, resize = "contain" } = opts;
   const [base] = url.split("?");
   const rendered = base.replace(OBJECT_MARKER, RENDER_MARKER);
 

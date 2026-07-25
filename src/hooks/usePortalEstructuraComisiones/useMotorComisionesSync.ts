@@ -25,10 +25,15 @@ import type { Channel, CommissionRule, MotorConfig } from "@/lib/portal-estructu
 /** PostgREST devuelve este código cuando la tabla aún no existe (DDL pendiente) — no es un error real que deba alertarse. */
 const TABLE_MISSING_CODE = "PGRST205";
 
+/** Código Postgres de violación de constraint UNIQUE. */
+const DUPLICATE_KEY_CODE = "23505";
+
 export interface SyncResult {
   ok: boolean;
   /** true cuando el fallo es porque la tabla todavía no existe (DDL pendiente) — no debe mostrarse como error al usuario. */
   tableMissing: boolean;
+  /** true cuando el fallo es porque ya existe una fila con la misma combinación canal×rol×proyecto — error de negocio, no técnico. */
+  duplicate?: boolean;
 }
 
 // ================================================================
@@ -151,16 +156,24 @@ export async function fetchReglasComisionReales(idProyecto: number): Promise<Com
   return (data as any[]).map(ruleFromRow);
 }
 
-export async function insertReglaComisionRemota(rule: CommissionRule, idProyecto: number): Promise<{ rule: CommissionRule | null; tableMissing: boolean }> {
-  const { data, error } = await (supabase as any).from("comisiones_reglas").insert(ruleToRow(rule, idProyecto)).select().single();
-  if (error) return { rule: null, tableMissing: error.code === TABLE_MISSING_CODE };
-  return { rule: ruleFromRow(data), tableMissing: false };
-}
-
-/** Inserta varias reglas de una vez (usado por "Sincronizar roles y comisiones"). */
+/**
+ * Inserta/actualiza varias reglas de una vez (usado por "Sincronizar roles y
+ * comisiones" y por "Guardar cambios" del Motor de Comisiones).
+ *
+ * Usa `upsert` (no `insert` puro) sobre la unique key real de la tabla
+ * (`id_canal, id_rol, id_proyecto`, ver `comisiones_reglas_canal_rol_proyecto_key`).
+ * Necesario porque el estado local (`commissionRules`) puede quedar
+ * momentáneamente desfasado de la BD al cambiar de proyecto (fetch en vuelo)
+ * o por dos sesiones sincronizando a la vez — con `insert` puro, intentar
+ * crear una fila que ya existe para ese canal×rol×proyecto revienta con
+ * `23505 duplicate key`. Con `upsert` esa misma fila simplemente se
+ * actualiza en vez de fallar.
+ */
 export async function insertReglasComisionRemotas(rules: CommissionRule[], idProyecto: number): Promise<{ rules: CommissionRule[]; tableMissing: boolean }> {
   if (!rules.length) return { rules: [], tableMissing: false };
-  const { data, error } = await (supabase as any).from("comisiones_reglas").insert(rules.map((r) => ruleToRow(r, idProyecto))).select();
+  const { data, error } = await (supabase as any).from("comisiones_reglas")
+    .upsert(rules.map((r) => ruleToRow(r, idProyecto)), { onConflict: "id_canal,id_rol,id_proyecto" })
+    .select();
   if (error) return { rules: [], tableMissing: error.code === TABLE_MISSING_CODE };
   return { rules: (data as any[]).map(ruleFromRow), tableMissing: false };
 }
@@ -174,7 +187,7 @@ export async function updateReglaComisionRemota(rule: CommissionRule): Promise<S
     pool: rule.pool,
     fecha_actualizacion: new Date().toISOString(),
   }).eq("id", Number(rule.id));
-  return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE };
+  return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE, duplicate: error?.code === DUPLICATE_KEY_CODE };
 }
 
 export async function deleteReglaComisionRemota(id: string): Promise<SyncResult> {

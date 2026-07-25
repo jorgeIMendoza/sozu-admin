@@ -5,11 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -36,6 +32,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SELECT_TRIGGER_CLS,
 } from "@/components/ui/select";
 import {
   Command,
@@ -53,14 +50,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import {
+  ModalFormHeader,
+  Req,
+  SECTION_CLS,
+  SECTION_HEADER_CLS,
+  MODAL_BODY_CLS,
+  MODAL_FOOTER_CLS,
+} from "@/components/ui/modal-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Check, ChevronsUpDown, UserPlus, Warehouse, Car, Info, AlertTriangle, Plus, Trash2, X, Mail } from "lucide-react";
+import { FileText, Check, ChevronDown, Warehouse, Car, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1466,37 +1470,36 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className={cn("sm:max-w-[600px] max-h-[90vh] overflow-y-auto", forceLight && "light")}>
-        <DialogHeader>
-          <DialogTitle>Configurar Oferta</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            Propiedad <span className="font-semibold">{propertyNumber}</span>
-            {projectName && <span className="font-semibold"> de {projectName}</span>}
-          </p>
-          
+      <DialogContent className={cn("flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-md p-0 sm:max-w-[600px]", forceLight && "light")}>
+        <ModalFormHeader
+          title="Configurar Oferta"
+          subtitle={
+            <>
+              Propiedad <span className="font-semibold">{propertyNumber}</span>
+              {projectName && <span className="font-semibold"> de {projectName}</span>}
+            </>
+          }
+        />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+            <div className={cn(MODAL_BODY_CLS, "min-h-0 flex-1")}>
+        {/* Plan / precio / productos */}
+        <div className="space-y-3">
           {/* Plan Selector - unified */}
           {selectedMode !== "manual" && propertyPaymentSchemes && propertyPaymentSchemes.length > 0 && (
-            <div className={`mt-2 rounded-lg border p-2.5 transition-colors ${
-              selectedSchemeDetails
-                ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800"
-                : "bg-muted/40 border-border/60"
-            }`}>
-              <div className="flex items-center gap-2">
-                <FileText className={`h-3.5 w-3.5 shrink-0 ${selectedSchemeDetails ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`} />
+            <div className="mt-2 space-y-2">
                 <Select
                   value={localSchemeId?.toString() || "none"}
                   onValueChange={(value) => {
                     setLocalSchemeId(value === "none" ? null : parseInt(value));
                   }}
                 >
-                  <SelectTrigger className={`h-8 text-xs border-0 shadow-none bg-transparent px-1 ${
-                    selectedSchemeDetails ? "text-emerald-700 font-medium dark:text-emerald-300" : "text-muted-foreground"
-                  }`}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Seleccionar plan de pago..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">
-                      <span className="text-muted-foreground italic">Sin plan seleccionado</span>
+                      <span className="text-muted-foreground">Sin plan seleccionado</span>
                     </SelectItem>
                     {propertyPaymentSchemes.map((scheme: any) => (
                       <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -1531,25 +1534,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedSchemeDetails?.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails?.porcentaje_descuento_aumento != null && (
-                  <Badge variant="outline" className={`text-[10px] shrink-0 ${
-                    selectedSchemeDetails.porcentaje_descuento_aumento < 0
-                      ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}>
-                    {selectedSchemeDetails.porcentaje_descuento_aumento > 0 ? "+" : ""}{selectedSchemeDetails.porcentaje_descuento_aumento}%
-                  </Badge>
-                )}
                 {selectedSchemeDetails && (
-                  <button
-                    type="button"
-                    onClick={() => setLocalSchemeId(null)}
-                    className="ml-auto text-muted-foreground hover:text-foreground shrink-0"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedSchemeDetails.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails.porcentaje_descuento_aumento != null && (
+                      <Badge variant="outline" className={`text-xs ${
+                        selectedSchemeDetails.porcentaje_descuento_aumento < 0
+                          ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "border-destructive/30 bg-destructive/10 text-destructive"
+                      }`}>
+                        {selectedSchemeDetails.porcentaje_descuento_aumento > 0 ? "+" : ""}{selectedSchemeDetails.porcentaje_descuento_aumento}%
+                      </Badge>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLocalSchemeId(null)}
+                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" /> Quitar plan
+                    </button>
+                  </div>
                 )}
-              </div>
             </div>
           )}
           {selectedMode !== "manual" && (!propertyPaymentSchemes || propertyPaymentSchemes.length === 0) && (
@@ -1593,7 +1597,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           {/* Badges for included products */}
           <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
             <div className="flex items-center gap-2 mb-2">
-              <Info className="h-4 w-4 text-blue-500" />
+              <Info className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Productos asociados a esta propiedad:</span>
             </div>
             {isLoadingProducts ? (
@@ -1614,10 +1618,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       <Badge 
                         key={`bodega-${bodega.id}`}
                         variant={isIncludedInPrice ? "default" : "outline"}
-                        className={cn(
-                          "flex items-center gap-1",
-                          isIncludedInPrice ? "bg-amber-500 hover:bg-amber-600" : "border-amber-500 text-amber-700"
-                        )}
+                        className="flex items-center gap-1"
                       >
                         <Warehouse className="h-3 w-3" />
                         {bodega.nombre}
@@ -1638,10 +1639,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       <Badge 
                         key={`est-${est.id}`}
                         variant={isIncludedInPrice ? "default" : "outline"}
-                        className={cn(
-                          "flex items-center gap-1",
-                          isIncludedInPrice ? "bg-blue-500 hover:bg-blue-600" : "border-blue-500 text-blue-700"
-                        )}
+                        className="flex items-center gap-1"
                       >
                         <Car className="h-3 w-3" />
                         {est.nombre}
@@ -1670,12 +1668,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             }));
                           }}
                         >
-                          <SelectTrigger className="h-7 text-[11px] w-48">
+                          <SelectTrigger className="h-7 text-xs w-48">
                             <SelectValue placeholder="Sin seleccionar" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">
-                              <span className="text-muted-foreground italic">Sin seleccionar</span>
+                              <span className="text-muted-foreground">Sin seleccionar</span>
                             </SelectItem>
                             {p.paymentSchemes?.map((scheme: any) => (
                               <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -1724,9 +1722,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </>
             )}
           </div>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        </div>
             {/* Mode Selection - Manual available for all roles except Agente Inmobiliario, hidden if hideManualMode is true */}
             {(() => {
               // If hideManualMode is true, don't show the manual option
@@ -1785,9 +1781,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             {/* Manual Payment Scheme Section */}
             {selectedMode === "manual" && (
               <>
-                <Separator />
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Esquema de Pago Personalizado</h3>
+                <div className={cn(SECTION_CLS, "space-y-4")}>
+                  <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Esquema de Pago Personalizado</h3>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -1795,7 +1790,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_enganche"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Enganche (%) *</FormLabel>
+                          <FormLabel>Porcentaje Enganche (%) <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1810,7 +1805,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         name="numero_pagos_enganche"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Número de Pagos de Enganche *</FormLabel>
+                            <FormLabel>Número de Pagos de Enganche <Req /></FormLabel>
                             <FormControl>
                               <Input 
                                 type="number" 
@@ -1845,7 +1840,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Mensualidades (%) *</FormLabel>
+                          <FormLabel>Porcentaje Mensualidades (%) <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1901,7 +1896,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="numero_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Número de Mensualidades *</FormLabel>
+                          <FormLabel>Número de Mensualidades <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="12" {...field} />
                           </FormControl>
@@ -1938,7 +1933,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             onClick={addTramo}
                             className="h-8"
                           >
-                            <Plus className="h-4 w-4 mr-1" />
                             Agregar tramo
                           </Button>
                         )}
@@ -1982,7 +1976,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                   </div>
                                   <div className="flex flex-col items-center gap-1">
                                     {index > 0 && (
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-xs text-muted-foreground">
                                         (mes {mensualidadesAcumuladas + 1}+)
                                       </span>
                                     )}
@@ -1993,7 +1987,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                       className="h-8 w-8 text-destructive hover:text-destructive"
                                       onClick={() => removeTramo(tramo.id)}
                                     >
-                                      <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 </div>
@@ -2201,12 +2194,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </>
             )}
 
-            <Separator />
-
             {/* Person Search Section */}
-            <div className="space-y-4">
+            <div className={cn(SECTION_CLS, "space-y-4")}>
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium">Buscar Prospecto</h3>
+                <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Buscar Prospecto</h3>
                 {selectedPerson && (
                   <Button
                     type="button"
@@ -2214,7 +2205,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     size="sm"
                     onClick={clearPersonSelection}
                   >
-                    <UserPlus className="h-4 w-4 mr-2" />
                     Nuevo Prospecto
                   </Button>
                 )}
@@ -2224,19 +2214,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 <div className="space-y-2">
                   <Popover open={searchOpen} onOpenChange={setSearchOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
+                      <button
+                        type="button"
                         role="combobox"
                         aria-expanded={searchOpen}
-                        className="w-full justify-between"
+                        className={cn(SELECT_TRIGGER_CLS, !selectedPerson && "font-normal text-muted-foreground")}
                       >
-                        {selectedPerson
-                          ? selectedPerson.nombre_legal
-                          : "Buscar por nombre..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
+                        <span className="truncate text-left">
+                          {selectedPerson ? selectedPerson.nombre_legal : "Buscar por nombre…"}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
+                    <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
                       <Command>
                         <CommandInput 
                           placeholder="Buscar persona..." 
@@ -2300,26 +2290,22 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               )}
             </div>
 
-            <Separator />
-
           {/* Prospect Information Section */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Información del Prospecto</h3>
-              
+            <div className={cn(SECTION_CLS, "space-y-4")}>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="tipo_persona"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tipo de Persona *</FormLabel>
+                      <FormLabel>Tipo de Persona <Req /></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
                         disabled={selectedPerson !== null}
                       >
                         <FormControl>
-                          <SelectTrigger className="neu-input h-auto">
+                          <SelectTrigger>
                             <SelectValue placeholder="Seleccionar" />
                           </SelectTrigger>
                         </FormControl>
@@ -2339,13 +2325,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {selectedPersonType === "pm" ? "Razón Social *" : "Nombre Completo *"}
+                        {selectedPersonType === "pm" ? "Razón Social" : "Nombre Completo"} <Req />
                       </FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder={selectedPersonType === "pm" ? "Ingresa la razón social" : "Ingresa el nombre completo"} 
+                          placeholder={selectedPersonType === "pm" ? "Constructora del Valle S.A. de C.V." : "Juan Pérez García"} 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field} 
                         />
                       </FormControl>
@@ -2361,13 +2346,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email *</FormLabel>
+                      <FormLabel>Email <Req /></FormLabel>
                       <FormControl>
                         <Input 
                           type="email" 
-                          placeholder="Ingresa el email" 
+                          placeholder="juan.perez@correo.com" 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field} 
                         />
                       </FormControl>
@@ -2381,14 +2365,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="clave_pais_telefono"
                   render={({ field }) => (
                     <FormItem className="w-24">
-                      <FormLabel>País *</FormLabel>
+                      <FormLabel>País <Req /></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
                         disabled={selectedPerson !== null}
                       >
                         <FormControl>
-                          <SelectTrigger className="neu-input h-auto">
+                          <SelectTrigger>
                             <SelectValue placeholder="--" />
                           </SelectTrigger>
                         </FormControl>
@@ -2408,12 +2392,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="telefono"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Teléfono *</FormLabel>
+                      <FormLabel>Teléfono <Req /></FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="10 dígitos" 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field}
                           onChange={(e) => {
                             const value = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -2437,10 +2420,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             <FormLabel>RFC</FormLabel>
                              <FormControl>
                              <Input 
-                               placeholder="Ingresa el RFC (Ej: ABC123456DEF)" 
+                               placeholder="PEGJ850101H2A" 
                                maxLength={13}
                                disabled={selectedPerson !== null}
-                               className="neu-input h-auto"
                                {...field} 
                              />
                            </FormControl>
@@ -2458,10 +2440,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                              <FormLabel>CURP</FormLabel>
                               <FormControl>
                                 <Input 
-                                  placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" 
+                                  placeholder="PEGJ850101HDFRRN09" 
                                   maxLength={18}
                                   disabled={selectedPerson !== null}
-                                  className="neu-input h-auto"
                                   {...field} 
                                 />
                               </FormControl>
@@ -2473,12 +2454,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              </div>
 
-             <Separator />
-
              {/* Opciones de visualización en PDF - Hidden if hidePdfOptions is true */}
              {!hidePdfOptions && (
-               <div className="space-y-4">
-                 <h3 className="text-sm font-semibold">Opciones de visualización en PDF</h3>
+               <div className={cn(SECTION_CLS, "space-y-4")}>
+                 <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Opciones de visualización en PDF</h3>
                  <p className="text-xs text-muted-foreground">
                    Selecciona qué información deseas mostrar en esta oferta
                  </p>
@@ -2545,32 +2524,32 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              )}
 
-            <div className="flex justify-end space-x-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-                className="rounded-2xl px-6"
-              >
+            </div>
+
+            <div className={MODAL_FOOTER_CLS}>
+              <Button type="button" variant="cancel" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <button
-                type="submit"
-                disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
-                className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
-              </button>
-              {enableDigitalOffer && (
-                <button
+              {/* Con oferta digital habilitada, ese es el único camino: el PDF suelto
+                  se omite para que el footer quepa en una sola fila. */}
+              {enableDigitalOffer ? (
+                <Button
                   type="button"
+                  variant="primary-outline"
                   disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                   onClick={() => { setPendingButton('digital'); form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
-                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {createOfferMutation.isPending && pendingButton === 'digital' ? "Generando..." : "Generar Oferta Digital"}
-                </button>
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="primary-outline"
+                  disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
+                  onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
+                >
+                  {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
+                </Button>
               )}
             </div>
           </form>
@@ -2614,7 +2593,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">
-                        <span className="text-muted-foreground italic">Sin seleccionar</span>
+                        <span className="text-muted-foreground">Sin seleccionar</span>
                       </SelectItem>
                       {propertyPaymentSchemes?.map((scheme: any) => (
                         <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -2679,7 +2658,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">
-                                  <span className="text-muted-foreground italic">Sin seleccionar</span>
+                                  <span className="text-muted-foreground">Sin seleccionar</span>
                                 </SelectItem>
                                 {p.paymentSchemes?.map((scheme: any) => (
                                   <SelectItem key={scheme.id} value={scheme.id.toString()}>

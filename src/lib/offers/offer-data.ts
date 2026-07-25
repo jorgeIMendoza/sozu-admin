@@ -255,6 +255,12 @@ export interface OfertaComercial {
   propertyId: string;
   /** Email del prospecto/cliente vinculado al crear la oferta. Pre-llena y bloquea el campo email en el flujo de captura de datos. */
   prospectEmail?: string;
+  /** Nombre legal del prospecto/cliente vinculado. Pre-llena el campo nombre en la captura de datos. */
+  prospectName?: string;
+  /** Teléfono (solo dígitos) del prospecto/cliente vinculado. Pre-llena el campo teléfono. */
+  prospectPhone?: string;
+  /** Lada internacional del prospecto (ej. "+52"). Pre-selecciona el país en el campo teléfono. */
+  prospectDialCode?: string;
   property: PropertyDetails;
   estimatedDelivery: string;
   highlights: string[];

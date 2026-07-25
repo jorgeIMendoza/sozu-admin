@@ -1,23 +1,26 @@
-import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
-import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
+import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
+import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
 import SectionCard from "@/components/offer/SectionCard";
+import { ActionButton } from "@/components/ui/action-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { NoteEditor } from "@/components/admin/agent-portal/NoteEditor";
-import { Loader2, ArrowLeft, Pencil, CalendarPlus, Check, FileText, MessageSquare, Download, ExternalLink } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalFormHeader } from "@/components/ui/modal-form";
+import { ModalViewer } from "@/components/ui/modal-viewer";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarPlus, Check, FileText, Loader2, MessageSquare, Pencil } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 interface TimelineItem {
@@ -239,10 +242,10 @@ const AgentProspectoDetalle = () => {
   });
 
   if (loadingPersona) {
-    return <div className="pb-24"><AgentPortalHeader /><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-[#9AA3AD]" /></div></div>;
+    return <div ><AgentPortalHeader /><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" /></div></div>;
   }
   if (!persona) {
-    return <div className="pb-24"><AgentPortalHeader /><div className="py-16 text-center text-sm text-muted-foreground">Prospecto no encontrado</div></div>;
+    return <div ><AgentPortalHeader /><div className="py-16 text-center text-sm text-muted-foreground">Prospecto no encontrado</div></div>;
   }
 
   const initials = (persona.nombre_legal || persona.email || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w.charAt(0).toUpperCase()).join("") || "?";
@@ -256,14 +259,14 @@ const AgentProspectoDetalle = () => {
   ];
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
-      <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
+      <div className="mx-auto max-w-[1040px] space-y-4">
         <button
           onClick={() => navigate("/admin/agent/prospectos")}
           title="Prospectos"
-          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white transition-colors hover:bg-gray-50"
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-card transition-colors hover:bg-gray-50"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -276,19 +279,19 @@ const AgentProspectoDetalle = () => {
             </Avatar>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[19px] font-bold tracking-[-0.3px] text-[#171A1D]">{mask(persona.nombre_legal || persona.email)}</span>
-                <Badge className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/10">
+                <span className="text-xl font-bold tracking-[-0.3px] text-foreground">{mask(persona.nombre_legal || persona.email)}</span>
+                <Badge className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary hover:bg-primary/10">
                   {entidades.length} {entidades.length === 1 ? "desarrollo" : "desarrollos"}
                 </Badge>
-                <Badge variant="secondary" className="rounded-full bg-[#F2F4F5] px-2.5 py-0.5 text-[10px] font-semibold text-[#6B7280] hover:bg-[#F2F4F5]">{tipoLabel}</Badge>
+                <Badge variant="secondary" className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground hover:bg-muted">{tipoLabel}</Badge>
               </div>
               <div className="mt-3.5 grid gap-x-6 gap-y-1 sm:grid-cols-2">
                 {infoRows.map(([label, value]) => (
-                  <div key={label} className="flex items-center justify-between gap-3 border-b border-[#F2F4F5] py-1.5">
-                    <span className="text-[11.5px] font-medium text-[#9AA3AD]">{label}</span>
+                  <div key={label} className="flex items-center justify-between gap-3 border-b border-border py-1.5">
+                    <span className="text-xs font-medium text-muted-foreground/70">{label}</span>
                     <span className={cn(
-                      "truncate text-right text-[12px] tabular-nums",
-                      value === "Sin datos" ? "font-medium text-[#B7BEC5]" : "font-bold text-[#171A1D]"
+                      "truncate text-right text-xs tabular-nums",
+                      value === "Sin datos" ? "font-medium text-muted-foreground/70" : "font-bold text-foreground"
                     )}>{value === "Sin datos" ? value : mask(value)}</span>
                   </div>
                 ))}
@@ -298,35 +301,31 @@ const AgentProspectoDetalle = () => {
 
           {/* Acciones */}
           <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditOpen(true)}>
-              <Pencil className="h-3.5 w-3.5" /> Editar
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setCitaOpen(true)}>
-              <CalendarPlus className="h-3.5 w-3.5" /> Agendar visita
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5 text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
-              onClick={() => navigate("/admin/agent/inventario")}
-            >
-              <FileText className="h-3.5 w-3.5" /> Generar oferta
-            </Button>
+            <ActionButton icon={Pencil} variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              Editar
+            </ActionButton>
+            <ActionButton icon={CalendarPlus} variant="outline" size="sm" onClick={() => setCitaOpen(true)}>
+              Agendar visita
+            </ActionButton>
+            <ActionButton icon={FileText} size="sm" onClick={() => navigate("/admin/agent/inventario")}>
+              Generar oferta
+            </ActionButton>
           </div>
 
           {/* Desarrollos de interés — solo lectura. Se editan desde el botón "Editar". */}
-          <div className="mt-4 border-t border-[#F2F4F5] pt-4">
-            <p className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Desarrollos de interés</p>
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Desarrollos de interés</p>
             <div className="flex flex-wrap gap-2">
               {entidades.map((e) => (
                 <span
                   key={e.id}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(158_64%_38%)] bg-white px-3 py-[6px] text-[11px] font-semibold text-[hsl(158_64%_38%)]"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary bg-card px-3 py-1.5 text-xs font-semibold text-primary"
                 >
                   <Check className="h-3.5 w-3.5" /> {e.proyectos?.nombre || `Proyecto ${e.id_proyecto}`}
                 </span>
               ))}
               {entidades.length === 0 && (
-                <span className="text-[11px] text-[#9AA3AD]">Sin desarrollos · edítalos desde “Editar”.</span>
+                <span className="text-xs text-muted-foreground/70">Sin desarrollos · edítalos desde “Editar”.</span>
               )}
             </div>
           </div>
@@ -341,7 +340,7 @@ const AgentProspectoDetalle = () => {
                 type="button"
                 onClick={() => setComposerOpen(true)}
                 disabled={entidadIds.length === 0}
-                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-left text-[12.5px] text-[#9AA3AD] transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-md border border-gray-200 bg-card px-3 py-2.5 text-left text-xs text-muted-foreground/70 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Agregar nota o comentario…
               </button>
@@ -349,18 +348,18 @@ const AgentProspectoDetalle = () => {
               <div>
                 <NoteEditor value={nota} onChange={setNota} storagePrefix={`crm-notas/${personaId}`} autoFocus />
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className="text-[10.5px] text-[#B7BEC5]">Nota interna · solo visible para ti.</p>
+                  <p className="text-xs text-muted-foreground/70">Nota interna · solo visible para ti.</p>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setComposerOpen(false); setNota(""); }}>
+                    <Button variant="cancel" size="sm" onClick={() => { setComposerOpen(false); setNota(""); }}>
                       Cancelar
                     </Button>
                     <Button
+                      variant="primary-outline"
                       size="sm"
                       disabled={addNota.isPending || entidadIds.length === 0 || (!nota.replace(/<[^>]+>/g, "").trim() && !/<img/i.test(nota))}
                       onClick={() => addNota.mutate(nota)}
-                      className="text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
                     >
-                      {addNota.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null} Guardar nota
+                      {addNota.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Guardar nota
                     </Button>
                   </div>
                 </div>
@@ -370,13 +369,13 @@ const AgentProspectoDetalle = () => {
 
           {/* Timeline - máx ~6 filas, luego scroll */}
           {timeline.length === 0 ? (
-            <p className="py-6 text-center text-[12px] text-[#9AA3AD]">Aún no hay actividad registrada</p>
+            <p className="py-6 text-center text-xs text-muted-foreground/70">Aún no hay actividad registrada</p>
           ) : (
             <div className="max-h-[440px] overflow-y-auto pr-1">
               <div className="flex flex-col">
                 {timeline.map((it, i) => {
                   const last = i === timeline.length - 1;
-                  const ring = it.kind === "cita" ? "border-[#2A6FDB] bg-[#EAF2FB]" : it.kind === "nota" ? "border-[#C79A2E] bg-[#FBF3DC]" : "border-primary bg-primary/10";
+                  const ring = it.kind === "cita" ? "border-blue-600 bg-blue-50" : it.kind === "nota" ? "border-amber-600 bg-amber-100" : "border-primary bg-primary/10";
                   return (
                     <div key={it.key} className="flex gap-3">
                       <div className="flex flex-col items-center">
@@ -385,18 +384,18 @@ const AgentProspectoDetalle = () => {
                             type="button"
                             onClick={() => setNotaModal({ id: it.notaId!, contenido: it.html || "", mode: "edit" })}
                             title="Editar nota"
-                            className={`h-[26px] w-[26px] shrink-0 rounded-full border-2 ${ring} transition hover:ring-2 hover:ring-[#C79A2E]/40`}
+                            className={`h-[26px] w-[26px] shrink-0 rounded-full border-2 ${ring} transition hover:ring-2 hover:ring-amber-600/40`}
                           />
                         ) : (
                           <span className={`h-[26px] w-[26px] shrink-0 rounded-full border-2 ${ring}`} />
                         )}
-                        {!last && <span className="min-h-3 w-0.5 flex-1 bg-[#F2F4F5]" />}
+                        {!last && <span className="min-h-3 w-0.5 flex-1 bg-muted" />}
                       </div>
                       <div className="min-w-0 flex-1 pb-5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="text-[12.5px] font-bold text-[#171A1D]">{it.title}</span>
-                            <span className="text-[10.5px] tabular-nums text-[#9AA3AD]">
+                            <span className="text-xs font-bold text-foreground">{it.title}</span>
+                            <span className="text-xs tabular-nums text-muted-foreground/70">
                               {it.date.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })} · {it.date.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
                             </span>
                           </div>
@@ -406,7 +405,7 @@ const AgentProspectoDetalle = () => {
                                 <button
                                   type="button"
                                   onClick={() => setNotaModal({ id: it.notaId!, contenido: it.html || "", mode: "view" })}
-                                  className="text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:underline"
+                                  className="text-xs font-semibold text-primary transition-colors hover:underline"
                                 >
                                   Ver detalle
                                 </button>
@@ -414,7 +413,7 @@ const AgentProspectoDetalle = () => {
                               <button
                                 type="button"
                                 onClick={() => setNotaModal({ id: it.notaId!, contenido: it.html || "", mode: "edit" })}
-                                className="text-[12.5px] font-semibold text-[#C79A2E] transition-colors hover:underline"
+                                className="text-xs font-semibold text-amber-600 transition-colors hover:underline"
                               >
                                 Editar
                               </button>
@@ -425,14 +424,14 @@ const AgentProspectoDetalle = () => {
                           it.html && (
                             <div
                               onClick={handleNoteContentClick}
-                              className="mt-0.5 line-clamp-3 text-[12px] leading-snug text-[#4B5563] [&_img]:mt-1 [&_img]:inline-block [&_img]:h-auto [&_img]:max-h-20 [&_img]:w-auto [&_img]:max-w-[120px] [&_img]:cursor-pointer [&_img]:rounded [&_img]:border [&_img]:border-gray-100 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4 [&_a]:cursor-pointer [&_a]:font-medium [&_a]:text-[hsl(158_64%_38%)] [&_a]:underline"
+                              className="mt-0.5 line-clamp-3 text-xs leading-snug text-muted-foreground [&_img]:mt-1 [&_img]:inline-block [&_img]:h-auto [&_img]:max-h-20 [&_img]:w-auto [&_img]:max-w-[120px] [&_img]:cursor-pointer [&_img]:rounded [&_img]:border [&_img]:border-gray-100 [&_p]:my-0.5 [&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:pl-4 [&_a]:cursor-pointer [&_a]:font-medium [&_a]:text-primary [&_a]:underline"
                               dangerouslySetInnerHTML={{ __html: it.html }}
                             />
                           )
                         ) : (
-                          it.detail && <p className="mt-0.5 text-[12px] leading-snug text-[#4B5563]">{it.detail}</p>
+                          it.detail && <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{it.detail}</p>
                         )}
-                        {it.by && <p className="mt-1 text-[10.5px] text-[#B7BEC5]">{it.by}</p>}
+                        {it.by && <p className="mt-1 text-xs text-muted-foreground/70">{it.by}</p>}
                       </div>
                     </div>
                   );
@@ -462,14 +461,12 @@ const AgentProspectoDetalle = () => {
           className="max-w-[560px] gap-0 overflow-hidden rounded-md p-0"
           style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
         >
-          <DialogHeader className="space-y-1 border-b border-[#ECEEF0] px-[22px] py-5 text-left">
-            <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
-              {notaModal?.mode === "edit" ? "Editar nota" : "Nota interna"}
-            </DialogTitle>
-            <p className="text-[12px] font-normal text-[#6B7280]">Solo visible para ti</p>
-          </DialogHeader>
+          <ModalFormHeader
+            title={notaModal?.mode === "edit" ? "Editar nota" : "Nota interna"}
+            subtitle="Solo visible para ti"
+          />
 
-          <div className="max-h-[calc(90vh-9rem)] overflow-y-auto px-[22px] py-[22px]">
+          <div className={cn(MODAL_BODY_CLS, "max-h-[calc(90vh-9rem)]")}>
             {notaModal?.mode === "edit" ? (
               <NoteEditor
                 value={notaModal.contenido}
@@ -480,95 +477,55 @@ const AgentProspectoDetalle = () => {
             ) : (
               <div
                 onClick={handleNoteContentClick}
-                className="prose prose-sm max-w-none rounded-md border border-[#ECEEF0] bg-[#FCFCFD] p-4 text-[13px] leading-relaxed text-[#3F464E] [&_img]:mx-auto [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-h-72 [&_img]:w-auto [&_img]:max-w-full [&_img]:cursor-pointer [&_img]:rounded-lg [&_img]:border [&_img]:border-gray-100 [&_ul]:list-disc [&_ul]:pl-5 [&_a]:cursor-pointer [&_a]:font-medium [&_a]:text-[hsl(158_64%_38%)] [&_a]:underline"
+                className="prose prose-sm max-w-none rounded-md border border-border bg-muted p-4 text-sm leading-relaxed text-foreground [&_img]:mx-auto [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-h-72 [&_img]:w-auto [&_img]:max-w-full [&_img]:cursor-pointer [&_img]:rounded-lg [&_img]:border [&_img]:border-gray-100 [&_ul]:list-disc [&_ul]:pl-5 [&_a]:cursor-pointer [&_a]:font-medium [&_a]:text-primary [&_a]:underline"
                 dangerouslySetInnerHTML={{ __html: notaModal?.contenido || "" }}
               />
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2.5 text-[13px] font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={deleteNota.isPending}
-              onClick={() => notaModal && deleteNota.mutate(notaModal.id)}
-            >
-              {deleteNota.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Eliminar
-            </button>
+          {/* Footer estándar: acciones a la derecha. En edición solo se guarda. */}
+          <div className={MODAL_FOOTER_CLS}>
             {notaModal?.mode === "view" ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => setNotaModal((m) => (m ? { ...m, mode: "edit" } : m))}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Editar
-              </button>
+              <>
+                <Button
+                  type="button"
+                  variant="cancel"
+                  disabled={deleteNota.isPending}
+                  onClick={() => notaModal && deleteNota.mutate(notaModal.id)}
+                >
+                  {deleteNota.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Eliminar
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary-outline"
+                  onClick={() => setNotaModal((m) => (m ? { ...m, mode: "edit" } : m))}
+                >
+                  Editar
+                </Button>
+              </>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                variant="primary-outline"
                 disabled={updateNota.isPending || !notaModal || (!notaModal.contenido.replace(/<[^>]+>/g, "").trim() && !/<img/i.test(notaModal.contenido))}
                 onClick={() => notaModal && updateNota.mutate({ id: notaModal.id, contenido: notaModal.contenido })}
               >
-                {updateNota.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Guardar
-              </button>
+                {updateNota.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Guardar
+              </Button>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Visor in-app de adjuntos: imagen / PDF sin salir de la plataforma. */}
-      <Dialog open={!!previewFile} onOpenChange={(o) => !o && setPreviewFile(null)}>
-        <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
-          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#F0F2F4] px-5 py-4 text-left">
-            <DialogTitle className="truncate pr-8 text-[15px] font-bold tracking-[-0.2px] text-[#171A1D]">
-              {previewFile?.name || "Adjunto"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="bg-[#F6F7F8] p-4">
-            {previewIsImage ? (
-              <img
-                src={previewFile?.url}
-                alt={previewFile?.name || "Adjunto"}
-                className="mx-auto max-h-[70vh] w-auto max-w-full rounded-md border border-gray-200 bg-white object-contain"
-              />
-            ) : previewIsPdf ? (
-              <iframe
-                src={previewFile?.url}
-                title={previewFile?.name || "Documento"}
-                className="h-[70vh] w-full rounded-md border border-gray-200 bg-white"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
-                <FileText className="h-10 w-10 text-[#9AA3AD]" />
-                <p className="text-[13px] font-medium text-[#4B5563]">Este tipo de archivo no se puede previsualizar aquí.</p>
-                <p className="text-[11px] text-[#9AA3AD]">Descárgalo para abrirlo.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 border-t border-[#F0F2F4] bg-[#FAFBFC] px-5 py-3.5">
-            <a
-              href={previewFile?.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Abrir en pestaña
-            </a>
-            <a
-              href={previewFile?.url}
-              download={previewFile?.name}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
-            >
-              <Download className="h-3.5 w-3.5" /> Descargar
-            </a>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Visor in-app de adjuntos (imagen / PDF): estándar ui/modal-viewer */}
+      <ModalViewer
+        open={!!previewFile}
+        onOpenChange={(o) => !o && setPreviewFile(null)}
+        url={previewFile?.url || ""}
+        title={previewFile?.name || "Adjunto"}
+      />
     </div>
   );
 };

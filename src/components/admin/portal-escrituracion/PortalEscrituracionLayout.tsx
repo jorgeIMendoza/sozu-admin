@@ -27,7 +27,7 @@ import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 interface NavItem {
   label: string;

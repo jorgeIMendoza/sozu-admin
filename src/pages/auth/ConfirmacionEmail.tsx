@@ -40,6 +40,27 @@ const stripOtpParams = (url: URL) => {
 
 const confirmedFlagKey = (email: string) => `sozu-email-confirmado:${email.toLowerCase()}`;
 
+// El `type` del enlace debe coincidir con el tipo de token que emitió GoTrue.
+// Enlaces generados por flujos que lo declaraban a mano pueden traer `magiclink`
+// cuando el token era de `signup` (o al revés), y entonces /verify responde 403
+// "One-time token not found" — el mismo error que un enlace caducado. Ese fallo
+// no consume el token, así que reintentar con el tipo contrario es seguro y
+// rescata los correos ya enviados con el tipo equivocado.
+const verifyWithTypeFallback = async (tokenHash: string, primary: EmailOtpType) => {
+  const alternate: EmailOtpType | null =
+    primary === 'magiclink' ? 'signup' : primary === 'signup' ? 'magiclink' : null;
+  const candidates: EmailOtpType[] = alternate ? [primary, alternate] : [primary];
+
+  let lastError: unknown = null;
+  for (const type of candidates) {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+    if (!error) return { error: null };
+    lastError = error;
+  }
+
+  return { error: lastError };
+};
+
 const getOtpType = (type: string | null): EmailOtpType => {
   switch (type) {
     case 'signup':
@@ -92,10 +113,7 @@ export default function ConfirmacionEmail() {
       let verified = false;
 
       if (tokenHash) {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: getOtpType(otpType),
-        });
+        const { error: verifyError } = await verifyWithTypeFallback(tokenHash, getOtpType(otpType));
 
         if (verifyError) {
           console.error('Email confirmation verify error:', verifyError);

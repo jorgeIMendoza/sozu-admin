@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronsUpDown, Check, UserSearch, X } from "lucide-react";
+import { Check, UserSearch, X, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Roles impersonables desde el Portal Agente. Hardcode a propósito: aún no
@@ -76,10 +76,8 @@ export function AgentPortalImpersonationSelector() {
             className="w-full sm:w-[260px] justify-between h-8 text-sm"
           >
             {isImpersonating ? (
-              <span className="truncate">{impersonatedAgentName}</span>
-            ) : (
-              <span className="text-muted-foreground">Seleccionar usuario...</span>
-            )}
+              <span className="truncate">{impersonatedAgentName}</span> ) : (
+              <span className="text-muted-foreground">Seleccionar usuario...</span> )}
             <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
@@ -107,7 +105,7 @@ export function AgentPortalImpersonationSelector() {
                     <div className="flex flex-col min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm truncate">{agent.nombre}</span>
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0 shrink-0">
                           {ROLE_BADGE[agent.rolId] ?? `Rol ${agent.rolId}`}
                         </Badge>
                       </div>

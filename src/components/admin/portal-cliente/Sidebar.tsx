@@ -1,4 +1,4 @@
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 import { useUnreadCount } from "@/lib/portal-cliente/notification-data";
 import { usePortalNavItems, isNavItemActive } from "@/lib/portal-cliente/portal-nav-data";
 import { ArrowLeft, ChevronRight, LogOut } from "lucide-react";

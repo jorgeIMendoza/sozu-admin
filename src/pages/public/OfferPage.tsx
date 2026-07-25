@@ -1,4 +1,3 @@
-import sozuLogo from "@/assets/sozu-logo.png";
 import AmenitiesGridSection from "@/components/offer/AmenitiesGridSection";
 import PaymentPlansComparatorSection from "@/components/offer/PaymentPlansComparatorSection";
 import Tour360Section from "@/components/offer/Tour360Section";
@@ -6,6 +5,7 @@ import AgentCard from "@/components/offer/AgentCard";
 import CustomerAccountView from "@/components/offer/CustomerAccountView";
 import DevelopmentLogo from "@/components/offer/DevelopmentLogo";
 import FormalReservationGateModal from "@/components/offer/FormalReservationGateModal";
+import OfferFooter from "@/components/offer/OfferFooter";
 import OfferAmenities from "@/components/offer/OfferAmenities";
 import OfferConstructionProgress from "@/components/offer/OfferConstructionProgress";
 import OfferFloorPlanLarge from "@/components/offer/OfferFloorPlanLarge";
@@ -25,6 +25,7 @@ import {
   useOfferStore,
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
+import { useCanSeeSalesFlow } from "@/lib/access/salesFlowWhitelist";
 import { AlertCircle, Building2, Calendar, ChevronRight, ExternalLink, Facebook, Globe, Home, Instagram, Landmark, Loader2, MapPin, ScanEye, Sparkles, UserRound, Youtube } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -110,6 +111,8 @@ const OfferPage = () => {
   const navigate = useNavigate();
   const [gateModalOpen, setGateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("unidad");
+  // Gate estático: solo los aprobadores del flujo de venta ven el botón de pago.
+  const canSeeSalesFlow = useCanSeeSalesFlow();
 
   const preReservation = useOfferStore((s) =>
     s.preReservations.find(
@@ -183,9 +186,9 @@ const OfferPage = () => {
   const isExpired = offer.status === "expired" || daysToExpiry < 0;
   const isReserved = offer.status === "pre_reserved" || offer.status === "converted_to_account";
   const ctaDisabled = isExpired || isReserved;
-  // Apartado deshabilitado hasta integrar Stripe: se oculta el botón "Apartar".
-  // Cambiar a true cuando el flujo de pago/hold esté en producción.
-  const APARTADO_HABILITADO = false;
+  // El flujo de pago (sin Stripe, por SPEI) está en fase de aprobación interna:
+  // solo los usuarios en la whitelist ven el botón "Continuar con el pago".
+  const APARTADO_HABILITADO = canSeeSalesFlow;
 
   // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
   // precio, metraje y $/m² reconcilien exacto entre sí.
@@ -222,7 +225,7 @@ const OfferPage = () => {
     ? (heroPct < 0 ? "Total con descuento" : "Total con aumento")
     : "Total";
 
-  const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
+  const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Continuar con el pago";
 
   const hasPaymentPlans = !!(offer.paymentPlans && offer.paymentPlans.length > 0);
 
@@ -666,75 +669,7 @@ const OfferPage = () => {
       </div>{/* /max-w-7xl */}
 
       {/* ── FOOTER UNIFICADO - sello empresarial (fondo oscuro, siempre visible) ── */}
-      <footer className={`mt-8 bg-zinc-900 text-zinc-400 ${!reservationId && APARTADO_HABILITADO ? "mb-20 lg:mb-0" : ""}`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-          {/* Presentado por */}
-          <div className="flex flex-col items-center text-center">
-            <p className="text-[8px] uppercase tracking-[0.32em] font-semibold text-zinc-500 mb-4">
-              Una oferta presentada por
-            </p>
-            <div className="flex items-center justify-center gap-6 md:gap-10">
-              {offer.development?.developerName && (
-                <>
-                  {/* Desarrolladora - clic → su sitio oficial; si no tiene, fallback SOZU */}
-                  <a
-                    href={offer.development.developerWebsite ?? "https://www.sozu.com/"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity"
-                  >
-                    <div className="h-6 md:h-7 flex items-center justify-center">
-                      {offer.development.developerLogoUrl ? (
-                        <img
-                          src={offer.development.developerLogoUrl}
-                          alt={offer.development.developerName}
-                          className="h-5 md:h-6 w-auto object-contain brightness-0 invert"
-                        />
-                      ) : (
-                        <span className="text-base md:text-lg font-bold text-white tracking-tight">
-                          {offer.development.developerName}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
-                      Desarrollador
-                    </span>
-                  </a>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-px h-4 bg-zinc-700" />
-                    <span className="text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em]">con</span>
-                    <div className="w-px h-4 bg-zinc-700" />
-                  </div>
-                </>
-              )}
-              {/* Comercializador SOZU - clic → sozu.com */}
-              <a
-                href="https://www.sozu.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity"
-              >
-                <div className="h-6 md:h-7 flex items-center justify-center">
-                  <img src={sozuLogo} alt="SOZU" className="h-5 md:h-6 w-auto object-contain brightness-0 invert" />
-                </div>
-                <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
-                  Comercializador
-                </span>
-              </a>
-            </div>
-          </div>
-
-          {/* Línea legal */}
-          <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col md:flex-row md:items-center md:justify-between gap-1 text-center md:text-left">
-            <p className="text-[9px] text-zinc-500 leading-relaxed">
-              SOZU © 2026 · Comercializador autorizado{offer.development ? ` de ${offer.development.legalName ?? offer.property.projectName}` : ""}. Oferta personal e intransferible.
-            </p>
-            <p className="text-[9px] text-zinc-500 leading-relaxed">
-              Oferta informativa · No constituye contrato de compraventa · Sujeta a disponibilidad · Precios en MXN
-            </p>
-          </div>
-        </div>
-      </footer>
+      <OfferFooter offer={offer} className={`mt-8 ${!reservationId && APARTADO_HABILITADO ? "mb-20 lg:mb-0" : ""}`} />
 
       {/* Mobile sticky CTA - solo con apartado habilitado (el aviso de vencida ya sale arriba) */}
       {!reservationId && APARTADO_HABILITADO && (
