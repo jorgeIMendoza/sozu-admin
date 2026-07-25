@@ -60,16 +60,16 @@ const FormalReservationGateModal = ({ open, onClose, offer, onStartFormal }: Pro
       <div className="px-5 py-4 space-y-4">
         <p className="text-xs text-muted-foreground leading-relaxed">El apartado tiene tres fases. Esto es lo que sigue:</p>
         <div>
-          <PhaseItem index={1} icon={Clock} phaseLabel="Fase 1 · 5 minutos" title="Reservas tu unidad" description="Capturas tus datos básicos, validamos tu email, y activas una retención de $10,000 MXN en tu tarjeta de crédito por 5 días. No es un cobro." />
-          <PhaseItem index={2} icon={BookOpen} phaseLabel="Fase 2 · sin presión" title="Revisas el contrato" description="Tu unidad queda reservada a tu nombre durante 5 días naturales mientras lees el contrato preliminar con calma y juntas tus documentos." />
-          <PhaseItem index={3} icon={FileText} phaseLabel="Fase 3 · 5-8 minutos" title="Completas tu apartado" description="Confirmas tu tipo de comprador, validas tu RFC y haces una transferencia SPEI de $20,000 MXN que no es reembolsable." />
+          <PhaseItem index={1} icon={Clock} phaseLabel="Fase 1 · 5 minutos" title="Reservas tu unidad" description="Capturas tus datos básicos y validamos tu email para iniciar el proceso de apartado a tu nombre." />
+          <PhaseItem index={2} icon={FileText} phaseLabel="Fase 2 · transferencia SPEI" title="Completas tu apartado" description="Haces una transferencia SPEI de $20,000 MXN a la CLABE de la unidad para apartarla. El monto se aplica al precio final de tu propiedad." />
+          <PhaseItem index={3} icon={BookOpen} phaseLabel="Fase 3 · con tu asesor" title="Revisas el contrato" description="Tu unidad queda apartada a tu nombre mientras revisas el contrato preliminar y completas tu expediente con tu asesor." />
         </div>
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3.5">
           <div className="flex items-start gap-2.5">
             <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold text-foreground leading-tight mb-1">Hold de tarjeta - no es un cobro</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">La retención de $10,000 MXN funciona como los hoteles al hacer check-in: queda bloqueada en tu línea de crédito pero no se cobra. Si decides no avanzar, expira sola a los 5 días sin cargo.</p>
+              <p className="text-xs font-semibold text-foreground leading-tight mb-1">Pago por transferencia SPEI</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">El apartado se paga por transferencia bancaria (SPEI) a la CLABE de la unidad, desde una cuenta a tu nombre. No se realiza ningún cargo a tarjeta. El monto del apartado se aplica al precio final de tu propiedad.</p>
             </div>
           </div>
         </div>

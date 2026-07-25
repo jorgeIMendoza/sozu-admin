@@ -213,6 +213,15 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Todo elemento clickeable muestra el cursor de mano (excepto deshabilitados).
+     Para <div>/<img> con onClick, agregar `cursor-pointer` en su className. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
 }
 
 @layer components {

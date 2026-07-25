@@ -19,7 +19,7 @@ import { InventoryProvider } from "@/lib/portal-estructura-comisiones/stores/Inv
 import { CompetitorsProvider } from "@/lib/portal-estructura-comisiones/stores/CompetitorsContext";
 import { AmbassadorsProvider as PECAmbassadorsProvider } from "@/lib/portal-estructura-comisiones/stores/AmbassadorsContext";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 interface NavItem { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }

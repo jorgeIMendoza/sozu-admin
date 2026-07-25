@@ -1,10 +1,22 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
-import { Loader2, X, Search, Lock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ModalFormHeader,
+  FIELD_LABEL_CLS,
+  Req,
+  SECTION_CLS,
+  SEG_TRACK_CLS,
+  segBtnCls,
+  MODAL_BODY_CLS,
+  MODAL_FOOTER_CLS,
+} from "@/components/ui/modal-form";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -451,10 +463,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     onOpenChange(false);
   };
 
-  const labelCls = "mb-1.5 block text-[13px] font-medium text-[#4B5563]";
-  const labelBoldCls = "mb-2 text-[13px] font-medium text-[#4B5563]";
-  const inputCls = "w-full rounded-md border border-[#ECEEF0] bg-white px-3 py-2.5 text-[14px] font-medium text-[#171A1D] outline-none transition-all placeholder:font-normal placeholder:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15";
-  const triggerCls = "w-full rounded-md border-[#ECEEF0] bg-white px-3 py-2.5 h-auto text-[14px] font-medium text-[#171A1D] data-[placeholder]:font-normal data-[placeholder]:text-[#9AA3AD] focus:border-[hsl(158_64%_38%)] focus:ring-2 focus:ring-[hsl(158_64%_38%)]/15 focus:ring-offset-0";
+  // Estilos del estándar: viven en ui/modal-form (fuente única del portal).
+  const labelCls = FIELD_LABEL_CLS;
+  const labelBoldCls = cn(FIELD_LABEL_CLS, "mb-2");
   const rfcInvalid = !!rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc);
   const curpInvalid = !!curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp);
 
@@ -471,13 +482,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         className="max-w-[540px] gap-0 overflow-hidden rounded-md p-0"
         style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
       >
-        <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
-          <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
-            {isEditMode ? "Editar Prospecto" : "Nuevo Prospecto"}
-          </DialogTitle>
-        </DialogHeader>
+        <ModalFormHeader title={isEditMode ? "Editar Prospecto" : "Nuevo Prospecto"} />
 
-        <div className="flex max-h-[calc(90vh-9rem)] flex-col gap-[18px] overflow-y-auto px-[22px] py-[22px]">
+        <div className={cn(MODAL_BODY_CLS, "max-h-[calc(90vh-9rem)]")}>
           {/* Search / pick existing prospect */}
           <div>
             <div className={labelBoldCls}>¿Ya lo tienes registrado? Búscalo para no duplicar</div>
@@ -492,7 +499,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               />
             ) : (
               <Select value={selectedProspectoId?.toString() || ""} onValueChange={handleSelectProspecto}>
-                <SelectTrigger className={triggerCls}>
+                <SelectTrigger>
                   <SelectValue placeholder="Buscar por nombre…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -507,14 +514,14 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           {/* Desarrollos de interés - búsqueda + lista */}
           <div>
             <div className={labelBoldCls}>
-              Desarrollos de Interés {!isEditMode && <span className="text-red-500">*</span>}
+              Desarrollos de Interés {!isEditMode && <Req />}
             </div>
 
             {/* Seleccionados */}
             {selectedProyectosList.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {selectedProyectosList.map((s) => (
-                  <span key={s.id} className="inline-flex items-center gap-1 rounded-md border border-[#D6ECE0] bg-[#EAF6F0] px-2 py-1 text-[12px] font-medium text-[hsl(158_64%_38%)]">
+                  <span key={s.id} className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                     {s.nombre}
                     {(!isEditMode || editProyectos.length > 1) && (
                       <button
@@ -529,7 +536,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                             setSelectedProyectoIds((prev) => prev.filter((id) => id !== s.id));
                           }
                         }}
-                        className="rounded p-0.5 text-[hsl(158_64%_38%)]/70 hover:bg-[hsl(158_64%_38%)]/10 hover:text-[hsl(158_64%_38%)]"
+                        className="rounded p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -541,23 +548,23 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
             {/* Buscador */}
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9AA3AD]" />
-              <input
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
                 value={projSearch}
                 onChange={(e) => setProjSearch(e.target.value)}
                 placeholder="Buscar desarrollo…"
-                className={cn(inputCls, "pl-8")}
+                className="pl-8"
               />
             </div>
 
             {/* Coincidencias (solo al escribir) */}
             {projSearch.trim() && (
-              <div className="mt-1.5 max-h-[184px] overflow-y-auto rounded-md border border-[#ECEEF0]">
+              <div className="mt-1.5 max-h-48 overflow-y-auto rounded-md border border-border">
                 {(() => {
                   const selectedIds = new Set(isEditMode ? editProyectos.map((e) => e.id_proyecto) : selectedProyectoIds);
                   const results = filteredProyectos.filter((p) => !selectedIds.has(p.id));
                   if (results.length === 0) {
-                    return <div className="px-3 py-2.5 text-[12px] text-[#9AA3AD]">No se encontró el desarrollo</div>;
+                    return <div className="px-3 py-2.5 text-xs text-muted-foreground">No se encontró el desarrollo</div>;
                   }
                   return results.map((p) => {
                     const already = !isEditMode && existingPersonaProjectIds.has(p.id);
@@ -575,10 +582,10 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                           }
                           setProjSearch("");
                         }}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] text-[#171A1D] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:text-[#B6BCC4]"
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground/60"
                       >
                         {p.nombre}
-                        {already && <span className="text-[11px] text-[#9AA3AD]">ya registrado</span>}
+                        {already && <span className="text-xs text-muted-foreground">ya registrado</span>}
                       </button>
                     );
                   });
@@ -587,28 +594,19 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
             )}
           </div>
 
-          {/* Información básica · datos sensibles */}
-          <div className="border-t border-[#ECEEF0] pt-4">
-            <div className="mb-3 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[#9AA3AD]">
-              <Lock className="h-3 w-3" />
-              Información básica · datos sensibles
-            </div>
+          {/* Datos de la persona (separador, sin título: los campos se explican solos) */}
+          <div className={SECTION_CLS}>
             <div className="flex flex-col gap-3">
               {/* Tipo de persona - segmented */}
               <div>
-                <div className={labelCls}>Tipo de Persona <span className="text-red-500">*</span></div>
-                <div className="flex max-w-[240px] rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-[3px]">
+                <div className={labelCls}>Tipo de Persona <Req /></div>
+                <div className={cn(SEG_TRACK_CLS, "max-w-60")}>
                   {[{ v: "pf", l: "Física" }, { v: "pm", l: "Moral" }].map((o) => (
                     <button
                       key={o.v}
                       type="button"
                       onClick={() => setTipoPersona(o.v)}
-                      className={cn(
-                        "flex-1 rounded-md py-[7px] text-[12px] font-semibold transition-colors",
-                        tipoPersona === o.v
-                          ? "bg-white text-[#171A1D] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
-                          : "text-[#6B7280] hover:text-[#171A1D]"
-                      )}
+                      className={segBtnCls(tipoPersona === o.v)}
                     >
                       {o.l}
                     </button>
@@ -618,9 +616,8 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
               {/* Nombre */}
               <div>
-                <div className={labelCls}>Nombre Completo <span className="text-red-500">*</span></div>
-                <input
-                  className={inputCls}
+                <div className={labelCls}>Nombre Completo <Req /></div>
+                <Input
                   placeholder="Juan Pérez García"
                   value={nombre}
                   onChange={(e) => { setNombre(e.target.value); trackFieldFill(); }}
@@ -630,24 +627,23 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               {/* Email + Teléfono */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <div className={labelCls}>Email <span className="text-red-500">*</span></div>
-                  <input
+                  <div className={labelCls}>Email <Req /></div>
+                  <Input
                     type="email"
-                    className={cn(inputCls, "disabled:bg-[#F6F7F8] disabled:text-[#9AA3AD]")}
                     placeholder="juan.perez@correo.com"
                     value={email}
                     onChange={(e) => handleEmailChange(e.target.value)}
                     disabled={isEditMode && !!selectedProspectoId}
                   />
                   {existingPersonaId && !isEditMode && (
-                    <p className="mt-1 text-[10px] font-medium text-blue-600">✓ Persona existente - se vinculará al prospecto</p>
+                    <p className="mt-1 text-xs font-medium text-blue-600">✓ Persona existente - se vinculará al prospecto</p>
                   )}
                 </div>
                 <div>
-                  <div className={labelCls}>Teléfono <span className="text-red-500">*</span> (+52)</div>
+                  <div className={labelCls}>Teléfono <Req /> (+52)</div>
                   <div className="flex gap-2">
                     <Select value={clavePais} onValueChange={setClavePais}>
-                      <SelectTrigger className={cn(triggerCls, "w-[70px] shrink-0")}>
+                      <SelectTrigger className="w-20 shrink-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -656,8 +652,8 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                         <SelectItem value="CO">CO</SelectItem>
                       </SelectContent>
                     </Select>
-                    <input
-                      className={cn(inputCls, "tabular-nums")}
+                    <Input
+                      className="tabular-nums"
                       inputMode="numeric"
                       placeholder="5512345678"
                       value={telefono}
@@ -672,25 +668,25 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <div className={labelCls}>RFC</div>
-                  <input
-                    className={cn(inputCls, "uppercase", rfcInvalid && "border-red-400 focus:border-red-400 focus:ring-red-400/15")}
+                  <Input
+                    className={cn("uppercase", rfcInvalid && "border-red-400 focus-visible:border-red-400 focus-visible:ring-red-400/15")}
                     placeholder="PEGJ850101H2A"
                     value={rfc}
                     onChange={(e) => setRfc(e.target.value.toUpperCase())}
                     maxLength={13}
                   />
-                  {rfcInvalid && <p className="mt-1 text-[10px] text-red-500">Formato inválido (12-13 caracteres)</p>}
+                  {rfcInvalid && <p className="mt-1 text-xs text-red-500">Formato inválido (12-13 caracteres)</p>}
                 </div>
                 <div>
                   <div className={labelCls}>CURP</div>
-                  <input
-                    className={cn(inputCls, "uppercase", curpInvalid && "border-red-400 focus:border-red-400 focus:ring-red-400/15")}
+                  <Input
+                    className={cn("uppercase", curpInvalid && "border-red-400 focus-visible:border-red-400 focus-visible:ring-red-400/15")}
                     placeholder="PEGJ850101HDFRRN09"
                     value={curp}
                     onChange={(e) => setCurp(e.target.value.toUpperCase())}
                     maxLength={18}
                   />
-                  {curpInvalid && <p className="mt-1 text-[10px] text-red-500">Formato inválido (18 caracteres)</p>}
+                  {curpInvalid && <p className="mt-1 text-xs text-red-500">Formato inválido (18 caracteres)</p>}
                 </div>
               </div>
             </div>
@@ -698,22 +694,17 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-2.5 text-[13px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-          >
+        <div className={MODAL_FOOTER_CLS}>
+          <Button type="button" variant="cancel" onClick={handleClose}>
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary-outline"
             onClick={() => { track({ page: "modal_prospecto", elementId: "modal_prospecto_guardar" }); createMutation.mutate(); }}
             disabled={createMutation.isPending || (!isEditMode && selectedProyectoIds.length === 0) || !nombre || !email || !telefono}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : isEditMode ? "Actualizar" : "Guardar"}
-          </button>
+          > {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : isEditMode ? "Actualizar" : "Guardar"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

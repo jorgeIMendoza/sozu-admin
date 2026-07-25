@@ -128,15 +128,15 @@ export function NoteEditor({ value, onChange, storagePrefix, placeholder = "Agre
       </div>
       <div className="relative">
         {editor.isEmpty && (
-          <span className="pointer-events-none absolute left-3 top-3 text-[12.5px] text-[#9AA3AD]">{placeholder}</span>
+          <span className="pointer-events-none absolute left-3 top-3 text-xs text-muted-foreground/70">{placeholder}</span>
         )}
         <EditorContent
           editor={editor}
-          className="prose prose-sm max-w-none p-3 min-h-[80px] max-h-[260px] overflow-y-auto text-[12.5px]
+          className="prose prose-sm max-w-none p-3 min-h-[80px] max-h-[260px] overflow-y-auto text-xs
             [&_.tiptap]:outline-none [&_.tiptap]:min-h-[60px]
             [&_.tiptap_p]:my-1 [&_.tiptap_ul]:my-1 [&_.tiptap_li]:my-0.5
             [&_.tiptap_img]:h-auto [&_.tiptap_img]:max-h-40 [&_.tiptap_img]:w-auto [&_.tiptap_img]:max-w-full [&_.tiptap_img]:rounded [&_.tiptap_img]:border [&_.tiptap_img]:border-gray-100
-            [&_.tiptap_a]:font-medium [&_.tiptap_a]:text-[hsl(158_64%_38%)] [&_.tiptap_a]:underline [&_.tiptap_a]:decoration-[hsl(158_64%_38%)]/40 [&_.tiptap_a]:cursor-pointer"
+            [&_.tiptap_a]:font-medium [&_.tiptap_a]:text-primary [&_.tiptap_a]:underline [&_.tiptap_a]:decoration-primary/40 [&_.tiptap_a]:cursor-pointer"
         />
       </div>
     </div>

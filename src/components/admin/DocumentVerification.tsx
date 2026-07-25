@@ -497,7 +497,7 @@ export function SelfieCameraOverlay({
   initialDelayDone,
 }: SelfieCameraProps) {
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3 pb-2">
+    <div className="flex w-full min-w-0 flex-1 flex-col gap-3 pb-2 min-h-0">
       <div className="text-center space-y-1 shrink-0">
         <h3 className="text-base font-bold text-foreground">Verifica tu identidad</h3>
         <p className="text-xs text-muted-foreground">Centra tu rostro en el óvalo</p>
@@ -573,12 +573,9 @@ export function SelfieCameraOverlay({
         </button>
       </div>
 
-      <button
-        onClick={onCancel}
-        className="shrink-0 w-full py-3 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
-      >
+      <Button variant="cancel" className="w-full min-w-0 shrink-0" onClick={onCancel}>
         Cancelar
-      </button>
+      </Button>
     </div>
   );
 }
@@ -647,7 +644,7 @@ export function DocCameraOverlay({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3 pb-2 overflow-hidden">
+    <div className="flex w-full min-w-0 flex-1 flex-col gap-3 overflow-hidden pb-2 min-h-0">
       <div className="text-center space-y-1 shrink-0">
         <h3 className="text-base font-bold text-foreground">{stepLabel}</h3>
         <p className={cn(
@@ -755,12 +752,9 @@ export function DocCameraOverlay({
         </button>
       </div>
 
-      <button
-        onClick={onCancel}
-        className="shrink-0 w-full py-3 rounded-2xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
-      >
+      <Button variant="cancel" className="w-full min-w-0 shrink-0" onClick={onCancel}>
         Cancelar
-      </button>
+      </Button>
     </div>
   );
 }

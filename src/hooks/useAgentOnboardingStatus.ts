@@ -143,11 +143,11 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     const hasINE = docTypes.has(2) && docTypes.has(3);
     const hasPasaporte = docTypes.has(4);
     const hasIdentityDoc = hasINE || hasPasaporte;
-    const identityDocsComplete = hasIdentityDoc;
-    const identityDocsPartial = !identityDocsComplete && docTypes.size > 0;
 
-    const identityComplete = basicComplete && addressComplete && identityDocsComplete;
-    const identityPartial = !identityComplete && (basicPartial || basicComplete || addressPartial || addressComplete || identityDocsPartial);
+    // El paso "Identidad" solo captura datos personales + dirección; la INE/pasaporte
+    // se sube desde el Expediente y se reporta en la sección "Documentos".
+    const identityComplete = basicComplete && addressComplete;
+    const identityPartial = !identityComplete && (basicPartial || basicComplete || addressPartial || addressComplete);
 
     const basicMissing: string[] = [];
     if (!persona?.nombre_legal) basicMissing.push('Nombre completo');
@@ -160,7 +160,9 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     if (!persona?.direccion_id_pais) basicMissing.push('País');
     if (!persona?.direccion_id_estado) basicMissing.push('Estado');
     if (!persona?.direccion_id_municipio) basicMissing.push('Municipio');
-    if (!hasIdentityDoc) basicMissing.push('INE o Pasaporte');
+
+    const documentsMissing: string[] = [];
+    if (!hasIdentityDoc) documentsMissing.push('INE o Pasaporte');
 
     const inmoSteps: OnboardingStep[] = [
       { id: 'basic', label: 'Identidad', isComplete: identityComplete, hasPartialData: identityPartial },
@@ -180,7 +182,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
       hasBasicIdentityComplete: identityComplete,
       canAccessComisiones: true,
       missingForComisiones: [],
-      missingByStep: { basic: basicMissing, fiscal: [], 'bank-accounts': [], training: trainingMissing },
+      missingByStep: { basic: basicMissing, fiscal: [], 'bank-accounts': [], training: trainingMissing, documents: documentsMissing },
     };
   }
 
@@ -217,12 +219,14 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const hasIdentityDoc = hasINE || hasPasaporte;
   const hasCartaCumplimiento = docTypes.has(48) || cartaFirmada;
   const documentsComplete = hasIdentityDoc && hasCartaCumplimiento;
-  const documentsPartial = !documentsComplete && (docTypes.size > 0 || cartaFirmada);
 
   const bankComplete = cuentas.length > 0;
 
-  const basicStageComplete = basicComplete && addressComplete && documentsComplete;
-  const basicStagePartial = !basicStageComplete && (basicPartial || basicComplete || addressPartial || addressComplete || documentsPartial);
+  // El paso "Identidad" ya solo captura datos personales + dirección (INE/pasaporte
+  // y carta se suben desde el Expediente). El badge del paso refleja datos+dirección;
+  // los documentos siguen exigiéndose aparte para habilitar comisiones (ver abajo).
+  const basicStageComplete = basicComplete && addressComplete;
+  const basicStagePartial = !basicStageComplete && (basicPartial || basicComplete || addressPartial || addressComplete);
 
   const constanciaApproved = documentos.some((d: any) => d.id_tipo_documento === 6 && d.id_estatus_verificacion === 2);
   const constanciaExists = docTypes.has(6);
@@ -244,8 +248,6 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   if (!persona?.direccion_id_pais) basicMissing.push('País');
   if (!persona?.direccion_id_estado) basicMissing.push('Estado');
   if (!persona?.direccion_id_municipio) basicMissing.push('Municipio');
-  if (!hasIdentityDoc) basicMissing.push('INE o Pasaporte');
-  if (!hasCartaCumplimiento) basicMissing.push('Carta de comercialización');
 
   const fiscalMissing: string[] = [];
   if (!persona?.rfc) fiscalMissing.push('RFC');
@@ -263,11 +265,18 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const bankMissing: string[] = [];
   if (!bankComplete) bankMissing.push('Cuenta bancaria');
 
+  // Documentos del expediente (identidad + carta) — se capturan aparte del paso
+  // "Identidad" pero siguen siendo requisito para habilitar comisiones.
+  const documentsMissing: string[] = [];
+  if (!hasIdentityDoc) documentsMissing.push('INE o Pasaporte');
+  if (!hasCartaCumplimiento) documentsMissing.push('Carta de comercialización');
+
   const missingByStep: Record<string, string[]> = {
     basic: basicMissing,
     fiscal: fiscalMissing,
     'bank-accounts': bankMissing,
     training: trainingMissing,
+    documents: documentsMissing,
   };
 
   const steps: OnboardingStep[] = [
@@ -282,6 +291,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
 
   const missingForComisiones: string[] = [];
   if (!basicStageComplete) missingForComisiones.push('Identidad');
+  if (!documentsComplete) missingForComisiones.push('Documentos (INE/Carta)');
   if (!fiscalStageComplete) missingForComisiones.push('Información fiscal');
   if (!bankComplete) missingForComisiones.push('Cuenta bancaria');
 
@@ -293,7 +303,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     isLoading,
     hasTrainingComplete: trainingComplete,
     hasBasicIdentityComplete: basicStageComplete,
-    canAccessComisiones: basicStageComplete && fiscalStageComplete && bankComplete,
+    canAccessComisiones: basicStageComplete && documentsComplete && fiscalStageComplete && bankComplete,
     missingForComisiones,
     missingByStep,
   };

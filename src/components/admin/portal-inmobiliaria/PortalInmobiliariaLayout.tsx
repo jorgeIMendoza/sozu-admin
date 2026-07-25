@@ -14,7 +14,7 @@ import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { InmobiliariaImpersonationSelector } from "./InmobiliariaImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { usePortalNav } from "@/hooks/usePortalNav";

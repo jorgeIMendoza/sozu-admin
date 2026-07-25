@@ -8,21 +8,49 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Building2, MapPin, Calendar, CalendarPlus, Loader2, Download, Share2, ChevronRight, ChevronDown, HardHat, Maximize2, BedDouble, Bath, Mail, Copy, Sparkles, Layers, Images, FileText } from "lucide-react";
+import { Building2, MapPin, Calendar, Loader2, Download, ChevronRight, ChevronDown, HardHat, Maximize2, BedDouble, Bath, Sparkles, Layers, Images, FileText, CalendarPlus, Share2, Mail, Copy, Globe } from "lucide-react";
 import SectionCard from "@/components/offer/SectionCard";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import useEmblaCarousel from "embla-carousel-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
-import { Globe, Play, X, ChevronLeft, ExternalLink } from "lucide-react";
+import { Play, X, ChevronLeft } from "lucide-react";
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
 import { cn } from "@/lib/utils";
 import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus, deriveStages, currentStageOf } from "@/utils/avanceObra";
+
+/** Detecta si un contenedor con scroll horizontal puede desplazarse a izq/der.
+ *  Sirve para mostrar las flechas SOLO cuando hay overflow. */
+function useScrollControls(ref: React.RefObject<HTMLElement>, key?: unknown) {
+  const [nav, setNav] = useState({ prev: false, next: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      setNav({ prev: scrollLeft > 1, next: scrollLeft + clientWidth < scrollWidth - 1 });
+    };
+    update();
+    // Re-mide tras el layout (imágenes/anchos) por si al montar aún no había overflow.
+    const raf = requestAnimationFrame(update);
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => { cancelAnimationFrame(raf); el.removeEventListener("scroll", update); ro.disconnect(); };
+    // `key` fuerza re-suscripción cuando el contenido (y el ref) ya está montado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref, key]);
+  return nav;
+}
 
 /** Monta children solo al entrar (o acercarse) al viewport — para diferir mapas/iframes pesados. */
 const LazyVisible = ({ children, minHeight = 200, rootMargin = "250px" }: { children: ReactNode; minHeight?: number; rootMargin?: string }) => {
@@ -103,11 +131,11 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
           <button
             key={i}
             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollTo(i); }}
-            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-white' : 'bg-white/50'}`}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-card' : 'bg-card/50'}`}
           />
         ))}
       </div>
-      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-md px-2 py-0.5 text-[10px] font-medium text-white">
+      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-md px-2 py-0.5 text-xs font-medium text-white">
         {selectedIndex + 1}/{images.length}
       </div>
     </div>
@@ -132,17 +160,17 @@ const Lightbox = ({ images, index, onClose, onIndex }: { images: string[]; index
   }, []);
   return createPortal(
     <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col" onClick={onClose}>
-      <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><X className="h-5 w-5" /></button>
+      <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><X className="h-5 w-5" /></button>
       <div className="flex-1 flex items-center justify-center px-4 py-14" onClick={(e) => e.stopPropagation()}>
         <OptImg src={images[index]} w={1600} alt="" loading="eager" className="max-h-[82vh] max-w-full object-contain rounded-md" />
       </div>
       {images.length > 1 && (
         <>
-          <button onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }} className="absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><ChevronLeft className="h-6 w-6" /></button>
-          <button onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }} className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><ChevronRight className="h-6 w-6" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }} className="absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><ChevronLeft className="h-6 w-6" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }} className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><ChevronRight className="h-6 w-6" /></button>
           <div className="pb-6 flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             {images.map((_, i) => (
-              <button key={i} onClick={() => onIndex(i)} className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-white" : "w-1.5 bg-white/40"}`} />
+              <button key={i} onClick={() => onIndex(i)} className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-card" : "w-1.5 bg-card/40"}`} />
             ))}
           </div>
         </>
@@ -169,7 +197,7 @@ const HeroGallery = ({ images, projectName, direccion, avanceObra, badgeText, on
       <div className="h-full overflow-hidden" ref={ref}>
         <div className="flex h-full">
           {images.map((url, i) => (
-            <div key={i} onClick={() => onOpenFull(i)} className="relative flex-[0_0_100%] min-w-0 h-full cursor-zoom-in">
+            <div key={i} onClick={() => onOpenFull(i)} className="relative flex-[0_0_100%] min-w-0 h-full cursor-pointer">
               <OptImg src={url} w={1400} loading={i === 0 ? "eager" : "lazy"} alt={projectName} className="h-full w-full object-cover object-[center_75%]" />
             </div>
           ))}
@@ -180,7 +208,7 @@ const HeroGallery = ({ images, projectName, direccion, avanceObra, badgeText, on
         <>
           <button onClick={() => api?.scrollPrev()} className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"><ChevronLeft className="h-5 w-5" /></button>
           <button onClick={() => api?.scrollNext()} className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"><ChevronRight className="h-5 w-5" /></button>
-          <div className="absolute top-3 right-3 rounded-md bg-black/50 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums">{idx + 1}/{images.length}</div>
+          <div className="absolute top-3 right-3 rounded-md bg-black/50 px-2 py-0.5 text-xs font-medium text-white tabular-nums">{idx + 1}/{images.length}</div>
         </>
       )}
       {avanceObra > 0 && (
@@ -542,6 +570,9 @@ const AgentProyectoDetalle = () => {
     enabled: projectId > 0,
   });
 
+  const vistasNav = useScrollControls(vistasRef, vistas.length);
+  const modelosNav = useScrollControls(modelosRef, modelos.length);
+
   const brochure = documentos.find((d: any) => d.id_tipo_documento === 30);
   const fichaTecnica = documentos.find((d: any) => d.id_tipo_documento === 49);
 
@@ -572,7 +603,7 @@ const AgentProyectoDetalle = () => {
 
   if (loadingProject) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
       </div>
@@ -581,7 +612,7 @@ const AgentProyectoDetalle = () => {
 
   if (!project) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="text-center py-12 text-sm text-muted-foreground">Proyecto no encontrado</div>
       </div>
@@ -606,7 +637,7 @@ const AgentProyectoDetalle = () => {
   const showroomAddr = (showroom as any)?.descripcion_direccion || null;
 
   return (
-    <div className="pb-24 bg-[hsl(var(--agent-bg))]">
+    <div className="bg-background">
       {/* Portada = carrusel de galería */}
       {galleryImages.length > 0 ? (
         <HeroGallery
@@ -627,14 +658,14 @@ const AgentProyectoDetalle = () => {
       {/* Stats row */}
       {stats && (
         <div className="-mt-2">
-          <div className="bg-white rounded-md shadow-sm border border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
+          <div className="bg-card rounded-md shadow-sm border border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
             <div className="text-center py-3">
               <p className="text-2xl font-bold text-primary tabular-nums">{stats.available}</p>
-              <p className="text-[11px] font-semibold text-primary/80">Disponibles</p>
+              <p className="text-xs font-semibold text-primary/80">Disponibles</p>
             </div>
             <div className="text-center py-3">
               <p className="text-2xl font-bold text-foreground tabular-nums">{stats.total}</p>
-              <p className="text-[11px] text-muted-foreground">Total unidades</p>
+              <p className="text-xs text-muted-foreground">Total unidades</p>
             </div>
           </div>
         </div>
@@ -645,24 +676,29 @@ const AgentProyectoDetalle = () => {
         <section className="rounded-md p-5">
           <p className="mb-3 text-center text-sm font-semibold text-foreground">¿Tu cliente está interesado en este proyecto?</p>
           <div className="flex flex-col gap-2.5 sm:flex-row">
-            <button
+            <ActionButton
+              icon={Building2}
+              className="h-11 flex-1"
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06]"
             >
-              <Building2 className="h-4 w-4" /> Ver inventario
-            </button>
-            <button
+              Ver inventario
+            </ActionButton>
+            <ActionButton
+              icon={CalendarPlus}
+              variant="outline"
+              className="h-11 flex-1"
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
             >
-              <CalendarPlus className="h-4 w-4" /> Agendar cita
-            </button>
-            <button
+              Agendar cita
+            </ActionButton>
+            <ActionButton
+              icon={Share2}
+              variant="outline"
+              className="h-11 flex-1"
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
             >
-              <Share2 className="h-4 w-4" /> Compartir
-            </button>
+              Compartir
+            </ActionButton>
           </div>
         </section>
 
@@ -672,14 +708,14 @@ const AgentProyectoDetalle = () => {
             <p className="text-sm text-foreground leading-relaxed">{project.descripcion}</p>
             {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
               <>
-                <p className="inline-flex items-center gap-2 text-xs font-medium text-[#4B5563]">
-                  <Calendar className="h-4 w-4 text-[#1A1D21]" />
+                <p className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <Calendar className="h-4 w-4 text-foreground" />
                   Posible fecha de entrega:{" "}
                   <span className="font-bold text-foreground">
                     {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
                   </span>
                 </p>
-                <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                <p className="text-xs text-muted-foreground/70 leading-snug">
                   Fecha estimada y sujeta a cambios según el avance de obra. No constituye una
                   fecha de entrega contractual.
                 </p>
@@ -698,22 +734,22 @@ const AgentProyectoDetalle = () => {
                     key={v.id}
                     type="button"
                     onClick={() => openLightbox(vistaImgs, i)}
-                    className="group relative snap-start w-[240px] shrink-0 aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-gray-100 cursor-zoom-in"
+                    className="group relative snap-start w-[240px] shrink-0 aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-gray-100 cursor-pointer"
                   >
                     <OptImg src={v.url} w={640} h={480} resize="cover" alt={v.nombre || "Vista"} className="h-full w-full object-cover object-center transition-transform group-hover:scale-[1.03]" />
                     {v.nombre && (
-                      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5 text-left text-[11px] font-medium text-white">
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5 text-left text-xs font-medium text-white">
                         {v.nombre}
                       </span>
                     )}
                   </button>
                 ))}
               </div>
-              {vistas.length > 1 && (
-                <>
-                  <button onClick={() => vistasRef.current?.scrollBy({ left: -280, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
-                  <button onClick={() => vistasRef.current?.scrollBy({ left: 280, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
-                </>
+              {vistasNav.prev && (
+                <button onClick={() => vistasRef.current?.scrollBy({ left: -280, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+              )}
+              {vistasNav.next && (
+                <button onClick={() => vistasRef.current?.scrollBy({ left: 280, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
               )}
             </div>
           </SectionCard>
@@ -727,8 +763,8 @@ const AgentProyectoDetalle = () => {
                 {modelos.map((m: any) => {
                   const imgs = modeloImages(m);
                   return (
-                    <div key={m.id} className="snap-start min-w-[240px] max-w-[260px] flex-shrink-0 bg-white rounded-md border border-gray-100 shadow-sm overflow-hidden">
-                      <div className="cursor-zoom-in" onClick={() => imgs.length && openLightbox(imgs, 0)}>
+                    <div key={m.id} className="snap-start min-w-[240px] max-w-[260px] flex-shrink-0 bg-card rounded-md border border-gray-100 shadow-sm overflow-hidden">
+                      <div className="cursor-pointer" onClick={() => imgs.length && openLightbox(imgs, 0)}>
                         {imgs.length > 0 ? (
                           <ModelCardCarousel images={imgs} alt={m.nombre} />
                         ) : (
@@ -744,28 +780,28 @@ const AgentProyectoDetalle = () => {
                         </div>
                         {m.minPrice && (
                           <div className="mt-2">
-                            <p className="text-[10px] text-muted-foreground">Desde</p>
+                            <p className="text-xs text-muted-foreground">Desde</p>
                             <p className="text-base font-bold text-foreground">{formatCurrency(m.minPrice)}</p>
                           </div>
                         )}
                         {m.availableCount > 0 && (
-                          <button
+                          <Button
+                            variant="primary-outline"
+                            className="mt-2.5 w-full"
                             onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario_modelo', elementLabel: 'Ver inventario', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
-                            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-md border border-primary bg-white py-2.5 text-sm font-semibold text-primary hover:bg-primary/[0.06] transition-colors"
-                          >
-                            Ver inventario <ChevronRight className="h-4 w-4" />
-                          </button>
+                          > Ver inventario 
+                          </Button>
                         )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {modelos.length > 1 && (
-                <>
-                  <button onClick={() => modelosRef.current?.scrollBy({ left: -320, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-[80px] h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
-                  <button onClick={() => modelosRef.current?.scrollBy({ left: 320, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-[80px] h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
-                </>
+              {modelosNav.prev && (
+                <button onClick={() => modelosRef.current?.scrollBy({ left: -320, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-20 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+              )}
+              {modelosNav.next && (
+                <button onClick={() => modelosRef.current?.scrollBy({ left: 320, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-20 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
               )}
             </div>
           </SectionCard>
@@ -776,14 +812,14 @@ const AgentProyectoDetalle = () => {
           <SectionCard icon={Sparkles} title="Amenidades" bodyClassName="p-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {list.map((a: any) => (
-                <div key={a.id} className="relative aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-white">
+                <div key={a.id} className="relative aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-card">
                   {a.foto ? (
                     <>
                       <OptImg src={a.foto} w={320} h={240} resize="cover" alt={a.nombre} className="h-full w-full object-cover object-center" />
-                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 py-2 text-[12px] font-bold text-white leading-tight">{a.nombre}</span>
+                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 py-2 text-xs font-bold text-white leading-tight">{a.nombre}</span>
                     </>
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center px-2 text-center text-[13px] font-medium text-foreground leading-tight">{a.nombre}</span>
+                    <span className="flex h-full w-full items-center justify-center px-2 text-center text-sm font-medium text-foreground leading-tight">{a.nombre}</span>
                   )}
                 </div>
               ))}
@@ -805,13 +841,13 @@ const AgentProyectoDetalle = () => {
           <SectionCard icon={HardHat} title="Avance de obra" bodyClassName="p-4 space-y-4">
             <>
               {avanceObra > 0 && (
-                <div className="rounded-md border border-gray-100 bg-[#FAFBFC] p-4">
+                <div className="rounded-md border border-gray-100 bg-muted/30 p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-[#4B5563]">Avance global del proyecto</span>
+                    <span className="text-sm font-medium text-muted-foreground">Avance global del proyecto</span>
                     <span className="text-2xl font-bold text-primary tabular-nums">{avanceObra}%</span>
                   </div>
                   <Progress value={avanceObra} className="my-2 h-2" />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Etapa actual: <span className="font-semibold text-foreground">{currentStage}</span>
                     {avanceLastUpdated && <span className="text-muted-foreground/70"> · Actualizado: {avanceLastUpdated}</span>}
                   </p>
@@ -826,14 +862,14 @@ const AgentProyectoDetalle = () => {
                 )}
                 {avanceObra > 0 && (
                   <div className={cn("rounded-md border border-gray-100 p-4", !latestVideoEmbed && "md:col-span-2")}>
-                    <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-[#8A929B]">Etapas de obra</h3>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Etapas de obra</h3>
                     {(() => {
                       const renderStage = (m: typeof milestones[number], i: number) => {
                         const isCurrent = !m.done && m.phase === currentStage;
                         return (
                           <li key={m.phase} className="flex items-center gap-2.5 text-sm">
                             <span className={cn(
-                              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold leading-none tabular-nums",
+                              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-semibold leading-none tabular-nums",
                               m.done ? "border-primary text-primary"
                                 : isCurrent ? "border-amber-500 bg-amber-50 text-amber-600"
                                 : "border-muted-foreground/30 text-muted-foreground/50",
@@ -855,11 +891,11 @@ const AgentProyectoDetalle = () => {
                     })()}
                     {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
                       <div className="mt-4 pt-3 border-t border-gray-100 space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                          <Calendar className="h-3 w-3 text-[#1A1D21]" />
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3 text-foreground" />
                           Posible fecha de entrega · {fmtLargo(project.fecha_entrega || project.fecha_entrega_proyecto)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                        <p className="text-xs text-muted-foreground/70 leading-snug">
                           Fecha estimada y sujeta a cambios según el avance de obra.
                         </p>
                       </div>
@@ -881,24 +917,26 @@ const AgentProyectoDetalle = () => {
                 <div className={cn("grid gap-4", hasRight && "md:grid-cols-2")}>
                   {/* El desarrollo */}
                   <div className={cn("overflow-hidden rounded-md border border-gray-100", !hasRight && "md:max-w-xl")}>
-                    <div className="border-b border-gray-100 bg-[#FAFBFC] px-4 py-2.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8A929B]">El desarrollo</p>
+                    <div className="border-b border-gray-100 bg-muted/30 px-4 py-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">El desarrollo</p>
                     </div>
                     {desarrolloEmbed ? (
                       <LazyVisible minHeight={200}>
-                        <div className="aspect-[16/9] w-full overflow-hidden bg-gray-100">
+                        <div className="aspect-video w-full overflow-hidden bg-gray-100">
                           <iframe src={desarrolloEmbed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Mapa del desarrollo" className="h-full w-full" style={{ border: "none" }} />
                         </div>
                       </LazyVisible>
                     ) : (
-                      <div className="flex aspect-[16/9] w-full items-center justify-center bg-gray-50"><MapPin className="h-8 w-8 text-gray-300" /></div>
+                      <div className="flex aspect-video w-full items-center justify-center bg-gray-50"><MapPin className="h-8 w-8 text-gray-300" /></div>
                     )}
                     <div className="space-y-3 px-4 py-3.5">
                       {project.direccion && <p className="text-sm font-medium leading-snug text-foreground">{project.direccion}</p>}
                       {mapsUrl && (
-                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-primary bg-white px-4 text-xs font-semibold text-primary transition-colors hover:bg-primary/[0.06]">
-                          <MapPin className="h-3.5 w-3.5" /> Cómo llegar
-                        </a>
+                        <Button asChild variant="primary-outline" size="sm">
+                          <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                            <MapPin className="h-3.5 w-3.5" /> Cómo llegar
+                          </a>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -906,38 +944,40 @@ const AgentProyectoDetalle = () => {
                   {/* Derecha: showroom o puntos de interés */}
                   {showroomAddr ? (
                     <div className="overflow-hidden rounded-md border border-gray-100">
-                      <div className="border-b border-gray-100 bg-[#FAFBFC] px-4 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8A929B]">Showroom de ventas</p>
+                      <div className="border-b border-gray-100 bg-muted/30 px-4 py-2.5">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Showroom de ventas</p>
                       </div>
                       {showroomEmbed ? (
                         <LazyVisible minHeight={200}>
-                          <div className="aspect-[16/9] w-full overflow-hidden bg-gray-100">
+                          <div className="aspect-video w-full overflow-hidden bg-gray-100">
                             <iframe src={showroomEmbed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Mapa del showroom" className="h-full w-full" style={{ border: "none" }} />
                           </div>
                         </LazyVisible>
                       ) : (
-                        <div className="flex aspect-[16/9] w-full items-center justify-center bg-gray-50"><MapPin className="h-8 w-8 text-gray-300" /></div>
+                        <div className="flex aspect-video w-full items-center justify-center bg-gray-50"><MapPin className="h-8 w-8 text-gray-300" /></div>
                       )}
                       <div className="space-y-3 px-4 py-3.5">
                         <p className="text-sm font-medium leading-snug text-foreground">{showroomAddr}</p>
                         {showroomMapsUrl && (
-                          <a href={showroomMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-primary bg-white px-4 text-xs font-semibold text-primary transition-colors hover:bg-primary/[0.06]">
+                          <Button asChild variant="primary-outline" size="sm">
+                            <a href={showroomMapsUrl} target="_blank" rel="noopener noreferrer">
                             <MapPin className="h-3.5 w-3.5" /> Cómo llegar
-                          </a>
+                            </a>
+                          </Button>
                         )}
                       </div>
                     </div>
                   ) : puntosDerecha ? (
                     <div className="overflow-hidden rounded-md border border-gray-100">
-                      <div className="border-b border-gray-100 bg-[#FAFBFC] px-4 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8A929B]">Puntos de interés</p>
+                      <div className="border-b border-gray-100 bg-muted/30 px-4 py-2.5">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Puntos de interés</p>
                       </div>
                       <div className="space-y-2 p-3">
                         {puntosInteres.map((p: any) => (
-                          <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-[#F6F7F8] px-3 py-2.5">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#EDEFF1]"><MapPin className="h-3.5 w-3.5 text-[#1A1D21]" /></span>
+                          <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted"><MapPin className="h-3.5 w-3.5 text-foreground" /></span>
                             <span className="flex-1 text-sm text-foreground leading-tight">{p.nombre}</span>
-                            <span className="text-xs font-semibold text-[#4B5563] tabular-nums whitespace-nowrap">
+                            <span className="text-xs font-semibold text-muted-foreground tabular-nums whitespace-nowrap">
                               {p.distancia_km < 1 ? `${(p.distancia_km * 1000).toFixed(0)} m` : `${p.distancia_km} km`}
                             </span>
                           </div>
@@ -956,10 +996,10 @@ const AgentProyectoDetalle = () => {
           <SectionCard icon={MapPin} title="Puntos de interés" bodyClassName="p-4">
             <div className="grid gap-2 sm:grid-cols-2">
               {puntosInteres.map((p: any) => (
-                <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-[#F6F7F8] px-3 py-2.5">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#EDEFF1]"><MapPin className="h-3.5 w-3.5 text-[#1A1D21]" /></span>
+                <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted"><MapPin className="h-3.5 w-3.5 text-foreground" /></span>
                   <span className="flex-1 text-sm text-foreground leading-tight">{p.nombre}</span>
-                  <span className="text-xs font-semibold text-[#4B5563] tabular-nums whitespace-nowrap">
+                  <span className="text-xs font-semibold text-muted-foreground tabular-nums whitespace-nowrap">
                     {p.distancia_km < 1 ? `${(p.distancia_km * 1000).toFixed(0)} m` : `${p.distancia_km} km`}
                   </span>
                 </div>
@@ -974,24 +1014,24 @@ const AgentProyectoDetalle = () => {
             <div className="grid gap-2 sm:grid-cols-2">
               {brochure && (
                 <div
-                  className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                   onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); setPreviewFile({ url: brochure.url, name: 'Brochure' }); }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
-                    <div><p className="text-sm font-semibold text-foreground">Brochure</p><p className="text-[11px] text-muted-foreground">PDF · Presentación</p></div>
+                    <div><p className="text-sm font-semibold text-foreground">Brochure</p><p className="text-xs text-muted-foreground">PDF · Presentación</p></div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
               )}
               {fichaTecnica && (
                 <div
-                  className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                   onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_ficha', elementLabel: 'Ficha técnica' }); registrarExportacion('ficha_tecnica', { proyecto_id: projectId }); window.open(fichaTecnica.url, '_blank'); }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
-                    <div><p className="text-sm font-semibold text-foreground">Ficha técnica</p><p className="text-[11px] text-muted-foreground">PDF · Especificaciones</p></div>
+                    <div><p className="text-sm font-semibold text-foreground">Ficha técnica</p><p className="text-xs text-muted-foreground">PDF · Especificaciones</p></div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
@@ -1007,91 +1047,57 @@ const AgentProyectoDetalle = () => {
 
       {/* Share Dialog */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Compartir - {project.nombre}</DialogTitle>
-          </DialogHeader>
-          <button
-            onClick={() => handleShareMethod("web")}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2.5 text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06]"
-          >
+        <DialogContent className="max-w-sm gap-0 overflow-hidden p-0">
+          <ModalFormHeader title={`Compartir - ${project.nombre}`} />
+          <div className={cn(MODAL_BODY_CLS, "gap-3")}>
+          <Button variant="primary-outline" className="w-full" onClick={() => handleShareMethod("web")}>
             <Globe className="h-4 w-4" /> Ver página web
-          </button>
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          </Button>
+          <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("whatsapp")}>
-              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              WhatsApp
+              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> WhatsApp
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("facebook")}>
-              <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              Facebook
+              <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> Facebook
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("email")}>
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              Correo
+              <Mail className="h-5 w-5 text-muted-foreground" /> Correo
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("copy")}>
-              <Copy className="h-5 w-5 text-muted-foreground" />
-              Copiar link
+              <Copy className="h-5 w-5 text-muted-foreground" /> Copiar link
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
       {/* Plano de modelo dialog */}
       <Dialog open={!!planoModeloUrl} onOpenChange={() => setPlanoModeloUrl(null)}>
-        <DialogContent className="max-w-lg p-2">
-          <DialogHeader>
-            <DialogTitle>Plano arquitectónico</DialogTitle>
-          </DialogHeader>
-          {planoModeloUrl && (
-            <img src={planoModeloUrl} alt="Plano del modelo" className="w-full object-contain max-h-[70vh] rounded-md" />
-          )}
+        <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+          <ModalFormHeader title="Plano arquitectónico" />
+          <div className={MODAL_BODY_CLS}>
+            {planoModeloUrl && (
+              <OptImg src={planoModeloUrl} w={1600} alt="Plano del modelo" className="max-h-[65vh] w-full rounded-md object-contain" />
+            )}
+          </div>
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setPlanoModeloUrl(null)}>Cerrar</Button>
+            {planoModeloUrl && (
+              <Button variant="primary-outline" asChild>
+                <a href={planoModeloUrl} download target="_blank" rel="noopener noreferrer"> Descargar
+                </a>
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Visor in-app de material comercial (PDF) sin salir de la plataforma. */}
-      <Dialog open={!!previewFile} onOpenChange={(o) => !o && setPreviewFile(null)}>
-        <DialogContent
-          className="max-w-4xl gap-0 overflow-hidden rounded-md p-0"
-          style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
-        >
-          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b border-[#ECEEF0] px-[22px] py-5">
-            <DialogTitle className="text-[18px] font-bold text-[#171A1D]">
-              {previewFile?.name || "Documento"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="bg-[#F6F7F8] p-4">
-            {previewFile && (
-              <iframe
-                src={previewFile.url}
-                title={previewFile.name || "Documento"}
-                className="h-[75vh] w-full rounded-md border border-gray-200 bg-white"
-              />
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 border-t border-[#ECEEF0] px-[22px] py-4">
-            <a
-              href={previewFile?.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md border border-[#ECEEF0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
-            >
-              <span className="inline-flex items-center gap-1.5"><ExternalLink className="h-3.5 w-3.5" /> Abrir en pestaña</span>
-            </a>
-            <a
-              href={previewFile?.url}
-              download={previewFile?.name}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
-            >
-              <Download className="h-3.5 w-3.5" /> Descargar
-            </a>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ModalViewer
+        open={!!previewFile}
+        onOpenChange={(o) => { if (!o) setPreviewFile(null); }}
+        url={previewFile?.url || ""}
+        title={previewFile?.name || "Documento"}
+      />
 
       {/* Visor pantalla completa */}
       {lightbox && (

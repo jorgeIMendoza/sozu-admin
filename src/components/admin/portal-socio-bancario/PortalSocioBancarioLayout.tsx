@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useSocioProyecto } from "@/hooks/usePortalSocioBancario/useSocioProyecto";
 

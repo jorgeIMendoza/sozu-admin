@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Loader2, X, Camera, Check, RotateCcw } from "lucide-react";
+import { ModalFormHeader } from "@/components/ui/modal-form";
+import { Loader2, Check } from "lucide-react";
 import {
   useStabilityDetection,
   CaptureFlash,
@@ -246,27 +247,12 @@ export function ClienteINECameraCapture({ open, onOpenChange, personaId, isDeskt
       ? "Paso 1 de 2 · Frente"
       : "Paso 2 de 2 · Reverso";
 
-  const header = (
-    <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border shrink-0">
-      <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center shrink-0">
-        <Camera className="w-4 h-4 text-muted-foreground" />
-      </div>
-      <div className="flex-1">
-        <h3 className="font-bold text-foreground text-sm">{docTitle}</h3>
-        <p className="text-[11px] text-muted-foreground mt-0.5">{stepHint}</p>
-      </div>
-      <button
-        onClick={() => onOpenChange(false)}
-        className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground"
-      >
-        <X className="w-4 h-4" />
-      </button>
-    </div>
-  );
+  // Header estándar del portal (ui/modal-form): título + paso, sin ícono.
+  const header = <ModalFormHeader title={docTitle} subtitle={stepHint} />;
 
   const body = (
-    <div className="flex-1 overflow-hidden flex flex-col">
-      <div className="px-4 py-4 flex-1 flex flex-col gap-4 min-h-0">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-6 py-5">
         <canvas ref={canvasRef} className="hidden" />
         <CaptureFlash show={showFlash} />
 
@@ -284,11 +270,11 @@ export function ClienteINECameraCapture({ open, onOpenChange, personaId, isDeskt
               <img src={preview} alt="Documento" className="max-w-full max-h-full object-contain" />
             </div>
             <div className="flex gap-2 shrink-0">
-              <Button variant="outline" className="flex-1 h-11" onClick={retake}>
-                <RotateCcw className="w-4 h-4 mr-2" /> Repetir
+              <Button variant="outline" className="flex-1" onClick={retake}>
+                 Repetir
               </Button>
-              <Button className="flex-1 h-11" onClick={confirmShot}>
-                <Check className="w-4 h-4 mr-2" /> {isLast ? "Guardar" : "Continuar"}
+              <Button variant="primary-outline" className="flex-1" onClick={confirmShot}>
+                <Check className="h-4 w-4" /> {isLast ? "Guardar" : "Continuar"}
               </Button>
             </div>
           </>
@@ -325,7 +311,7 @@ export function ClienteINECameraCapture({ open, onOpenChange, personaId, isDeskt
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="p-0 max-w-md h-[min(90vh,760px)] flex flex-col [&>button:last-child]:hidden">
+        <DialogContent className="flex h-[min(90vh,760px)] max-w-md flex-col gap-0 overflow-hidden rounded-md p-0">
           {fullContent}
         </DialogContent>
       </Dialog>
@@ -334,7 +320,7 @@ export function ClienteINECameraCapture({ open, onOpenChange, personaId, isDeskt
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="p-0 rounded-t-2xl h-[92dvh] flex flex-col [&>button:last-child]:hidden">
+      <SheetContent side="bottom" className="flex h-[92dvh] flex-col gap-0 rounded-t-2xl p-0">
         {fullContent}
       </SheetContent>
     </Sheet>
