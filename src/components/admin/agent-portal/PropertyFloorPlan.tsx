@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
 import { Loader2 } from "lucide-react";
 
 interface PropertyFloorPlanProps {

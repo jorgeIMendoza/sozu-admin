@@ -4,7 +4,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/ModalForm";
+import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 
 /**
  * ModalViewerDetail — modal partido: a la IZQUIERDA un recurso visual (PDF,
@@ -79,13 +79,20 @@ export interface ModalViewerDetailProps {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   /** Recurso visual a mostrar a la izquierda (PDF / imagen / doc). */
-  resourceUrl: string | null | undefined;
+  resourceUrl?: string | null;
+  /**
+   * Panel izquierdo propio (carrusel, mapa, plano interactivo…). Si se pasa,
+   * manda sobre `resourceUrl` y el componente no resuelve ninguna URL.
+   */
+  resource?: React.ReactNode;
   /** Contenido/detalle escrito (panel derecho). */
   children: React.ReactNode;
   footer?: React.ReactNode;
   /** ancho/estilos del contenedor (default max-w-4xl). */
   className?: string;
   bodyClassName?: string;
+  /** Estilos extra del panel izquierdo (p. ej. `aspect-[4/3] md:aspect-auto`). */
+  resourceClassName?: string;
 }
 
 export function ModalViewerDetail({
@@ -94,16 +101,25 @@ export function ModalViewerDetail({
   title,
   subtitle,
   resourceUrl,
+  resource: customResource,
   children,
   footer,
   className,
   bodyClassName,
+  resourceClassName,
 }: ModalViewerDetailProps) {
   const { url, loading, error } = useResourceUrl(open, resourceUrl);
   const isImage = resourceUrl ? /\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(resourceUrl) : false;
 
-  const resource = (
-    <div className="min-h-[240px] bg-[#F6F7F8] md:h-[90vh] md:min-h-0">
+  const resourceWrapperCls = cn(
+    "relative min-h-[240px] overflow-hidden bg-muted md:h-[90vh] md:min-h-0",
+    resourceClassName,
+  );
+
+  const resource = customResource ? (
+    <div className={resourceWrapperCls}>{customResource}</div>
+  ) : (
+    <div className={resourceWrapperCls}>
       {loading ? (
         <div className="flex h-full items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -130,8 +146,8 @@ export function ModalViewerDetail({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("w-[95vw] max-w-4xl gap-0 overflow-hidden p-0", className)}>
-        <div className="grid max-h-[90vh] md:grid-cols-2">
+      <DialogContent className={cn("w-full gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-4xl", className)}>
+        <div className="grid max-h-[90vh] grid-cols-1 md:grid-cols-2">
           {/* Izquierda: recurso visual */}
           {resource}
           {/* Derecha: header + detalle + footer */}

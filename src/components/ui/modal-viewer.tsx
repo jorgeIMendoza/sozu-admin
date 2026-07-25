@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Download, Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ModalFormHeader, MODAL_FOOTER_CLS } from "@/components/ui/ModalForm";
+import { ModalFormHeader, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 
 /**
  * ModalViewer — modal que muestra ÚNICAMENTE un recurso visual (PDF, imagen, doc).
@@ -100,7 +100,7 @@ export function ModalViewer({ open, onOpenChange, url, title = "Documento" }: Mo
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(url);
 
   const body = (
-    <div className="min-h-0 flex-1 overflow-hidden bg-[#F6F7F8]">
+    <div className="min-h-0 flex-1 overflow-hidden bg-muted">
       {loading ? (
         <div className="flex h-full items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -130,8 +130,7 @@ export function ModalViewer({ open, onOpenChange, url, title = "Documento" }: Mo
       <Button variant="cancel" onClick={() => onOpenChange(false)}>Cerrar</Button>
       {effectiveUrl && !loading && (
         <Button variant="primary-outline" asChild>
-          <a href={effectiveUrl} download target="_blank" rel="noopener noreferrer">
-            <Download className="h-4 w-4" /> Descargar
+          <a href={effectiveUrl} download target="_blank" rel="noopener noreferrer"> Descargar
           </a>
         </Button>
       )}

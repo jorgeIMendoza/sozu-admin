@@ -17,7 +17,7 @@ import {
 } from "@/contexts/PortalProductosImpersonationContext";
 import { PortalProductosImpersonationSelector } from "./PortalProductosImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 interface NavLeaf { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavLeaf[] }

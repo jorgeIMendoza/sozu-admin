@@ -11,26 +11,24 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
 import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
-import { ModalViewer } from "@/components/ui/ModalViewer";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
-import {
-  FileText, Receipt, Landmark, GraduationCap,
-  Check, AlertTriangle, Loader2,
-  Camera, Trash2, Upload, ArrowLeft, Eye, EyeOff, Pencil, Plus, UploadCloud, PenLine
-} from "lucide-react";
+import { FileText, Receipt, Landmark, GraduationCap, Check, AlertTriangle, Loader2, Camera, Trash2, Upload, ArrowLeft, Eye, EyeOff, Pencil, Plus, UploadCloud, PenLine, CalendarDays } from "lucide-react";
 import { Link } from "react-router-dom";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { FIELD_LABEL_CLS, FIELD_INPUT_CLS, Req, ModalHeader, MODAL_TITLE_CLS, MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
+import { FIELD_LABEL_CLS, Req, ModalForm, ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { Input } from "@/components/ui/input";
+import { matchRegimenId } from "@/utils/regimenMatch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
 import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -115,10 +113,10 @@ const SUBSECTION_TITLES: Record<string, string> = {
 // Badge de estatus reutilizable para las filas de "Secciones de tu perfil".
 function sectionBadge(status: string) {
   return status === 'complete'
-    ? { label: 'Completado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
+    ? { label: 'Completado', color: 'text-primary', bg: 'bg-primary/10' }
     : status === 'partial'
-    ? { label: 'En proceso', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
-    : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#F2F4F5]' };
+    ? { label: 'En proceso', color: 'text-amber-700', bg: 'bg-amber-100' }
+    : { label: 'Pendiente', color: 'text-muted-foreground', bg: 'bg-muted' };
 }
 
 // Zona profesional de subida: arrastra o selecciona (PDF).
@@ -144,22 +142,26 @@ function DocDropzone({ accept, uploading, onFile }: { accept: string; uploading:
       onClick={() => !uploading && inputRef.current?.click()}
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-8 text-center transition-colors",
-        drag ? "border-[hsl(158_64%_38%)] bg-[#F0FAF4]" : "border-[#D6DBDF] bg-[#FAFBFB] hover:border-[hsl(158_64%_38%)]"
+        drag ? "border-primary bg-primary/5" : "border-border bg-muted hover:border-primary"
       )}
     >
       <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
       {uploading ? (
-        <Loader2 className="h-8 w-8 animate-spin text-[hsl(158_64%_38%)]" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       ) : (
-        <UploadCloud className="h-8 w-8 text-[hsl(158_64%_38%)]" strokeWidth={1.6} />
+        <UploadCloud className="h-8 w-8 text-primary" strokeWidth={1.6} />
       )}
       <div>
-        <p className="text-[14px] font-bold text-[#171A1D]">{uploading ? 'Subiendo…' : 'Arrastra el archivo aquí'}</p>
-        <p className="mt-1 text-[12px] font-medium text-[#9AA3AD]">o haz clic para seleccionar · Solo PDF</p>
+        <p className="text-sm font-bold text-foreground">{uploading ? 'Subiendo…' : 'Arrastra el archivo aquí'}</p>
+        <p className="mt-1 text-xs font-medium text-muted-foreground/70">o haz clic para seleccionar · Solo PDF</p>
       </div>
     </div>
   );
 }
+/** Valores centinela de los selects (Radix no admite value=""). */
+const NO_REGIMEN = "__none__";
+const SIN_ESPECIFICAR = "__none__";
+
 const AgentPerfil = () => {
   const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
@@ -377,6 +379,8 @@ const AgentPerfil = () => {
 
   const isMobile = useIsMobile();
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
+  // Cuenta bancaria: 'create' abre el alta en blanco; 'edit' carga la cuenta tocada.
+  const [bankTarget, setBankTarget] = useState<{ mode: 'create' | 'edit'; id: number | null }>({ mode: 'create', id: null });
   // Pestaña inicial del modal de paso (p. ej. 'address' para ir directo a firmar la carta).
   const [activeStepTab, setActiveStepTab] = useState<string | undefined>(undefined);
   // Captura por cámara de identidad (INE frente+reverso o pasaporte) directo desde
@@ -391,7 +395,10 @@ const AgentPerfil = () => {
   const [ineViewer, setIneViewer] = useState<{ frente: string | null; reverso: string | null } | null>(null);
   const [viewer, setViewer] = useState<{ url: string; nombre: string } | null>(null);
   // CSF: datos extraídos para confirmar/editar antes de guardar
-  const [csfConfirm, setCsfConfirm] = useState<{ file: File; fields: { key: string; label: string; value: string; personaCol: string | null }[] } | null>(null);
+  const [csfConfirm, setCsfConfirm] = useState<{
+    file: File;
+    fields: { key: string; label: string; value: string; personaCol: string | null; kind?: "text" | "regimen" }[];
+  } | null>(null);
   const [csfEdit, setCsfEdit] = useState<Record<string, string>>({});
   const [savingCsf, setSavingCsf] = useState(false);
   useEffect(() => {
@@ -405,8 +412,8 @@ const AgentPerfil = () => {
   const { data: regimenCatalog = [] } = useQuery({
     queryKey: ["agent-regimen-catalog"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("regimen").select("id, nombre").eq("activo", true).order("id");
-      return (data || []) as { id: number; nombre: string }[];
+      const { data } = await (supabase as any).from("regimen").select("id, nombre, tipo").eq("activo", true).order("id");
+      return (data || []) as { id: string; nombre: string; tipo: string }[];
     },
   });
   const [securityOpen, setSecurityOpen] = useState(false);
@@ -498,7 +505,7 @@ const AgentPerfil = () => {
 
   // Subida directa de PDF (constancia fiscal) → documentos, pendiente de validación.
   const [uploadingDoc, setUploadingDoc] = useState(false);
-  const uploadDocPdf = async (file: File, tipo: number, opts?: { estatus?: number; personaUpdates?: Record<string, string> }) => {
+  const uploadDocPdf = async (file: File, tipo: number, opts?: { estatus?: number; personaUpdates?: Record<string, string | null> }) => {
     if (!personaId) { toast.error('Tu usuario no tiene un perfil de persona asociado.'); return; }
     const estatus = opts?.estatus ?? 1;
     setUploadingDoc(true);
@@ -551,7 +558,7 @@ const AgentPerfil = () => {
           { key: "rfc",          label: "RFC",                  value: f.rfc ?? "",          personaCol: "rfc" },
           { key: "curp",         label: "CURP",                 value: f.curp ?? "",         personaCol: "curp" },
           { key: "nombre",       label: "Nombre / Razón social", value: f.nombre ?? "",      personaCol: "nombre_legal" },
-          { key: "regimen",      label: "Régimen fiscal",       value: f.regimen ?? "",      personaCol: null },
+          { key: "regimen",      label: "Régimen fiscal",       value: matchRegimenId(f.regimen ?? "", regimenCatalog), personaCol: "regimen", kind: "regimen" },
           { key: "codigoPostal", label: "Código postal",        value: f.codigoPostal ?? "", personaCol: "direccion_fiscal_codigo_postal" },
           { key: "calle",        label: "Calle",                value: f.calle ?? "",        personaCol: "direccion_fiscal_calle" },
           { key: "numExt",       label: "Núm. exterior",        value: f.numExt ?? "",       personaCol: "direccion_fiscal_num_ext" },
@@ -568,21 +575,12 @@ const AgentPerfil = () => {
     if (!csfConfirm) return;
     setSavingCsf(true);
     try {
-      const personaUpdates: Record<string, string> = {};
+      const personaUpdates: Record<string, string | null> = {};
       for (const fld of csfConfirm.fields) {
         const val = (csfEdit[fld.key] ?? fld.value).trim();
+        // El régimen se elige del catálogo: si el agente lo deja vacío se guarda null.
+        if (fld.kind === "regimen") { personaUpdates["regimen"] = val || null; continue; }
         if (fld.personaCol && val) personaUpdates[fld.personaCol] = val;
-      }
-      // Régimen: texto de la CSF → id/código SAT del catálogo (por código de 3 dígitos o por nombre).
-      const regText = (csfEdit["regimen"] ?? "").trim();
-      if (regText && regimenCatalog.length) {
-        const nrm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
-        const nText = nrm(regText);
-        const codeMatch = regText.match(/\b(\d{3})\b/)?.[1];
-        const found =
-          (codeMatch ? regimenCatalog.find((r) => String(r.id) === codeMatch) : undefined) ||
-          regimenCatalog.find((r) => { const n = nrm(r.nombre); return n.length > 3 && (nText.includes(n) || n.includes(nText)); });
-        if (found) personaUpdates["regimen"] = String(found.id);
       }
       await uploadDocPdf(csfConfirm.file, 6, { estatus: 2, personaUpdates });
       await queryClient.refetchQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
@@ -788,7 +786,7 @@ const AgentPerfil = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-primary))]" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
@@ -801,30 +799,26 @@ const AgentPerfil = () => {
             <button
               onClick={() => setProfileView('overview')}
               aria-label="Volver a Perfil"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-[#4B5563] transition-colors hover:bg-gray-50"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-card text-muted-foreground transition-colors hover:bg-gray-50"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <h2 className="flex-1 truncate text-[18px] font-bold tracking-[-0.3px] text-[#171A1D]">{SUBSECTION_TITLES[profileView]}</h2>
+            <h2 className="flex-1 truncate text-lg font-bold tracking-[-0.3px] text-foreground">{SUBSECTION_TITLES[profileView]}</h2>
             {profileView === 'training' && perfilPerms.canUpdate && (
-              <button
-                onClick={() => setActiveStep('training')}
-                className="inline-flex shrink-0 items-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06]"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-                <span className="hidden sm:inline">Agendar capacitación</span>
-                <span className="sm:hidden">Agendar</span>
-              </button>
+              <ActionButton icon={CalendarDays} shortLabel="Agendar" size="sm" className="shrink-0" onClick={() => setActiveStep('training')}>
+                Agendar capacitación
+              </ActionButton>
             )}
             {profileView === 'bank' && perfilPerms.canUpdate && (
-              <button
-                onClick={() => setActiveStep('bank-accounts')}
-                className="inline-flex shrink-0 items-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-2 text-[12.5px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06]"
+              <ActionButton
+                icon={Plus}
+                shortLabel="Agregar"
+                size="sm"
+                className="shrink-0"
+                onClick={() => { setBankTarget({ mode: 'create', id: null }); setActiveStep('bank-accounts'); }}
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
-                <span className="hidden sm:inline">Agregar cuenta</span>
-                <span className="sm:hidden">Agregar</span>
-              </button>
+                Agregar cuenta
+              </ActionButton>
             )}
           </div>
         )}
@@ -832,11 +826,11 @@ const AgentPerfil = () => {
       <div className={cn("mx-auto max-w-[1040px] space-y-4", profileView === 'overview' ? "pt-1" : "pt-5")}>
       {profileView === 'overview' && (<>
       {/* Profile Card */}
-      <div className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-5 sm:p-[22px] flex flex-wrap items-center gap-5">
+      <div className="flex flex-col items-center gap-4 rounded-md border border-border bg-card p-5 text-center shadow-[0_1px_3px_rgba(20,30,25,0.04)] sm:flex-row sm:flex-wrap sm:gap-5 sm:p-6 sm:text-left">
         {/* Avatar */}
         <button
           type="button"
-          className="relative shrink-0 rounded-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(158_64%_38%)] focus-visible:ring-offset-2"
+          className="relative shrink-0 rounded-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           onClick={() => canEdit && setShowPhotoModal(true)}
           disabled={!canEdit}
           title={canEdit ? "Cambiar foto de perfil" : undefined}
@@ -849,34 +843,34 @@ const AgentPerfil = () => {
               h={208}
               resize="cover"
               alt={displayName || "Avatar"}
-              className="h-[104px] w-[104px] rounded-full object-cover"
+              className="h-20 w-20 rounded-full object-cover sm:h-[104px] sm:w-[104px]"
             />
           ) : (
-            <div className="h-[104px] w-[104px] rounded-full bg-[hsl(158_64%_38%)] flex items-center justify-center text-white font-bold text-4xl">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-3xl font-bold text-primary-foreground sm:h-[104px] sm:w-[104px] sm:text-4xl">
               {(displayName || "A")[0]?.toUpperCase()}
             </div>
           )}
           {canEdit && (
-            <span className="absolute -right-1 -bottom-1 h-[26px] w-[26px] rounded-full bg-white border border-[#E4E7EA] shadow-[0_1px_4px_rgba(0,0,0,0.12)] flex items-center justify-center text-[#4B5563]">
+            <span className="absolute -right-1 -bottom-1 h-[26px] w-[26px] rounded-full bg-card border border-border shadow-[0_1px_4px_rgba(0,0,0,0.12)] flex items-center justify-center text-muted-foreground">
               <Camera className="h-3.5 w-3.5" />
             </span>
           )}
         </button>
 
         {/* Info + presentación */}
-        <div className="flex-1 min-w-[240px]">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[19px] font-bold tracking-[-0.3px] text-[#171A1D]">
+        <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-[240px]">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+            <span className="text-xl font-bold tracking-[-0.3px] text-foreground">
               {displayName || "Agente"}
             </span>
           </div>
           {/* Desarrollos asignados (rol/equipo viven en "Datos de tu cuenta SOZU") */}
           {misDesarrollos.length > 0 && (
             <div className="mt-2.5">
-              <div className="mb-1.5 text-[10px] font-bold tracking-[0.6px] text-[#9AA3AD]">Desarrollos asignados</div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="mb-1.5 text-xs font-bold tracking-wide text-muted-foreground/70">Desarrollos asignados</div>
+              <div className="flex flex-wrap justify-center gap-1.5 sm:justify-start">
                 {(showAllDesarrollos ? misDesarrollos : misDesarrollos.slice(0, 3)).map((d) => (
-                  <span key={d} className="rounded-full border border-[#E4E7EA] bg-white px-2.5 py-[3px] text-[10.5px] font-semibold text-[#4B5563]">
+                  <span key={d} className="rounded-full border border-border bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                     {d}
                   </span>
                 ))}
@@ -884,7 +878,7 @@ const AgentPerfil = () => {
                   <button
                     type="button"
                     onClick={() => setShowAllDesarrollos((v) => !v)}
-                    className="rounded-full border border-[#D6ECE0] bg-[#EAF6F0] px-2.5 py-[3px] text-[10.5px] font-bold text-[hsl(158_64%_38%)] hover:bg-[#DDF0E6]"
+                    className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/10"
                   >
                     {showAllDesarrollos ? 'Ver menos' : `+${misDesarrollos.length - 3}`}
                   </button>
@@ -895,10 +889,10 @@ const AgentPerfil = () => {
 
           {/* Presentación: lectura por defecto, edición al pulsar */}
           {(canEdit || perfilExtra?.frase_perfil) && (
-            <div className="mt-3.5 pt-3.5 border-t border-[#F2F4F5]">
+            <div className="mt-3.5 pt-3.5 border-t border-border">
               {editingFrase ? (
                 <>
-                  <p className="text-[11.5px] font-semibold text-[#4B5563] leading-relaxed">
+                  <p className="text-xs font-semibold text-muted-foreground leading-relaxed">
                     Así te presentas ante tus clientes. Aparece cuando compartes una propiedad con un prospecto.
                   </p>
                   <textarea
@@ -913,39 +907,32 @@ const AgentPerfil = () => {
                     }}
                     maxLength={280}
                     placeholder="Escribe tu presentación…"
-                    className="mt-2 w-full max-h-[140px] resize-none overflow-y-auto rounded-md border border-[#ECEEF0] px-3 py-2.5 text-[12.5px] text-[#171A1D] leading-relaxed outline-none focus:ring-2 focus:ring-[hsl(158_64%_38%)]/30"
+                    className="mt-2 w-full max-h-[140px] resize-none overflow-y-auto rounded-md border border-border px-3 py-2.5 text-xs text-foreground leading-relaxed outline-none focus:ring-2 focus:ring-primary/30"
                   />
-                  <div className="mt-1.5 flex items-center justify-between gap-3 flex-wrap">
-                    <span className="text-[10.5px] italic text-[#9AA3AD]">
+                  <div className="mt-1.5 space-y-2.5">
+                    <p className="text-xs italic text-muted-foreground/70">
                       Habla de tu experiencia. Evita promesas de rendimiento o plusvalía.
-                    </span>
-                    <span className="flex items-center gap-2.5 shrink-0">
-                      <span className="text-[10.5px] font-medium tabular-nums text-[#B7BEC5]">{fraseValue.length}/280</span>
-                      <button
-                        onClick={() => setEditingFrase(false)}
-                        disabled={savingFrase}
-                        className="inline-flex items-center rounded-md border border-[#ECEEF0] px-3.5 py-1.5 text-[11.5px] font-semibold text-[#6B7280] transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-50"
-                      >
+                    </p>
+                    {/* Acciones alineadas a la derecha, como en las modales. */}
+                    <div className="flex items-center justify-end gap-2.5">
+                      <span className="text-xs font-medium tabular-nums text-muted-foreground/70">{fraseValue.length}/280</span>
+                      <Button variant="cancel" size="sm" onClick={() => setEditingFrase(false)} disabled={savingFrase}>
                         Cancelar
-                      </button>
-                      <button
-                        onClick={handleFraseSave}
-                        disabled={savingFrase}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(158_64%_38%)] bg-white px-3.5 py-1.5 text-[11.5px] font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[#F0FAF4] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {savingFrase && <Loader2 className="h-3 w-3 animate-spin" />}
+                      </Button>
+                      <Button variant="primary-outline" size="sm" onClick={handleFraseSave} disabled={savingFrase}>
+                        {savingFrase && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                         Guardar
-                      </button>
-                    </span>
+                      </Button>
+                    </div>
                   </div>
                 </>
               ) : perfilExtra?.frase_perfil ? (
                 <div className="flex items-start justify-between gap-3">
-                  <p className="flex-1 text-[12.5px] italic text-[#4B5563] leading-relaxed">"{perfilExtra.frase_perfil}"</p>
+                  <p className="flex-1 text-xs italic text-muted-foreground leading-relaxed">"{perfilExtra.frase_perfil}"</p>
                   {canEdit && (
                     <button
                       onClick={() => { setFraseValue(perfilExtra.frase_perfil || ''); setEditingFrase(true); }}
-                      className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-2.5 py-1.5 text-[11px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
                     >
                       <Pencil className="h-3.5 w-3.5" /> Editar
                     </button>
@@ -954,7 +941,7 @@ const AgentPerfil = () => {
               ) : canEdit ? (
                 <button
                   onClick={() => { setFraseValue(''); setEditingFrase(true); }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-[#D6DBDF] px-3.5 py-2 text-[12px] font-semibold text-[#4B5563] transition-colors hover:border-[hsl(158_64%_38%)] hover:text-[hsl(158_64%_38%)]"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-primary"
                 >
                   <Plus className="h-3.5 w-3.5" /> Agregar presentación
                 </button>
@@ -964,15 +951,15 @@ const AgentPerfil = () => {
         </div>
 
         {/* Panel activación */}
-        <div className="w-full sm:w-[220px] shrink-0 sm:border-l sm:border-[#F2F4F5] sm:pl-5">
+        <div className="w-full sm:w-[220px] shrink-0 sm:border-l sm:border-border sm:pl-5">
           <div className="flex items-baseline justify-between">
-            <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Activación</span>
-            <span className="text-[18px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{percentage}%</span>
+            <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Activación</span>
+            <span className="text-lg font-bold tabular-nums text-primary">{percentage}%</span>
           </div>
-          <div className="mt-1.5 h-2 rounded-full bg-[#EEF0F2] overflow-hidden">
-            <div className="h-full rounded-full bg-[hsl(158_64%_38%)] transition-all duration-700" style={{ width: `${percentage}%` }} />
+          <div className="mt-1.5 h-2 rounded-full bg-muted overflow-hidden">
+            <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${percentage}%` }} />
           </div>
-          <p className="mt-1.5 text-[10px] font-medium text-[#9AA3AD] leading-snug">
+          <p className="mt-1.5 text-xs font-medium text-muted-foreground/70 leading-snug">
             Se calcula sobre documentos validados y etapas completadas.
           </p>
         </div>
@@ -995,7 +982,7 @@ const AgentPerfil = () => {
             label: 'Estatus',
             render: (
               <span className="inline-flex items-center gap-1.5">
-                <span className={cn('h-[7px] w-[7px] rounded-full', sozuInfo.activo ? 'bg-[hsl(158_64%_38%)]' : 'bg-[#C4CBD2]')} />
+                <span className={cn('h-[7px] w-[7px] rounded-full', sozuInfo.activo ? 'bg-primary' : 'bg-muted')} />
                 {sozuInfo.activo ? 'Activo' : 'Inactivo'}
               </span>
             ),
@@ -1005,14 +992,14 @@ const AgentPerfil = () => {
         ];
         return (
           <div>
-            <div className="mb-2 px-0.5 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
+            <div className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wide text-muted-foreground/70">
               Datos de tu cuenta
             </div>
-            <div className="grid grid-cols-1 gap-x-8 gap-y-0.5 rounded-md border border-[#ECEEF0] bg-white p-5 sm:grid-cols-2 sm:p-[22px]">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-0.5 rounded-md border border-border bg-card p-5 sm:grid-cols-2 sm:p-6">
               {rows.map((r) => (
-                <div key={r.label} className="flex items-center justify-between gap-3 border-b border-[#F2F4F5] py-2.5 last:border-b-0 sm:[&:nth-last-child(2)]:border-b-0">
-                  <span className="text-[12px] font-medium text-[#9AA3AD]">{r.label}</span>
-                  <span className="text-right text-[13px] font-semibold text-[#171A1D]">{r.render}</span>
+                <div key={r.label} className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0 sm:[&:nth-last-child(2)]:border-b-0">
+                  <span className="text-xs font-medium text-muted-foreground/70">{r.label}</span>
+                  <span className="text-right text-sm font-semibold text-foreground">{r.render}</span>
                 </div>
               ))}
             </div>
@@ -1030,144 +1017,110 @@ const AgentPerfil = () => {
         onChange={handleFileSelect}
       />
 
-      {/* Photo modal - phase 1: options / phase 2: preview & confirm */}
-      <Dialog open={showPhotoModal} onOpenChange={(open) => { if (!open) closePhotoModal(); }}>
-        <DialogContent
-          aria-describedby={undefined}
-          style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}
-          className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[360px] p-0 overflow-hidden rounded-md border-0 shadow-2xl [&>button]:text-white/80 [&>button:hover]:text-white"
-        >
-          {!pendingFile ? (
-            /* ── Phase 1: Options ── */
-            <>
-              {/* Colored header */}
-              <div className="bg-[hsl(var(--agent-primary))] px-5 pt-5 sm:pt-7 pb-6 sm:pb-8 flex flex-col items-center gap-2">
-                <DialogTitle className="text-[14px] sm:text-[15px] font-semibold text-white text-center tracking-wide uppercase opacity-80">
-                  Foto de perfil
-                </DialogTitle>
-                <div className="mt-2 sm:mt-3 relative">
-                  {perfilExtra?.foto_perfil_url ? (
-                    <OptImg
-                      src={perfilExtra.foto_perfil_url}
-                      w={160}
-                      h={160}
-                      resize="cover"
-                      alt={displayName || "Avatar"}
-                      className="h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl"
-                    />
-                  ) : (
-                    <div className="h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-2xl sm:text-3xl ring-[3px] ring-white/40 shadow-xl">
-                      {(displayName || "A")[0]?.toUpperCase()}
-                    </div>
-                  )}
+      {/* Foto de perfil - estándar de formulario (ui/modal-form) */}
+      <ModalForm
+        open={showPhotoModal}
+        onOpenChange={(open) => { if (!open) closePhotoModal(); }}
+        className="sm:max-w-[360px]"
+        title={pendingFile ? "Vista previa" : "Foto de perfil"}
+        subtitle={pendingFile ? "Así se verá tu foto de perfil" : (displayName || "Agente")}
+        footer={pendingFile ? (
+          <>
+            <Button
+              variant="outline"
+              disabled={uploadingPhoto}
+              onClick={() => { setPendingFile(null); if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); } }}
+            > Volver
+            </Button>
+            <Button variant="primary-outline" onClick={handlePhotoConfirm} disabled={uploadingPhoto}>
+              {uploadingPhoto
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</>
+                : <><Check className="h-4 w-4" /> Guardar foto</>}
+            </Button>
+          </>
+        ) : (
+          <Button variant="cancel" onClick={closePhotoModal}>Cancelar</Button>
+        )}
+      >
+        {pendingFile ? (
+          <div className="flex justify-center py-2">
+            <img
+              src={previewUrl!}
+              alt="Vista previa"
+              className="h-24 w-24 rounded-full object-cover ring-2 ring-primary/20"
+            />
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-center py-2">
+              {perfilExtra?.foto_perfil_url ? (
+                <OptImg
+                  src={perfilExtra.foto_perfil_url}
+                  w={160}
+                  h={160}
+                  resize="cover"
+                  alt={displayName || "Avatar"}
+                  className="h-20 w-20 rounded-full object-cover ring-2 ring-primary/20"
+                />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary ring-2 ring-primary/20">
+                  {(displayName || "A")[0]?.toUpperCase()}
                 </div>
-                <p className="text-[13px] sm:text-sm font-medium text-white/90 leading-none">{displayName || "Agente"}</p>
-              </div>
+              )}
+            </div>
 
-              {/* Actions */}
-              <div className="px-3 sm:px-4 py-3 sm:py-4 flex flex-col gap-1">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-3 w-full rounded-md px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-[hsl(var(--agent-primary))]/10 hover:bg-[hsl(var(--agent-primary))]/15 active:bg-[hsl(var(--agent-primary))]/20 transition-colors cursor-pointer"
-                >
-                  <div className="h-8 w-8 rounded-full bg-[hsl(var(--agent-primary))]/15 flex items-center justify-center shrink-0">
-                    <Upload className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-[hsl(var(--agent-primary))]">
-                      {perfilExtra?.foto_perfil_url ? 'Cambiar foto' : 'Cargar foto'}
-                    </p>
-                    <p className="text-[11px] text-[hsl(var(--agent-primary))]/60 mt-0.5">JPG, PNG o WebP</p>
-                  </div>
-                </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex w-full items-center gap-3 rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <Upload className="h-4 w-4 text-primary" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">
+                  {perfilExtra?.foto_perfil_url ? "Cambiar foto" : "Cargar foto"}
+                </span>
+                <span className="block text-xs text-muted-foreground">JPG, PNG o WebP</span>
+              </span>
+            </button>
 
-                {perfilExtra?.foto_perfil_url && (
-                  <button
-                    onClick={handlePhotoDelete}
-                    disabled={deletingPhoto}
-                    className="flex items-center gap-3 w-full rounded-md px-3 sm:px-4 min-h-[52px] text-sm font-medium text-left bg-red-50 hover:bg-red-100 active:bg-red-200 transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                      {deletingPhoto
-                        ? <Loader2 className="h-4 w-4 text-red-500 animate-spin" />
-                        : <Trash2 className="h-4 w-4 text-red-500" />
-                      }
-                    </div>
-                    <div>
-                      <p className="text-[13px] font-semibold text-red-700">Eliminar foto</p>
-                      <p className="text-[11px] text-red-400 mt-0.5">Vuelves a mostrar tus iniciales</p>
-                    </div>
-                  </button>
-                )}
-
-                <button
-                  onClick={closePhotoModal}
-                  className="mt-0.5 w-full rounded-md px-4 min-h-[44px] text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors text-center cursor-pointer"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </>
-          ) : (
-            /* ── Phase 2: Preview & confirm ── */
-            <>
-              {/* Colored header with preview */}
-              <div className="bg-[hsl(var(--agent-primary))] px-5 pt-5 sm:pt-7 pb-6 sm:pb-8 flex flex-col items-center gap-2">
-                <DialogTitle className="text-[14px] sm:text-[15px] font-semibold text-white text-center tracking-wide uppercase opacity-80">
-                  Vista previa
-                </DialogTitle>
-                <div className="mt-2 sm:mt-3 relative">
-                  <div className="absolute -inset-2 rounded-full bg-white/10 animate-pulse" />
-                  <img
-                    src={previewUrl!}
-                    alt="Vista previa"
-                    className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover ring-[3px] ring-white/40 shadow-xl relative z-10"
-                  />
-                </div>
-                <p className="text-[12px] sm:text-[13px] text-white/70 text-center leading-snug">
-                  Así se verá tu foto de perfil
-                </p>
-              </div>
-
-              <div className="px-3 sm:px-4 pb-4 sm:pb-5 pt-3 sm:pt-4 flex flex-col gap-2">
-                <button
-                  onClick={handlePhotoConfirm}
-                  disabled={uploadingPhoto}
-                  className="w-full rounded-md min-h-[52px] text-sm font-semibold bg-[hsl(var(--agent-primary))] hover:opacity-90 active:opacity-80 text-white transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {uploadingPhoto ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</>
-                  ) : (
-                    <><Check className="h-4 w-4" strokeWidth={2.5} /> Guardar foto</>
-                  )}
-                </button>
-                <button
-                  onClick={() => { setPendingFile(null); if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); } }}
-                  disabled={uploadingPhoto}
-                  className="w-full rounded-md min-h-[44px] text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  Volver
-                </button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+            {perfilExtra?.foto_perfil_url && (
+              <button
+                type="button"
+                onClick={handlePhotoDelete}
+                disabled={deletingPhoto}
+                className="flex w-full items-center gap-3 rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:border-destructive/40 hover:bg-destructive/5 disabled:opacity-50"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+                  {deletingPhoto
+                    ? <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+                    : <Trash2 className="h-4 w-4 text-destructive" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-destructive">Eliminar foto</span>
+                  <span className="block text-xs text-muted-foreground">Vuelves a mostrar tus iniciales</span>
+                </span>
+              </button>
+            )}
+          </>
+        )}
+      </ModalForm>
 
       {/* Aviso proactivo */}
       {isAgentRole && !canReceivePayments && (
-        <div className="flex items-center gap-3 rounded-md border border-[#EBCBA6] bg-[#FBE3CE] px-3.5 py-3">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#B5601C] text-white">
+        <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-orange-100 px-3.5 py-3">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-700 text-white">
             <AlertTriangle className="h-3 w-3" />
           </span>
-          <span className="flex-1 text-[12px] font-semibold text-[#B5601C]">
+          <span className="flex-1 text-xs font-semibold text-orange-700">
             Completa tu información fiscal y cuenta bancaria para poder recibir comisiones.
           </span>
           {perfilPerms.canUpdate && (
             <span
               tabIndex={0}
               onClick={() => setProfileView('fiscal')}
-              className="shrink-0 cursor-pointer text-[11.5px] font-bold text-[#B5601C] underline"
+              className="shrink-0 cursor-pointer text-xs font-bold text-orange-700 underline"
             >
               Actualizar
             </span>
@@ -1176,43 +1129,39 @@ const AgentPerfil = () => {
       )}
 
       {/* HERO MOTOR · expediente */}
-      <div className="flex flex-wrap gap-[22px] rounded-md border border-[#CFE9DA] bg-gradient-to-br from-[#F0FAF4] to-[#FBFEFC] p-[22px]">
-        <div className="min-w-[240px] flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-[hsl(158_64%_38%)]">
+      <div className="flex flex-wrap gap-4 rounded-md border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/5 p-5 sm:gap-6 sm:p-6">
+        <div className="w-full min-w-0 flex-1 sm:w-auto sm:min-w-[240px]">
+          <div className="text-xs font-bold uppercase tracking-wide text-primary">
             Tu expediente · el motor de tu activación
           </div>
-          <div className="mt-2 text-[21px] font-bold leading-[1.25] tracking-[-0.4px] text-[#16331F]">
+          <div className="mt-2 text-base font-bold leading-snug tracking-[-0.4px] text-primary sm:text-xl sm:leading-[1.25]">
             Tu información se construye desde tus documentos.
           </div>
-          <p className="mt-2 text-[13px] font-medium leading-relaxed text-[#3F5A4A]">
+          <p className="mt-2 text-xs font-medium leading-relaxed text-primary sm:text-sm">
             Cada documento que subes alimenta tu información personal y fiscal. Solo validas lo que ya dijeron.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3.5">
-            <button
-              onClick={() => setProfileView('expediente')}
-              className="inline-flex items-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-[18px] py-2.5 text-[13px] font-bold text-[hsl(158_64%_38%)] transition-opacity hover:bg-[hsl(158_64%_38%)]/[0.06]"
-            >
-              <FileText className="h-4 w-4" />
+          <div className="mt-4 flex flex-wrap items-center gap-2.5 sm:gap-3.5">
+            <ActionButton icon={FileText} className="w-full sm:w-auto" onClick={() => setProfileView('expediente')}>
               Gestionar documentos
-            </button>
-            <span className="text-[12px] font-semibold tabular-nums text-[#3F5A4A]">
+            </ActionButton>
+            <span className="text-xs font-semibold tabular-nums text-primary">
               {seccionesValidadas} de {totalSecciones} secciones completadas
             </span>
           </div>
         </div>
-        <div className="w-[210px] shrink-0 rounded-md border border-[#DCEEE3] bg-white p-[15px]">
-          <div className="mb-3 text-[9.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Estado de secciones</div>
-          <div className="flex flex-col gap-[11px]">
+        <div className="w-full shrink-0 rounded-md border border-primary/20 bg-card p-4 sm:w-[210px]">
+          <div className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Estado de secciones</div>
+          <div className="flex flex-col gap-3">
             {[
-              { n: seccionesValidadas, label: 'validadas', bg: 'bg-[#E8F5EE]', color: 'text-[hsl(158_64%_38%)]' },
-              { n: seccionesEnProceso, label: 'en proceso', bg: 'bg-[#FBEFD9]', color: 'text-[#B5730A]' },
-              { n: seccionesPendientes, label: 'pendientes', bg: 'bg-[#EEF0F2]', color: 'text-[#6B7280]' },
+              { n: seccionesValidadas, label: 'validadas', bg: 'bg-primary/10', color: 'text-primary' },
+              { n: seccionesEnProceso, label: 'en proceso', bg: 'bg-amber-100', color: 'text-amber-700' },
+              { n: seccionesPendientes, label: 'pendientes', bg: 'bg-muted', color: 'text-muted-foreground' },
             ].map((c) => (
               <div key={c.label} className="flex items-center gap-2.5">
-                <span className={cn("flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums", c.bg, c.color)}>
+                <span className={cn("flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-xs font-bold tabular-nums", c.bg, c.color)}>
                   {c.n}
                 </span>
-                <span className="text-[12px] font-semibold text-[#4B5563]">{c.label}</span>
+                <span className="text-xs font-semibold text-muted-foreground">{c.label}</span>
               </div>
             ))}
           </div>
@@ -1221,7 +1170,7 @@ const AgentPerfil = () => {
 
       {/* SECCIONES DE TU PERFIL */}
       <div>
-        <div className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[1px] text-[#9AA3AD]">
+        <div className="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground/70">
           Secciones de tu perfil
         </div>
         <div className="flex flex-col gap-2.5">
@@ -1310,8 +1259,8 @@ const AgentPerfil = () => {
         <div>
           {/* Leyenda: solo mientras no haya una identidad vigente */}
           {!identityVigente && (
-            <div className="mb-2.5 rounded-md border border-[#FBEFD9] bg-[#FEF9EF] px-4 py-3">
-              <p className="text-[12.5px] font-medium leading-relaxed text-[#B5730A]">
+            <div className="mb-2.5 rounded-md border border-amber-100 bg-amber-50 px-4 py-3">
+              <p className="text-xs font-medium leading-relaxed text-amber-700">
                 Aún no has registrado tu identificación oficial. Elige y captura tu <span className="font-bold">INE</span> (frente y reverso) o tu <span className="font-bold">pasaporte</span> para completar tu expediente.
               </p>
             </div>
@@ -1319,14 +1268,14 @@ const AgentPerfil = () => {
 
           {/* Selector INE | Pasaporte (solo hasta subir una identidad vigente) */}
           {showSelector && perfilPerms.canUpdate && (
-            <div className="mb-2.5 inline-flex rounded-md border border-[#ECEEF0] bg-[#F6F7F8] p-1">
+            <div className="mb-2.5 inline-flex rounded-md border border-border bg-muted p-1">
               {([['ine', 'INE'], ['pasaporte', 'Pasaporte']] as const).map(([m, label]) => (
                 <button
                   key={m}
                   onClick={() => setIdentitySel(m)}
                   className={cn(
-                    "rounded-[5px] px-4 py-1.5 text-[12px] font-bold transition-colors",
-                    identitySel === m ? "bg-white text-[hsl(158_64%_38%)] shadow-sm" : "text-[#6B7280]"
+                    "rounded px-4 py-1.5 text-xs font-bold transition-colors",
+                    identitySel === m ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
                   )}
                 >
                   {label}
@@ -1343,11 +1292,11 @@ const AgentPerfil = () => {
               const estado = docEstado(doc);
               const exists = estado !== 'pendiente';
               const badge =
-                estado === 'validado'  ? { label: 'Validado',    color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
-                : estado === 'revision' ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
-                : estado === 'rechazado'? { label: 'Rechazado',   color: 'text-[#B84A3C]', bg: 'bg-[#FBE9E7]' }
-                : estado === 'expirado' ? { label: 'Expirado',    color: 'text-[#6B7280]', bg: 'bg-[#F2F4F5]' }
-                : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
+                estado === 'validado'  ? { label: 'Validado',    color: 'text-primary', bg: 'bg-primary/10' }
+                : estado === 'revision' ? { label: 'En revisión', color: 'text-amber-700', bg: 'bg-amber-100' }
+                : estado === 'rechazado'? { label: 'Rechazado',   color: 'text-destructive', bg: 'bg-destructive/10' }
+                : estado === 'expirado' ? { label: 'Expirado',    color: 'text-muted-foreground', bg: 'bg-muted' }
+                : { label: 'Pendiente', color: 'text-muted-foreground', bg: 'bg-muted' };
               // ¿Requiere capturar/subir uno nuevo? (falta, expiró o fue rechazado).
               // Si ya está cargado y válido/en revisión → lápiz (reemplazar por si se equivocaron).
               const needsUpload = !exists || estado === 'expirado' || estado === 'rechazado';
@@ -1373,19 +1322,19 @@ const AgentPerfil = () => {
               return (
                 <div
                   key={doc.nombre}
-                  className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[15px]"
+                  className="flex items-center gap-3.5 rounded-md border border-border bg-card px-4 py-4"
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[12px] font-bold tabular-nums text-[#6B7280]">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold tabular-nums text-muted-foreground">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="text-[13.5px] font-bold text-[#171A1D]">{doc.nombre}</span>
-                      <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>
+                      <span className="text-sm font-bold text-foreground">{doc.nombre}</span>
+                      <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", badge.bg, badge.color)}>
                         {badge.label}
                       </span>
                     </div>
-                    <div className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">
+                    <div className="mt-1 text-xs font-medium text-muted-foreground/70">
                       {doc.emisor} · {exists ? 'Cargado' : 'Sin cargar'}
                     </div>
                   </div>
@@ -1394,7 +1343,7 @@ const AgentPerfil = () => {
                       <button
                         title={actionTitle}
                         onClick={handleAction}
-                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
                       >
                         <ActionIcon className="h-4 w-4" />
                       </button>
@@ -1403,7 +1352,7 @@ const AgentPerfil = () => {
                       <button
                         title="Ver documento"
                         onClick={handleView}
-                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -1439,23 +1388,23 @@ const AgentPerfil = () => {
         return (
           <div>
             {/* Información personal (texto + editar) */}
-            <div className="mb-3 rounded-md border border-[#ECEEF0] bg-white p-5">
+            <div className="mb-3 rounded-md border border-border bg-card p-5">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Información personal</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Información personal</span>
                 {canEditInfo && (
                   <button
                     onClick={openIdentEdit}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-3 py-1.5 text-[11.5px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
                   >
                     <Pencil className="h-3.5 w-3.5" /> Editar
                   </button>
                 )}
               </div>
-              <div className="divide-y divide-[#F2F4F5]">
+              <div className="divide-y divide-border">
                 {campos.map((c) => (
                   <div key={c.label} className="flex items-center justify-between gap-3 py-2.5">
-                    <span className="text-[12px] font-medium text-[#9AA3AD]">{c.label}</span>
-                    <span className={cn("text-right text-[12.5px] font-semibold", c.value ? "text-[#171A1D]" : "text-[#9AA3AD]")}>
+                    <span className="text-xs font-medium text-muted-foreground/70">{c.label}</span>
+                    <span className={cn("text-right text-xs font-semibold", c.value ? "text-foreground" : "text-muted-foreground/70")}>
                       {c.value || 'Sin registro'}
                     </span>
                   </div>
@@ -1479,46 +1428,49 @@ const AgentPerfil = () => {
         return (
           <div>
             {/* Uso CFDI */}
-            <div className="mb-3 rounded-md border border-[#ECEEF0] bg-white p-5">
+            <div className="mb-3 rounded-md border border-border bg-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5">
                 <div>
-                  <div className="text-[12px] font-medium text-[#9AA3AD]">Uso del CFDI</div>
+                  <div className="text-xs font-medium text-muted-foreground/70">Uso del CFDI</div>
                 </div>
-                <select
+                <Select
                   value={personaDatos?.uso_cfdi || ''}
                   disabled={!perfilPerms.canUpdate || savingCfdi}
-                  onChange={(e) => saveUsoCfdi(e.target.value)}
-                  className={cn(FIELD_INPUT_CLS, "w-auto min-w-[240px] cursor-pointer")}
+                  onValueChange={(v) => saveUsoCfdi(v)}
                 >
-                  <option value="">Selecciona…</option>
-                  {usoCfdiCatalog.map((u: any) => (
-                    <option key={u.codigo} value={u.codigo}>{u.codigo} · {u.nombre}</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-auto min-w-60">
+                    <SelectValue placeholder="Selecciona…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {usoCfdiCatalog.map((u: any) => (
+                      <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} · {u.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="border-t border-[#F2F4F5] pt-3 text-[11.5px] font-medium leading-relaxed text-[#6B7280]">
+              <div className="border-t border-border pt-3 text-xs font-medium leading-relaxed text-muted-foreground">
                 Como emites CFDI de comisiones a SOZU, tu RFC, régimen y CP fiscal deben coincidir con el SAT (CFDI 4.0).
               </div>
             </div>
 
             {/* Información fiscal (texto + editar) */}
-            <div className="mb-3 rounded-md border border-[#ECEEF0] bg-white p-5">
+            <div className="mb-3 rounded-md border border-border bg-card p-5">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">Información fiscal</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Información fiscal</span>
                 {perfilPerms.canUpdate && (
                   <button
                     onClick={() => setActiveStep('fiscal')}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#ECEEF0] px-3 py-1.5 text-[11.5px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
                   >
                     <Pencil className="h-3.5 w-3.5" /> Editar
                   </button>
                 )}
               </div>
-              <div className="divide-y divide-[#F2F4F5]">
+              <div className="divide-y divide-border">
                 {derivados.map((f) => (
                   <div key={f.label} className="flex items-center justify-between gap-3 py-2.5">
-                    <span className="text-[12px] font-medium text-[#9AA3AD]">{f.label}</span>
-                    <span className={cn("text-right text-[12.5px] font-semibold", f.valor ? "text-[#171A1D]" : "text-[#9AA3AD]")}>
+                    <span className="text-xs font-medium text-muted-foreground/70">{f.label}</span>
+                    <span className={cn("text-right text-xs font-semibold", f.valor ? "text-foreground" : "text-muted-foreground/70")}>
                       {f.valor || 'Sin registro'}
                     </span>
                   </div>
@@ -1532,44 +1484,55 @@ const AgentPerfil = () => {
       {/* ===== VISTA: CUENTA DE DISPERSIÓN ===== */}
       {profileView === 'bank' && (
         <div>
-          <div className="flex items-start gap-3 rounded-md border border-[#C9DCF2] bg-[#EAF2FB] px-4 py-3">
+          <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 px-4 py-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2A6FDB" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
-            <div className="text-[12px] font-medium leading-relaxed text-[#2A557F]">
+            <div className="text-xs font-medium leading-relaxed text-blue-800">
               Por tu seguridad, una cuenta nueva queda <strong>pendiente de activación</strong> hasta que validemos que es tuya.
             </div>
           </div>
 
           <div className="mt-4 flex flex-col gap-2.5">
             {bankAccounts.length === 0 && (
-              <div className="rounded-md border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center text-[12.5px] font-medium text-[#9AA3AD]">
+              <div className="rounded-md border border-dashed border-border bg-muted px-4 py-8 text-center text-xs font-medium text-muted-foreground/70">
                 Aún no tienes cuentas registradas.
               </div>
             )}
             {bankAccounts.map((c: any) => {
               const validada = c.id_estatus_verificacion === 2;
-              const last4 = (c.cuenta_clabe || '').slice(-4);
+              const last4 = (c.cuenta_clabe || c.numero_cuenta || '').slice(-4);
+              const editable = perfilPerms.canUpdate;
               return (
-                <div key={c.id} className="rounded-md border border-[#ECEEF0] bg-white p-4">
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={!editable}
+                  onClick={() => { if (!editable) return; setBankTarget({ mode: 'edit', id: c.id }); setActiveStep('bank-accounts'); }}
+                  className={cn(
+                    "w-full rounded-md border border-border bg-card p-4 text-left transition-colors",
+                    editable ? "hover:border-primary/40 hover:bg-primary/[0.03]" : "cursor-default",
+                  )}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <span className="text-[14px] font-bold text-[#171A1D]">{c.banco?.nombre || 'Banco'}</span>
-                        <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", validada ? "bg-[#E8F5EE] text-[hsl(158_64%_38%)]" : "bg-[#EEF0F2] text-[#6B7280]")}>
+                        <span className="text-sm font-bold text-foreground">{c.banco?.nombre || 'Banco'}</span>
+                        <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", validada ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                           {validada ? 'Validada' : 'Pendiente de activación'}
                         </span>
                         {c.predeterminada && (
-                          <span className="rounded-full bg-[#E8F5EE] px-2.5 py-[3px] text-[9.5px] font-bold text-[hsl(158_64%_38%)]">Predeterminada</span>
+                          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">Predeterminada</span>
                         )}
                       </div>
                       {last4 && (
-                        <div className="mt-2 text-[13px] font-semibold tracking-[1px] text-[#4B5563]">•••• •••• •••• {last4}</div>
+                        <div className="mt-2 text-sm font-semibold tracking-wide text-muted-foreground">•••• •••• •••• {last4}</div>
                       )}
                       {c.titular && (
-                        <div className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">Titular: {c.titular}</div>
+                        <div className="mt-1 text-xs font-medium text-muted-foreground/70">Titular: {c.titular}</div>
                       )}
                     </div>
+                    {editable && <span className="text-xs font-semibold text-primary">Editar</span>}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -1582,39 +1545,39 @@ const AgentPerfil = () => {
         const pct = tStatus === 'complete' ? 100 : tStatus === 'partial' ? 50 : 0;
         return (
           <div>
-            <div className="rounded-md border border-[#ECEEF0] bg-white px-[18px] py-[17px]">
+            <div className="rounded-md border border-border bg-card px-4 py-4">
               <div className="flex items-baseline justify-between">
-                <span className="text-[12px] font-semibold text-[#6B7280]">Avance de tu capacitación</span>
-                <span className="text-[14px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{pct}%</span>
+                <span className="text-xs font-semibold text-muted-foreground">Avance de tu capacitación</span>
+                <span className="text-sm font-bold tabular-nums text-primary">{pct}%</span>
               </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#EEF0F2]">
-                <div className="h-full rounded-full bg-[hsl(158_64%_38%)]" style={{ width: `${pct}%` }} />
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
               </div>
             </div>
 
             <div className="mt-3.5 flex flex-col gap-2.5">
               {sortedTrainingAppointments.length === 0 && (
-                <div className="rounded-md border border-dashed border-[#D6DBDF] bg-[#FAFBFB] px-4 py-8 text-center text-[12.5px] font-medium text-[#9AA3AD]">
+                <div className="rounded-md border border-dashed border-border bg-muted px-4 py-8 text-center text-xs font-medium text-muted-foreground/70">
                   Aún no tienes capacitaciones agendadas.
                 </div>
               )}
               {sortedTrainingAppointments.map((cita) => {
                 const st = getTrainingAppointmentStatus(cita);
                 return (
-                  <div key={cita.id} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[15px]">
+                  <div key={cita.id} className="flex items-center gap-3.5 rounded-md border border-border bg-card px-4 py-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <span className="text-[13.5px] font-bold text-[#171A1D]">{cita.display_name || 'Capacitación'}</span>
+                        <span className="text-sm font-bold text-foreground">{cita.display_name || 'Capacitación'}</span>
                         <Badge
                           variant={st.tone === 'danger' ? 'destructive' : 'outline'}
-                          className={cn("shrink-0 border-0 text-[10px]",
+                          className={cn("shrink-0 border-0 text-xs",
                             st.tone === 'success' && "bg-emerald-500 text-white",
                             st.tone === 'warning' && "bg-amber-500 text-white",
                             st.tone === 'info' && "bg-blue-500 text-white",
                             st.tone === 'neutral' && "bg-gray-400 text-white")}
                         >{st.label}</Badge>
                       </div>
-                      <div className="mt-1 text-[11.5px] font-medium text-[#9AA3AD]">
+                      <div className="mt-1 text-xs font-medium text-muted-foreground/70">
                         {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
                         {cita.hora_inicio ? ` · ${cita.hora_inicio.slice(0, 5)}` : ''}
                       </div>
@@ -1630,31 +1593,46 @@ const AgentPerfil = () => {
 
       {/* Modal confirmar datos de la Constancia (CSF) */}
       <Dialog open={!!csfConfirm} onOpenChange={(o) => { if (!o && !savingCsf) setCsfConfirm(null); }}>
-        <DialogContent aria-describedby={undefined} className="max-w-md gap-0 overflow-hidden p-0">
-          <DialogHeader className="space-y-1 border-b border-[#F0F2F4] px-5 py-4 text-left">
-            <DialogTitle className={MODAL_TITLE_CLS}>Confirma tus datos fiscales</DialogTitle>
-            <p className="text-[12px] font-medium leading-relaxed text-[#9AA3AD]">
-              Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal; se guardarán en tu perfil y el documento quedará validado.
-            </p>
-          </DialogHeader>
-          <div className="max-h-[52vh] space-y-3 overflow-y-auto px-5 py-4">
+        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-md p-0">
+          <ModalFormHeader
+            title="Confirma tus datos fiscales"
+            subtitle="Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal; se guardarán en tu perfil y el documento quedará validado."
+          />
+          <div className={cn(MODAL_BODY_CLS, "max-h-[52vh] gap-3")}>
             {csfConfirm?.fields.map((f) => (
               <div key={f.key}>
                 <div className={FIELD_LABEL_CLS}>{f.label}</div>
-                <input
-                  value={csfEdit[f.key] ?? f.value}
-                  onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))}
-                  className={FIELD_INPUT_CLS}
-                />
+                {f.kind === "regimen" ? (
+                  /* Régimen: solo valores del catálogo SAT en BD. Si la Constancia
+                     trae uno que no existe, queda vacío y el agente lo elige. */
+                  <Select
+                    value={csfEdit[f.key] ?? f.value ?? ""}
+                    onValueChange={(v) => setCsfEdit((prev) => ({ ...prev, [f.key]: v === NO_REGIMEN ? "" : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona tu régimen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_REGIMEN}>Sin especificar</SelectItem>
+                      {regimenCatalog.map((r) => (
+                        <SelectItem key={r.id} value={String(r.id)}>{r.id} · {r.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={csfEdit[f.key] ?? f.value}
+                    onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))}
+                  />
+                )}
               </div>
             ))}
           </div>
           <div className={MODAL_FOOTER_CLS}>
-            <Button variant="cancel" onClick={() => setCsfConfirm(null)} disabled={savingCsf}>
-              Cancelar
+            <Button variant="cancel" onClick={() => setCsfConfirm(null)} disabled={savingCsf}> Cancelar
             </Button>
             <Button variant="primary-outline" onClick={handleConfirmCsf} disabled={savingCsf}>
-              {savingCsf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Sí, es correcta
+              {savingCsf ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Sí, es correcta
             </Button>
           </div>
         </DialogContent>
@@ -1662,12 +1640,12 @@ const AgentPerfil = () => {
 
       {/* Modal cambiar contraseña */}
       <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwShow({ current: false, nueva: false, confirm: false }); } }}>
-        <DialogContent aria-describedby={undefined} className="max-w-[400px] bg-white p-[26px]">
-          <DialogTitle className={MODAL_TITLE_CLS}>Cambiar contraseña</DialogTitle>
-          <p className="-mt-1 text-[12px] font-medium leading-relaxed text-[#6B7280]">
-            Tu nueva contraseña debe tener al menos 6 caracteres.
-          </p>
-          <div className="mt-2 space-y-3">
+        <DialogContent className="max-w-[400px] gap-0 overflow-hidden rounded-md bg-card p-0">
+          <ModalFormHeader
+            title="Cambiar contraseña"
+            subtitle="Tu nueva contraseña debe tener al menos 6 caracteres."
+          />
+          <div className={cn(MODAL_BODY_CLS, "gap-3")}>
             {([
               { key: 'current', label: 'Contraseña actual', val: pwCurrent, set: setPwCurrent },
               { key: 'nueva', label: 'Nueva contraseña', val: pwNew, set: setPwNew },
@@ -1676,17 +1654,17 @@ const AgentPerfil = () => {
               <div key={f.label}>
                 <div className={FIELD_LABEL_CLS}>{f.label}</div>
                 <div className="relative">
-                  <input
+                  <Input
                     type={pwShow[f.key] ? 'text' : 'password'}
                     value={f.val}
                     onChange={(e) => f.set(e.target.value)}
-                    className={cn(FIELD_INPUT_CLS, "pr-10")}
+                    className="pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setPwShow((s) => ({ ...s, [f.key]: !s[f.key] }))}
                     title={pwShow[f.key] ? 'Ocultar' : 'Mostrar'}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-[#9AA3AD] hover:bg-[#F2F4F5] hover:text-[#4B5563]"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted hover:text-muted-foreground"
                   >
                     {pwShow[f.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -1696,14 +1674,13 @@ const AgentPerfil = () => {
             <Link
               to="/auth/forgot-password"
               onClick={() => setSecurityOpen(false)}
-              className="inline-block text-[11.5px] font-semibold text-[hsl(158_64%_38%)] hover:underline"
+              className="inline-block text-xs font-semibold text-primary hover:underline"
             >
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
-          <div className="mt-[18px] flex justify-end gap-2.5">
-            <Button variant="cancel" onClick={() => setSecurityOpen(false)}>
-              Cancelar
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setSecurityOpen(false)}> Cancelar
             </Button>
             <Button
               variant="primary-outline"
@@ -1746,11 +1723,11 @@ const AgentPerfil = () => {
 
       {/* Visor del INE: frente y reverso apilados vertical (como dos hojas). */}
       <Dialog open={!!ineViewer} onOpenChange={(o) => { if (!o) setIneViewer(null); }}>
-        <DialogContent className="max-w-[560px] w-[92vw] bg-white p-0 gap-0 overflow-hidden">
-          <ModalHeader title="INE" subtitle="Frente y reverso" />
-          <div className="max-h-[75vh] overflow-y-auto px-[22px] py-[22px] space-y-4">
+        <DialogContent className="w-full gap-0 overflow-hidden rounded-md bg-card p-0 sm:w-[92vw] sm:max-w-[560px]">
+          <ModalFormHeader title="INE" subtitle="Frente y reverso" />
+          <div className="max-h-[75vh] overflow-y-auto px-6 py-6 space-y-4">
             {[ineViewer?.frente, ineViewer?.reverso].filter(Boolean).map((url, i) => (
-              <OptImg key={i} src={url as string} w={1000} alt="INE" className="w-full rounded-md border border-[#ECEEF0]" />
+              <OptImg key={i} src={url as string} w={1000} alt="INE" className="w-full rounded-md border border-border" />
             ))}
           </div>
         </DialogContent>
@@ -1758,52 +1735,57 @@ const AgentPerfil = () => {
 
       {/* Modal editar información de Identidad */}
       <Dialog open={identEditOpen} onOpenChange={(o) => { if (!o) setIdentEditOpen(false); }}>
-        <DialogContent className="max-w-[540px] w-[92vw] bg-white p-0 gap-0 overflow-hidden">
-          <ModalHeader title="Editar información" />
-          <div className="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-3.5">
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden rounded-md bg-card p-0 sm:w-[92vw] sm:max-w-[540px]">
+          <ModalFormHeader title="Editar información" />
+          <div className={cn(MODAL_BODY_CLS, "max-h-[70vh] gap-3.5")}>
             {(() => {
               const lbl = FIELD_LABEL_CLS;
-              const inp = FIELD_INPUT_CLS;
               return (
                 <>
                   <div>
                     <label className={lbl}>Email · solo lectura</label>
-                    <input value={personaDatos?.email || agentEmail || ''} disabled className={inp} />
+                    <Input value={personaDatos?.email || agentEmail || ''} disabled />
                   </div>
                   <div>
                     <label className={lbl}>Nombre completo <Req /></label>
-                    <input value={identForm.nombre_legal || ''} onChange={(e) => setIdent('nombre_legal', e.target.value)} placeholder="Juan Pérez García" className={inp} />
+                    <Input value={identForm.nombre_legal || ''} onChange={(e) => setIdent('nombre_legal', e.target.value)} placeholder="Juan Pérez García" />
                   </div>
                   <div>
                     <label className={lbl}>Teléfono <Req /></label>
-                    <input inputMode="numeric" value={identForm.telefono || ''} onChange={(e) => setIdent('telefono', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="5512345678" className={cn(inp, "tabular-nums")} />
+                    <Input inputMode="numeric" value={identForm.telefono || ''} onChange={(e) => setIdent('telefono', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="5512345678" className="tabular-nums" />
                   </div>
                   <div>
                     <label className={lbl}>CURP <Req /></label>
-                    <input value={identForm.curp || ''} maxLength={18} onChange={(e) => setIdent('curp', e.target.value.toUpperCase())} placeholder="GARC850101HDFRRL09" className={cn(inp, "uppercase tabular-nums")} />
+                    <Input value={identForm.curp || ''} maxLength={18} onChange={(e) => setIdent('curp', e.target.value.toUpperCase())} placeholder="GARC850101HDFRRL09" className="uppercase tabular-nums" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={lbl}>Fecha de nacimiento</label>
-                      <input type="date" value={identForm.fecha_nacimiento || ''} onChange={(e) => setIdent('fecha_nacimiento', e.target.value)} className={inp} />
+                      <Input type="date" value={identForm.fecha_nacimiento || ''} onChange={(e) => setIdent('fecha_nacimiento', e.target.value)} />
                     </div>
                     <div>
                       <label className={lbl}>Sexo</label>
-                      <select value={identForm.sexo || ''} onChange={(e) => setIdent('sexo', e.target.value)} className={inp}>
-                        <option value="">Sin especificar</option>
-                        <option value="M">Hombre</option>
-                        <option value="F">Mujer</option>
-                        <option value="O">Otro</option>
-                      </select>
+                      <Select
+                        value={identForm.sexo || SIN_ESPECIFICAR}
+                        onValueChange={(v) => setIdent('sexo', v === SIN_ESPECIFICAR ? '' : v)}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Sin especificar" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SIN_ESPECIFICAR}>Sin especificar</SelectItem>
+                          <SelectItem value="M">Hombre</SelectItem>
+                          <SelectItem value="F">Mujer</SelectItem>
+                          <SelectItem value="O">Otro</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div>
                     <label className={lbl}>Dirección particular</label>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input value={identForm.direccion_calle || ''} onChange={(e) => setIdent('direccion_calle', e.target.value)} placeholder="Av. Insurgentes Sur" className={inp} />
-                      <input value={identForm.direccion_num_ext || ''} onChange={(e) => setIdent('direccion_num_ext', e.target.value)} placeholder="1234" className={inp} />
-                      <input value={identForm.direccion_colonia || ''} onChange={(e) => setIdent('direccion_colonia', e.target.value)} placeholder="Del Valle" className={inp} />
-                      <input inputMode="numeric" maxLength={5} value={identForm.direccion_codigo_postal || ''} onChange={(e) => setIdent('direccion_codigo_postal', e.target.value.replace(/\D/g, '').slice(0, 5))} placeholder="03100" className={cn(inp, "tabular-nums")} />
+                      <Input value={identForm.direccion_calle || ''} onChange={(e) => setIdent('direccion_calle', e.target.value)} placeholder="Av. Insurgentes Sur" />
+                      <Input value={identForm.direccion_num_ext || ''} onChange={(e) => setIdent('direccion_num_ext', e.target.value)} placeholder="1234" />
+                      <Input value={identForm.direccion_colonia || ''} onChange={(e) => setIdent('direccion_colonia', e.target.value)} placeholder="Del Valle" />
+                      <Input inputMode="numeric" maxLength={5} value={identForm.direccion_codigo_postal || ''} onChange={(e) => setIdent('direccion_codigo_postal', e.target.value.replace(/\D/g, '').slice(0, 5))} placeholder="03100" className="tabular-nums" />
                     </div>
                   </div>
                 </>
@@ -1811,8 +1793,7 @@ const AgentPerfil = () => {
             })()}
           </div>
           <div className={MODAL_FOOTER_CLS}>
-            <Button variant="cancel" onClick={() => setIdentEditOpen(false)} disabled={savingIdent}>
-              Cancelar
+            <Button variant="cancel" onClick={() => setIdentEditOpen(false)} disabled={savingIdent}> Cancelar
             </Button>
             <Button variant="primary-outline" onClick={saveIdent} disabled={savingIdent}>
               {savingIdent && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -1824,77 +1805,29 @@ const AgentPerfil = () => {
 
       {/* Modal detalle de documento */}
       <Dialog open={!!docDetail} onOpenChange={(o) => { if (!o) setDocDetail(null); }}>
-        <DialogContent aria-describedby={undefined} className="max-w-[520px] bg-white p-0 gap-0 overflow-hidden" style={{ '--agent-primary': '147 33% 29%' } as React.CSSProperties}>
-          {docDetail && (() => {
-            const rows = expedienteDocs.filter((d: any) => docDetail.tipos.includes(d.id_tipo_documento));
-            const approved = rows.some((d: any) => d.id_estatus_verificacion === 2);
-            const exists = rows.length > 0;
-            const estado = approved ? 'validado' : exists ? 'revision' : 'pendiente';
-            const badge =
-              estado === 'validado'
-                ? { label: 'Validado', color: 'text-[hsl(158_64%_38%)]', bg: 'bg-[#E8F5EE]' }
-                : estado === 'revision'
-                ? { label: 'En revisión', color: 'text-[#B5730A]', bg: 'bg-[#FBEFD9]' }
-                : { label: 'Pendiente', color: 'text-[#6B7280]', bg: 'bg-[#EEF0F2]' };
-            const isFiscal = docDetail.tipos.includes(6);
-            const isIdentity = docDetail.tipos.some((t) => [2, 3, 4].includes(t));
-            const domicilioFiscal = [personaDatos?.direccion_fiscal_calle, personaDatos?.direccion_fiscal_colonia, personaDatos?.direccion_fiscal_codigo_postal]
-              .filter(Boolean).join(', ');
-            const datos = (isFiscal
-              ? [
-                  { label: 'Nombre', valor: personaDatos?.nombre_legal },
-                  { label: 'RFC', valor: personaDatos?.rfc },
-                  { label: 'Régimen fiscal', valor: personaDatos?.regimen },
-                  { label: 'Uso de CFDI', valor: personaDatos?.uso_cfdi },
-                  { label: 'Domicilio fiscal', valor: domicilioFiscal || null },
-                ]
-              : isIdentity
-              ? [{ label: 'Nombre', valor: personaDatos?.nombre_legal }]
-              : []
-            ).filter((f) => f.valor);
-            return (
-              <div className="p-[22px]">
-                <div className="flex flex-wrap items-start justify-between gap-3 pr-7">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <DialogTitle className={MODAL_TITLE_CLS}>{docDetail.nombre}</DialogTitle>
-                      <span className={cn("rounded-full px-2.5 py-[3px] text-[9.5px] font-bold", badge.bg, badge.color)}>
-                        {badge.label}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 text-[12px] font-medium text-[#9AA3AD]">{docDetail.emisor} · {docDetail.hint}</p>
-                  </div>
-                </div>
+        <DialogContent className="flex max-h-[90vh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-md bg-card p-0">
+          {docDetail && (
+            <>
+              <ModalFormHeader
+                title={docDetail.nombre}
+                subtitle={`${docDetail.emisor} · ${docDetail.hint}`}
+              />
 
-                {/* Subida por dropzone (solo docs PDF llegan a este modal) */}
-                {perfilPerms.canUpdate && (
-                  <div className="mt-[18px] border-t border-[#ECEEF0] pt-4">
-                    <DocDropzone accept=".pdf" uploading={uploadingDoc} onFile={(f) => handleDocFile(f, docDetail)} />
-                  </div>
-                )}
-
-                {datos.length > 0 && (
-                  <div className="mt-[18px] border-t border-[#ECEEF0] pt-4">
-                    <div className="mb-3 text-[10.5px] font-bold uppercase tracking-[0.8px] text-[#9AA3AD]">
-                      Datos leídos de este documento
-                    </div>
-                    {datos.map((f) => (
-                      <div key={f.label} className="flex items-center justify-between gap-3.5 border-b border-[#F2F4F5] py-2.5">
-                        <span className="text-[12px] font-medium text-[#9AA3AD]">{f.label}</span>
-                        <span className="text-right text-[12.5px] font-bold text-[#171A1D]">{f.valor}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {datos.length === 0 && (
-                  <p className="mt-[18px] border-t border-[#ECEEF0] pt-4 text-[12px] font-medium text-[#9AA3AD]">
-                    {exists ? 'Documento cargado. Sin datos leídos por ahora.' : 'Aún no has cargado este documento.'}
+              {/* Solo carga del archivo. Los datos leídos se confirman en la
+                  modal "Confirma tus datos fiscales" al subir el documento. */}
+              <div className={MODAL_BODY_CLS}>
+                {perfilPerms.canUpdate ? (
+                  <DocDropzone accept=".pdf" uploading={uploadingDoc} onFile={(f) => handleDocFile(f, docDetail)} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {expedienteDocs.some((d: any) => docDetail.tipos.includes(d.id_tipo_documento))
+                      ? 'Documento cargado.'
+                      : 'Aún no has cargado este documento.'}
                   </p>
                 )}
               </div>
-            );
-          })()}
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1902,6 +1835,8 @@ const AgentPerfil = () => {
       {activeStep && personaId && (
         <AgentOnboardingStepDialog
           step={activeStep}
+          bankMode={bankTarget.mode}
+          bankAccountId={bankTarget.id}
           personaId={personaId}
           initialTab={activeStepTab}
           open={!!activeStep}
@@ -1910,6 +1845,7 @@ const AgentPerfil = () => {
               setActiveStep(null);
               setActiveStepTab(undefined);
               queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
+              queryClient.invalidateQueries({ queryKey: ['agent-perfil-bancos', personaId] });
             }
           }}
         />

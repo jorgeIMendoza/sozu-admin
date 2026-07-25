@@ -17,10 +17,10 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // Estándar de portal: botón de descarte (Cancelar/Cerrar). Hover → rojo.
         cancel:
-          "border border-[#ECEEF0] bg-white text-[#4B5563] hover:border-red-300 hover:text-red-600",
-        // Estándar de portal: botón primario outline verde, hover se rellena.
+          "border border-input bg-background text-muted-foreground hover:border-destructive/40 hover:text-destructive",
+        // Estándar de portal: botón primario outline, hover se rellena.
         "primary-outline":
-          "border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)] hover:text-white",
+          "border border-primary bg-background text-primary hover:bg-primary hover:text-primary-foreground",
       },
       size: {
         default: "h-10 px-4 py-2",

@@ -8,21 +8,22 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Building2, MapPin, Calendar, CalendarPlus, Loader2, Download, Share2, ChevronRight, ChevronDown, HardHat, Maximize2, BedDouble, Bath, Mail, Copy, Sparkles, Layers, Images, FileText } from "lucide-react";
+import { Building2, MapPin, Calendar, Loader2, Download, ChevronRight, ChevronDown, HardHat, Maximize2, BedDouble, Bath, Sparkles, Layers, Images, FileText, CalendarPlus, Share2, Mail, Copy, Globe } from "lucide-react";
 import SectionCard from "@/components/offer/SectionCard";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ModalHeader, MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
-import { ModalViewer } from "@/components/ui/ModalViewer";
+import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
-import { Globe, Play, X, ChevronLeft } from "lucide-react";
+import { Play, X, ChevronLeft } from "lucide-react";
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
 import { cn } from "@/lib/utils";
 import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus, deriveStages, currentStageOf } from "@/utils/avanceObra";
 
@@ -130,7 +131,7 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
           <button
             key={i}
             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollTo(i); }}
-            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-white' : 'bg-white/50'}`}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-card' : 'bg-card/50'}`}
           />
         ))}
       </div>
@@ -159,17 +160,17 @@ const Lightbox = ({ images, index, onClose, onIndex }: { images: string[]; index
   }, []);
   return createPortal(
     <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col" onClick={onClose}>
-      <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><X className="h-5 w-5" /></button>
+      <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><X className="h-5 w-5" /></button>
       <div className="flex-1 flex items-center justify-center px-4 py-14" onClick={(e) => e.stopPropagation()}>
         <OptImg src={images[index]} w={1600} alt="" loading="eager" className="max-h-[82vh] max-w-full object-contain rounded-md" />
       </div>
       {images.length > 1 && (
         <>
-          <button onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }} className="absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><ChevronLeft className="h-6 w-6" /></button>
-          <button onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }} className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><ChevronRight className="h-6 w-6" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }} className="absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><ChevronLeft className="h-6 w-6" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }} className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><ChevronRight className="h-6 w-6" /></button>
           <div className="pb-6 flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             {images.map((_, i) => (
-              <button key={i} onClick={() => onIndex(i)} className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-white" : "w-1.5 bg-white/40"}`} />
+              <button key={i} onClick={() => onIndex(i)} className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-card" : "w-1.5 bg-card/40"}`} />
             ))}
           </div>
         </>
@@ -657,7 +658,7 @@ const AgentProyectoDetalle = () => {
       {/* Stats row */}
       {stats && (
         <div className="-mt-2">
-          <div className="bg-white rounded-md shadow-sm border border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
+          <div className="bg-card rounded-md shadow-sm border border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
             <div className="text-center py-3">
               <p className="text-2xl font-bold text-primary tabular-nums">{stats.available}</p>
               <p className="text-xs font-semibold text-primary/80">Disponibles</p>
@@ -675,27 +676,29 @@ const AgentProyectoDetalle = () => {
         <section className="rounded-md p-5">
           <p className="mb-3 text-center text-sm font-semibold text-foreground">¿Tu cliente está interesado en este proyecto?</p>
           <div className="flex flex-col gap-2.5 sm:flex-row">
-            <Button
-              variant="primary-outline"
+            <ActionButton
+              icon={Building2}
               className="h-11 flex-1"
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
             >
-              <Building2 className="h-4 w-4" /> Ver inventario
-            </Button>
-            <Button
+              Ver inventario
+            </ActionButton>
+            <ActionButton
+              icon={CalendarPlus}
               variant="outline"
               className="h-11 flex-1"
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
             >
-              <CalendarPlus className="h-4 w-4" /> Agendar cita
-            </Button>
-            <Button
+              Agendar cita
+            </ActionButton>
+            <ActionButton
+              icon={Share2}
               variant="outline"
               className="h-11 flex-1"
               onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
             >
-              <Share2 className="h-4 w-4" /> Compartir
-            </Button>
+              Compartir
+            </ActionButton>
           </div>
         </section>
 
@@ -743,10 +746,10 @@ const AgentProyectoDetalle = () => {
                 ))}
               </div>
               {vistasNav.prev && (
-                <button onClick={() => vistasRef.current?.scrollBy({ left: -280, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+                <button onClick={() => vistasRef.current?.scrollBy({ left: -280, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
               )}
               {vistasNav.next && (
-                <button onClick={() => vistasRef.current?.scrollBy({ left: 280, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
+                <button onClick={() => vistasRef.current?.scrollBy({ left: 280, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
               )}
             </div>
           </SectionCard>
@@ -760,7 +763,7 @@ const AgentProyectoDetalle = () => {
                 {modelos.map((m: any) => {
                   const imgs = modeloImages(m);
                   return (
-                    <div key={m.id} className="snap-start min-w-[240px] max-w-[260px] flex-shrink-0 bg-white rounded-md border border-gray-100 shadow-sm overflow-hidden">
+                    <div key={m.id} className="snap-start min-w-[240px] max-w-[260px] flex-shrink-0 bg-card rounded-md border border-gray-100 shadow-sm overflow-hidden">
                       <div className="cursor-pointer" onClick={() => imgs.length && openLightbox(imgs, 0)}>
                         {imgs.length > 0 ? (
                           <ModelCardCarousel images={imgs} alt={m.nombre} />
@@ -786,8 +789,7 @@ const AgentProyectoDetalle = () => {
                             variant="primary-outline"
                             className="mt-2.5 w-full"
                             onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario_modelo', elementLabel: 'Ver inventario', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
-                          >
-                            Ver inventario <ChevronRight className="h-4 w-4" />
+                          > Ver inventario 
                           </Button>
                         )}
                       </div>
@@ -796,10 +798,10 @@ const AgentProyectoDetalle = () => {
                 })}
               </div>
               {modelosNav.prev && (
-                <button onClick={() => modelosRef.current?.scrollBy({ left: -320, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-20 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+                <button onClick={() => modelosRef.current?.scrollBy({ left: -320, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-20 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
               )}
               {modelosNav.next && (
-                <button onClick={() => modelosRef.current?.scrollBy({ left: 320, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-20 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
+                <button onClick={() => modelosRef.current?.scrollBy({ left: 320, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-20 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
               )}
             </div>
           </SectionCard>
@@ -810,7 +812,7 @@ const AgentProyectoDetalle = () => {
           <SectionCard icon={Sparkles} title="Amenidades" bodyClassName="p-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {list.map((a: any) => (
-                <div key={a.id} className="relative aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-white">
+                <div key={a.id} className="relative aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-card">
                   {a.foto ? (
                     <>
                       <OptImg src={a.foto} w={320} h={240} resize="cover" alt={a.nombre} className="h-full w-full object-cover object-center" />
@@ -959,7 +961,7 @@ const AgentProyectoDetalle = () => {
                         {showroomMapsUrl && (
                           <Button asChild variant="primary-outline" size="sm">
                             <a href={showroomMapsUrl} target="_blank" rel="noopener noreferrer">
-                              <MapPin className="h-3.5 w-3.5" /> Cómo llegar
+                            <MapPin className="h-3.5 w-3.5" /> Cómo llegar
                             </a>
                           </Button>
                         )}
@@ -1012,7 +1014,7 @@ const AgentProyectoDetalle = () => {
             <div className="grid gap-2 sm:grid-cols-2">
               {brochure && (
                 <div
-                  className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                   onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); setPreviewFile({ url: brochure.url, name: 'Brochure' }); }}
                 >
                   <div className="flex items-center gap-3">
@@ -1024,7 +1026,7 @@ const AgentProyectoDetalle = () => {
               )}
               {fichaTecnica && (
                 <div
-                  className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                   onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_ficha', elementLabel: 'Ficha técnica' }); registrarExportacion('ficha_tecnica', { proyecto_id: projectId }); window.open(fichaTecnica.url, '_blank'); }}
                 >
                   <div className="flex items-center gap-3">
@@ -1046,30 +1048,23 @@ const AgentProyectoDetalle = () => {
       {/* Share Dialog */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="max-w-sm gap-0 overflow-hidden p-0">
-          <ModalHeader title={`Compartir - ${project.nombre}`} />
-          <div className="space-y-3 px-6 py-6">
-          <button
-            onClick={() => handleShareMethod("web")}
-            className="flex w-full items-center justify-center gap-2 rounded-md border border-primary bg-white px-4 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/[0.06]"
-          >
+          <ModalFormHeader title={`Compartir - ${project.nombre}`} />
+          <div className={cn(MODAL_BODY_CLS, "gap-3")}>
+          <Button variant="primary-outline" className="w-full" onClick={() => handleShareMethod("web")}>
             <Globe className="h-4 w-4" /> Ver página web
-          </button>
+          </Button>
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("whatsapp")}>
-              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              WhatsApp
+              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> WhatsApp
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("facebook")}>
-              <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              Facebook
+              <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> Facebook
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("email")}>
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              Correo
+              <Mail className="h-5 w-5 text-muted-foreground" /> Correo
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("copy")}>
-              <Copy className="h-5 w-5 text-muted-foreground" />
-              Copiar link
+              <Copy className="h-5 w-5 text-muted-foreground" /> Copiar link
             </Button>
           </div>
           </div>
@@ -1078,8 +1073,8 @@ const AgentProyectoDetalle = () => {
       {/* Plano de modelo dialog */}
       <Dialog open={!!planoModeloUrl} onOpenChange={() => setPlanoModeloUrl(null)}>
         <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
-          <ModalHeader title="Plano arquitectónico" />
-          <div className="px-6 py-6">
+          <ModalFormHeader title="Plano arquitectónico" />
+          <div className={MODAL_BODY_CLS}>
             {planoModeloUrl && (
               <OptImg src={planoModeloUrl} w={1600} alt="Plano del modelo" className="max-h-[65vh] w-full rounded-md object-contain" />
             )}
@@ -1088,8 +1083,7 @@ const AgentProyectoDetalle = () => {
             <Button variant="cancel" onClick={() => setPlanoModeloUrl(null)}>Cerrar</Button>
             {planoModeloUrl && (
               <Button variant="primary-outline" asChild>
-                <a href={planoModeloUrl} download target="_blank" rel="noopener noreferrer">
-                  <Download className="h-4 w-4" /> Descargar
+                <a href={planoModeloUrl} download target="_blank" rel="noopener noreferrer"> Descargar
                 </a>
               </Button>
             )}

@@ -1,10 +1,7 @@
 import { useState, useLayoutEffect, useRef } from "react";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
-import {
-  Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon,
-  ArrowLeft, Menu, LogOut, ChevronRight, Eye, EyeOff,
-} from "lucide-react";
+import { Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon, Menu, ChevronRight, Eye, EyeOff, LogOut, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AgentPresentationProvider, useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { useQuery } from "@tanstack/react-query";
@@ -17,10 +14,10 @@ import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 const AGENT_MENU_ID = 16;
 
@@ -32,10 +29,10 @@ const PresentationToggle = () => {
       onClick={toggle}
       title={presentationMode ? "Info sensible oculta · toca para mostrar" : "Info visible · toca para ocultar"}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
         presentationMode
-          ? "border-[#EBC089] bg-[#FBE3CE] text-[#B5601C]"
-          : "border-[#ECEEF0] bg-white text-[#4B5563] hover:bg-[#F6F7F8]"
+          ? "border-amber-300 bg-orange-100 text-orange-700"
+          : "border-border bg-card text-muted-foreground hover:bg-muted"
       )}
     >
       {presentationMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -173,30 +170,30 @@ export const AgentPortalLayout = () => {
           aria-label="Mi perfil"
           className="rounded-full hover:opacity-90 transition-opacity"
         >
-          {renderAvatar("w-8 h-8", "text-[11px]")}
+          {renderAvatar("w-8 h-8", "text-xs")}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-60 p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-border-soft bg-muted/30">
           <div className="flex items-center gap-3">
-            {renderAvatar("w-9 h-9", "text-[12px]")}
+            {renderAvatar("w-9 h-9", "text-xs")}
             <div className="min-w-0 space-y-0.5">
-              <p className="text-[13px] font-semibold text-foreground truncate">{userName}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
+              <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
+              <p className="text-xs text-muted-foreground truncate">{userRole}</p>
             </div>
           </div>
         </div>
         <div className="p-1.5 space-y-0.5">
           <button
             onClick={() => handleNavigate("/admin/agent/perfil")}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-foreground hover:bg-muted/60 transition-colors duration-150"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-foreground hover:bg-muted/60 transition-colors duration-150"
           >
             <User className="size-4 text-muted-foreground shrink-0" />
             Ver perfil
           </button>
           <button
             onClick={signOut}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-destructive hover:bg-destructive/10 transition-colors duration-150"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-destructive hover:bg-destructive/10 transition-colors duration-150"
           >
             <LogOut className="size-4 shrink-0" />
             Cerrar sesión
@@ -211,7 +208,7 @@ export const AgentPortalLayout = () => {
       {/* Brand */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <SozuLogo className="h-6" />
-        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
+        <p className="text-xs font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal de Agentes
         </p>
       </div>
@@ -226,7 +223,7 @@ export const AgentPortalLayout = () => {
               key={tab.path}
               onClick={() => handleNavigate(tab.path)}
               className={cn(
-                "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-[13px] font-medium transition-colors duration-150 text-left",
+                "group relative w-full flex items-center gap-3 pl-4 pr-3 py-2 rounded-md text-sm font-medium transition-colors duration-150 text-left",
                 active
                   ? "bg-primary/[0.06] text-primary"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -252,10 +249,10 @@ export const AgentPortalLayout = () => {
           onClick={() => handleNavigate("/admin/agent/perfil")}
           className="w-full flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group/profile"
         >
-          {renderAvatar("w-8 h-8", "text-[11px]")}
+          {renderAvatar("w-8 h-8", "text-xs")}
           <div className="flex-1 text-left min-w-0">
-            <p className="text-[13px] font-medium text-foreground truncate">{userName}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
+            <p className="text-sm font-medium text-foreground truncate">{userName}</p>
+            <p className="text-xs text-muted-foreground truncate">{userRole}</p>
           </div>
           <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover/profile:opacity-100 transition-opacity" />
         </button>
@@ -264,7 +261,7 @@ export const AgentPortalLayout = () => {
           {showBackButton && (
             <button
               onClick={() => navigate("/admin")}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             >
               <ArrowLeft className="size-4 shrink-0" />
               Regresar
@@ -273,7 +270,7 @@ export const AgentPortalLayout = () => {
           <button
             onClick={signOut}
             className={cn(
-              "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] text-destructive hover:bg-destructive/10 transition-colors",
+              "flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors",
               showBackButton ? "flex-1" : "w-full"
             )}
           >
@@ -282,7 +279,7 @@ export const AgentPortalLayout = () => {
           </button>
         </div>
 
-        <p className="text-[10px] text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
+        <p className="text-xs text-muted-foreground/40 font-mono text-center pt-0.5">{APP_VERSION}</p>
       </div>
     </>
   );
@@ -298,7 +295,9 @@ export const AgentPortalLayout = () => {
 
         {/* Mobile drawer */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="p-0 w-64 flex flex-col bg-sidebar">
+          <SheetContent side="left" className="flex w-64 flex-col bg-sidebar p-0">
+            <SheetTitle className="sr-only">Menú del portal</SheetTitle>
+            <SheetDescription className="sr-only">Navegación del portal de agentes</SheetDescription>
             {sidebar}
           </SheetContent>
         </Sheet>
@@ -325,7 +324,7 @@ export const AgentPortalLayout = () => {
                 <Menu className="h-5 w-5" />
               </button>
               <div className="min-w-0 flex-1">
-                <p className="text-[17px] font-bold text-foreground tracking-tight truncate">{currentSection}</p>
+                <p className="text-lg font-bold text-foreground tracking-tight truncate">{currentSection}</p>
               </div>
               <PresentationToggle />
               {renderProfileMenu()}
@@ -337,7 +336,7 @@ export const AgentPortalLayout = () => {
             )}
           </header>
 
-          <main className="px-8 py-4 bg-background min-h-[calc(100vh-64px)]">
+          <main className="min-h-[calc(100vh-64px)] bg-background px-4 py-4 sm:px-6 lg:px-8">
             <Outlet context={{ permissions, isAgentRole }} />
           </main>
         </div>

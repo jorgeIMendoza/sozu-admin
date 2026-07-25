@@ -10,12 +10,13 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ModalViewer } from "@/components/ui/ModalViewer";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { Loader2, Lock, CheckCircle2, AlertCircle, FileText, EyeOff, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { FILTER_LABEL_CLS } from "@/components/ui/modal-filters";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 
@@ -24,15 +25,15 @@ type ClienteInfo = { nombre: string; email: string; porcentaje: number };
 // Celda de cliente estilo portal cobranza: nombre + correo debajo; si hay
 // copropiedad, se indica cuántos más.
 function ClienteCell({ clientes }: { clientes: ClienteInfo[] }) {
-  if (!clientes || clientes.length === 0) return <span className="text-[12px] text-muted-foreground/60">Sin cliente</span>;
+  if (!clientes || clientes.length === 0) return <span className="text-xs text-muted-foreground/60">Sin cliente</span>;
   const first = clientes[0];
   const extra = clientes.length - 1;
   return (
     <div className="min-w-0">
-      <p className="text-[12px] font-medium truncate" title={first.nombre}>
+      <p className="text-xs font-medium truncate" title={first.nombre}>
         {first.nombre || 'Sin nombre'}{extra > 0 && <span className="text-muted-foreground font-normal"> +{extra}</span>}
       </p>
-      {first.email && <p className="text-[10px] text-muted-foreground truncate" title={first.email}>{first.email}</p>}
+      {first.email && <p className="text-xs text-muted-foreground truncate" title={first.email}>{first.email}</p>}
     </div>
   );
 }
@@ -65,12 +66,12 @@ function SortHeader({ label, sortKey, sort, onSort, align = 'left', thClass }: {
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className={cn('inline-flex items-center gap-1 uppercase tracking-wide whitespace-nowrap text-[11px] font-semibold select-none transition-colors',
+        className={cn('inline-flex items-center gap-1 uppercase tracking-wide whitespace-nowrap text-xs font-semibold select-none transition-colors',
           align === 'right' && 'flex-row-reverse',
-          active ? 'text-[hsl(158_64%_38%)]' : 'text-muted-foreground hover:text-foreground')}
+          active ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
       >
         {label}
-        <ArrowUpDown strokeWidth={2.25} className={cn('size-3 shrink-0', active ? 'text-[hsl(158_64%_38%)]' : 'text-muted-foreground/50')} />
+        <ArrowUpDown strokeWidth={2.25} className={cn('size-3 shrink-0', active ? 'text-primary' : 'text-muted-foreground/50')} />
       </button>
     </TableHead>
   );
@@ -371,14 +372,14 @@ const AgentComisiones = () => {
       <div className="pb-24">
         <AgentPortalHeader />
         <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
-        <div className="rounded-md border border-[#E7E9EC] bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
+        <div className="rounded-md border border-border bg-card p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center">
               <Lock className="h-5 w-5 text-amber-600" />
             </div>
             <div>
-              <p className="font-semibold text-sm text-[hsl(var(--agent-text))]">Perfil incompleto</p>
-              <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
+              <p className="font-semibold text-sm text-foreground">Perfil incompleto</p>
+              <p className="text-xs text-muted-foreground">
                 Completa tu perfil para ver y recibir comisiones
               </p>
             </div>
@@ -397,8 +398,7 @@ const AgentComisiones = () => {
               navigate('/admin/agent/perfil');
             }}
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Completar perfil
+          > Completar perfil
           </Button>
         </div>
       </div>
@@ -414,9 +414,9 @@ const AgentComisiones = () => {
       {/* Banner modo presentación */}
       {presentationMode && (
         <div>
-          <div className="flex items-center gap-2.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
-            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
-            <span className="text-[12px] font-semibold text-[#B5601C]">
+          <div className="flex items-center gap-2.5 rounded-md border border-amber-300 bg-orange-100 px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-orange-700" />
+            <span className="text-xs font-semibold text-orange-700">
               Modo presentación activo · tus ingresos están ocultos. Desactívalo en la barra superior para verlos.
             </span>
           </div>
@@ -425,24 +425,24 @@ const AgentComisiones = () => {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3.5">
-        <div className="rounded-md border border-[hsl(158_64%_38%)] bg-white p-[18px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[hsl(158_64%_38%)]/70">Total cobrado</p>
-          <p className="mt-2 text-[24px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{mask(formatCurrency(totalCobrado))}</p>
-          <p className="mt-1 text-[10px] font-semibold text-[hsl(158_64%_38%)]/60">MXN · acumulado</p>
+        <div className="rounded-md border border-primary bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-primary/70">Total cobrado</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-primary">{mask(formatCurrency(totalCobrado))}</p>
+          <p className="mt-1 text-xs font-semibold text-primary/60">MXN · acumulado</p>
         </div>
-        <div className="rounded-md border border-[#ECEEF0] bg-white p-[18px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Por cobrar</p>
-          <p className="mt-2 text-[24px] font-bold tabular-nums text-[#171A1D]">{mask(formatCurrency(totalPorCobrar))}</p>
-          <p className="mt-1 text-[10px] font-semibold text-[#9AA3AD]">MXN · en proceso</p>
+        <div className="rounded-md border border-border bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Por cobrar</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{mask(formatCurrency(totalPorCobrar))}</p>
+          <p className="mt-1 text-xs font-semibold text-muted-foreground/70">MXN · en proceso</p>
         </div>
       </div>
 
       {/* Filtros (estilo portal cobranza): Proyecto · Cliente · Estatus */}
       <div className="grid grid-cols-2 gap-3 items-end sm:flex sm:flex-wrap sm:gap-3">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Proyecto</span>
+          <span className={FILTER_LABEL_CLS}>Proyecto</span>
           <Select value={filterProyecto} onValueChange={(v) => { setFilterProyecto(v); setPage(1); }}>
-            <SelectTrigger className="h-9 w-full sm:w-[160px] text-sm"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
               {proyectoOptions.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
@@ -450,18 +450,18 @@ const AgentComisiones = () => {
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Cliente</span>
+          <span className={FILTER_LABEL_CLS}>Cliente</span>
           <Input
             value={searchCliente}
             onChange={(e) => { setSearchCliente(e.target.value); setPage(1); }}
             placeholder="Nombre o correo"
-            className="h-9 w-full sm:w-[180px] text-sm"
+            className="w-full sm:w-[180px]"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground px-0.5">Estatus</span>
+          <span className={FILTER_LABEL_CLS}>Estatus</span>
           <Select value={filterEstatus} onValueChange={(v) => { setFilterEstatus(v); setPage(1); }}>
-            <SelectTrigger className="h-9 w-full sm:w-[170px] text-sm"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[170px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los estatus</SelectItem>
               {estatusOptions.map((s) => <SelectItem key={s} value={s}>{ESTATUS_LABEL[s] || s}</SelectItem>)}
@@ -473,15 +473,15 @@ const AgentComisiones = () => {
       {/* Tabla (estilo portal cobranza) */}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
         </div>
       ) : total === 0 ? (
-        <div className="text-center py-12 text-sm text-[hsl(var(--agent-text-secondary))]">
+        <div className="text-center py-12 text-sm text-muted-foreground">
           {comisiones.length === 0 ? 'Aún no tienes comisiones' : 'Sin comisiones con estos filtros'}
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="rounded-md border border-[#ECEEF0] bg-white overflow-hidden">
+          <div className="rounded-md border border-border bg-card overflow-hidden">
             <div className="overflow-x-auto">
               <Table className="min-w-[1180px] table-fixed">
                 <TableHeader>
@@ -491,9 +491,9 @@ const AgentComisiones = () => {
                     <SortHeader label="Cliente" sortKey="client" sort={sort} onSort={toggleSort} thClass="w-[190px]" />
                     <SortHeader label="Venta" sortKey="price" sort={sort} onSort={toggleSort} align="center" thClass="w-[130px]" />
                     <SortHeader label="Comisión +IVA" sortKey="commission" sort={sort} onSort={toggleSort} align="center" thClass="w-[150px]" />
-                    <TableHead className="w-[130px] h-9 text-center uppercase tracking-wide whitespace-nowrap text-[11px] font-semibold text-muted-foreground">Estatus</TableHead>
+                    <TableHead className="w-[130px] h-9 text-center uppercase tracking-wide whitespace-nowrap text-xs font-semibold text-muted-foreground">Estatus</TableHead>
                     <SortHeader label="F. Pago" sortKey="date" sort={sort} onSort={toggleSort} align="center" thClass="w-[140px]" />
-                    <TableHead className="w-[120px] h-9 text-center uppercase tracking-wide whitespace-nowrap text-[11px] font-semibold text-muted-foreground">Comprobante</TableHead>
+                    <TableHead className="w-[120px] h-9 text-center uppercase tracking-wide whitespace-nowrap text-xs font-semibold text-muted-foreground">Comprobante</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -505,21 +505,21 @@ const AgentComisiones = () => {
                       <TableRow key={`${c.id_cuenta_cobranza}-${idx}`} className="h-[52px]">
                         <TableCell className="pl-3 pr-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-[10px] font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">{rowNum}</span>
-                            <span className="text-[12px] font-mono font-semibold tabular-nums truncate" title={c.cuenta_cobranza_label}>{c.cuenta_cobranza_label}</span>
+                            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-xs font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">{rowNum}</span>
+                            <span className="text-xs font-mono font-semibold tabular-nums truncate" title={c.cuenta_cobranza_label}>{c.cuenta_cobranza_label}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <p className="text-[12px] font-medium truncate" title={c.proyecto}>{c.proyecto || 'Sin proyecto'}</p>
-                          {unidad && <p className="text-[10px] text-muted-foreground truncate" title={unidad}>{unidad}</p>}
+                          <p className="text-xs font-medium truncate" title={c.proyecto}>{c.proyecto || 'Sin proyecto'}</p>
+                          {unidad && <p className="text-xs text-muted-foreground truncate" title={unidad}>{unidad}</p>}
                         </TableCell>
                         <TableCell><ClienteCell clientes={c.clientes} /></TableCell>
-                        <TableCell className="text-center tabular-nums text-[12px]">{mask(formatCurrency(c.precio_final || 0))}</TableCell>
-                        <TableCell className="text-center tabular-nums text-[12px] font-semibold">{mask(formatCurrency(c.monto_comision || 0))}</TableCell>
+                        <TableCell className="text-center tabular-nums text-xs">{mask(formatCurrency(c.precio_final || 0))}</TableCell>
+                        <TableCell className="text-center tabular-nums text-xs font-semibold">{mask(formatCurrency(c.monto_comision || 0))}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center"><EstatusBadgeTabla status={c.detailed_status} /></div>
                         </TableCell>
-                        <TableCell className="text-center text-[12px] whitespace-nowrap truncate">{c.fecha_pago ? formatFechaPago(c.fecha_pago) : ''}</TableCell>
+                        <TableCell className="text-center text-xs whitespace-nowrap truncate">{c.fecha_pago ? formatFechaPago(c.fecha_pago) : ''}</TableCell>
                         <TableCell className="text-center">
                           <button
                             type="button"
@@ -544,7 +544,7 @@ const AgentComisiones = () => {
 
           {/* Footer: conteo + paginación */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-[12px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {`${((currentPage - 1) * PAGE_SIZE + 1).toLocaleString('es-MX')} a ${Math.min(currentPage * PAGE_SIZE, total).toLocaleString('es-MX')} de ${total.toLocaleString('es-MX')} comisiones`}
             </p>
             {totalPages > 1 && (
@@ -553,10 +553,9 @@ const AgentComisiones = () => {
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 {pageNumbers.map((p, i) => p === '...' ? (
-                  <span key={`e-${i}`} className="px-1.5 text-[12px] text-muted-foreground">…</span>
+                  <span key={`e-${i}`} className="px-1.5 text-xs text-muted-foreground">…</span>
                 ) : (
-                  <Button key={p} variant={p === currentPage ? 'default' : 'outline'} size="icon" className="h-7 w-7 text-[11px]" onClick={() => setPage(p as number)}>
-                    {p}
+                  <Button key={p} variant={p === currentPage ? 'default' : 'outline'} size="icon" className="h-7 w-7 text-xs" onClick={() => setPage(p as number)}> {p}
                   </Button>
                 ))}
                 <Button variant="outline" size="icon" className="h-7 w-7" disabled={currentPage === totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
@@ -588,7 +587,7 @@ function CheckItem({ label, done }: { label: string; done: boolean }) {
       ) : (
         <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
       )}
-      <span className={cn("text-sm", done ? "text-[hsl(var(--agent-text))]" : "text-[hsl(var(--agent-text-secondary))]")}>
+      <span className={cn("text-sm", done ? "text-foreground" : "text-muted-foreground")}>
         {label}
       </span>
     </div>

@@ -5,11 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -36,6 +32,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SELECT_TRIGGER_CLS,
 } from "@/components/ui/select";
 import {
   Command,
@@ -53,14 +50,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import {
+  ModalFormHeader,
+  Req,
+  SECTION_CLS,
+  SECTION_HEADER_CLS,
+  MODAL_BODY_CLS,
+  MODAL_FOOTER_CLS,
+} from "@/components/ui/modal-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Check, ChevronsUpDown, UserPlus, Warehouse, Car, Info, AlertTriangle, Plus, Trash2, X, Mail } from "lucide-react";
+import { FileText, Check, ChevronDown, Warehouse, Car, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1466,16 +1470,20 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className={cn("sm:max-w-[600px] max-h-[90vh] overflow-y-auto", forceLight && "light")}>
-        <DialogHeader className="-mx-6 -mt-6 border-b border-border px-6 pb-4 pt-6 text-left">
-          <DialogTitle>Configurar Oferta</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            Propiedad <span className="font-semibold">{propertyNumber}</span>
-            {projectName && <span className="font-semibold"> de {projectName}</span>}
-          </p>
-        </DialogHeader>
-
-        {/* Plan / precio / productos — en el body, no en el header */}
+      <DialogContent className={cn("flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-md p-0 sm:max-w-[600px]", forceLight && "light")}>
+        <ModalFormHeader
+          title="Configurar Oferta"
+          subtitle={
+            <>
+              Propiedad <span className="font-semibold">{propertyNumber}</span>
+              {projectName && <span className="font-semibold"> de {projectName}</span>}
+            </>
+          }
+        />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+            <div className={cn(MODAL_BODY_CLS, "min-h-0 flex-1")}>
+        {/* Plan / precio / productos */}
         <div className="space-y-3">
           {/* Plan Selector - unified */}
           {selectedMode !== "manual" && propertyPaymentSchemes && propertyPaymentSchemes.length > 0 && (
@@ -1529,7 +1537,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 {selectedSchemeDetails && (
                   <div className="flex items-center gap-2">
                     {selectedSchemeDetails.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails.porcentaje_descuento_aumento != null && (
-                      <Badge variant="outline" className={`text-[10px] ${
+                      <Badge variant="outline" className={`text-xs ${
                         selectedSchemeDetails.porcentaje_descuento_aumento < 0
                           ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                           : "border-destructive/30 bg-destructive/10 text-destructive"
@@ -1660,7 +1668,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             }));
                           }}
                         >
-                          <SelectTrigger className="h-7 text-[11px] w-48">
+                          <SelectTrigger className="h-7 text-xs w-48">
                             <SelectValue placeholder="Sin seleccionar" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1715,8 +1723,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             )}
           </div>
         </div>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Mode Selection - Manual available for all roles except Agente Inmobiliario, hidden if hideManualMode is true */}
             {(() => {
               // If hideManualMode is true, don't show the manual option
@@ -1775,9 +1781,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             {/* Manual Payment Scheme Section */}
             {selectedMode === "manual" && (
               <>
-                <Separator />
-                <div className="space-y-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Esquema de Pago Personalizado</h3>
+                <div className={cn(SECTION_CLS, "space-y-4")}>
+                  <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Esquema de Pago Personalizado</h3>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -1785,7 +1790,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_enganche"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Enganche (%) <span className="text-destructive">*</span></FormLabel>
+                          <FormLabel>Porcentaje Enganche (%) <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1800,7 +1805,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         name="numero_pagos_enganche"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Número de Pagos de Enganche <span className="text-destructive">*</span></FormLabel>
+                            <FormLabel>Número de Pagos de Enganche <Req /></FormLabel>
                             <FormControl>
                               <Input 
                                 type="number" 
@@ -1835,7 +1840,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Mensualidades (%) <span className="text-destructive">*</span></FormLabel>
+                          <FormLabel>Porcentaje Mensualidades (%) <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1891,7 +1896,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="numero_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Número de Mensualidades <span className="text-destructive">*</span></FormLabel>
+                          <FormLabel>Número de Mensualidades <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="12" {...field} />
                           </FormControl>
@@ -1928,7 +1933,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             onClick={addTramo}
                             className="h-8"
                           >
-                            <Plus className="h-4 w-4 mr-1" />
                             Agregar tramo
                           </Button>
                         )}
@@ -1972,7 +1976,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                   </div>
                                   <div className="flex flex-col items-center gap-1">
                                     {index > 0 && (
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-xs text-muted-foreground">
                                         (mes {mensualidadesAcumuladas + 1}+)
                                       </span>
                                     )}
@@ -1983,7 +1987,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                       className="h-8 w-8 text-destructive hover:text-destructive"
                                       onClick={() => removeTramo(tramo.id)}
                                     >
-                                      <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 </div>
@@ -2191,12 +2194,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </>
             )}
 
-            <Separator />
-
             {/* Person Search Section */}
-            <div className="space-y-4">
+            <div className={cn(SECTION_CLS, "space-y-4")}>
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Buscar Prospecto</h3>
+                <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Buscar Prospecto</h3>
                 {selectedPerson && (
                   <Button
                     type="button"
@@ -2204,7 +2205,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     size="sm"
                     onClick={clearPersonSelection}
                   >
-                    <UserPlus className="h-4 w-4 mr-2" />
                     Nuevo Prospecto
                   </Button>
                 )}
@@ -2214,17 +2214,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 <div className="space-y-2">
                   <Popover open={searchOpen} onOpenChange={setSearchOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
+                      <button
+                        type="button"
                         role="combobox"
                         aria-expanded={searchOpen}
-                        className="w-full justify-between"
+                        className={cn(SELECT_TRIGGER_CLS, !selectedPerson && "font-normal text-muted-foreground")}
                       >
-                        {selectedPerson
-                          ? selectedPerson.nombre_legal
-                          : "Buscar por nombre..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
+                        <span className="truncate text-left">
+                          {selectedPerson ? selectedPerson.nombre_legal : "Buscar por nombre…"}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </button>
                     </PopoverTrigger>
                     <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
                       <Command>
@@ -2290,19 +2290,15 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               )}
             </div>
 
-            <Separator />
-
           {/* Prospect Information Section */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Información del Prospecto</h3>
-              
+            <div className={cn(SECTION_CLS, "space-y-4")}>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="tipo_persona"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tipo de Persona <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>Tipo de Persona <Req /></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
@@ -2329,7 +2325,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {selectedPersonType === "pm" ? "Razón Social" : "Nombre Completo"} <span className="text-destructive">*</span>
+                        {selectedPersonType === "pm" ? "Razón Social" : "Nombre Completo"} <Req />
                       </FormLabel>
                       <FormControl>
                         <Input 
@@ -2350,7 +2346,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>Email <Req /></FormLabel>
                       <FormControl>
                         <Input 
                           type="email" 
@@ -2369,7 +2365,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="clave_pais_telefono"
                   render={({ field }) => (
                     <FormItem className="w-24">
-                      <FormLabel>País <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>País <Req /></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
@@ -2396,7 +2392,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="telefono"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Teléfono <span className="text-destructive">*</span></FormLabel>
+                      <FormLabel>Teléfono <Req /></FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="10 dígitos" 
@@ -2458,12 +2454,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              </div>
 
-             <Separator />
-
              {/* Opciones de visualización en PDF - Hidden if hidePdfOptions is true */}
              {!hidePdfOptions && (
-               <div className="space-y-4">
-                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Opciones de visualización en PDF</h3>
+               <div className={cn(SECTION_CLS, "space-y-4")}>
+                 <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Opciones de visualización en PDF</h3>
                  <p className="text-xs text-muted-foreground">
                    Selecciona qué información deseas mostrar en esta oferta
                  </p>
@@ -2530,25 +2524,31 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              )}
 
-            <div className="-mx-6 -mb-6 mt-2 flex flex-wrap justify-end gap-2.5 border-t border-border px-6 pb-6 pt-4">
+            </div>
+
+            <div className={MODAL_FOOTER_CLS}>
               <Button type="button" variant="cancel" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                variant="primary-outline"
-                disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
-              >
-                {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
-              </Button>
-              {enableDigitalOffer && (
+              {/* Con oferta digital habilitada, ese es el único camino: el PDF suelto
+                  se omite para que el footer quepa en una sola fila. */}
+              {enableDigitalOffer ? (
                 <Button
                   type="button"
+                  variant="primary-outline"
                   disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                   onClick={() => { setPendingButton('digital'); form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
                 >
                   {createOfferMutation.isPending && pendingButton === 'digital' ? "Generando..." : "Generar Oferta Digital"}
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="primary-outline"
+                  disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
+                  onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
+                >
+                  {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
                 </Button>
               )}
             </div>

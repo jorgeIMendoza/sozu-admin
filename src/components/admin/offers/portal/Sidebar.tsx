@@ -5,7 +5,7 @@ import type { NavTab } from "./BottomNav";
 import { useUnreadCountsByNavTab, useUnreadCount } from "@/lib/offers/notification-data";
 import { filterPortfolioByCategory, mockPortfolio } from "@/lib/offers/mock-data";
 import { useOfferStore } from "@/lib/offers/offer-data";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 interface SidebarProps {
   activeTab: NavTab;

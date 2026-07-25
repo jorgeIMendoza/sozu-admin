@@ -8,7 +8,7 @@ import { UserSettingsDialog } from "./UserSettingsDialog";
 import { AgentOnboardingWidget } from "./AgentOnboardingWidget";
 import { useAuth } from "@/contexts/AuthContext";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 import {
   Popover,
   PopoverContent,

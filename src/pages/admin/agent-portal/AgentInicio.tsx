@@ -3,12 +3,12 @@ import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroo
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
 import { Button } from "@/components/ui/button";
-import { ActionCard } from "@/components/ui/ActionCard";
-import { StatCard } from "@/components/ui/StatCard";
+import { ActionCard } from "@/components/ui/action-card";
+import { StatCard } from "@/components/ui/stat-card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ModalForm } from "@/components/ui/ModalForm";
+import { ModalForm } from "@/components/ui/modal-form";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,18 +19,7 @@ import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Ban,
-  Calendar,
-  CalendarClock,
-  CalendarPlus,
-  ChevronRight,
-  Clock,
-  EyeOff,
-  Loader2,
-  MapPin,
-  UserPlus
-} from "lucide-react";
+import { Calendar, CalendarPlus, Clock, EyeOff, Loader2, MapPin, UserPlus, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -493,15 +482,13 @@ const AgentInicio = () => {
           cancelConfirmOpen ? (
             <>
               <Button variant="outline" size="sm" onClick={() => setCancelConfirmOpen(false)}>No, volver</Button>
-              <Button variant="destructive" size="sm" onClick={() => cancelCitaMutation.mutate(selectedCita.id)} disabled={cancelCitaMutation.isPending}>
-                {cancelCitaMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+              <Button variant="destructive" size="sm" onClick={() => cancelCitaMutation.mutate(selectedCita.id)} disabled={cancelCitaMutation.isPending}> {cancelCitaMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                 Sí, cancelar
               </Button>
             </>
           ) : (
             <>
-              <Button variant="cancel" onClick={() => setCancelConfirmOpen(true)}>
-                <Ban className="h-4 w-4" /> Cancelar cita
+              <Button variant="cancel" onClick={() => setCancelConfirmOpen(true)}> Cancelar cita
               </Button>
               <Button
                 variant="primary-outline"
@@ -521,8 +508,7 @@ const AgentInicio = () => {
                     setAgendarCitaOpen(true);
                   }
                 }}
-              >
-                <CalendarClock className="h-4 w-4" /> Reagendar
+              > Reagendar
               </Button>
             </>
           )

@@ -6,13 +6,12 @@ import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponible
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, X, Layers, Car, Search, SlidersHorizontal, Package, Warehouse } from "lucide-react";
+import { ModalFilters, FilterSelect, FilterField } from "@/components/ui/modal-filters";
+import { ModalViewerDetail } from "@/components/ui/modal-viewer-detail";
+import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, X, Layers, Car, Search, Package, Warehouse, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import useEmblaCarousel from "embla-carousel-react";
 import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,28 +21,11 @@ import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
 type TriState = "todos" | "si" | "no";
-
-/** Select de filtro con etiqueta (estilo CC). */
-const FilterSelect = ({ label, value, onChange, options }: {
-  label: string; value: string; onChange: (v: string) => void; options: { v: string; l: string }[];
-}) => (
-  <div className="flex w-full flex-col gap-1.5">
-    <span className="px-0.5 text-xs font-medium text-muted-foreground">{label}</span>
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-[38px] text-[13px] font-normal text-muted-foreground">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>)}
-      </SelectContent>
-    </Select>
-  </div>
-);
 
 const AgentUnidadesProyecto = () => {
   const [searchParams] = useSearchParams();
@@ -394,13 +376,13 @@ const AgentUnidadesProyecto = () => {
   const activeFilterCount = (filterProjectNames.length > 0 ? 1 : 0) + (filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter.length > 0 ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== "todos" ? 1 : 0) + (filterEstacionamiento !== "todos" ? 1 : 0) + (priceRange ? 1 : 0);
 
   const filterContent = (
-    <div className="space-y-5">
+    <>
       {availableProjectNames.length > 0 && (
         <FilterSelect
           label="Desarrollo"
           value={filterProjectNames[0] || "all"}
           onChange={(v) => setFilterProjectNames(v === "all" ? [] : [v])}
-          options={[{ v: "all", l: "Todos" }, ...availableProjectNames.map((n) => ({ v: n, l: projectCounts[n] != null ? `${n} (${projectCounts[n]})` : n }))]}
+          options={[{ value: "all", label: "Todos" }, ...availableProjectNames.map((n) => ({ value: n, label: projectCounts[n] != null ? `${n} (${projectCounts[n]})` : n }))]}
         />
       )}
       {availableModelNames.length > 0 && (
@@ -408,7 +390,7 @@ const AgentUnidadesProyecto = () => {
           label="Modelo"
           value={filterModelNames[0] || "all"}
           onChange={(v) => setFilterModelNames(v === "all" ? [] : [v])}
-          options={[{ v: "all", l: "Todos" }, ...availableModelNames.map((m) => ({ v: m, l: m }))]}
+          options={[{ value: "all", label: "Todos" }, ...availableModelNames.map((m) => ({ value: m, label: m }))]}
         />
       )}
       {availableLevelOptions.length > 0 && (
@@ -416,14 +398,14 @@ const AgentUnidadesProyecto = () => {
           label="Nivel"
           value={filterLevels[0] || "all"}
           onChange={(v) => setFilterLevels(v === "all" ? [] : [v])}
-          options={[{ v: "all", l: "Todos los niveles" }, ...availableLevelOptions.map((l) => ({ v: l, l: `Nivel ${l}` }))]}
+          options={[{ value: "all", label: "Todos los niveles" }, ...availableLevelOptions.map((l) => ({ value: l, label: `Nivel ${l}` }))]}
         />
       )}
       <FilterSelect
         label="Recámaras"
         value={recamarasFilter[0] || "all"}
         onChange={(v) => setRecamarasFilter(v === "all" ? [] : [v])}
-        options={[{ v: "all", l: "Todas" }, ...recamarasOptions.map((o) => ({ v: o, l: `${o} recámara${o === "1" ? "" : "s"}` }))]}
+        options={[{ value: "all", label: "Todas" }, ...recamarasOptions.map((o) => ({ value: o, label: `${o} recámara${o === "1" ? "" : "s"}` }))]}
       />
 
       <div className="grid grid-cols-2 gap-3">
@@ -431,24 +413,23 @@ const AgentUnidadesProyecto = () => {
           label="Bodega"
           value={filterBodega}
           onChange={(v) => setFilterBodega(v as TriState)}
-          options={triStateOptions.map((o) => ({ v: o.value, l: o.label }))}
+          options={triStateOptions}
         />
         <FilterSelect
           label="Estacionamiento"
           value={filterEstacionamiento}
           onChange={(v) => setFilterEstacionamiento(v as TriState)}
-          options={triStateOptions.map((o) => ({ v: o.value, l: o.label }))}
+          options={triStateOptions}
         />
       </div>
 
       {/* Rango de precio (al final) */}
-      <div className="flex w-full flex-col gap-2.5">
-        <div className="flex items-center justify-between px-0.5">
-          <span className="text-xs font-medium text-muted-foreground">Rango de precio</span>
-          {priceRange && (
-            <button onClick={() => setPriceRange(null)} className="text-[11px] font-medium text-[hsl(158_64%_38%)]">Restablecer</button>
-          )}
-        </div>
+      <FilterField
+        label="Rango de precio"
+        action={priceRange && (
+          <button onClick={() => setPriceRange(null)} className="text-sm font-medium text-primary">Restablecer</button>
+        )}
+      >
         <Slider
           min={priceBounds.min}
           max={priceBounds.max}
@@ -459,12 +440,12 @@ const AgentUnidadesProyecto = () => {
           className="w-full py-1 [&>span]:h-5 [&_[role=slider]]:h-5 [&_[role=slider]]:w-5"
         />
         <div className="flex items-center justify-between gap-2">
-          <span className="rounded-md bg-[#F6F7F8] px-2.5 py-1.5 text-xs font-semibold tabular-nums text-[#171A1D]">{formatPrice((priceRangeLocal || priceRange)?.[0] ?? priceBounds.min)}</span>
-          <span className="text-[11px] text-muted-foreground">a</span>
-          <span className="rounded-md bg-[#F6F7F8] px-2.5 py-1.5 text-xs font-semibold tabular-nums text-[#171A1D]">{formatPrice((priceRangeLocal || priceRange)?.[1] ?? priceBounds.max)}</span>
+          <span className="rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold tabular-nums text-foreground">{formatPrice((priceRangeLocal || priceRange)?.[0] ?? priceBounds.min)}</span>
+          <span className="text-xs text-muted-foreground">a</span>
+          <span className="rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold tabular-nums text-foreground">{formatPrice((priceRangeLocal || priceRange)?.[1] ?? priceBounds.max)}</span>
         </div>
-      </div>
-    </div>
+      </FilterField>
+    </>
   );
 
   const handleOpenFilters = () => {
@@ -488,7 +469,7 @@ const AgentUnidadesProyecto = () => {
         <div className="fixed top-3 right-4 z-50">
           <Badge
             variant="outline"
-            className="border-destructive/30 text-destructive gap-1 bg-white shadow-sm"
+            className="border-destructive/30 text-destructive gap-1 bg-card shadow-sm"
           >
             <span className="h-2 w-2 rounded-full bg-destructive inline-block" />
             No verificado
@@ -497,28 +478,28 @@ const AgentUnidadesProyecto = () => {
       )}
 
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[hsl(var(--agent-bg))] pt-4 pb-3 space-y-3">
+      <div className="sticky top-0 z-10 bg-background pt-4 pb-3 space-y-3">
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate("/admin/agent/inventario")} className="h-10 w-10 shrink-0 rounded-md bg-white border border-gray-200 flex items-center justify-center transition-colors hover:bg-gray-50" title="Regresar">
+          <button onClick={() => navigate("/admin/agent/inventario")} className="h-10 w-10 shrink-0 rounded-md bg-card border border-gray-200 flex items-center justify-center transition-colors hover:bg-gray-50" title="Regresar">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9AA3AD]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-sm font-medium text-[#171A1D] placeholder:text-[#9AA3AD] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+              className="h-10 w-full rounded-md border border-gray-200 bg-card pl-9 pr-3 text-sm font-medium text-foreground placeholder:text-muted-foreground/70 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
               placeholder="Buscar unidad…"
             />
           </div>
           <button
             onClick={handleOpenFilters}
-            className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-sm font-medium text-[#171A1D] shadow-sm transition-colors hover:bg-gray-50"
+            className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-card px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-gray-50"
           >
             <SlidersHorizontal className="h-4 w-4" />
             <span className="hidden sm:inline">Filtros</span>
             {activeFilterCount > 0 && (
-              <span className="ml-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+              <span className="ml-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-xs font-bold text-primary-foreground">
                 {activeFilterCount}
               </span>
             )}
@@ -531,7 +512,7 @@ const AgentUnidadesProyecto = () => {
               "flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors",
               hasActiveFilters
                 ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                : "border-gray-200 bg-white text-gray-300 cursor-not-allowed"
+                : "border-gray-200 bg-card text-gray-300 cursor-not-allowed"
             )}
           >
             <X className="h-4 w-4" />
@@ -539,33 +520,18 @@ const AgentUnidadesProyecto = () => {
         </div>
       </div>
 
-      {/* Filtros - panel lateral derecho (diseño CC) */}
-      <Sheet open={filtersDrawerOpen} onOpenChange={setFiltersDrawerOpen}>
-        <SheetContent side="right" className="light w-full sm:w-[380px] sm:max-w-[380px] p-0 gap-0 flex flex-col">
-          <SheetHeader className="space-y-2 border-b px-6 pt-6 pb-4 text-left">
-            <SheetTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-              <SlidersHorizontal className="size-4" /> Filtros
-            </SheetTitle>
-            <p className="text-sm text-muted-foreground">Filtra las unidades disponibles. Los cambios se aplican al instante.</p>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">{filterContent}</div>
-          <div className="border-t px-6 py-4 flex items-center justify-between gap-3">
-            <button
-              onClick={clearAllFilters}
-              disabled={!hasActiveFilters}
-              className="h-9 rounded-md px-3 text-[13px] font-medium text-muted-foreground hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
-            >
-              Limpiar
-            </button>
-            <button
-              onClick={() => setFiltersDrawerOpen(false)}
-              className="h-9 rounded-md border border-primary bg-white px-4 text-[13px] font-medium text-primary hover:bg-primary/[0.06]"
-            >
-              Ver resultados
-            </button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Filtros - panel lateral estándar (ui/modal-filters) */}
+      <ModalFilters
+        open={filtersDrawerOpen}
+        onOpenChange={setFiltersDrawerOpen}
+        subtitle="Filtra las unidades disponibles. Los cambios se aplican al instante."
+        onClear={clearAllFilters}
+        clearDisabled={!hasActiveFilters}
+        onApply={() => setFiltersDrawerOpen(false)}
+        className="light"
+      >
+        {filterContent}
+      </ModalFilters>
 
       {/* Properties Grid */}
       <div className="mt-2">
@@ -588,14 +554,14 @@ const AgentUnidadesProyecto = () => {
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-4 pt-4 pb-2">
                 <Button variant="outline" size="sm" disabled={page === 0} onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                  <ChevronLeft className="h-4 w-4" /> Anterior
                 </Button>
                 <span className="text-sm text-muted-foreground">
                   {page + 1} / {totalPages}
                   {isFetching && !isLoading && <Loader2 className="inline h-3 w-3 animate-spin ml-1.5" />}
                 </span>
                 <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                  Siguiente <ChevronRight className="h-4 w-4 ml-1" />
+                  Siguiente <ChevronRight className="h-4 w-4" /> 
                 </Button>
               </div>
             )}
@@ -603,61 +569,87 @@ const AgentUnidadesProyecto = () => {
         )}
       </div>
 
-      {/* Property Detail - modal centrado (izq carrusel · der info) */}
-      <Dialog open={!!selectedProperty} onOpenChange={(open) => !open && setSelectedProperty(null)}>
-        <DialogContent
-          className="light w-[95vw] max-w-4xl p-0 gap-0 overflow-hidden rounded-md max-h-[90vh]"
-          style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
-        >
-          <DialogTitle className="sr-only">Detalle del departamento</DialogTitle>
-          <DialogDescription className="sr-only">Información, precio y esquemas de pago de la unidad seleccionada</DialogDescription>
-          {selectedProperty && (
-            <div className="grid max-h-[90vh] md:grid-cols-2">
-              {/* Izquierda: carrusel (llena la columna) */}
-              <div className="relative bg-gray-100 aspect-[4/3] md:aspect-auto md:h-[90vh]">
-                {selectedProperty.model_images?.length > 0 ? (
-                  <DetailCarousel images={selectedProperty.model_images} />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center"><Package className="h-10 w-10 text-muted-foreground/30" /></div>
-                )}
+      {/* Detalle de unidad - estándar visor + detalle (ui/modal-viewer-detail) */}
+      {selectedProperty && (
+        <ModalViewerDetail
+          open={!!selectedProperty}
+          onOpenChange={(open) => !open && setSelectedProperty(null)}
+          title={`Departamento ${selectedProperty.numero || selectedProperty.id}`}
+          subtitle={selectedProperty.proyecto_nombre}
+          className="light"
+          resourceClassName="aspect-[4/3] md:aspect-auto"
+          resource={
+            selectedProperty.model_images?.length > 0 ? (
+              <DetailCarousel images={selectedProperty.model_images} />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <Package className="h-10 w-10 text-muted-foreground/30" />
               </div>
-              {/* Derecha: información */}
-              <div className="flex min-h-0 flex-col md:max-h-[90vh]">
-                <div className="shrink-0 space-y-0.5 px-[22px] pt-[22px] pb-3">
-                  <h2 className="text-[18px] font-bold text-[#171A1D]">Departamento {selectedProperty.numero || selectedProperty.id}</h2>
-                  <p className="text-[12px] font-normal text-[#6B7280]">{selectedProperty.proyecto_nombre}</p>
-                </div>
-                <div className="flex-1 overflow-y-auto px-[22px] space-y-4 pb-5">
+            )
+          }
+          footer={
+            <>
+              <Button variant="cancel" onClick={() => setSelectedProperty(null)}>Cerrar</Button>
+              {canGenerateOffer && (
+                isAgentRole && !hasTrainingComplete ? (
+                  <Button variant="primary-outline" disabled>
+                     Completa tu capacitación
+                  </Button>
+                ) : (
+                  <div onClick={(e) => { e.stopPropagation(); handleConfigureOffer(); }}>
+                    <NewOfferDialog
+                      propertyId={selectedProperty.id}
+                      propertyNumber={selectedProperty.numero || `${selectedProperty.id}`}
+                      hideManualMode={true}
+                      hidePdfOptions={true}
+                      preSelectedSchemeId={selectedSchemeId}
+                      hideBankingInPdf={isAgentRole && !hasBasicIdentityComplete}
+                      forceLight={true}
+                      enableDigitalOffer={canGenerateDigitalOffer}
+                      customTrigger={
+                        <Button variant="primary-outline">
+                          Configurar Oferta
+                          {selectedSchemeId && (
+                            <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span> )}
+                        </Button>
+                      }
+                    />
+                  </div>
+                )
+              )}
+            </>
+          }
+        >
                 {/* Contexto */}
                 <div className="flex flex-wrap gap-1.5">
-                  {selectedProperty.edificio_nombre && <span className="inline-flex items-center rounded-md bg-[#F6F7F8] px-2.5 py-1 text-[11px] font-semibold text-[#4B5563]">{selectedProperty.edificio_nombre}</span>}
-                  {selectedProperty.modelo_nombre && <span className="inline-flex items-center rounded-md bg-[#F6F7F8] px-2.5 py-1 text-[11px] font-semibold text-[#4B5563]">{selectedProperty.modelo_nombre}</span>}
-                  {selectedProperty.piso && <span className="inline-flex items-center gap-1 rounded-md bg-[#F6F7F8] px-2.5 py-1 text-[11px] font-semibold text-[#4B5563]"><Layers className="h-3 w-3 text-[hsl(158_64%_38%)]" /> Nivel {selectedProperty.piso}</span>}
+                  {selectedProperty.edificio_nombre && <span className="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{selectedProperty.edificio_nombre}</span>}
+                  {selectedProperty.modelo_nombre && <span className="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{selectedProperty.modelo_nombre}</span>}
+                  {selectedProperty.piso && <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground"><Layers className="h-3 w-3 text-primary" /> Nivel {selectedProperty.piso}</span>}
                 </div>
 
                 {/* Specs */}
-                <div className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-md border border-[#ECEEF0] bg-white p-3.5 text-sm font-medium text-[#4B5563]">
-                  {selectedProperty.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.m2_total.toFixed(2)} m²</span>}
-                  {selectedProperty.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.recamaras} rec.</span>}
-                  {selectedProperty.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.banos} baño{selectedProperty.banos > 1 ? "s" : ""}</span>}
-                  {selectedProperty.medio_bano > 0 && <span className="flex items-center gap-1.5"><ShowerHead className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.medio_bano} ½ baño</span>}
+                <div className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-md border border-border bg-card p-3.5 text-sm font-medium text-muted-foreground">
+                  {selectedProperty.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-primary" /> {selectedProperty.m2_total.toFixed(2)} m²</span>}
+                  {selectedProperty.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-primary" /> {selectedProperty.recamaras} rec.</span>}
+                  {selectedProperty.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-primary" /> {selectedProperty.banos} baño{selectedProperty.banos > 1 ? "s" : ""}</span>}
+                  {selectedProperty.medio_bano > 0 && <span className="flex items-center gap-1.5"><ShowerHead className="h-4 w-4 text-primary" /> {selectedProperty.medio_bano} ½ baño</span>}
                   {selectedProperty.bodegas_count > 0 && <span className="flex items-center gap-1.5"><Warehouse className="h-4 w-4 text-primary" /> {selectedProperty.bodegas_count} bodega{selectedProperty.bodegas_count > 1 ? "s" : ""}</span>}
-                  {selectedProperty.estacionamientos_count > 0 && <span className="flex items-center gap-1.5"><Car className="h-4 w-4 text-[hsl(158_64%_38%)]" /> {selectedProperty.estacionamientos_count} estac.{selectedProperty.estacionamientos_tipos?.length > 0 && <span className="text-[#9AA3AD]"> ({[...new Set(selectedProperty.estacionamientos_tipos as string[])].join(", ")})</span>}</span>}
+                  {selectedProperty.estacionamientos_count > 0 && <span className="flex items-center gap-1.5"><Car className="h-4 w-4 text-primary" /> {selectedProperty.estacionamientos_count} estac.{selectedProperty.estacionamientos_tipos?.length > 0 && <span className="text-muted-foreground/70"> ({[...new Set(selectedProperty.estacionamientos_tipos as string[])].join(", ")})</span>}</span>}
                 </div>
 
                 <PropertyFloorPlanButton propertyId={selectedProperty.id} />
                 {selectedProperty.precio_lista > 0 && (
-                  <div className="rounded-md border border-[hsl(158_64%_38%)]/20 bg-[hsl(158_64%_38%)]/[0.06] px-5 py-4 text-center">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(158_64%_38%)]/80">Precio de Lista</p>
-                    <p className="mt-1 text-2xl font-bold text-[hsl(158_64%_38%)]">{formatPrice(selectedProperty.precio_lista)}</p>
+                  <div className="rounded-md border border-primary/20 bg-primary/[0.06] px-5 py-4 text-center">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/80">Precio de Lista</p>
+                    <p className="mt-1 text-2xl font-bold text-primary">{formatPrice(selectedProperty.precio_lista)}</p>
                   </div>
                 )}
                 {dialogSchemes.length > 0 && (
                   <div>
-                    <p className="text-sm font-semibold text-[#171A1D] flex items-center gap-2 py-2">
-                      <span className="h-4 w-1 rounded-full bg-[hsl(158_64%_38%)]" />
+                    <p className="text-sm font-semibold text-foreground flex items-center gap-2 py-2">
+                      <span className="h-4 w-1 rounded-full bg-primary" />
                       Esquemas de Pago
-                      <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[hsl(158_64%_38%)]/10 text-[11px] font-semibold text-[hsl(158_64%_38%)]">{dialogSchemes.length}</span>
+                      <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary/10 text-xs font-semibold text-primary">{dialogSchemes.length}</span>
                     </p>
                     <div className="space-y-2.5 pt-1.5">
                       {dialogSchemes.map((scheme: any) => {
@@ -675,42 +667,42 @@ const AgentUnidadesProyecto = () => {
                             onClick={() => setSelectedSchemeId(prev => prev === scheme.id ? null : scheme.id)}
                             className={`relative w-full text-left rounded-md border p-4 space-y-3 transition-all duration-200 ${
                               isSelected
-                                ? "border-[hsl(158_64%_38%)] bg-[hsl(158_64%_38%)]/[0.05] ring-2 ring-[hsl(158_64%_38%)]/20 shadow-sm"
-                                : "border-border/60 bg-card hover:border-[hsl(158_64%_38%)]/40 hover:shadow-sm"
+                                ? "border-primary bg-primary/[0.05] ring-2 ring-primary/20 shadow-sm"
+                                : "border-border/60 bg-card hover:border-primary/40 hover:shadow-sm"
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${isSelected ? "bg-[hsl(158_64%_38%)]" : "bg-muted-foreground/25"}`} />
-                                <p className="font-semibold text-sm text-[hsl(var(--agent-text,0_0%_10%))] truncate">{scheme.nombre}</p>
+                                <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${isSelected ? "bg-primary" : "bg-muted-foreground/25"}`} />
+                                <p className="font-semibold text-sm text-foreground truncate">{scheme.nombre}</p>
                               </div>
                               {scheme.porcentaje_descuento_aumento !== 0 && scheme.porcentaje_descuento_aumento != null && (
                                 <Badge variant="outline" className={scheme.porcentaje_descuento_aumento < 0
-                                  ? "shrink-0 border-[hsl(158_64%_38%)]/30 bg-[hsl(158_64%_38%)]/10 text-[hsl(158_64%_38%)] text-[11px] font-semibold"
-                                  : "shrink-0 border-destructive/30 bg-destructive/10 text-destructive text-[11px] font-semibold"}>
+                                  ? "shrink-0 border-primary/30 bg-primary/10 text-primary text-xs font-semibold"
+                                  : "shrink-0 border-destructive/30 bg-destructive/10 text-destructive text-xs font-semibold"}>
                                   {scheme.porcentaje_descuento_aumento > 0 ? "+" : ""}{scheme.porcentaje_descuento_aumento}%
                                 </Badge>
                               )}
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {scheme.porcentaje_enganche > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{scheme.porcentaje_enganche}%</span> Enganche
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{scheme.porcentaje_enganche}%</span> Enganche
                                 </span>
                               )}
                               {amounts.porcentajeMensualidades > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades
                                 </span>
                               )}
                               {amounts.porcentajeEntrega > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
                                 </span>
                               )}
                               {amounts.numMensualidades > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-[hsl(158_64%_38%)]/10 px-2 py-1 text-[11px] text-[hsl(158_64%_38%)]/80">
-                                  <span className="font-semibold text-[hsl(158_64%_38%)]">{amounts.numMensualidades}</span> meses
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs text-primary/80">
+                                  <span className="font-semibold text-primary">{amounts.numMensualidades}</span> meses
                                 </span>
                               )}
                             </div>
@@ -718,14 +710,14 @@ const AgentUnidadesProyecto = () => {
                               <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3 border-t border-border/50">
                                 {amounts.enganche > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Enganche</p>
-                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{formatPrice(amounts.enganche)}</p>
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Enganche</p>
+                                    <p className="text-xs font-semibold text-foreground">{formatPrice(amounts.enganche)}</p>
                                   </div>
                                 )}
                                 {amounts.mensualidadesTotal > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Mensualidad</p>
-                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Mensualidad</p>
+                                    <p className="text-xs font-semibold text-foreground">
                                       {formatPrice(amounts.mensualidad)}
                                       {amounts.numMensualidades > 0 && <span className="font-normal text-muted-foreground"> × {amounts.numMensualidades}</span>}
                                     </p>
@@ -733,13 +725,13 @@ const AgentUnidadesProyecto = () => {
                                 )}
                                 {amounts.entrega > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Entrega</p>
-                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{formatPrice(amounts.entrega)}</p>
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Entrega</p>
+                                    <p className="text-xs font-semibold text-foreground">{formatPrice(amounts.entrega)}</p>
                                   </div>
                                 )}
                                 <div className="space-y-0.5">
-                                  <p className="text-[10px] uppercase tracking-wide text-[hsl(158_64%_38%)]/70">Precio final</p>
-                                  <p className="text-xs font-bold text-[hsl(158_64%_38%)]">{formatPrice(amounts.precioAjustado)}</p>
+                                  <p className="text-xs uppercase tracking-wide text-primary/70">Precio final</p>
+                                  <p className="text-xs font-bold text-primary">{formatPrice(amounts.precioAjustado)}</p>
                                 </div>
                               </div>
                             )}
@@ -750,49 +742,13 @@ const AgentUnidadesProyecto = () => {
                   </div>
                 )}
                 {selectedSchemeId && (
-                  <div className="bg-[hsl(158_64%_38%)]/[0.07] border border-[hsl(158_64%_38%)]/20 rounded-md px-3 py-2.5 text-xs text-[hsl(158_64%_38%)] font-medium flex items-center gap-2">
+                  <div className="bg-primary/[0.07] border border-primary/20 rounded-md px-3 py-2.5 text-xs text-primary font-medium flex items-center gap-2">
                     <FileText className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">Plan seleccionado: <span className="font-semibold">{dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre || ""}</span></span>
                   </div>
                 )}
-              </div>
-              <div className="shrink-0 flex items-center justify-end gap-2.5 px-[22px] py-4 border-t border-[#ECEEF0] bg-background">
-                <Button variant="cancel" onClick={() => setSelectedProperty(null)}>Cerrar</Button>
-                {canGenerateOffer && (
-                  isAgentRole && !hasTrainingComplete ? (
-                    <Button variant="primary-outline" disabled>
-                      <FileText className="h-4 w-4" /> Completa tu capacitación
-                    </Button>
-                  ) : (
-                  <div onClick={(e) => { e.stopPropagation(); handleConfigureOffer(); }}>
-                    <NewOfferDialog
-                      propertyId={selectedProperty.id}
-                      propertyNumber={selectedProperty.numero || `${selectedProperty.id}`}
-                      hideManualMode={true}
-                      hidePdfOptions={true}
-                      preSelectedSchemeId={selectedSchemeId}
-                      hideBankingInPdf={isAgentRole && !hasBasicIdentityComplete}
-                      forceLight={true}
-                      enableDigitalOffer={canGenerateDigitalOffer}
-                      customTrigger={
-                        <Button variant="primary-outline">
-                          <FileText className="h-4 w-4" />
-                          Configurar Oferta
-                          {selectedSchemeId && (
-                            <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
-                          )}
-                        </Button>
-                      }
-                    />
-                  </div>
-                  )
-                )}
-              </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        </ModalViewerDetail>
+      )}
     </div>
   );
 };
@@ -805,25 +761,25 @@ const UnitCard = React.memo(({ prop, formatPrice, onClick }: {
 }) => (
   <div
     onClick={onClick}
-    className="cursor-pointer overflow-hidden rounded-md border border-[#E7E9EC] bg-white shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-colors hover:border-[#CBD2D9]"
+    className="cursor-pointer overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-colors hover:border-border"
   >
     <div className="relative aspect-video overflow-hidden bg-gray-100">
       <UnitCardImage images={prop.model_images || []} />
-      <span className="absolute right-2.5 top-2.5 rounded-md bg-white px-2.5 py-1 text-[11px] font-bold text-[#171A1D] shadow-sm">
+      <span className="absolute right-2.5 top-2.5 rounded-md bg-card px-2.5 py-1 text-xs font-bold text-foreground shadow-sm">
         Depto. {prop.numero || prop.id}
       </span>
     </div>
     <div className="p-4 space-y-2.5">
       <div className="min-w-0">
-        <p className="truncate text-[15px] font-bold text-[#171A1D]">{prop.modelo_nombre || `Depto. ${prop.numero || prop.id}`}</p>
-        <p className="truncate text-[11.5px] font-medium text-[#9AA3AD]">
+        <p className="truncate text-base font-bold text-foreground">{prop.modelo_nombre || `Depto. ${prop.numero || prop.id}`}</p>
+        <p className="truncate text-xs font-medium text-muted-foreground/70">
           {prop.proyecto_nombre}{prop.piso ? ` · Nivel ${prop.piso}` : ""}
         </p>
       </div>
       {prop.precio_lista > 0 && (
-        <p className="text-[15px] font-bold tabular-nums text-primary">{formatPrice(prop.precio_lista)}</p>
+        <p className="text-base font-bold tabular-nums text-primary">{formatPrice(prop.precio_lista)}</p>
       )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#F0F1F3] pt-3 text-[13px] font-medium text-[#4B5563]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-sm font-medium text-muted-foreground">
         {prop.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-primary" /> {prop.m2_total.toFixed(1)} m²</span>}
         {prop.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-primary" /> {prop.recamaras}</span>}
         {prop.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-primary" /> {prop.banos}</span>}
@@ -889,7 +845,7 @@ const DetailCarousel = ({ images }: { images: any[] }) => {
           </button>
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
             {images.map((_: any, i: number) => (
-              <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIndex ? "w-5 bg-white" : "w-1.5 bg-white/50"}`} />
+              <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIndex ? "w-5 bg-card" : "w-1.5 bg-card/50"}`} />
             ))}
           </div>
         </>

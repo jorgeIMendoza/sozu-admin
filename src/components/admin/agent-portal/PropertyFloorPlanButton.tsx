@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, FileImage, MapPin, Download } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MODAL_FOOTER_CLS } from "@/components/ui/form-standard";
+import { Loader2, FileImage, MapPin } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ModalFormHeader, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 
@@ -499,31 +501,20 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white py-3 text-sm font-semibold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)] hover:text-white"
-      >
-        <FileImage className="h-4 w-4" />
+      <ActionButton icon={FileImage} className="w-full" onClick={() => setOpen(true)}>
         Ver planos
-      </button>
+      </ActionButton>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="shrink-0 space-y-0 border-b border-border px-6 py-5 text-left">
-            <DialogTitle>
-              Planos - {planData.modelo}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <ModalFormHeader title={`Planos - ${planData.modelo}`} />
 
           <Tabs defaultValue="ubicacion" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="mx-6 mt-4 w-auto shrink-0">
               <TabsTrigger value="ubicacion" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <MapPin className="mr-1.5 h-3.5 w-3.5" />
                 Ubicación
               </TabsTrigger>
               <TabsTrigger value="arquitectonico" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <FileImage className="mr-1.5 h-3.5 w-3.5" />
                 Arquitectónico
               </TabsTrigger>
             </TabsList>
@@ -566,10 +557,10 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
             </TabsContent>
           </Tabs>
 
-          <div className={`${MODAL_FOOTER_CLS} shrink-0`}>
+          <div className={cn(MODAL_FOOTER_CLS, "shrink-0")}>
             <Button variant="cancel" onClick={() => setOpen(false)}>Cerrar</Button>
             <Button variant="primary-outline" onClick={handleDownloadPdf} disabled={generatingPdf}>
-              {generatingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {generatingPdf && <Loader2 className="h-4 w-4 animate-spin" />}
               {generatingPdf ? "Generando..." : "Descargar PDF"}
             </Button>
           </div>
