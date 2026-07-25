@@ -71,7 +71,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Switch } from "@/components/ui/switch";
-import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
@@ -1468,7 +1468,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     if (!pendingFormData) return [] as string[];
 
     const reasons: string[] = [];
-    if (!isValidRFC(pendingFormData.rfc)) reasons.push("el prospecto no tiene un RFC válido");
+    // La CLABE de apartado se expone al cliente si el prospecto está
+    // identificado con RFC **o** CURP (ver el gate en lib/offers/use-offer-db).
+    if (!isValidRFC(pendingFormData.rfc) && !isValidCURP(pendingFormData.curp)) {
+      reasons.push("el prospecto no tiene un RFC ni una CURP válidos");
+    }
     if (pendingFormData.mode === "precargada" && !propertySchemeSelection) reasons.push("no se seleccionó un plan de pago");
 
     return reasons;
@@ -1479,7 +1483,20 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     onTrackSubmit?.();
 
     const missingScheme = data.mode === "precargada" && !localSchemeId;
-    const missingRFC = !isValidRFC(data.rfc);
+
+    // Sin plan de pago la oferta digital no puede mostrar la CLABE de apartado
+    // ni el plan al cliente, así que se bloquea antes de crearla.
+    if (data.digital && missingScheme) {
+      toast({
+        title: "Selecciona un plan de pago",
+        description: "La oferta digital necesita un esquema de pago para mostrar la CLABE de apartado y el plan al cliente.",
+        variant: "destructive",
+      });
+      setPendingButton(null);
+      return;
+    }
+
+    const missingRFC = !isValidRFC(data.rfc) && !isValidCURP(data.curp);
     const shouldShowBankingConfirm = missingScheme || missingRFC;
 
     if (productsWithPriceInfo.total > 0 || shouldShowBankingConfirm) {
@@ -1520,6 +1537,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   // Un teléfono legacy con formato inválido también queda editable, si no la
   // validación de 10 dígitos dejaría el formulario bloqueado sin salida.
   const phoneLocked = selectedPerson !== null && (selectedPerson.telefono ?? "").replace(/\D/g, "").length === 10;
+  // Mismo criterio para RFC/CURP: si el prospecto guardado no los trae (o son
+  // inválidos) el asesor debe poder capturarlos, porque de ellos depende que la
+  // oferta digital muestre la CLABE de apartado.
+  const rfcLocked = selectedPerson !== null && isValidRFC(selectedPerson.rfc);
+  const curpLocked = selectedPerson !== null && isValidCURP(selectedPerson.curp);
   const proyectoFechaEntrega = (propertyDetails?.entidades_relacionadas?.proyectos as any)?.fecha_entrega as string | null | undefined;
   const efectivaMesesHoy = proyectoFechaEntrega ? mesesEntreFechas(new Date(), proyectoFechaEntrega) : 0;
 
@@ -2487,11 +2509,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                        <FormItem>
                             <FormLabel>RFC</FormLabel>
                              <FormControl>
-                             <Input 
-                               placeholder="PEGJ850101H2A" 
+                             <Input
+                               placeholder="PEGJ850101H2A"
                                maxLength={13}
-                               disabled={selectedPerson !== null}
-                               {...field} 
+                               disabled={rfcLocked}
+                               {...field}
                              />
                            </FormControl>
                            <FormMessage />
@@ -2507,11 +2529,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                            <FormItem>
                              <FormLabel>CURP</FormLabel>
                               <FormControl>
-                                <Input 
-                                  placeholder="PEGJ850101HDFRRN09" 
+                                <Input
+                                  placeholder="PEGJ850101HDFRRN09"
                                   maxLength={18}
-                                  disabled={selectedPerson !== null}
-                                  {...field} 
+                                  disabled={curpLocked}
+                                  {...field}
                                 />
                               </FormControl>
                              <FormMessage />

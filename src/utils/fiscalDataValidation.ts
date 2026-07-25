@@ -131,3 +131,26 @@ export function validateRFC(rfc: string | null | undefined): { isValid: boolean;
 export function isValidRFC(rfc: string | null | undefined): boolean {
   return validateRFC(rfc).isValid;
 }
+
+// CURP: 4 letras + AAMMDD + H/M + 2 letras de entidad + 3 consonantes +
+// homoclave (dígito o letra para nacidos desde 2000) + dígito verificador.
+const CURP_REGEX = /^[A-ZÑ]{4}[0-9]{6}[HM][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[0-9A-Z][0-9]$/;
+
+/**
+ * Valida el formato de una CURP (18 caracteres). Se usa como alternativa al RFC
+ * para acreditar la identidad del prospecto (datos del INE) antes de exponer la
+ * CLABE de apartado en la oferta digital.
+ */
+export function isValidCURP(curp: string | null | undefined): boolean {
+  if (!curp || typeof curp !== "string") return false;
+
+  const value = curp.trim().toUpperCase();
+  if (!CURP_REGEX.test(value)) return false;
+
+  const month = parseInt(value.substring(6, 8), 10);
+  const day = parseInt(value.substring(8, 10), 10);
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  return true;
+}
