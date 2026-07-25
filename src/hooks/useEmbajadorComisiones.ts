@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
+import {
+  fetchComisionesPorEmail,
+  type ComisionDetailedStatus,
+  type ComisionPorEmailRow,
+} from '@/hooks/useComisionesPorEmail';
 
 /** Detecta si la columna url_factura ya existe en embajadores_referidos.
  *  Se cachea por 5 min para no repetir el probe en cada render. */
@@ -17,33 +21,28 @@ export function useReferidosFacturaColExists() {
   return data?.exists ?? false;
 }
 
-// Comisiones del embajador entendido como COMISIONISTA (igual que un agente externo):
-// filas en `comisionistas` ligadas a una cuenta de cobranza, enriquecidas con la venta
-// (proyecto/propiedad/producto), la factura (documentos tipo 46) y el recibo de pago
-// (comisionistas.url_evidencia_pago). Espeja la lógica de AgentComisiones.tsx.
+// Comisiones del embajador entendido como COMISIONISTA (misma lógica que un agente:
+// hook global useComisionesPorEmail), más las comisiones que solo existen como
+// referido (`embajadores_referidos.estatus_comision`).
 
-export type EmbComisionStatus =
-  | 'pendiente'
-  | 'en_revision'
-  | 'factura_requerida'
-  | 'programada'
-  | 'pagada';
+export type EmbComisionStatus = ComisionDetailedStatus;
 
-export interface EmbComision {
-  id_cuenta_cobranza: number;
-  referralId?: string;       // set for referral-sourced entries
-  porcentaje_comision: number;
-  aprobada: boolean;
-  pagada: boolean;
-  url_evidencia_pago: string | null;
-  proyecto: string;
-  propiedad: string;
-  productoNombre: string;
-  precio_final: number;
-  monto_comision: number;
-  status: EmbComisionStatus;
-  cuenta_cobranza_label: string;
-  factura_url: string | null;
+export interface EmbComision extends ComisionPorEmailRow {
+  /** Presente cuando la fila viene de `embajadores_referidos` (sin cuenta de cobranza). */
+  referralId?: string;
+  /** Embajador dueño de la comisión (se muestra en la vista global del admin). */
+  embajadorNombre?: string;
+  embajadorId?: string;
+  embajadorIdPersona?: number | null;
+  embajadorEmail?: string | null;
+}
+
+/** Embajador del que se consultan comisiones. */
+export interface EmbajadorComisionTarget {
+  id?: string | null;
+  email?: string | null;
+  nombre?: string;
+  idPersona?: number | null;
 }
 
 const REF_STATUS_MAP: Record<string, EmbComisionStatus> = {
@@ -52,170 +51,58 @@ const REF_STATUS_MAP: Record<string, EmbComisionStatus> = {
   pagada:    'pagada',
 };
 
-export function useEmbajadorComisiones(email?: string | null, ambassadorId?: string | null) {
+export function useEmbajadoresComisiones(targets: EmbajadorComisionTarget[]) {
+  const key = targets
+    .map((t) => `${t.id ?? ''}:${t.email ?? ''}`)
+    .sort()
+    .join('|');
+
   const query = useQuery({
-    queryKey: ['embajador-comisiones', email ?? null, ambassadorId ?? null],
-    enabled: !!email,
+    queryKey: ['embajadores-comisiones', key],
+    enabled: targets.length > 0,
     staleTime: 30_000,
     queryFn: async (): Promise<EmbComision[]> => {
-      if (!email) return [];
+      if (targets.length === 0) return [];
 
-      const { data: comisionistas } = await (supabase as any)
-        .from('comisionistas')
-        .select('id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_creacion, url_evidencia_pago')
-        .eq('email_usuario', email)
-        .eq('activo', true)
-        .order('fecha_creacion', { ascending: false });
+      const byEmail = new Map<string, EmbajadorComisionTarget>();
+      targets.forEach((t) => { if (t.email) byEmail.set(t.email.toLowerCase(), t); });
+      const byErId = new Map<number, EmbajadorComisionTarget>();
+      targets.forEach((t) => { if (t.id) byErId.set(Number(t.id), t); });
 
-      const comisionistasArr = comisionistas ?? [];
-
-      const cuentaIds = [...new Set(comisionistasArr.map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
-      const cuentaMap = new Map<number, any>();
-
-      if (cuentaIds.length > 0) {
-        const { data: cuentas } = await (supabase as any)
-          .from('cuentas_cobranza')
-          .select('id, id_oferta, precio_final')
-          .in('id', cuentaIds);
-
-        if (cuentas) {
-          const ofertaIds = cuentas.map((c: any) => c.id_oferta).filter(Boolean);
-          const ofertaMap = new Map<number, any>();
-
-          if (ofertaIds.length > 0) {
-            const { data: ofertas } = await (supabase as any)
-              .from('ofertas')
-              .select('id, id_propiedad, id_producto')
-              .in('id', ofertaIds);
-
-            const propIds = (ofertas || []).map((o: any) => o.id_propiedad).filter(Boolean);
-            const prodIds = [...new Set((ofertas || []).map((o: any) => o.id_producto).filter(Boolean))] as number[];
-            const propMap = new Map<number, any>();
-            const prodMap = new Map<number, string>();
-
-            if (prodIds.length > 0) {
-              const { data: prods } = await (supabase as any)
-                .from('productos_servicios')
-                .select('id, nombre')
-                .in('id', prodIds);
-              (prods || []).forEach((p: any) => prodMap.set(p.id, p.nombre));
-            }
-
-            if (propIds.length > 0) {
-              const { data: props } = await (supabase as any)
-                .from('propiedades')
-                .select('id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad')
-                .in('id', propIds);
-
-              const emIds = [...new Set((props || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
-              const propToProject = new Map<number, string>();
-
-              if (emIds.length > 0) {
-                const { data: ems } = await (supabase as any).from('edificios_modelos').select('id, id_edificio').in('id', emIds);
-                const edIds = [...new Set((ems || []).map((em: any) => em.id_edificio).filter(Boolean))];
-                if (edIds.length > 0) {
-                  const { data: eds } = await (supabase as any).from('edificios').select('id, id_proyecto').in('id', edIds);
-                  const pjIds = [...new Set((eds || []).map((e: any) => e.id_proyecto).filter(Boolean))];
-                  if (pjIds.length > 0) {
-                    const { data: pjs } = await (supabase as any).from('proyectos').select('id, nombre').in('id', pjIds);
-                    const pjMap = new Map((pjs || []).map((p: any) => [p.id, p.nombre]));
-                    const edToP = new Map((eds || []).map((e: any) => [e.id, e.id_proyecto]));
-                    const emToE = new Map((ems || []).map((em: any) => [em.id, em.id_edificio]));
-                    (props || []).forEach((p: any) => {
-                      const eId = emToE.get(p.id_edificio_modelo);
-                      const pjId = eId ? edToP.get(eId) : null;
-                      if (pjId) propToProject.set(p.id, (pjMap.get(pjId) as string) || '');
-                    });
-                  }
-                }
-              }
-
-              (props || []).forEach((p: any) => propMap.set(p.id, { ...p, proyecto: propToProject.get(p.id) || '' }));
-            }
-
-            (ofertas || []).forEach((o: any) => {
-              const prop = propMap.get(o.id_propiedad);
-              const productoNombre = o.id_producto ? prodMap.get(o.id_producto) || '' : '';
-              const tipoDerivado = o.id_producto ? 'Producto' : 'Propiedad';
-              ofertaMap.set(o.id, { ...prop, productoNombre, tipoDerivado });
-            });
-          }
-
-          cuentas.forEach((c: any) => {
-            const info = ofertaMap.get(c.id_oferta);
-            cuentaMap.set(c.id, {
-              ...c,
-              propiedad: info?.numero_propiedad,
-              proyecto: info?.proyecto,
-              precio_final: c.precio_final,
-              tipo: info?.tipoDerivado || 'Propiedad',
-              productoNombre: info?.productoNombre || '',
-              id_estatus_disponibilidad: info?.id_estatus_disponibilidad,
-            });
-          });
-        }
-      }
-
-      const cuentaIdsForFactura = comisionistasArr.map((c: any) => c.id_cuenta_cobranza).filter(Boolean);
-      const { data: facturas } = cuentaIdsForFactura.length > 0
-        ? await (supabase as any)
-            .from('documentos')
-            .select('id, id_cuenta_cobranza, url')
-            .in('id_cuenta_cobranza', cuentaIdsForFactura)
-            .eq('id_tipo_documento', 46)
-            .eq('activo', true)
-        : { data: [] };
-      const facturaUrlMap = new Map<number, string>();
-      (facturas || []).forEach((f: any) => {
-        if (f.id_cuenta_cobranza) facturaUrlMap.set(f.id_cuenta_cobranza, f.url || '');
+      const stamp = (row: EmbComision, t?: EmbajadorComisionTarget): EmbComision => ({
+        ...row,
+        embajadorNombre: t?.nombre,
+        embajadorId: t?.id ?? undefined,
+        embajadorIdPersona: t?.idPersona ?? null,
+        embajadorEmail: t?.email ?? null,
       });
 
-      const comisionistasResult: EmbComision[] = comisionistasArr.map((c: any): EmbComision => {
-        const cuenta = cuentaMap.get(c.id_cuenta_cobranza);
-        const precioFinal = cuenta?.precio_final || 0;
-        const montoComision = precioFinal * (c.porcentaje_comision || 0) / 100;
-        const propSold = cuenta?.id_estatus_disponibilidad === 5;
-        const facturaUrl = facturaUrlMap.get(c.id_cuenta_cobranza) || null;
-        const hasFactura = facturaUrlMap.has(c.id_cuenta_cobranza);
+      // 1) Comisiones formales (comisionistas) — misma fuente que el portal de agentes.
+      const emails = [...byEmail.keys()];
+      const comisionistasResult = ((await fetchComisionesPorEmail(emails)) as EmbComision[]).map((r) =>
+        stamp(r, byEmail.get(String(r.email_usuario ?? '').toLowerCase())),
+      );
 
-        let status: EmbComisionStatus;
-        if (c.pagada) status = 'pagada';
-        else if (c.aprobada && hasFactura) status = 'programada';
-        else if (c.aprobada && !hasFactura) status = 'factura_requerida';
-        else if (propSold) status = 'en_revision';
-        else status = 'pendiente';
-
-        return {
-          id_cuenta_cobranza: c.id_cuenta_cobranza,
-          porcentaje_comision: c.porcentaje_comision || 0,
-          aprobada: !!c.aprobada,
-          pagada: !!c.pagada,
-          url_evidencia_pago: c.url_evidencia_pago || null,
-          proyecto: cuenta?.proyecto || '',
-          propiedad: cuenta?.propiedad || '',
-          productoNombre: cuenta?.productoNombre || '',
-          precio_final: precioFinal,
-          monto_comision: montoComision,
-          status,
-          cuenta_cobranza_label: formatCuentaCobranzaId(c.id_cuenta_cobranza, cuenta?.tipo),
-          factura_url: facturaUrl,
-        };
-      });
-
-      // ── Referral-sourced commissions (embajadores_referidos.estatus_comision) ──
-      // ambassadorId = entidades_relacionadas.id del embajador (id_entidad_relacionada_emb)
-      // Si no se pasa, intentar resolverlo por email via personas
-      let embajadorErId: number | null = ambassadorId ? Number(ambassadorId) : null;
-      if (!embajadorErId) {
+      // 2) Comisiones que solo viven en el referido.
+      let erIds = [...byErId.keys()].filter((n) => Number.isFinite(n));
+      if (erIds.length === 0 && emails.length === 1) {
+        // Sin ambassadorId: resolver la entidad del embajador por correo.
         const { data: personaRow } = await (supabase as any)
-          .from('personas').select('id').eq('email', email).maybeSingle();
-        if (personaRow?.id) {
+          .from('personas').select('id').eq('email', emails[0]).maybeSingle();
+        const { data: tipoEmb } = await (supabase as any)
+          .from('tipos_entidad').select('id').eq('nombre', 'Embajador').maybeSingle();
+        if (personaRow?.id && tipoEmb?.id) {
           const { data: erRow } = await (supabase as any)
             .from('entidades_relacionadas').select('id')
-            .eq('id_persona', personaRow.id).eq('id_tipo_entidad', 2).maybeSingle();
-          embajadorErId = erRow?.id ?? null;
+            .eq('id_persona', personaRow.id).eq('id_tipo_entidad', tipoEmb.id)
+            .eq('activo', true).maybeSingle();
+          if (erRow?.id) {
+            erIds = [Number(erRow.id)];
+            byErId.set(Number(erRow.id), byEmail.get(emails[0])!);
+          }
         }
       }
+      if (erIds.length === 0) return comisionistasResult;
 
       // DDL probe: url_factura puede no existir aún si el ALTER TABLE no se ha ejecutado
       const facturaColProbe = await (supabase as any)
@@ -224,29 +111,26 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
 
       const refSelect = [
         'id', 'estatus_comision', 'monto_comision', 'monto_venta',
-        'id_entidad_relacionada', 'producto_interes',
+        'id_entidad_relacionada', 'id_entidad_relacionada_emb', 'producto_interes',
         ...(hasFacturaCol ? ['url_factura'] : []),
       ].join(', ');
 
-      const refQuery = embajadorErId
-        ? (supabase as any)
-            .from('embajadores_referidos')
-            .select(refSelect)
-            .eq('id_entidad_relacionada_emb', embajadorErId)
-            .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
-            .eq('activo', true)
-            .order('fecha_creacion', { ascending: false })
-        : { data: null };
-      const { data: refRows } = await refQuery;
+      const { data: refRows } = await (supabase as any)
+        .from('embajadores_referidos')
+        .select(refSelect)
+        .in('id_entidad_relacionada_emb', erIds)
+        .in('estatus_comision', ['generada', 'autorizada', 'pagada'])
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false });
 
       const referralCommissions: EmbComision[] = [];
       if (refRows && refRows.length > 0) {
-        // Waterfall: entidades_relacionadas → personas for client names
-        const erIds = refRows.map((r: any) => r.id_entidad_relacionada).filter(Boolean);
+        // Waterfall: entidades_relacionadas → personas para el nombre del cliente
+        const clientErIds = refRows.map((r: any) => r.id_entidad_relacionada).filter(Boolean);
         const clientNameMap = new Map<number, string>();
-        if (erIds.length > 0) {
+        if (clientErIds.length > 0) {
           const { data: ers } = await (supabase as any)
-            .from('entidades_relacionadas').select('id, id_persona').in('id', erIds);
+            .from('entidades_relacionadas').select('id, id_persona').in('id', clientErIds);
           const personaIds = (ers || []).map((er: any) => er.id_persona).filter(Boolean);
           if (personaIds.length > 0) {
             const { data: personas } = await (supabase as any)
@@ -256,34 +140,32 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
           }
         }
 
-        // Ids of comisionistas already shown (avoid duplicates when comisionistas exists)
-        const existingReferralIds = new Set<string>();
-
         for (const r of refRows as any[]) {
-          const refId = String(r.id);
-          if (existingReferralIds.has(refId)) continue;
           const clientName = clientNameMap.get(r.id_entidad_relacionada) ?? 'Referido';
           const s = r.estatus_comision as string;
-          referralCommissions.push({
+          const status = REF_STATUS_MAP[s] ?? 'en_revision';
+          referralCommissions.push(stamp({
             id_cuenta_cobranza: 0,
-            referralId: refId,
+            referralId: String(r.id),
             porcentaje_comision: 0,
             aprobada: s === 'autorizada' || s === 'pagada',
             pagada: s === 'pagada',
             url_evidencia_pago: null,
-            proyecto: clientName,
+            proyecto: '',
             propiedad: '',
             productoNombre: r.producto_interes || '',
+            clientes: [{ nombre: clientName, porcentaje: 100 }],
             precio_final: r.monto_venta || 0,
             monto_comision: r.monto_comision || 0,
-            status: REF_STATUS_MAP[s] ?? 'en_revision',
+            detailed_status: status,
+            fecha_pago: null,
             cuenta_cobranza_label: `Referido · ${clientName}`,
-            factura_url: hasFacturaCol ? (r.url_factura || null) : null,
-          });
+            factura_url: hasFacturaCol ? r.url_factura || null : null,
+          }, byErId.get(Number(r.id_entidad_relacionada_emb))));
         }
       }
 
-      // Comisionistas takes precedence (formal records); referral entries fill the gap
+      // Comisionistas manda (registro formal); los referidos llenan el hueco.
       return [...comisionistasResult, ...referralCommissions];
     },
   });
@@ -292,12 +174,17 @@ export function useEmbajadorComisiones(email?: string | null, ambassadorId?: str
   const totals = {
     generada:  comisiones.reduce((s, c) => s + c.monto_comision, 0),
     autorizada: comisiones
-      .filter((c) => c.aprobada || ['factura_requerida', 'programada'].includes(c.status))
+      .filter((c) => c.aprobada || ['factura_requerida', 'programada'].includes(c.detailed_status))
       .reduce((s, c) => s + c.monto_comision, 0),
     pagada: comisiones
-      .filter((c) => c.pagada || c.status === 'pagada')
+      .filter((c) => c.pagada || c.detailed_status === 'pagada')
       .reduce((s, c) => s + c.monto_comision, 0),
   };
 
   return { comisiones, totals, isLoading: query.isLoading, refetch: query.refetch };
+}
+
+/** Atajo de un solo embajador (portal cuando se impersona o el propio embajador). */
+export function useEmbajadorComisiones(email?: string | null, ambassadorId?: string | null) {
+  return useEmbajadoresComisiones(email ? [{ email, id: ambassadorId ?? null }] : []);
 }
