@@ -50,7 +50,12 @@ export const FIELD_LABEL_CLS = "mb-1.5 block text-sm font-medium text-muted-fore
 
 // Los campos NO tienen token propio: el estándar es el componente base.
 //   texto    → <Input />        (ui/input.tsx)
-//   select   → <SelectTrigger/> (ui/select.tsx)
+//   select   → <SearchableSelect/> (ui/searchable-select.tsx) ← ÚNICO selector.
+//              Lista corta (≤8): se ve y se usa como un select normal.
+//              Catálogo largo: buscador desde 2 letras, coincidencias por
+//              cercanía. Nunca volcar 30+ opciones en un modal: tapa el
+//              formulario y obliga a scrollear a ciegas.
+//              (ui/select.tsx queda como primitivo de las vistas sin migrar.)
 //   botones  → <Button variant="cancel" | "primary-outline" /> (ui/button.tsx)
 
 // Control segmentado (p. ej. Física / Moral).
