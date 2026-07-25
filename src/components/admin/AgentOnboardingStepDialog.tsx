@@ -5,15 +5,15 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MifielSigningDialog } from "@/components/admin/MifielSigningDialog";
-import { PdfViewerDialog } from "@/components/admin/PdfViewerDialog";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, Download, FileText, CalendarDays, Landmark, Trash2, Camera, Shield, PenTool, Send, Lock, ChevronRight } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, FileText, CalendarDays, Camera, Shield, PenTool, ChevronRight } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,15 +30,12 @@ import { cn } from "@/lib/utils";
 import { ENVIRONMENT } from "@/lib/config";
 import {
   FIELD_LABEL_CLS,
-  FIELD_INPUT_CLS,
-  FIELD_SELECT_TRIGGER_CLS,
-  BTN_SECONDARY_CLS,
-  BTN_PRIMARY_CLS,
   SEG_TRACK_CLS,
   segBtnCls,
   Req,
-  ModalHeader,
-} from "@/components/ui/form-standard";
+  SECTION_HEADER_CLS,
+  ModalFormHeader,
+} from "@/components/ui/modal-form";
 import {
   useStabilityDetection,
   CaptureFlash,
@@ -53,28 +50,31 @@ interface AgentOnboardingStepDialogProps {
   personaId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Pestaña inicial dentro del paso (p. ej. 'address' para ir directo a firmar la carta). */
+  initialTab?: string;
+  /** Paso bancario: 'create' abre el formulario vacío; 'edit' carga `bankAccountId`. */
+  bankMode?: 'create' | 'edit';
+  bankAccountId?: number | null;
 }
 
 const STEP_TITLES: Record<string, string> = {
   basic: 'Identidad',
   address: 'Dirección',
   fiscal: 'Información Fiscal',
-  documents: 'Documentos',
+  documents: 'Carta de comercialización',
   'bank-accounts': 'Cuenta Bancaria',
   training: 'Capacitación',
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
-  basic: 'Datos personales, dirección e INE',
+  basic: 'Datos personales y dirección',
   address: 'Tu dirección física completa',
   fiscal: 'RFC, régimen fiscal, constancia y dirección fiscal',
-  documents: 'INE y Constancia',
+  documents: 'Firma digital de tu Carta de comercialización',
   'bank-accounts': 'Agrega tu cuenta bancaria',
   training: 'Agenda tu cita de capacitación presencial',
 };
 
-// Required document types for basic step (INE frente=2, INE reverso=3, Pasaporte=4, Carta comercialización=48)
-const BASIC_DOC_TYPES = [2, 3, 4, 48];
 // Constancia de situación fiscal (type 6) for fiscal step
 const FISCAL_DOC_TYPES = [6];
 // All required doc types for onboarding queries
@@ -88,34 +88,12 @@ const PASAPORTE_DOC_TYPE = 4;
 // Selfie document type
 const SELFIE_DOC_TYPE = 49;
 
-export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange }: AgentOnboardingStepDialogProps) {
+export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange, initialTab, bankMode = 'edit', bankAccountId = null }: AgentOnboardingStepDialogProps) {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { track } = useCtaTracker();
   const { hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
   const hasTrackedFieldChange = useRef(false);
-
-  // Check if agent belongs to an inmobiliaria (to hide doc 48)
-  const { data: hasInmobiliaria } = useQuery({
-    queryKey: ['agent-step-dialog-inmo', personaId],
-    queryFn: async () => {
-      if (!personaId) return false;
-      const { data } = await supabase
-        .from('entidades_relacionadas')
-        .select('id')
-        .eq('id_persona', personaId)
-        .eq('id_tipo_entidad', 19)
-        .eq('activo', true)
-        .not('id_persona_duena_lead', 'is', null)
-        .limit(1);
-      return (data && data.length > 0) || false;
-    },
-    enabled: !!personaId,
-  });
-
-  // Filter out doc type 48 for agents with inmobiliaria
-  const effectiveBasicDocTypes = hasInmobiliaria ? BASIC_DOC_TYPES.filter(t => t !== 48) : BASIC_DOC_TYPES;
-  const effectiveRequiredDocTypes = hasInmobiliaria ? REQUIRED_DOC_TYPES.filter(t => t !== 48) : REQUIRED_DOC_TYPES;
 
   // Track opening the step
   useEffect(() => {
@@ -140,8 +118,18 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
     enabled: open && !!personaId,
   });
 
-  const title = STEP_TITLES[step];
-  const description = STEP_DESCRIPTIONS[step];
+  // El paso bancario distingue alta de edición (misma UI, distinto encabezado).
+  const isBankCreate = step === 'bank-accounts' && bankMode === 'create';
+  const title =
+    step === 'bank-accounts'
+      ? (isBankCreate ? 'Nueva cuenta bancaria' : 'Editar cuenta bancaria')
+      : STEP_TITLES[step];
+  const description =
+    step === 'bank-accounts'
+      ? (isBankCreate
+          ? 'Queda pendiente de activación hasta que la validemos'
+          : 'Corrige los datos de tu cuenta registrada')
+      : STEP_DESCRIPTIONS[step];
 
   const handleSaved = async () => {
     // Await refetch while dialog is still open (query enabled) to avoid stale cache
@@ -158,8 +146,11 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       <Loader2 className="h-6 w-6 animate-spin text-primary" />
     </div>
   ) : step === 'documents' ? (
-    <div className="px-1">
-      <AgentDocumentsStep personaId={personaId} filterDocTypes={effectiveRequiredDocTypes} onTrackFieldChange={() => {
+    // El paso "documents" quedó dedicado exclusivamente a la firma de la Carta de
+    // comercialización (tipo 48). La identidad (INE/pasaporte) y la CSF se suben
+    // desde el Expediente / paso fiscal. Solo aplica a agentes independientes.
+    <div>
+      <AgentDocumentsStep personaId={personaId} filterDocTypes={[48]} onTrackFieldChange={() => {
         if (!hasTrackedFieldChange.current) {
           hasTrackedFieldChange.current = true;
           track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -167,8 +158,8 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       }} onTrackDocView={(docName: string) => track({ page: "modal_perfil", elementId: "perfil_documentos_ver", metadata: { documento: docName } })} />
     </div>
   ) : step === 'bank-accounts' ? (
-    <div className="px-1">
-      <AgentBankAccountStep personaId={personaId} onTrackFieldChange={() => {
+    <div>
+      <AgentBankAccountStep personaId={personaId} mode={bankMode} accountId={bankAccountId} onTrackFieldChange={() => {
         if (!hasTrackedFieldChange.current) {
           hasTrackedFieldChange.current = true;
           track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -176,7 +167,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       }} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: "bank-accounts" } })} />
     </div>
   ) : step === 'training' ? (
-    <div className="px-1">
+    <div>
       <AgentTrainingStep personaId={personaId} onSaved={handleSaved} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
         if (!hasTrackedFieldChange.current) {
           hasTrackedFieldChange.current = true;
@@ -185,7 +176,7 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
       }} />
     </div>
   ) : (
-    <StepForm step={step} persona={persona} personaId={personaId} onSaved={handleSaved} onClose={() => onOpenChange(false)} basicDocTypes={effectiveBasicDocTypes} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
+    <StepForm step={step} persona={persona} personaId={personaId} initialTab={initialTab} onSaved={handleSaved} onClose={() => onOpenChange(false)} onTrackSave={() => track({ page: "modal_perfil", elementId: "perfil_fase_guardar", metadata: { fase: step } })} onTrackFieldChange={() => {
       if (!hasTrackedFieldChange.current) {
         hasTrackedFieldChange.current = true;
         track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -213,9 +204,9 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[540px] w-[calc(100vw-2rem)] max-h-[90vh] gap-0 overflow-hidden rounded-md border border-[#ECEEF0] bg-white p-0 shadow-lg">
-        <ModalHeader title={title} subtitle={description} />
-        <div className="max-h-[calc(90vh-5.5rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden px-[22px] py-[22px]">
+      <DialogContent className="max-w-[540px] w-[calc(100vw-2rem)] max-h-[90vh] gap-0 overflow-hidden rounded-md border border-border bg-card p-0 shadow-lg">
+        <ModalFormHeader title={title} subtitle={description} />
+        <div className="max-h-[calc(90vh-5.5rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden px-6 py-5">
           {content}
         </div>
       </DialogContent>
@@ -1197,21 +1188,21 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
             <h3 className="text-base font-bold text-foreground">Revisa tu captura</h3>
             <p className="text-xs font-medium text-muted-foreground">{previewLabel} · Verifica que se vea completo y legible</p>
           </div>
-          <div className="relative rounded-2xl overflow-hidden border-4 border-[hsl(158_64%_38%)]/40 bg-black aspect-[8/5]">
+          <div className="relative rounded-2xl overflow-hidden border-4 border-primary/40 bg-black aspect-[8/5]">
             <img src={docPreviewUrl} alt="Captura" className="w-full h-full object-contain" />
           </div>
           <div className="flex gap-2 pt-1">
             <button
               onClick={retakeDocPreview}
               disabled={busy}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[#ECEEF0] px-4 py-3 text-sm font-semibold text-[#6B7280] transition-colors hover:bg-[#F6F7F8] disabled:opacity-50"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border px-4 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >
               <RefreshCw className="h-4 w-4" /> Repetir
             </button>
             <button
               onClick={confirmDocPreview}
               disabled={busy}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(158_64%_38%)] bg-white px-4 py-3 text-sm font-bold text-[hsl(158_64%_38%)] transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] disabled:opacity-50"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-primary bg-card px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/[0.06] disabled:opacity-50"
             >
               {uploading !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Continuar
             </button>
@@ -1278,7 +1269,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
               </button>
             ))}
           </div>
-          <p className="text-[11.5px] font-medium text-[#9AA3AD]">
+          <p className="text-xs font-medium text-muted-foreground/70">
             Solo necesitas uno. Elige el documento que vas a usar; la validación se hace sola al tomar las fotos.
           </p>
         </div>
@@ -1323,7 +1314,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           return (
             <div
               key={typeId}
-              className="rounded-md border border-[#ECEEF0] bg-white transition-colors"
+              className="rounded-md border border-border bg-card transition-colors"
             >
               <div className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -1335,7 +1326,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   </div>
                   <Badge
                     variant="outline"
-                    className={`text-[10px] px-2 py-0.5 shrink-0 ${firmaStatus.color} ${firmaStatus.bg} border-0`}
+                    className={`text-xs px-2 py-0.5 shrink-0 ${firmaStatus.color} ${firmaStatus.bg} border-0`}
                   >
                     <FirmaIcon className="h-3 w-3 mr-1" />
                     {firmaStatus.label}
@@ -1343,16 +1334,15 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                 </div>
 
                 <div className="flex gap-2">
-                  {/* View PDF if available */}
-                  {(pdfUrl || doc?.url) && (
+                  {/* Ver PDF: firmado completo (bucket privado) o carta subida a mano.
+                      En 'enviado'/'firmado_parcial' no se ofrece el PDF. */}
+                  {((firmaCompletada && pdfUrl) || doc?.url) && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCartaPdfViewerUrl(pdfUrl || doc?.url || null)}
-                      className="h-10 px-3 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Ver PDF
+                      onClick={() => setCartaPdfViewerUrl((firmaCompletada && pdfUrl) ? pdfUrl : (doc?.url || null))}
+                      className="h-10 px-3 rounded-md transition-colors font-bold text-xs gap-1.5 border-primary text-primary hover:bg-primary/[0.06]"
+                    > Ver PDF
                     </Button>
                   )}
 
@@ -1364,7 +1354,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                           disabled
                           className="w-full h-10 rounded-md font-semibold text-xs gap-1.5"
                         >
-                          <Lock className="h-3.5 w-3.5" />
                           Completa tu información básica y documentos para firmar
                         </Button>
                       </div>
@@ -1374,16 +1363,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                       disabled={sendingToMifiel}
                       onClick={() => handleRequestAgentSignature("firmar")}
                       variant="outline"
-                      className="flex-1 h-10 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]"
-                    >
-                      {sendingToMifiel ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <>
-                          <PenTool className="h-3.5 w-3.5" />
-                          Firmar Carta
-                        </>
-                      )}
+                      className="flex-1 h-10 rounded-md transition-colors font-bold text-xs gap-1.5 border-primary text-primary hover:bg-primary/[0.06]"
+                    > {sendingToMifiel ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> ) : (
+                        <> Firmar Carta
+                        </> )}
                     </Button>
                     )
                   )}
@@ -1396,19 +1380,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                       onClick={pendienteContraparte ? undefined : () => handleContinuarFirmaInternal()}
                       disabled={syncingFirma || pendienteContraparte}
                       className={cn(
-                        "flex-1 h-10 rounded-md transition-colors font-bold text-xs gap-1.5 border-[hsl(158_64%_38%)] text-[hsl(158_64%_38%)] hover:bg-[hsl(158_64%_38%)]/[0.06]",
+                        "flex-1 h-10 rounded-md transition-colors font-bold text-xs gap-1.5 border-primary text-primary hover:bg-primary/[0.06]",
                         pendienteContraparte
                           ? "opacity-70 cursor-not-allowed"
                           : ""
                       )}
                     >
-                      {syncingFirma ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : pendienteContraparte ? (
-                        <Clock className="h-3.5 w-3.5" />
-                      ) : (
-                        <Send className="h-3.5 w-3.5" />
-                      )}
+                      {syncingFirma && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       {syncingFirma
                         ? 'Sincronizando...'
                         : pendienteContraparte
@@ -1428,7 +1406,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         return (
           <div
             key={typeId}
-            className="rounded-md border border-[#ECEEF0] bg-white transition-colors"
+            className="rounded-md border border-border bg-card transition-colors"
           >
             <div className="flex items-center gap-3 p-4">
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1439,7 +1417,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                 <div className="mt-1">
                   <Badge
                     variant="outline"
-                    className={`text-[10px] px-2 py-0.5 ${status.color} ${status.bg} border-0`}
+                    className={`text-xs px-2 py-0.5 ${status.color} ${status.bg} border-0`}
                   >
                     <StatusIcon className="h-3 w-3 mr-1" />
                     {status.label}
@@ -1454,7 +1432,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                     onClick={() => setDocView({ url: doc.url, nombre: docType?.nombre || 'Documento' })}
                     title="Ver documento"
                     aria-label="Ver documento"
-                    className="h-[34px] w-[34px] p-0 rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                    className="h-[34px] w-[34px] p-0 rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
                   >
                     <FileText className="h-4 w-4" />
                   </Button>
@@ -1466,7 +1444,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   onClick={() => isCameraDoc ? startDocumentCamera(typeId) : handleFileSelect(typeId)}
                   title={isCameraDoc ? (doc ? 'Volver a tomar foto' : 'Tomar foto') : (doc ? 'Reemplazar documento' : 'Subir documento')}
                   aria-label={isCameraDoc ? (doc ? 'Volver a tomar foto' : 'Tomar foto') : (doc ? 'Reemplazar documento' : 'Subir documento')}
-                  className="h-[34px] w-[34px] p-0 rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                  className="h-[34px] w-[34px] p-0 rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
                 >
                   {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCameraDoc ? <Camera className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
                 </Button>
@@ -1487,33 +1465,22 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         />
       )}
 
-      <PdfViewerDialog
+      <ModalViewer
         open={!!cartaPdfViewerUrl}
         onOpenChange={(open) => { if (!open) setCartaPdfViewerUrl(null); }}
         url={cartaPdfViewerUrl || ""}
         title="Carta de Cumplimiento"
       />
 
-      {/* Visor interno del expediente: PDF → PdfViewerDialog; imagen → visor propio */}
-      {docView && /\.pdf(\?|$)/i.test(docView.url) ? (
-        <PdfViewerDialog
+      {/* Visor interno del expediente (PDF o imagen): estándar ui/modal-viewer */}
+      {docView && (
+        <ModalViewer
           open
           onOpenChange={(open) => { if (!open) setDocView(null); }}
           url={docView.url}
           title={docView.nombre}
         />
-      ) : docView ? (
-        <Dialog open onOpenChange={(open) => { if (!open) setDocView(null); }}>
-          <DialogContent className="max-w-3xl w-[92vw] gap-0 overflow-hidden rounded-md border border-[#ECEEF0] bg-white p-0">
-            <div className="flex items-center border-b border-[#ECEEF0] px-[22px] py-4 pr-12">
-              <DialogTitle className="truncate text-[15px] font-bold text-[#171A1D]">{docView.nombre}</DialogTitle>
-            </div>
-            <div className="flex max-h-[78vh] items-center justify-center overflow-auto bg-[#0b0b0b] p-3">
-              <img src={docView.url} alt={docView.nombre} className="max-h-[74vh] max-w-full object-contain" />
-            </div>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+      )}
 
       <SignaturePadDialog
         open={agentSignaturePadOpen}
@@ -1957,25 +1924,25 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
             {allCitas.map((cita: any) => {
               const status = getTrainingAppointmentStatus(cita);
               const badge = status.tone === 'success'
-                ? <Badge className="bg-emerald-500 text-white border-0 text-[10px]"><CheckCircle2 className="h-3 w-3 mr-0.5" />Confirmada</Badge>
+                ? <Badge className="bg-emerald-500 text-white border-0 text-xs"><CheckCircle2 className="h-3 w-3 mr-0.5" />Confirmada</Badge>
                 : status.tone === 'warning'
-                  ? <Badge className="bg-amber-500 text-white border-0 text-[10px]"><Clock className="h-3 w-3 mr-0.5" />Pend. confirmación</Badge>
+                  ? <Badge className="bg-amber-500 text-white border-0 text-xs"><Clock className="h-3 w-3 mr-0.5" />Pend. confirmación</Badge>
                   : status.tone === 'info'
-                    ? <Badge className="bg-blue-500 text-white border-0 text-[10px]"><CalendarDays className="h-3 w-3 mr-0.5" />Agendada</Badge>
+                    ? <Badge className="bg-blue-500 text-white border-0 text-xs"><CalendarDays className="h-3 w-3 mr-0.5" />Agendada</Badge>
                     : status.tone === 'danger'
-                      ? <Badge variant="destructive" className="text-[10px]">No asistió</Badge>
-                      : <Badge variant="outline" className="text-[10px]">{status.label}</Badge>;
+                      ? <Badge variant="destructive" className="text-xs">No asistió</Badge>
+                      : <Badge variant="outline" className="text-xs">{status.label}</Badge>;
               return (
                 <div key={cita.id} className="flex items-center justify-between rounded-lg border border-border/60 p-2.5 bg-card">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium">{cita.fecha}</span>
                       {cita.hora_inicio?.slice(0, 5) !== '00:00' && (
-                        <span className="text-[10px] text-muted-foreground">{cita.hora_inicio?.slice(0, 5)}</span>
+                        <span className="text-xs text-muted-foreground">{cita.hora_inicio?.slice(0, 5)}</span>
                       )}
                       {badge}
                     </div>
-                    {cita.display_name && <p className="text-[10px] text-muted-foreground">{cita.display_name}</p>}
+                    {cita.display_name && <p className="text-xs text-muted-foreground">{cita.display_name}</p>}
                   </div>
                 </div>
               );
@@ -2044,7 +2011,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
               <button
                 onClick={handleAlreadyAttended}
                 disabled={saving || !attendedDate}
-                className="w-full py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm tracking-wide transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
+                className="w-full py-4 rounded-md border border-primary bg-card text-primary font-bold text-sm tracking-wide transition-colors hover:bg-primary/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</> : "Reportar asistencia"}
               </button>
@@ -2120,7 +2087,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                         const cfgSlots = dbSlots.filter(s => s.config_id === cfg.id);
                         return (
                           <div key={cfg.id} className="space-y-2">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            <p className={cn(SECTION_HEADER_CLS, "mb-0")}>
                               {cfg.owner_display_name ? `${cfg.nombre} (capacitador: ${cfg.owner_display_name})` : cfg.nombre}
                             </p>
                             <div className="grid grid-cols-2 gap-2">
@@ -2153,7 +2120,7 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                                           : slot.is_full
                                             ? 'bg-muted/50 border-border/30 text-muted-foreground/50 cursor-not-allowed'
                                             : isSelected
-                                              ? 'bg-white text-[hsl(158_64%_38%)] border-[hsl(158_64%_38%)] scale-[1.02]'
+                                              ? 'bg-card text-primary border-primary scale-[1.02]'
                                               : isExisting
                                                 ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30'
                                                 : 'bg-card border-border/60 text-foreground hover:border-primary/40 hover:bg-primary/5'
@@ -2161,10 +2128,10 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                                   >
                                     <span>{slot.hora}</span>
                                     {isCancelledSlot && (
-                                      <span className="ml-2 text-[10px] text-destructive/70">cancelado</span>
+                                      <span className="ml-2 text-xs text-destructive/70">cancelado</span>
                                     )}
                                     {!isCancelledSlot && (
-                                      <span className={`ml-2 text-[10px] ${slot.is_full ? 'text-destructive/60' : 'text-muted-foreground'}`}>
+                                      <span className={`ml-2 text-xs ${slot.is_full ? 'text-destructive/60' : 'text-muted-foreground'}`}>
                                         {slot.attendees}/{slot.max_invitados}
                                       </span>
                                     )}
@@ -2188,13 +2155,15 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
                 </div>
               )}
 
-              <button
-                onClick={handleSchedule}
-                disabled={saving || !selectedDate || !selectedSlot}
-                className="w-full py-4 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm tracking-wide transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : "Agendar Cita"}
-              </button>
+              <div className="flex justify-end pt-1">
+                <Button
+                  variant="primary-outline"
+                  onClick={handleSchedule}
+                  disabled={saving || !selectedDate || !selectedSlot}
+                >
+                  {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Agendando...</> : citaCancelledExternally ? "Reprogramar Cita" : "Agendar Cita"}
+                </Button>
+              </div>
             </>
           )}
         </>
@@ -2212,13 +2181,36 @@ interface StepFormProps {
   onClose?: () => void;
   onTrackSave?: () => void;
   onTrackFieldChange?: () => void;
-  basicDocTypes?: number[];
+  initialTab?: string;
 }
 
-function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onTrackFieldChange, basicDocTypes }: StepFormProps) {
+function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onTrackFieldChange, initialTab }: StepFormProps) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState(step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '');
+  const [activeTab, setActiveTab] = useState(
+    initialTab || (step === 'basic' ? 'personal' : step === 'fiscal' ? 'datos' : '')
+  );
+
+  // ¿Agente independiente? (sin inmobiliaria). Solo a ellos se les pide la Carta
+  // de comercialización, que se firma al final del paso Identidad (tab Dirección).
+  const { data: hasInmobiliaria = false } = useQuery({
+    queryKey: ['stepform-inmo', personaId],
+    queryFn: async () => {
+      if (!personaId) return false;
+      const { data } = await supabase
+        .from('entidades_relacionadas')
+        .select('id')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .not('id_persona_duena_lead', 'is', null)
+        .limit(1);
+      return (data && data.length > 0) || false;
+    },
+    enabled: !!personaId,
+    staleTime: 60_000,
+  });
+  const esIndependiente = !hasInmobiliaria;
 
   // Basic fields
   const [nombre, setNombre] = useState('');
@@ -2505,64 +2497,71 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
     <div className="space-y-4">
       <div>
         <Label className={FIELD_LABEL_CLS}>Calle <Req /></Label>
-        <Input value={calleVal} onChange={(e) => setCalleVal(e.target.value)} placeholder="Av. Insurgentes Sur" className={FIELD_INPUT_CLS} />
+        <Input value={calleVal} onChange={(e) => setCalleVal(e.target.value)} placeholder="Av. Insurgentes Sur" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className={FIELD_LABEL_CLS}>Num. Ext. <Req /></Label>
-          <Input value={numExtVal} onChange={(e) => setNumExtVal(e.target.value)} placeholder="1234" className={FIELD_INPUT_CLS} />
+          <Input value={numExtVal} onChange={(e) => setNumExtVal(e.target.value)} placeholder="1234" />
         </div>
         <div>
           <Label className={FIELD_LABEL_CLS}>Num. Int.</Label>
-          <Input value={numIntVal} onChange={(e) => setNumIntVal(e.target.value)} placeholder="4B" className={FIELD_INPUT_CLS} />
+          <Input value={numIntVal} onChange={(e) => setNumIntVal(e.target.value)} placeholder="4B" />
         </div>
       </div>
       <div>
         <Label className={FIELD_LABEL_CLS}>Colonia <Req /></Label>
-        <Input value={coloniaVal} onChange={(e) => setColoniaVal(e.target.value)} placeholder="Del Valle" className={FIELD_INPUT_CLS} />
+        <Input value={coloniaVal} onChange={(e) => setColoniaVal(e.target.value)} placeholder="Del Valle" />
       </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>Código Postal <Req /></Label>
-        <Input value={cpVal} onChange={(e) => setCpVal(e.target.value)} placeholder="03100" className={FIELD_INPUT_CLS} maxLength={5} />
+      {/* Desktop: CP + País en una fila, Estado + Municipio en la siguiente. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <Label className={FIELD_LABEL_CLS}>Código Postal <Req /></Label>
+          <Input value={cpVal} onChange={(e) => setCpVal(e.target.value)} placeholder="03100" maxLength={5} />
+        </div>
+        <div>
+          <Label className={FIELD_LABEL_CLS}>País <Req /></Label>
+          <Select value={paisVal} onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}>
+            <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
+            <SelectContent>
+              {paises.map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>País <Req /></Label>
-        <Select value={paisVal} onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
-          <SelectContent>
-            {paises.map((p: any) => (
-              <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>Estado <Req /></Label>
-        <Select value={estadoVal} onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
-          <SelectContent>
-            {filteredEstados(paisVal).map((e: any) => (
-              <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        <Label className={FIELD_LABEL_CLS}>Municipio <Req /></Label>
-        <Select value={municipioVal} onValueChange={setMunicipioVal}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
-          <SelectContent>
-            {filteredMunicipios(estadoVal).map((m: any) => (
-              <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <Label className={FIELD_LABEL_CLS}>Estado <Req /></Label>
+          <Select value={estadoVal} onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}>
+            <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
+            <SelectContent>
+              {filteredEstados(paisVal).map((e: any) => (
+                <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className={FIELD_LABEL_CLS}>Municipio <Req /></Label>
+          <Select value={municipioVal} onValueChange={setMunicipioVal}>
+            <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
+            <SelectContent>
+              {filteredMunicipios(estadoVal).map((m: any) => (
+                <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );
 
-  const basicTabs = ['personal', 'address', 'documents'] as const;
-  const basicTabLabels = ['Datos personales', 'Dirección', 'Documentos'];
+  // La identidad (INE/pasaporte) ya no se captura aquí: se sube desde el Expediente.
+  // El paso "Identidad" solo recoge datos personales + dirección.
+  const basicTabs = ['personal', 'address'] as const;
+  const basicTabLabels = ['Datos personales', 'Dirección'];
   const fiscalTabs = ['datos', 'direccion', 'constancia'] as const;
   const fiscalTabLabels = ['Datos', 'Dirección', 'Constancia'];
 
@@ -2651,10 +2650,9 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
     <div className="space-y-5 pb-4">
       {step === 'basic' && (
         <Tabs value={activeTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="personal" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Datos personales</TabsTrigger>
-            <TabsTrigger value="address" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Dirección</TabsTrigger>
-            <TabsTrigger value="documents" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Documentos</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="personal" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Datos personales</TabsTrigger>
+            <TabsTrigger value="address" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Dirección</TabsTrigger>
           </TabsList>
 
           {/* Indicador de progreso (solo visual, no navega) */}
@@ -2665,7 +2663,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
                 i === currentTabIndex ? "w-6 bg-primary" : i < currentTabIndex ? "w-4 bg-primary/60" : "w-4 bg-muted"
               )} />
             ))}
-            <span className="text-[10px] text-muted-foreground ml-2">
+            <span className="text-xs text-muted-foreground ml-2">
               {currentTabIndex + 1} de {basicTabs.length}
             </span>
           </div>
@@ -2673,28 +2671,28 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
           <TabsContent value="personal" className="space-y-4">
             <div>
               <Label className={FIELD_LABEL_CLS}>Nombre completo <Req /></Label>
-              <Input value={nombre} onChange={(e) => { setNombre(e.target.value); onTrackFieldChange?.(); }} placeholder="Juan Pérez García" className={FIELD_INPUT_CLS} />
+              <Input value={nombre} onChange={(e) => { setNombre(e.target.value); onTrackFieldChange?.(); }} placeholder="Juan Pérez García" />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Correo electrónico <Req /></Label>
-              <Input type="email" value={email} disabled className={FIELD_INPUT_CLS} />
+              <Input type="email" value={email} disabled />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Teléfono (10 dígitos) <Req /></Label>
-              <Input value={telefono} onChange={(e) => { setTelefono(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }} maxLength={10} placeholder="5512345678" className={FIELD_INPUT_CLS} />
+              <Input value={telefono} onChange={(e) => { setTelefono(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }} maxLength={10} placeholder="5512345678" />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>CURP <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-              <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="GARC850101HDFRRL09" className={FIELD_INPUT_CLS} />
+              <Input value={curp} onChange={(e) => setCurp(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={18} placeholder="GARC850101HDFRRL09" />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Tipo de Persona</Label>
-              <Input value="Persona Física" disabled className={FIELD_INPUT_CLS} />
+              <Input value="Persona Física" disabled />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Sexo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
               <Select value={sexo} onValueChange={setSexo}>
-                <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="M">Masculino</SelectItem>
                   <SelectItem value="F">Femenino</SelectItem>
@@ -2707,9 +2705,14 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
               'dir', calle, setCalle, numExt, setNumExt, numInt, setNumInt,
               colonia, setColonia, cp, setCp, idPais, setIdPais, idEstado, setIdEstado, idMunicipio, setIdMunicipio
             )}
-          </TabsContent>
-          <TabsContent value="documents" className="space-y-4">
-            <AgentDocumentsStep personaId={personaId} filterDocTypes={basicDocTypes || BASIC_DOC_TYPES} onTrackFieldChange={onTrackFieldChange} />
+            {/* Carta de comercialización (firma Mifiel): solo agentes independientes.
+                La identidad (INE/pasaporte) NO se captura aquí; va en el Expediente. */}
+            {esIndependiente && (
+              <div className="border-t border-border pt-4">
+                <div className="mb-2 text-sm font-bold text-foreground">Carta de comercialización</div>
+                <AgentDocumentsStep personaId={personaId} filterDocTypes={[48]} onTrackFieldChange={onTrackFieldChange} />
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       )}
@@ -2722,9 +2725,9 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
       {step === 'fiscal' && (
         <Tabs value={activeTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="datos" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Datos</TabsTrigger>
-            <TabsTrigger value="direccion" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Dirección</TabsTrigger>
-            <TabsTrigger value="constancia" className="text-xs pointer-events-none data-[state=active]:bg-white data-[state=active]:text-[hsl(158_64%_38%)] data-[state=active]:font-semibold">Constancia</TabsTrigger>
+            <TabsTrigger value="datos" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Datos</TabsTrigger>
+            <TabsTrigger value="direccion" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Dirección</TabsTrigger>
+            <TabsTrigger value="constancia" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Constancia</TabsTrigger>
           </TabsList>
 
           {/* Indicador de progreso (solo visual, no navega) */}
@@ -2735,7 +2738,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
                 i === currentTabIndex ? "w-6 bg-primary" : i < currentTabIndex ? "w-4 bg-primary/60" : "w-4 bg-muted"
               )} />
             ))}
-            <span className="text-[10px] text-muted-foreground ml-2">
+            <span className="text-xs text-muted-foreground ml-2">
               {currentTabIndex + 1} de {fiscalTabs.length}
             </span>
           </div>
@@ -2743,12 +2746,12 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
           <TabsContent value="datos" className="space-y-4">
             <div>
               <Label className={FIELD_LABEL_CLS}>RFC <Req /></Label>
-              <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} maxLength={13} placeholder="PEGJ850101H2A" className={FIELD_INPUT_CLS} />
+              <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} maxLength={13} placeholder="PEGJ850101H2A" />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Régimen Fiscal <Req /></Label>
               <Select value={regimen} onValueChange={setRegimen}>
-                <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
                   {regimenes.map((r: any) => (
                     <SelectItem key={r.id} value={r.id.toString()}>{r.nombre}</SelectItem>
@@ -2759,7 +2762,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
             <div>
               <Label className={FIELD_LABEL_CLS}>Uso CFDI <Req /></Label>
               <Select value={usoCfdi} onValueChange={setUsoCfdi}>
-                <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
                 <SelectContent>
                   {usosCfdi.map((u: any) => (
                     <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</SelectItem>
@@ -2785,29 +2788,25 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
       )}
 
       {/* Navigation buttons (estándar: derecha, outline verde) */}
-      <div className="flex justify-end gap-2.5 border-t border-[#ECEEF0] pt-4 mt-2">
+      <div className="flex justify-end gap-2.5 border-t border-border pt-4 mt-2">
         {currentTabIndex > 0 && (
-          <button
-            onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}
-            className={BTN_SECONDARY_CLS}
-          >
-            Atrás
-          </button>
+          <Button variant="outline" onClick={() => setActiveTab(currentTabs[currentTabIndex - 1])}> Atrás
+          </Button>
         )}
         {isDocTab && isLastTab ? (
-          <button onClick={handleSave} disabled={saving} className={BTN_PRIMARY_CLS}>
+          <Button variant="primary-outline" onClick={handleSave} disabled={saving}>
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Finalizar"}
-          </button>
+          </Button>
         ) : !isDocTab && (
-          <button
+          <Button
+            variant="primary-outline"
             onClick={isLastTab ? handleSave : handleNextTab}
             disabled={saving}
-            className={BTN_PRIMARY_CLS}
           >
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : isLastTab ? "Guardar y finalizar" : (
               <>Siguiente <ChevronRight className="h-4 w-4" /></>
             )}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -2816,7 +2815,21 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
 
 // ---------- Agent Bank Account Step (single account, evidence required) ----------
 
-function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { personaId: number; onTrackFieldChange?: () => void; onTrackSave?: () => void }) {
+function AgentBankAccountStep({
+  personaId,
+  mode = 'edit',
+  accountId = null,
+  onTrackFieldChange,
+  onTrackSave,
+}: {
+  personaId: number;
+  /** 'create' → formulario vacío para una cuenta nueva; 'edit' → carga la cuenta. */
+  mode?: 'create' | 'edit';
+  /** Cuenta a editar. Si no se pasa en modo 'edit', toma la más reciente. */
+  accountId?: number | null;
+  onTrackFieldChange?: () => void;
+  onTrackSave?: () => void;
+}) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [bankId, setBankId] = useState('');
@@ -2826,7 +2839,8 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
   const [titular, setTitular] = useState('');
   const [titularIsSamePerson, setTitularIsSamePerson] = useState(false);
   const [existingId, setExistingId] = useState<number | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+
+  const isCreate = mode === 'create';
 
   // Fetch persona name for "same person" checkbox
   const { data: personaName } = useQuery({
@@ -2846,36 +2860,34 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
     },
   });
 
+  // En modo 'create' no se carga ninguna cuenta: el formulario arranca vacío.
   const { data: existingAccount, isLoading } = useQuery({
-    queryKey: ['agent-bank-account', personaId],
+    queryKey: ['agent-bank-account', personaId, accountId],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = (supabase as any)
         .from('cuentas_bancarias')
         .select('*, banco:bancos(nombre)')
         .eq('id_persona', personaId)
-        .eq('activo', true)
-        .order('fecha_creacion', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq('activo', true);
+      if (accountId) q = q.eq('id', accountId);
+      const { data } = await q.order('fecha_creacion', { ascending: false }).limit(1).maybeSingle();
       return data;
     },
-    enabled: !!personaId,
+    enabled: !!personaId && !isCreate,
   });
 
   useEffect(() => {
-    if (existingAccount) {
-      setBankId(existingAccount.id_banco?.toString() || '');
-      setNumeroCuenta(existingAccount.numero_cuenta || '');
-      setClabe(existingAccount.cuenta_clabe || '');
-      setEvidencia(existingAccount.url_evidencia || '');
-      setTitular((existingAccount as any).titular || '');
-      setExistingId(existingAccount.id);
-      // Check if titular matches persona name
-      if ((existingAccount as any).titular && personaName && (existingAccount as any).titular === personaName) {
-        setTitularIsSamePerson(true);
-      }
+    if (isCreate || !existingAccount) return;
+    setBankId(existingAccount.id_banco?.toString() || '');
+    setNumeroCuenta(existingAccount.numero_cuenta || '');
+    setClabe(existingAccount.cuenta_clabe || '');
+    setEvidencia(existingAccount.url_evidencia || '');
+    setTitular((existingAccount as any).titular || '');
+    setExistingId(existingAccount.id);
+    if ((existingAccount as any).titular && personaName && (existingAccount as any).titular === personaName) {
+      setTitularIsSamePerson(true);
     }
-  }, [existingAccount, personaName]);
+  }, [existingAccount, personaName, isCreate]);
 
   const handleSave = async () => {
     onTrackSave?.();
@@ -2891,19 +2903,28 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
       toast.error("La evidencia es obligatoria.");
       return;
     }
-    const len = numeroCuenta.length;
     if (!/^\d+$/.test(numeroCuenta)) {
       toast.error("El número de cuenta solo debe contener dígitos.");
       return;
     }
-    if (len < 8 || len > 34) {
+    if (numeroCuenta.length < 8 || numeroCuenta.length > 34) {
       toast.error("El número de cuenta debe tener entre 8 y 34 dígitos.");
+      return;
+    }
+    // La CLABE es de 18 dígitos y NO es el número de cuenta: confundirlas manda
+    // la dispersión al vacío, así que se valida antes de guardar.
+    if (clabe && clabe.length !== 18) {
+      toast.error("La CLABE debe tener exactamente 18 dígitos.");
+      return;
+    }
+    if (clabe && clabe === numeroCuenta) {
+      toast.error("El número de cuenta y la CLABE no pueden ser iguales.");
       return;
     }
 
     setSaving(true);
     try {
-      const accountData = {
+      const accountData: Record<string, any> = {
         id_banco: parseInt(bankId),
         numero_cuenta: numeroCuenta,
         cuenta_clabe: clabe || null,
@@ -2912,18 +2933,30 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
         id_persona: personaId,
       };
 
-      if (existingId) {
+      if (existingId && !isCreate) {
+        // Si cambian los datos de dispersión, la cuenta vuelve a validación.
+        const cambioSensible =
+          String(existingAccount?.id_banco ?? '') !== String(accountData.id_banco) ||
+          (existingAccount?.numero_cuenta || '') !== numeroCuenta ||
+          (existingAccount?.cuenta_clabe || '') !== (clabe || '');
+        if (cambioSensible) accountData.id_estatus_verificacion = 1;
         const { error } = await (supabase as any).from('cuentas_bancarias').update(accountData).eq('id', existingId);
         if (error) throw error;
       } else {
+        // Cuenta nueva → siempre pendiente de validación.
+        accountData.id_estatus_verificacion = 1;
         const { error } = await (supabase as any).from('cuentas_bancarias').insert([accountData]);
         if (error) throw error;
       }
 
-      toast.success("Cuenta bancaria guardada.");
+      toast.success(
+        existingId && !isCreate
+          ? "Cuenta bancaria actualizada."
+          : "Cuenta registrada. Queda pendiente de activación hasta que la validemos.",
+      );
       queryClient.invalidateQueries({ queryKey: ['agent-bank-account'] });
       queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
-      setIsEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['agent-perfil-bancos'] });
     } catch (err: any) {
       toast.error("Error: " + (err.message || "Error"));
     } finally {
@@ -2931,81 +2964,23 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
     }
   };
 
-  const handleDelete = async () => {
-    if (!existingId) return;
-    setSaving(true);
-    try {
-      await supabase.from('cuentas_bancarias').update({ activo: false }).eq('id', existingId);
-      toast.success("Cuenta eliminada.");
-      setExistingId(null);
-      setBankId('');
-      setNumeroCuenta('');
-      setClabe('');
-      setEvidencia('');
-      setTitular('');
-      setTitularIsSamePerson(false);
-      setIsEditing(true);
-      queryClient.invalidateQueries({ queryKey: ['agent-bank-account'] });
-      queryClient.invalidateQueries({ queryKey: ['agent-onboarding-bank'] });
-    } catch (err: any) {
-      toast.error("Error: " + (err.message || "Error"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (isLoading) {
+  if (isLoading && !isCreate) {
     return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  // Show existing account view
-  if (existingAccount && !isEditing) {
-    return (
-      <div className="space-y-4 pb-4">
-        <div className="rounded-md border bg-card p-5 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center">
-              <Landmark className="h-5 w-5 text-emerald-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground">{(existingAccount as any).banco?.nombre || 'Banco'}</p>
-              <p className="text-xs text-muted-foreground">Cuenta: {existingAccount.numero_cuenta}</p>
-              {(existingAccount as any).titular && (
-                <p className="text-xs text-muted-foreground">Titular: {(existingAccount as any).titular}</p>
-              )}
-            </div>
-          </div>
-          {existingAccount.cuenta_clabe && (
-            <div className="text-xs text-muted-foreground">
-              <span className="font-medium">CLABE:</span> {existingAccount.cuenta_clabe}
-            </div>
-          )}
-          {existingAccount.url_evidencia && (
-            <div className="text-xs">
-              <span className="font-medium text-muted-foreground">Evidencia:</span>{' '}
-              <a href={existingAccount.url_evidencia} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver documento</a>
-            </div>
-          )}
-          <div className="flex gap-2 pt-1">
-            <Button variant="outline" size="sm" className="flex-1 rounded-md" onClick={() => setIsEditing(true)}>
-              Editar
-            </Button>
-            <Button variant="outline" size="sm" className="rounded-md text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={saving}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show form (add or edit)
+  // Formulario único: alta y edición. El agente no puede eliminar cuentas
+  // (una cuenta de dispersión solo la desactiva el equipo de SOZU).
   return (
-    <div className="space-y-4 pb-4">
+    <div className="space-y-4">
+      {!isCreate && existingId && (existingAccount as any)?.id_estatus_verificacion !== 2 && (
+        <p className="rounded-md bg-muted px-3 py-2.5 text-xs font-medium text-muted-foreground">
+          Esta cuenta está pendiente de activación. Si corriges algo, la validamos de nuevo.
+        </p>
+      )}
       <div>
         <Label className={FIELD_LABEL_CLS}>Banco <Req /></Label>
         <Select value={bankId} onValueChange={(v) => { setBankId(v); onTrackFieldChange?.(); }}>
-          <SelectTrigger className={FIELD_SELECT_TRIGGER_CLS}><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
           <SelectContent>
             {banks.map((b: any) => (
               <SelectItem key={b.id} value={b.id.toString()}>{b.nombre}</SelectItem>
@@ -3015,25 +2990,28 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
       </div>
       <div>
         <Label className={FIELD_LABEL_CLS}>Número de Cuenta <Req /></Label>
-        <Input value={numeroCuenta} onChange={(e) => { const v = e.target.value.replace(/\D/g, ''); setNumeroCuenta(v); onTrackFieldChange?.(); }} placeholder="0123456789" maxLength={34} className={FIELD_INPUT_CLS} />
+        <Input
+          value={numeroCuenta}
+          onChange={(e) => { setNumeroCuenta(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }}
+          placeholder="0123456789"
+          maxLength={34}
+          inputMode="numeric"
+          className="tabular-nums"
+        />
       </div>
       <div>
         <Label className={FIELD_LABEL_CLS}>Titular de la cuenta <Req /></Label>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="mt-1 flex items-center gap-2">
           <Checkbox
             id="titular-same-person"
             checked={titularIsSamePerson}
             onCheckedChange={(checked) => {
               setTitularIsSamePerson(checked as boolean);
-              if (checked && personaName) {
-                setTitular(personaName);
-              } else {
-                setTitular('');
-              }
+              setTitular(checked && personaName ? personaName : '');
               onTrackFieldChange?.();
             }}
           />
-          <Label htmlFor="titular-same-person" className="text-xs text-muted-foreground font-normal cursor-pointer">
+          <Label htmlFor="titular-same-person" className="cursor-pointer text-xs font-normal text-muted-foreground">
             El titular es {personaName || 'la misma persona'}
           </Label>
         </div>
@@ -3041,13 +3019,21 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
           value={titular}
           onChange={(e) => { setTitular(e.target.value); setTitularIsSamePerson(false); onTrackFieldChange?.(); }}
           placeholder="Juan Pérez García"
-          className={FIELD_INPUT_CLS}
           disabled={titularIsSamePerson}
         />
       </div>
       <div>
-        <Label className={FIELD_LABEL_CLS}>CLABE <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-        <Input value={clabe} onChange={(e) => setClabe(e.target.value)} placeholder="012345678901234567" maxLength={18} className={FIELD_INPUT_CLS} />
+        <Label className={FIELD_LABEL_CLS}>
+          CLABE <span className="text-xs font-normal text-muted-foreground">(18 dígitos, opcional)</span>
+        </Label>
+        <Input
+          value={clabe}
+          onChange={(e) => { setClabe(e.target.value.replace(/\D/g, '')); onTrackFieldChange?.(); }}
+          placeholder="012345678901234567"
+          maxLength={18}
+          inputMode="numeric"
+          className="tabular-nums"
+        />
       </div>
       <div>
         <ImageUploadField
@@ -3057,19 +3043,11 @@ function AgentBankAccountStep({ personaId, onTrackFieldChange, onTrackSave }: { 
           accept=".pdf,.jpg,.jpeg,.png,.webp"
         />
       </div>
-      <div className="flex gap-2">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-1 py-3 rounded-md border border-[hsl(158_64%_38%)] bg-white text-[hsl(158_64%_38%)] font-bold text-sm transition-colors hover:bg-[hsl(158_64%_38%)]/[0.06] flex items-center justify-center gap-2 disabled:opacity-60"
-        >
-          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : "Guardar"}
-        </button>
-        {existingId && (
-          <button onClick={() => setIsEditing(false)} className="py-3 px-4 rounded-md border text-sm font-medium text-muted-foreground hover:bg-muted/50">
-            Cancelar
-          </button>
-        )}
+      <div className="flex justify-end gap-2.5 border-t border-border pt-4">
+        <Button variant="primary-outline" onClick={handleSave} disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+          {existingId && !isCreate ? "Guardar cambios" : "Registrar cuenta"}
+        </Button>
       </div>
     </div>
   );

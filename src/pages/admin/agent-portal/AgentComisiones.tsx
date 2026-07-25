@@ -1,33 +1,27 @@
-import { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { ComisionesTable, comisionEstatus, COMISION_ESTATUS_LABEL, type ComisionEstatus } from "@/components/admin/comisiones/ComisionesTable";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { MODAL_BODY_CLS, ModalFormHeader } from "@/components/ui/modal-form";
+import { Input } from "@/components/ui/input";
+import { FILTER_LABEL_CLS } from "@/components/ui/modal-filters";
+import { ModalViewer } from "@/components/ui/modal-viewer";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { IconButton } from "@/components/ui/icon-button";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
+import { useAuth } from "@/contexts/AuthContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Lock, CheckCircle2, AlertCircle, DollarSign, Clock, FileText, CalendarCheck, Upload, EyeOff, ExternalLink } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, CheckCircle2, EyeOff, Upload, UploadCloud, Loader2, Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-
-type TabKey = 'todas' | 'pendiente' | 'en_revision' | 'factura_requerida' | 'programada' | 'pagada';
-
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'todas', label: 'Todas' },
-  { key: 'pendiente', label: 'Pendiente' },
-  { key: 'en_revision', label: 'En revisión' },
-  { key: 'factura_requerida', label: 'Factura requerida' },
-  { key: 'programada', label: 'Programada' },
-  { key: 'pagada', label: 'Pagada' },
-];
 
 const AgentComisiones = () => {
   const { profile, user } = useAuth();
@@ -39,7 +33,9 @@ const AgentComisiones = () => {
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { steps, percentage, isLoading: onboardingLoading, canAccessComisiones, missingForComisiones } = useAgentOnboardingStatus(personaId);
   const { presentationMode, mask } = useAgentPresentation();
-  const [activeTab, setActiveTab] = useState<TabKey>('todas');
+  const [filterProyecto, setFilterProyecto] = useState<string>('todos');
+  const [searchCliente, setSearchCliente] = useState<string>('');
+  const [filterEstatus, setFilterEstatus] = useState<string>('todos');
   const [viewerDoc, setViewerDoc] = useState<{ url: string; title: string } | null>(null);
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
@@ -61,7 +57,7 @@ const AgentComisiones = () => {
 
       const { data: comisionistas } = await (supabase as any)
         .from('comisionistas')
-        .select('id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_creacion, url_evidencia_pago')
+        .select('id_cuenta_cobranza, porcentaje_comision, aprobada, pagada, fecha_creacion, fecha_actualizacion, fecha_pago_comision, url_evidencia_pago')
         .eq('email_usuario', agentEmail)
         .eq('activo', true)
         .order('fecha_creacion', { ascending: false });
@@ -80,13 +76,13 @@ const AgentComisiones = () => {
         if (cuentas) {
           const ofertaIds = cuentas.map((c: any) => c.id_oferta).filter(Boolean);
           let ofertaMap = new Map<number, any>();
-          
+
           if (ofertaIds.length > 0) {
             const { data: ofertas } = await (supabase as any)
               .from('ofertas')
               .select('id, id_propiedad, id_producto')
               .in('id', ofertaIds);
-            
+
             const propIds = (ofertas || []).map((o: any) => o.id_propiedad).filter(Boolean);
             const prodIds = [...new Set((ofertas || []).map((o: any) => o.id_producto).filter(Boolean))] as number[];
             let propMap = new Map<number, any>();
@@ -99,16 +95,16 @@ const AgentComisiones = () => {
                 .in('id', prodIds);
               (prods || []).forEach((p: any) => prodMap.set(p.id, p.nombre));
             }
-            
+
             if (propIds.length > 0) {
               const { data: props } = await (supabase as any)
                 .from('propiedades')
                 .select('id, numero_propiedad, id_edificio_modelo, id_estatus_disponibilidad')
                 .in('id', propIds);
-              
+
               const emIds = [...new Set((props || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
               let propToProject = new Map<number, string>();
-              
+
               if (emIds.length > 0) {
                 const { data: ems } = await (supabase as any).from('edificios_modelos').select('id, id_edificio').in('id', emIds);
                 const edIds = [...new Set((ems || []).map((em: any) => em.id_edificio).filter(Boolean))];
@@ -128,10 +124,10 @@ const AgentComisiones = () => {
                   }
                 }
               }
-              
+
               (props || []).forEach((p: any) => propMap.set(p.id, { ...p, proyecto: propToProject.get(p.id) || '' }));
             }
-            
+
             (ofertas || []).forEach((o: any) => {
               const prop = propMap.get(o.id_propiedad);
               const productoNombre = o.id_producto ? prodMap.get(o.id_producto) || '' : '';
@@ -139,14 +135,14 @@ const AgentComisiones = () => {
               ofertaMap.set(o.id, { ...prop, productoNombre, tipoDerivado });
             });
           }
-          
+
           cuentas.forEach((c: any) => {
             const info = ofertaMap.get(c.id_oferta);
-            cuentaMap.set(c.id, { 
-              ...c, 
-              propiedad: info?.numero_propiedad, 
-              proyecto: info?.proyecto, 
-              precio_final: c.precio_final, 
+            cuentaMap.set(c.id, {
+              ...c,
+              propiedad: info?.numero_propiedad,
+              proyecto: info?.proyecto,
+              precio_final: c.precio_final,
               tipo: info?.tipoDerivado || 'Propiedad',
               productoNombre: info?.productoNombre || '',
               id_estatus_disponibilidad: info?.id_estatus_disponibilidad,
@@ -169,6 +165,27 @@ const AgentComisiones = () => {
         if (f.id_cuenta_cobranza) facturaUrlMap.set(f.id_cuenta_cobranza, f.url || '');
       });
 
+      // Cliente(s) de cada cuenta (compradores → personas).
+      const clientesMap = new Map<number, ClienteInfo[]>();
+      if (cuentaIds.length > 0) {
+        const { data: compradores } = await (supabase as any)
+          .from('compradores')
+          .select('id_cuenta_cobranza, porcentaje_copropiedad, id_persona')
+          .in('id_cuenta_cobranza', cuentaIds)
+          .eq('activo', true);
+        const persIds = [...new Set((compradores || []).map((d: any) => d.id_persona).filter(Boolean))] as number[];
+        const { data: persC } = persIds.length > 0
+          ? await supabase.from('personas').select('id, nombre_legal, email').in('id', persIds)
+          : { data: [] };
+        const persMap = new Map<number, { nombre: string; email: string }>((persC || []).map((p: any) => [p.id, { nombre: p.nombre_legal || '', email: p.email || '' }]));
+        (compradores || []).forEach((d: any) => {
+          const arr = clientesMap.get(d.id_cuenta_cobranza) || [];
+          const p = persMap.get(d.id_persona);
+          arr.push({ nombre: p?.nombre || '', email: p?.email || '', porcentaje: Number(d.porcentaje_copropiedad) || 0 });
+          clientesMap.set(d.id_cuenta_cobranza, arr);
+        });
+      }
+
       return comisionistas.map((c: any) => {
         const cuenta = cuentaMap.get(c.id_cuenta_cobranza);
         const precioFinal = cuenta?.precio_final || 0;
@@ -190,6 +207,9 @@ const AgentComisiones = () => {
           detailedStatus = 'pendiente';
         }
 
+        // Fecha de pago: solo cuando la comisión ya se pagó.
+        const fechaPago = c.pagada ? (c.fecha_pago_comision || c.fecha_actualizacion || null) : null;
+
         return {
           ...c,
           proyecto: cuenta?.proyecto || '',
@@ -200,6 +220,8 @@ const AgentComisiones = () => {
           detailed_status: detailedStatus,
           cuenta_cobranza_label: formatCuentaCobranzaId(c.id_cuenta_cobranza, cuenta?.tipo),
           factura_url: facturaUrl,
+          clientes: clientesMap.get(c.id_cuenta_cobranza) || [],
+          fecha_pago: fechaPago,
         };
       });
     },
@@ -212,17 +234,6 @@ const AgentComisiones = () => {
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'pendiente': return { label: 'Pendiente', color: 'text-gray-600 bg-gray-50 border-gray-200', icon: Clock };
-      case 'en_revision': return { label: 'En revisión', color: 'text-blue-700 bg-blue-50 border-blue-200', icon: FileText };
-      case 'factura_requerida': return { label: 'Factura requerida', color: 'text-amber-700 bg-amber-50 border-amber-200', icon: AlertCircle };
-      case 'programada': return { label: 'Programada', color: 'text-purple-700 bg-purple-50 border-purple-200', icon: CalendarCheck };
-      case 'pagada': return { label: 'Pagada', color: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: CheckCircle2 };
-      default: return { label: 'Pendiente', color: 'text-gray-600 bg-gray-50 border-gray-200', icon: Clock };
-    }
-  };
-
   const totalCobrado = comisiones
     .filter((c: any) => c.detailed_status === 'pagada')
     .reduce((sum: number, c: any) => sum + (c.monto_comision || 0), 0);
@@ -231,28 +242,36 @@ const AgentComisiones = () => {
     .filter((c: any) => c.detailed_status !== 'pagada')
     .reduce((sum: number, c: any) => sum + (c.monto_comision || 0), 0);
 
-  const visibleTabs = isAgentRole 
-    ? TABS 
-    : TABS.filter(t => t.key !== 'factura_requerida');
+  // Opciones de filtro derivadas de los datos.
+  const proyectoOptions = [...new Set(comisiones.map((c: any) => c.proyecto).filter(Boolean))].sort() as string[];
+  const estatusOptions = [...new Set(comisiones.map((c: any) => comisionEstatus(c.detailed_status)))] as ComisionEstatus[];
 
-  const filteredComisiones = activeTab === 'todas' 
-    ? comisiones 
-    : comisiones.filter((c: any) => c.detailed_status === activeTab);
+  const filteredComisiones = comisiones.filter((c: any) => {
+    if (filterProyecto !== 'todos' && c.proyecto !== filterProyecto) return false;
+    if (filterEstatus !== 'todos' && comisionEstatus(c.detailed_status) !== filterEstatus) return false;
+    if (searchCliente.trim()) {
+      const q = searchCliente.trim().toLowerCase();
+      const hit = (c.clientes || []).some((cl: any) =>
+        (cl.nombre || '').toLowerCase().includes(q) || (cl.email || '').toLowerCase().includes(q));
+      if (!hit) return false;
+    }
+    return true;
+  });
 
   // Blocked state - only for Agente Inmobiliario role
   if (isAgentRole && !onboardingLoading && !canReceivePayments) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
-        <div className="rounded-md border border-[#E7E9EC] bg-white p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
+        <div className="rounded-md border border-border bg-card p-5 space-y-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center">
               <Lock className="h-5 w-5 text-amber-600" />
             </div>
             <div>
-              <p className="font-semibold text-sm text-[hsl(var(--agent-text))]">Perfil incompleto</p>
-              <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
+              <p className="font-semibold text-sm text-foreground">Perfil incompleto</p>
+              <p className="text-xs text-muted-foreground">
                 Completa tu perfil para ver y recibir comisiones
               </p>
             </div>
@@ -271,8 +290,7 @@ const AgentComisiones = () => {
               navigate('/admin/agent/perfil');
             }}
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Completar perfil
+          > Completar perfil
           </Button>
         </div>
       </div>
@@ -281,16 +299,16 @@ const AgentComisiones = () => {
   }
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
       <div className="mx-auto max-w-[1040px] pt-1 space-y-4">
       {/* Banner modo presentación */}
       {presentationMode && (
         <div>
-          <div className="flex items-center gap-2.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
-            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
-            <span className="text-[12px] font-semibold text-[#B5601C]">
+          <div className="flex items-center gap-2.5 rounded-md border border-amber-300 bg-orange-100 px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-orange-700" />
+            <span className="text-xs font-semibold text-orange-700">
               Modo presentación activo · tus ingresos están ocultos. Desactívalo en la barra superior para verlos.
             </span>
           </div>
@@ -299,201 +317,138 @@ const AgentComisiones = () => {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3.5">
-        <div className="rounded-md border border-[hsl(158_64%_38%)] bg-white p-[18px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[hsl(158_64%_38%)]/70">Total cobrado</p>
-          <p className="mt-2 text-[24px] font-bold tabular-nums text-[hsl(158_64%_38%)]">{mask(formatCurrency(totalCobrado))}</p>
-          <p className="mt-1 text-[10px] font-semibold text-[hsl(158_64%_38%)]/60">MXN · acumulado</p>
+        <div className="rounded-md border border-primary bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-primary/70">Total cobrado</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-primary">{mask(formatCurrency(totalCobrado))}</p>
+          <p className="mt-1 text-xs font-semibold text-primary/60">MXN · acumulado</p>
         </div>
-        <div className="rounded-md border border-[#ECEEF0] bg-white p-[18px]">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#9AA3AD]">Por cobrar</p>
-          <p className="mt-2 text-[24px] font-bold tabular-nums text-[#171A1D]">{mask(formatCurrency(totalPorCobrar))}</p>
-          <p className="mt-1 text-[10px] font-semibold text-[#9AA3AD]">MXN · en proceso</p>
+        <div className="rounded-md border border-border bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Por cobrar</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{mask(formatCurrency(totalPorCobrar))}</p>
+          <p className="mt-1 text-xs font-semibold text-muted-foreground/70">MXN · en proceso</p>
         </div>
       </div>
 
-      {/* Status tabs (estilo segmentado) */}
-      <div>
-        <ScrollArea className="w-full whitespace-nowrap">
-          <div className="flex w-max gap-1 rounded-lg bg-[#F1F3F5] p-1">
-            {visibleTabs.map(tab => {
-              const count = tab.key === 'todas'
-                ? comisiones.length
-                : comisiones.filter((c: any) => c.detailed_status === tab.key).length;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => {
-                    track({ page: 'agent_comisiones', elementId: 'btn_filtro_tab', elementLabel: tab.label, metadata: { tab: tab.key } });
-                    setActiveTab(tab.key);
-                  }}
-                  className={cn(
-                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors tabular-nums",
-                    activeTab === tab.key
-                      ? "bg-white text-[hsl(158_64%_38%)] shadow-sm"
-                      : "text-[#6B7280] hover:text-[#374151]"
-                  )}
-                >
-                  {tab.label}{count > 0 ? ` (${count})` : ''}
-                </button>
-              );
-            })}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+      {/* Filtros (estilo portal cobranza): Proyecto · Cliente · Estatus */}
+      <div className="grid grid-cols-2 gap-3 items-end sm:flex sm:flex-wrap sm:gap-3">
+        <div className="flex flex-col gap-1.5">
+          <span className={FILTER_LABEL_CLS}>Proyecto</span>
+          <Select value={filterProyecto} onValueChange={setFilterProyecto}>
+            <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              {proyectoOptions.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className={FILTER_LABEL_CLS}>Cliente</span>
+          <Input
+            value={searchCliente}
+            onChange={(e) => setSearchCliente(e.target.value)}
+            placeholder="Nombre o correo"
+            className="w-full sm:w-[180px]"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className={FILTER_LABEL_CLS}>Estatus</span>
+          <Select value={filterEstatus} onValueChange={setFilterEstatus}>
+            <SelectTrigger className="w-full sm:w-[170px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los estatus</SelectItem>
+              {estatusOptions.map((s) => <SelectItem key={s} value={s}>{COMISION_ESTATUS_LABEL[s]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {/* List */}
-      <div className="space-y-2.5">
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
-          </div>
-        ) : filteredComisiones.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[hsl(var(--agent-text-secondary))]">
-            {activeTab === 'todas' ? 'Aún no tienes comisiones' : 'Sin comisiones en esta categoría'}
-          </div>
-        ) : (
-          filteredComisiones.map((c: any, idx: number) => {
-            const status = getStatusConfig(c.detailed_status);
-            const StatusIcon = status.icon;
-            return (
-              <div key={`${c.id_cuenta_cobranza}-${idx}`} className="rounded-md border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="text-[13.5px] font-bold text-[#171A1D]">
-                      {c.proyecto || 'Sin proyecto'}
-                      {c.propiedad ? ` · ${c.propiedad}` : ''}
-                    </p>
-                    <p className="truncate text-[11px] font-medium text-[#9AA3AD]">
-                      {c.cuenta_cobranza_label}
-                      {' · '}
-                      {c.productoNombre
-                        ? `${c.productoNombre}${c.propiedad ? ` · Depto ${c.propiedad}` : ''}`
-                        : c.propiedad ? `Departamento ${c.propiedad}` : 'Sin unidad'}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-[16px] font-bold tabular-nums text-[#171A1D]">
-                    {mask(formatCurrency(c.monto_comision || 0))}
-                  </p>
-                </div>
-                <div className="mt-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={cn("text-[10px] shrink-0 border gap-1", status.color)}>
-                      <StatusIcon className="h-3 w-3" />
-                      {status.label}
-                    </Badge>
-                    {c.detailed_status === 'pagada' && c.url_evidencia_pago && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setViewerDoc({ url: c.url_evidencia_pago, title: `Comprobante · ${c.cuenta_cobranza_label}` }); }}
-                        className="inline-flex items-center gap-1 rounded-md border border-[#E7E9EC] px-2 py-1 text-[10px] font-semibold text-primary hover:bg-[#F6F7F8]"
-                      >
-                        <FileText className="h-3 w-3" /> Ver comprobante
-                      </button>
-                    )}
-                    {c.factura_url && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setViewerDoc({ url: c.factura_url, title: `Factura · ${c.cuenta_cobranza_label}` }); }}
-                        className="inline-flex items-center gap-1 rounded-md border border-[#E7E9EC] px-2 py-1 text-[10px] font-semibold text-primary hover:bg-[#F6F7F8]"
-                      >
-                        <FileText className="h-3 w-3" /> Ver factura
-                      </button>
-                    )}
-                  </div>
-                  {c.precio_final > 0 && (
-                    <span className="text-[10px] text-[hsl(var(--agent-text-secondary))]">
-                      Venta: {mask(formatCurrency(c.precio_final))}
-                    </span>
-                  )}
-                </div>
-                {c.detailed_status === 'factura_requerida' && !c.factura_url && agentEmail && personaId && (
-                  <div className="mt-3">
-                    <AgentFacturaUploadButton
-                      cuentaId={c.id_cuenta_cobranza}
-                      agentEmail={agentEmail}
-                      personaId={personaId}
-                      onUploaded={() => queryClient.invalidateQueries({ queryKey: ['agent-comisiones', agentEmail] })}
-                      track={track}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+      {/* Tabla de comisiones (componente global reutilizable) */}
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
+        </div>
+      ) : (
+        <ComisionesTable
+          rows={filteredComisiones}
+          mask={mask}
+          onView={(url, title) => setViewerDoc({ url, title })}
+          emptyLabel={comisiones.length === 0 ? 'Aún no tienes comisiones' : 'Sin comisiones con estos filtros'}
+          renderFacturaUpload={(row) => {
+            // Puede subir su factura si la comisión está APROBADA o PAGADA (y aún no hay factura).
+            const est = comisionEstatus(row.detailed_status);
+            return (est === 'aprobado' || est === 'pagada') && agentEmail && personaId ? (
+              <AgentDocUploadButton
+                title="Factura de comisión"
+                subtitle="Sube el PDF de tu factura"
+                tooltip="Subir factura (PDF)"
+                elementId="btn_subir_factura_agent"
+                pdfOnly
+                track={track}
+                cuentaId={row.id_cuenta_cobranza}
+                onUpload={async (file) => {
+                  const path = `facturas-comision/${row.id_cuenta_cobranza}/${crypto.randomUUID()}-${file.name}`;
+                  const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
+                  if (upErr) throw upErr;
+                  const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+                  const { error: insErr } = await (supabase as any).from('documentos').insert({
+                    id_cuenta_cobranza: row.id_cuenta_cobranza, id_tipo_documento: 46, url: publicUrl, id_persona: personaId, numero: agentEmail, activo: true,
+                  });
+                  if (insErr) throw insErr;
+                  queryClient.invalidateQueries({ queryKey: ['agent-comisiones', agentEmail] });
+                }}
+              />
+            ) : null;
+          }}
+        />
+      )}
       </div>
 
       {/* Visor interno de documento (factura / comprobante) */}
-      <Dialog open={!!viewerDoc} onOpenChange={(v) => { if (!v) setViewerDoc(null); }}>
-        <DialogContent className="max-w-4xl gap-0 p-0">
-          <DialogHeader className="flex-row items-center justify-between gap-3 border-b border-[#ECEEF0] px-5 py-3.5 space-y-0">
-            <DialogTitle className="text-[15px] font-bold text-[#171A1D]">{viewerDoc?.title || 'Documento'}</DialogTitle>
-            {viewerDoc?.url && (
-              <a
-                href={viewerDoc.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mr-6 inline-flex items-center gap-1.5 rounded-md border border-[#E7E9EC] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
-              >
-                Abrir en pestaña <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            )}
-          </DialogHeader>
-          {viewerDoc?.url && (
-            <iframe
-              src={viewerDoc.url}
-              title={viewerDoc.title}
-              className="h-[78vh] w-full rounded-b-md bg-[#F6F7F8]"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <ModalViewer
+        open={!!viewerDoc}
+        onOpenChange={(v) => { if (!v) setViewerDoc(null); }}
+        url={viewerDoc?.url || ""}
+        title={viewerDoc?.title || "Documento"}
+      />
     </div>
   );
 };
 
-function AgentFacturaUploadButton({
-  cuentaId,
-  agentEmail,
-  personaId,
-  onUploaded,
-  track,
-}: {
-  cuentaId: number;
-  agentEmail: string;
-  personaId: number;
-  onUploaded: () => void;
-  track: ReturnType<typeof useCtaTracker>['track'];
+// Botón compacto que abre un modal con dropzone para subir un documento (factura o
+// evidencia de pago). El guardado se inyecta con `onUpload`; acepta PDF (y opcional imagen).
+function AgentDocUploadButton({ title, subtitle, tooltip, elementId, cuentaId, pdfOnly, onUpload, track }: {
+  title: string; subtitle: string; tooltip: string; elementId: string; cuentaId: number;
+  pdfOnly?: boolean; onUpload: (file: File) => Promise<void>; track: ReturnType<typeof useCtaTracker>['track'];
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [drag, setDrag] = useState(false);
 
-  const handleUpload = async (file: File) => {
+  const accept = pdfOnly ? '.pdf' : '.pdf,image/*';
+  const hint = pdfOnly ? 'Solo PDF' : 'PDF o imagen';
+
+  const pick = (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+    const isImg = f.type.startsWith('image/');
+    if (pdfOnly ? !isPdf : !(isPdf || isImg)) {
+      toast.error(pdfOnly ? 'Solo se permiten archivos PDF.' : 'Solo se permiten PDF o imágenes.');
+      return;
+    }
+    doUpload(f);
+  };
+
+  const doUpload = async (file: File) => {
     setUploading(true);
     try {
-      const path = `facturas-comision/${cuentaId}/${crypto.randomUUID()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
-
-      const { error: insertError } = await (supabase as any).from('documentos').insert({
-        id_cuenta_cobranza: cuentaId,
-        id_tipo_documento: 46,
-        url: publicUrl,
-        id_persona: personaId,
-        numero: agentEmail,
-        activo: true,
-      });
-      if (insertError) throw insertError;
-
-      toast.success('Factura subida correctamente');
-      onUploaded();
+      await onUpload(file);
+      toast.success('Documento subido correctamente');
+      setOpen(false);
     } catch (err: any) {
-      console.error('Error uploading factura:', err);
-      toast.error('Error al subir la factura: ' + (err.message || 'Error desconocido'));
+      console.error('Error al subir documento:', err);
+      toast.error('Error al subir: ' + (err?.message || 'Error desconocido'));
     } finally {
       setUploading(false);
     }
@@ -501,29 +456,39 @@ function AgentFacturaUploadButton({
 
   return (
     <>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".pdf"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleUpload(f);
-          e.target.value = '';
-        }}
+      <IconButton
+        icon={Upload}
+        tooltip={tooltip}
+        onClick={() => { track({ page: 'agent_comisiones', elementId, elementLabel: tooltip, metadata: { cuentaId } }); setOpen(true); }}
       />
-      <button
-        type="button"
-        disabled={uploading}
-        onClick={() => {
-          track({ page: 'agent_comisiones', elementId: 'btn_subir_factura_agent', elementLabel: 'Subir factura', metadata: { cuentaId } });
-          fileRef.current?.click();
-        }}
-        className="w-full inline-flex items-center justify-center gap-2 py-2 rounded-md border border-primary bg-white text-primary text-xs font-semibold active:scale-[0.98] transition-transform disabled:opacity-60"
-      >
-        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-        {uploading ? 'Subiendo...' : 'Subir factura'}
-      </button>
+
+      {/* Modal de subida con dropzone (mismo estilo que CSF del perfil) */}
+      <Dialog open={open} onOpenChange={(o) => { if (!uploading) setOpen(o); }}>
+        <DialogContent className="flex max-h-[90vh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-md bg-card p-0">
+          <ModalFormHeader title={title} subtitle={subtitle} />
+          <div className={MODAL_BODY_CLS}>
+            <input ref={fileRef} type="file" accept={accept} className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
+            <div
+              role="button"
+              tabIndex={0}
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
+              onClick={() => !uploading && fileRef.current?.click()}
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-8 text-center transition-colors",
+                drag ? "border-primary bg-primary/5" : "border-border bg-muted hover:border-primary"
+              )}
+            >
+              {uploading ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="h-8 w-8 text-primary" strokeWidth={1.6} />}
+              <div>
+                <p className="text-sm font-bold text-foreground">{uploading ? 'Subiendo…' : 'Arrastra el archivo aquí'}</p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground/70">o haz clic para seleccionar · {hint}</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -536,7 +501,7 @@ function CheckItem({ label, done }: { label: string; done: boolean }) {
       ) : (
         <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
       )}
-      <span className={cn("text-sm", done ? "text-[hsl(var(--agent-text))]" : "text-[hsl(var(--agent-text-secondary))]")}>
+      <span className={cn("text-sm", done ? "text-foreground" : "text-muted-foreground")}>
         {label}
       </span>
     </div>

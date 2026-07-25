@@ -11,9 +11,9 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, Lock, Mail, Search, ExternalLink, EyeOff } from "lucide-react";
+import { Loader2, Lock, Mail, Search, EyeOff, Plus, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -265,31 +265,31 @@ const AgentPipeline = () => {
   };
 
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader />
 
       {/* Toolbar */}
       <div className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-between gap-3 pt-1 pb-3">
         {!isLoading ? (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A929B]">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
             {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} · últimos 30 días
           </p>
         ) : <span />}
         {pipelinePerms.canCreate && (
           isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
-            <span className="flex items-center gap-1 text-xs font-medium text-[#9AA3AD]">
+            <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground/70">
               <Lock className="h-3.5 w-3.5" /> Completa tu capacitación
             </span>
           ) : (
-            <Button
+            <ActionButton
+              icon={Plus}
               onClick={() => {
                 track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
                 navigate('/admin/agent/inventario/unidades?openFilters=true');
               }}
-              className="gap-1.5 text-xs border border-primary bg-white text-primary hover:bg-primary/[0.06]"
             >
-              <Plus className="h-4 w-4" /> Nueva oferta
-            </Button>
+              Nueva oferta
+            </ActionButton>
           )
         )}
       </div>
@@ -297,16 +297,16 @@ const AgentPipeline = () => {
       {/* Búsqueda (izquierda) + filtros de etapa (derecha) en una fila */}
       <div className="mx-auto flex max-w-[1040px] items-center gap-3 pb-3">
         <div className="relative flex w-full max-w-[240px] shrink-0 items-center">
-          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground/70" />
           <Input
             placeholder="Buscar prospecto…"
             value={searchProspecto}
             onChange={(e) => setSearchProspecto(e.target.value)}
-            className="h-10 rounded-md border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[hsl(158_64%_38%)]/30"
+            className="h-10 rounded-md border-border bg-card pl-9 text-sm shadow-none focus-visible:ring-primary/30"
           />
         </div>
         <ScrollArea className="min-w-0 flex-1">
-          <div className="flex w-max gap-1 rounded-lg bg-[#F1F3F5] p-1">
+          <div className="flex w-max gap-1 rounded-lg bg-muted p-1">
             {STAGES.map(stage => {
               const count = stage.key === 'all' ? ofertas.length : (grouped[stage.key]?.length || 0);
               const isActive = activeStage === stage.key;
@@ -319,10 +319,10 @@ const AgentPipeline = () => {
                     setActiveStage(stage.key);
                   }}
                   className={cn(
-                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors tabular-nums",
+                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors tabular-nums",
                     isActive
-                      ? "bg-white text-[hsl(158_64%_38%)] shadow-sm"
-                      : "text-[#6B7280] hover:text-[#374151]"
+                      ? "bg-card text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {stage.label} {count > 0 && `(${count})`}
@@ -337,9 +337,9 @@ const AgentPipeline = () => {
       {/* Banner modo presentación */}
       {presentationMode && (
         <div className="mx-auto mb-2 max-w-[1040px]">
-          <div className="flex items-center gap-2.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
-            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
-            <span className="text-[12px] font-semibold text-[#B5601C]">
+          <div className="flex items-center gap-2.5 rounded-md border border-amber-300 bg-orange-100 px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-orange-700" />
+            <span className="text-xs font-semibold text-orange-700">
               Modo presentación · nombres de prospecto y montos ocultos. Desactívalo arriba para verlos.
             </span>
           </div>
@@ -350,10 +350,10 @@ const AgentPipeline = () => {
       <div className="mx-auto max-w-[1040px] space-y-2.5">
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
           </div>
         ) : displayOfertas.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[hsl(var(--agent-text-secondary))]">
+          <div className="text-center py-12 text-sm text-muted-foreground">
             No hay ofertas en esta etapa
           </div>
         ) : (
@@ -434,35 +434,35 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer rounded-md border border-[#E7E9EC] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-[#CBD2D9]"
+      className="cursor-pointer rounded-md border border-border bg-card p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-border"
     >
       {/* Row 1: label + chip / estado */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[12px] font-bold text-[hsl(158_64%_38%)]">Oferta: {ofertaLabel}</span>
+          <span className="text-xs font-bold text-primary">Oferta: {ofertaLabel}</span>
           {oferta.inmobiliaria_nombre && (
             <span
               className={cn(
-                "rounded-md px-2 py-0.5 text-[10px] font-semibold",
+                "rounded-md px-2 py-0.5 text-xs font-semibold",
                 oferta.inmobiliaria_nombre === 'Interno'
-                  ? "bg-[#F2F4F5] text-[#6B7280]"
-                  : "bg-[#EAF6F0] text-[hsl(158_64%_38%)]"
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-primary/10 text-primary"
               )}
             >
               {oferta.inmobiliaria_nombre}
             </span>
           )}
         </div>
-        <Badge className={cn("shrink-0 border-0 text-[10px]", stageInfo.color)}>
+        <Badge className={cn("shrink-0 border-0 text-xs", stageInfo.color)}>
           {stageInfo.label}
         </Badge>
       </div>
 
       {/* Row 2: title + price */}
       <div className="mt-1.5 flex items-start justify-between gap-3">
-        <p className="truncate text-[15px] font-bold text-[#171A1D]">{unitLabel}</p>
+        <p className="truncate text-base font-bold text-foreground">{unitLabel}</p>
         {oferta.precio != null && oferta.precio > 0 && (
-          <span className="shrink-0 text-[16px] font-bold tabular-nums text-[#171A1D]">
+          <span className="shrink-0 text-base font-bold tabular-nums text-foreground">
             {mask(formatCurrency(oferta.precio))}
           </span>
         )}
@@ -470,24 +470,24 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
 
       {/* Row 3: subtitle */}
       {subParts.length > 0 && (
-        <p className="mt-1 truncate text-[12px] font-medium text-[#9AA3AD]">
+        <p className="mt-1 truncate text-xs font-medium text-muted-foreground/70">
           {subParts.join(' · ')}
         </p>
       )}
 
       {/* Row 4: dates */}
       {genDate && (
-        <p className="mt-1 text-[11.5px] font-medium tabular-nums text-[#9AA3AD]">
+        <p className="mt-1 text-xs font-medium tabular-nums text-muted-foreground/70">
           Generada: {format(genDate, 'dd MMM yyyy', { locale: es })}
           {venceDate && `  ·  Vence: ${format(venceDate, 'dd MMM yyyy', { locale: es })}`}
         </p>
       )}
 
       {/* Footer: acciones */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#F2F4F5] pt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
         <button
           onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[#E7E9EC] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] hover:bg-[#F6F7F8]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
         >
           Oferta digital <ExternalLink className="h-3.5 w-3.5" />
         </button>
@@ -495,10 +495,10 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
           onClick={handleReenviar}
           title={hasUrl ? 'Reenviar oferta por correo' : 'Descarga la oferta primero'}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold",
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold",
             hasUrl
-              ? "border-[#E7E9EC] text-[#4B5563] hover:bg-[#F6F7F8]"
-              : "border-[#E7E9EC] text-[#9AA3AD] cursor-not-allowed"
+              ? "border-border text-muted-foreground hover:bg-muted"
+              : "border-border text-muted-foreground/70 cursor-not-allowed"
           )}
         >
           <Mail className="h-3.5 w-3.5" /> Reenviar
