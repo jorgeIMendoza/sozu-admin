@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect, useRef } from "react";
+import { useState, useLayoutEffect, useEffect, useMemo, useRef } from "react";
 import { OptImg } from "@/components/ui/opt-img";
 import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { Home, Building2, BarChart3, DollarSign, User, Users, LucideIcon, Menu, ChevronRight, Eye, EyeOff, LogOut, ArrowLeft } from "lucide-react";
@@ -50,6 +50,31 @@ const iconMap: Record<string, LucideIcon> = {
   '/admin/agent/perfil': User,
 };
 
+/**
+ * Cache local del menú ya resuelto (permisos + dependencia de inmobiliaria),
+ * por email del usuario logueado. Al recargar se pinta al instante y luego se
+ * reconcilia en silencio con la respuesta real; si no hay cache, va el skeleton.
+ */
+const TABS_CACHE_PREFIX = "sozu-agent-portal-tabs:";
+
+type CachedTab = { path: string; label: string };
+
+function readTabsCache(email: string | null): CachedTab[] | null {
+  if (!email || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${TABS_CACHE_PREFIX}${email}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const clean = parsed.filter(
+      (t: any) => typeof t?.path === "string" && typeof t?.label === "string"
+    );
+    return clean.length > 0 ? clean : null;
+  } catch {
+    return null;
+  }
+}
+
 const FALLBACK_TABS = [
   { path: "/admin/agent/inicio",      label: "Inicio",      icon: Home },
   { path: "/admin/agent/inventario",  label: "Inventario",  icon: Building2 },
@@ -62,7 +87,7 @@ export const AgentPortalLayout = () => {
   const location  = useLocation();
   const navigate  = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
-  const { hasInmobiliaria } = useAgentHasInmobiliaria();
+  const { hasInmobiliaria, isLoading: inmobLoading } = useAgentHasInmobiliaria();
   const { theme, setTheme } = useTheme();
   const previousThemeRef = useRef(theme ?? "system");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -98,7 +123,7 @@ export const AgentPortalLayout = () => {
     return () => { setTheme(previousThemeRef.current); };
   }, [setTheme]);
 
-  const { data: allTabs = FALLBACK_TABS } = useQuery({
+  const { data: allTabs = FALLBACK_TABS, isLoading: tabsLoading } = useQuery({
     queryKey: ['agent-portal-tabs'],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -117,15 +142,53 @@ export const AgentPortalLayout = () => {
     staleTime: 5 * 60_000,
   });
 
-  const tabs = permLoading
-    ? allTabs
-    : allTabs.filter((tab) => {
-        if (hasInmobiliaria && tab.path === '/admin/agent/comisiones') return false;
-        const perm = permissions[tab.path as keyof typeof permissions];
-        return perm?.canRead !== false;
-      });
+  // El menú depende de dos fuentes async (permisos por rol + si el agente es
+  // dependiente de una inmobiliaria). Pintar la lista completa mientras cargan
+  // provoca el "golpe" de tabs que aparecen y se esconden (Comisiones/Prospectos),
+  // así que hasta que ambas resuelvan se muestran placeholders.
+  const menuReady = !permLoading && !inmobLoading && !tabsLoading;
 
-  if (hasInmobiliaria && location.pathname.startsWith('/admin/agent/comisiones')) {
+  const resolvedTabs = useMemo(
+    () =>
+      menuReady
+        ? allTabs.filter((tab) => {
+            if (hasInmobiliaria && tab.path === '/admin/agent/comisiones') return false;
+            const perm = permissions[tab.path as keyof typeof permissions];
+            return perm?.canRead !== false;
+          })
+        : [],
+    [menuReady, allTabs, hasInmobiliaria, permissions]
+  );
+
+  // Menú de la última sesión de este usuario: evita el skeleton al recargar.
+  const cacheEmail = profile?.email ?? null;
+  const cachedTabs = useMemo(
+    () =>
+      (readTabsCache(cacheEmail) || []).map((t) => ({
+        path: t.path,
+        label: t.label,
+        icon: iconMap[t.path] || Home,
+      })),
+    [cacheEmail]
+  );
+
+  const tabs = menuReady ? resolvedTabs : cachedTabs;
+  const showTabsSkeleton = !menuReady && cachedTabs.length === 0;
+
+  const tabsCachePayload = menuReady
+    ? JSON.stringify(resolvedTabs.map(({ path, label }) => ({ path, label })))
+    : null;
+
+  useEffect(() => {
+    if (!tabsCachePayload || !cacheEmail) return;
+    try {
+      window.localStorage.setItem(`${TABS_CACHE_PREFIX}${cacheEmail}`, tabsCachePayload);
+    } catch {
+      // Cuota llena / modo privado: sin cache se cae al skeleton, no rompe nada.
+    }
+  }, [tabsCachePayload, cacheEmail]);
+
+  if (menuReady && hasInmobiliaria && location.pathname.startsWith('/admin/agent/comisiones')) {
     return <Navigate to="/admin/agent/inicio" replace />;
   }
 
@@ -138,7 +201,10 @@ export const AgentPortalLayout = () => {
   const userRole  = effectivePerfil?.roles?.nombre || (isImpersonating ? 'Agente' : profile?.rol_nombre) || 'Agente';
   const initials  = userName.split(' ').filter(Boolean).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('') || 'U';
   const photoUrl  = effectivePerfil?.foto_perfil_url || (isImpersonating ? null : profile?.foto_perfil_url) || null;
-  const currentSection = tabs.find(t => isActive(t.path))?.label || 'Inicio';
+  // Título: sobre el catálogo completo (no sobre tabs), para no caer a "Inicio"
+  // mientras carga el menú ni en rutas que el fallback no lista (ej. Prospectos).
+  const currentSection =
+    [...allTabs, ...cachedTabs].find(t => isActive(t.path))?.label || 'Inicio';
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -215,6 +281,15 @@ export const AgentPortalLayout = () => {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+        {showTabsSkeleton && Array.from({ length: 4 }).map((_, i) => (
+          <div key={`nav-skeleton-${i}`} className="flex items-center gap-3 pl-4 pr-3 py-2" aria-hidden>
+            <div className="size-4 shrink-0 rounded bg-muted animate-pulse" />
+            <div
+              className="h-3.5 rounded bg-muted animate-pulse"
+              style={{ width: `${[64, 84, 72, 56][i]}px` }}
+            />
+          </div>
+        ))}
         {tabs.map((tab) => {
           const active = isActive(tab.path);
           const Icon   = tab.icon;
