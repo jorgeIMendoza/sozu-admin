@@ -287,6 +287,20 @@ const OfferPage = () => {
 
             </header>
 
+            {/* Unidad ya vendida/apartada: tiene cuenta de cobranza activa, ya no se comercializa. */}
+            {!isExpired && isReserved && (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2 flex items-start gap-2 mb-4">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-700 leading-snug">
+                  <span className="font-semibold">Esta unidad ya tiene dueño.</span>{" "}
+                  <span className="text-muted-foreground">
+                    Se generó su cuenta de cobranza, así que ya no está disponible para venta.
+                    Si buscas otra unidad, contacta a tu asesor.
+                  </span>
+                </p>
+              </div>
+            )}
+
             {/* Expired banner - slim, solo mobile (en desktop lo comunica el card derecho) */}
             {isExpired && (
               <div className="lg:hidden rounded-lg bg-destructive/8 border border-destructive/20 px-3 py-2 flex items-center gap-2 mb-4">

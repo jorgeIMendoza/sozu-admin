@@ -296,8 +296,17 @@ export interface OfertaComercial {
   // ── Extras reales de la unidad (tablas bodegas / estacionamientos) ──
   bodegas?: OfertaBodega[];
   estacionamientos?: OfertaEstacionamiento[];
-  /** CLABE STP temporal del apartado (propiedades.clabe_stp_tmp_apartado). undefined → ocultar. */
+  /**
+   * CLABE STP para pagar. Prioridad: `cuentas_cobranza.clabe_stp` (dedicada de la
+   * cuenta, existe tras el primer pago) → `propiedades.clabe_stp_tmp_apartado`
+   * (temporal/universal del apartado). undefined → ocultar.
+   */
   clabeStp?: string;
+  /**
+   * La oferta ya tiene cuenta de cobranza activa: la unidad tiene dueño y ya no
+   * se comercializa (implica `status: "converted_to_account"`).
+   */
+  hasCuentaCobranza?: boolean;
   /** Meses restantes de mensualidades (hoy→entrega−1 mes) desde RPC. Para nota legal. */
   mesesRestantes?: number;
   /** Plano del nivel (edificios_niveles_planos.imagen_url) para señalar la ubicación de la unidad. */

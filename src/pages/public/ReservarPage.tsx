@@ -470,6 +470,9 @@ const ReservarPage = () => {
   // Concepto/referencia estable y rastreable: unidad + oferta (no el id efímero
   // en memoria). El match SPEI real es por CLABE; esto es referencia legible.
   const concepto = `Apartado ${offer.property.unitNumber}OF${offer.id}`;
+  // Con cuenta de cobranza la unidad ya tiene dueño: el apartado ya ocurrió y los
+  // pagos siguientes se hacen desde el portal del cliente, no desde esta pantalla.
+  const yaTieneCuenta = !!offer.hasCuentaCobranza;
 
   return (
     <PublicShell
@@ -482,28 +485,60 @@ const ReservarPage = () => {
         {/* Contenido — top-align (sin panel de propiedad; ya se mostró en la oferta) */}
         <div className="flex-1 flex items-start justify-center px-4 py-4">
           <div className="w-full max-w-[420px] space-y-5">
-            <div className="space-y-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                Apartar · {formatMXN(APARTADO_AMOUNT_MXN)} MXN
-              </span>
-              <h1 className="text-[1.7rem] font-bold text-foreground leading-tight tracking-tight">
-                Información para tu pago
-              </h1>
-              <p className="text-[13px] text-muted-foreground leading-relaxed">
-                Realiza una transferencia SPEI con estos datos para apartar tu unidad.
-                El monto se aplica al precio final de la propiedad.
-              </p>
-            </div>
-            <SpeiPayPanel
-              formalReservationId={formalReservationId}
-              offerId={offerId}
-              clabe={clabeApartado}
-              concepto={concepto}
-              agent={agent}
-              clientEmail={clientEmail}
-              onPaid={createClientAccount}
-            />
+            {yaTieneCuenta ? (
+              <>
+                <div className="space-y-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/[0.08] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Unidad apartada
+                  </span>
+                  <h1 className="text-[1.7rem] font-bold text-foreground leading-tight tracking-tight">
+                    Esta unidad ya tiene dueño
+                  </h1>
+                  <p className="text-[13px] text-muted-foreground leading-relaxed">
+                    Ya se generó la cuenta de cobranza de la unidad {offer.property.unitNumber},
+                    así que este apartado no puede volver a pagarse. Tus pagos siguientes se
+                    realizan desde tu portal de cliente con la CLABE de tu cuenta.
+                  </p>
+                </div>
+                {clabeApartado && (
+                  <div className="rounded-2xl border border-border bg-card px-5 py-4 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      CLABE de tu cuenta de cobranza
+                    </p>
+                    <p className="font-mono font-semibold text-foreground tabular-nums tracking-tight text-[1.15rem] leading-none break-all">
+                      {clabeApartado.match(/.{1,4}/g)?.join(" ") ?? clabeApartado}
+                    </p>
+                  </div>
+                )}
+                <AdvisorContactCard agent={agent} />
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    Apartar · {formatMXN(APARTADO_AMOUNT_MXN)} MXN
+                  </span>
+                  <h1 className="text-[1.7rem] font-bold text-foreground leading-tight tracking-tight">
+                    Información para tu pago
+                  </h1>
+                  <p className="text-[13px] text-muted-foreground leading-relaxed">
+                    Realiza una transferencia SPEI con estos datos para apartar tu unidad.
+                    El monto se aplica al precio final de la propiedad.
+                  </p>
+                </div>
+                <SpeiPayPanel
+                  formalReservationId={formalReservationId}
+                  offerId={offerId}
+                  clabe={clabeApartado}
+                  concepto={concepto}
+                  agent={agent}
+                  clientEmail={clientEmail}
+                  onPaid={createClientAccount}
+                />
+              </>
+            )}
           </div>
         </div>
 
