@@ -1,13 +1,39 @@
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  EXP_ESTADO_LABEL,
+  estadoFromEstatusId,
+  useExpedienteDocs,
+  type ExpDocEstado,
+} from '@/hooks/useExpedienteDocs';
 
-// Documentos del embajador (Portal Embajadores). Se almacenan en la tabla `documentos`
-// ligados al id_persona del embajador. La "Constancia de situación fiscal" ya existía
-// (tipo 6); los demás tipos se crean en la migración 20260601000000_tipos_documento_embajador.
-// El tipo se resuelve por NOMBRE para no depender de ids fijos.
+/**
+ * Documentación de pago del embajador. Vive de la misma fuente que el expediente
+ * del agente (`documentos` por `id_persona` + estatus de verificación), con dos
+ * documentos que no son un archivo subido:
+ *  - Convenio: se firma digitalmente con Mifiel (igual que la Carta de
+ *    comercialización del agente) → estado en `firmas_digitales`. El webhook de
+ *    Mifiel deja además el PDF firmado como `documentos` (tipo 48 hoy; ver
+ *    Ejecuciones_manuales para el mapeo pendiente al tipo 58).
+ *  - Carátula bancaria: evidencia de la cuenta en `cuentas_bancarias` (mismo
+ *    mecanismo que usa el agente para dar de alta su cuenta).
+ *
+ * Tipos de `documentos`: 58 Convenio · 2/3 INE (frente+reverso) o 4 Pasaporte ·
+ * 6 Constancia de situación fiscal.
+ */
 
 export type EmbajadorDocKey = 'convenio' | 'id' | 'rfc' | 'bancarios';
+
+export const CONVENIO_TIPO = 58;
+/** Plantilla de `cartas_acuerdo` que se firma como Convenio de Embajador. */
+export const CONVENIO_CARTA_NOMBRE_LIKE = '%convenio%embajador%';
+export const CSF_TIPO = 6;
+export const INE_TIPOS = [2, 3];
+export const PASAPORTE_TIPO = 4;
+
+/** Tipos de `documentos` que componen el expediente del embajador. */
+export const EMBAJADOR_DOC_TIPOS = [CONVENIO_TIPO, ...INE_TIPOS, PASAPORTE_TIPO, CSF_TIPO];
 
 export interface EmbajadorDocType {
   key: EmbajadorDocKey;
@@ -22,150 +48,217 @@ export const EMBAJADOR_DOC_TYPES: EmbajadorDocType[] = [
   { key: 'bancarios', nombre: 'Carátula Estado de Cuenta Bancario', requiresApproval: true },
 ];
 
-// id_estatus_verificacion: 1 Pendiente, 2 Validado, 3 Rechazado, 4 Expirado
-export type EmbajadorDocEstatus = 'pendiente' | 'aprobado' | 'rechazado';
-
-export const EMB_DOC_STATUS_LABEL: Record<EmbajadorDocEstatus, string> = {
-  pendiente: 'En revisión',
-  aprobado: 'Aprobado',
-  rechazado: 'Rechazado',
-};
+/** Estado mostrado (mismo vocabulario que el expediente del agente). */
+export type EmbajadorDocEstatus = ExpDocEstado;
+export const EMB_DOC_STATUS_LABEL = EXP_ESTADO_LABEL;
 
 export interface EmbajadorDoc {
   key: EmbajadorDocKey;
   label: string;
   requiresApproval: boolean;
-  tipoId: number | null;
+  /** Filas de `documentos` que respaldan el documento (el INE son dos). */
+  docIds: number[];
+  /** Compat: primera fila. La carátula bancaria no tiene fila en `documentos`. */
   docId: number | null;
   url: string | null;
   estatusId: number | null;
   status: EmbajadorDocEstatus;
   uploadedAt: string | null;
-  locked: boolean; // aprobado -> no se puede reemplazar
-}
-
-function mapEstatus(id: number | null | undefined): EmbajadorDocEstatus {
-  if (id === 2) return 'aprobado';
-  if (id === 3 || id === 4) return 'rechazado';
-  return 'pendiente';
+  /** Aprobado → no se puede reemplazar. */
+  locked: boolean;
 }
 
 export function useEmbajadorDocumentos(idPersona?: number | null) {
-  const qc = useQueryClient();
-  const queryKey = ['embajador-documentos', idPersona ?? null] as const;
+  const queryClient = useQueryClient();
+  const docsQueryKey = ['embajador-documentos', idPersona ?? null];
 
-  const query = useQuery({
-    queryKey,
+  const { docs: rows, tipoRow, tipoEstado, isLoading, refetch, invalidate, setDocEstatus } = useExpedienteDocs({
+    personaId: idPersona,
+    tipos: EMBAJADOR_DOC_TIPOS,
+    queryKey: docsQueryKey,
+  });
+
+  // Convenio firmado: el estado real vive en `firmas_digitales` (Mifiel).
+  const firmaQueryKey = ['embajador-convenio-firma', idPersona ?? null];
+  const { data: firmaConvenio = null } = useQuery({
+    queryKey: firmaQueryKey,
     enabled: !!idPersona,
-    queryFn: async (): Promise<EmbajadorDoc[]> => {
-      const nombres = EMBAJADOR_DOC_TYPES.map((t) => t.nombre);
-      const { data: tipos, error: tErr } = await (supabase as any)
-        .from('tipos_documento')
-        .select('id, nombre')
-        .in('nombre', nombres);
-      if (tErr) throw tErr;
-      const tipoIdByNombre = new Map<string, number>((tipos ?? []).map((t: any) => [t.nombre, t.id]));
-      const tipoIds = (tipos ?? []).map((t: any) => t.id);
-
-      let docsRows: any[] = [];
-      if (idPersona && tipoIds.length) {
-        const { data: docs, error: dErr } = await (supabase as any)
-          .from('documentos')
-          .select('id, id_tipo_documento, url, id_estatus_verificacion, fecha_creacion')
-          .eq('id_persona', idPersona)
-          .eq('activo', true)
-          .in('id_tipo_documento', tipoIds)
-          .order('fecha_creacion', { ascending: false });
-        if (dErr) throw dErr;
-        docsRows = docs ?? [];
-      }
-
-      const latestByTipo = new Map<number, any>();
-      for (const row of docsRows) {
-        if (!latestByTipo.has(row.id_tipo_documento)) latestByTipo.set(row.id_tipo_documento, row);
-      }
-
-      return EMBAJADOR_DOC_TYPES.map((t) => {
-        const tipoId = tipoIdByNombre.get(t.nombre) ?? null;
-        const row = tipoId != null ? latestByTipo.get(tipoId) : undefined;
-        const estatusId = row?.id_estatus_verificacion ?? null;
-        const status = mapEstatus(estatusId);
-        return {
-          key: t.key,
-          label: t.nombre,
-          requiresApproval: t.requiresApproval,
-          tipoId,
-          docId: row?.id ?? null,
-          url: row?.url ?? null,
-          estatusId,
-          status,
-          uploadedAt: row?.fecha_creacion ?? null,
-          locked: status === 'aprobado',
-        };
-      });
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: carta } = await (supabase as any)
+        .from('cartas_acuerdo')
+        .select('id')
+        .eq('activo', true)
+        .ilike('nombre', CONVENIO_CARTA_NOMBRE_LIKE)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!carta?.id) return null;
+      const { data } = await (supabase as any)
+        .from('firmas_digitales')
+        .select('id, estado, pdf_firmado_url, created_at, updated_at')
+        .eq('tipo_documento', 'carta_acuerdos')
+        .eq('referencia_id', idPersona)
+        .eq('carta_acuerdo_id', carta.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data ?? null;
     },
   });
 
-  const uploadDoc = useCallback(
-    async (key: EmbajadorDocKey, file: File) => {
-      if (!idPersona) throw new Error('El embajador no tiene persona asociada.');
-      const target = (query.data ?? []).find((d) => d.key === key);
-      if (!target?.tipoId) throw new Error('Tipo de documento no configurado (aplica la migración).');
-      if (target.locked) throw new Error('El documento ya fue aprobado y no se puede reemplazar.');
-
-      const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
-      const filePath = `embajadores/${idPersona}/${key}-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('documentos').upload(filePath, file);
-      if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(filePath);
-
-      // Desactivar versión anterior del mismo tipo
-      await (supabase as any)
-        .from('documentos')
-        .update({ activo: false })
+  // Carátula bancaria = evidencia de la cuenta bancaria de la persona.
+  const bankQueryKey = ['embajador-cuenta-bancaria', idPersona ?? null];
+  const { data: cuentaBancaria = null } = useQuery({
+    queryKey: bankQueryKey,
+    enabled: !!idPersona,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('cuentas_bancarias')
+        .select('id, url_evidencia, id_estatus_verificacion, fecha_creacion, fecha_actualizacion')
         .eq('id_persona', idPersona)
-        .eq('id_tipo_documento', target.tipoId)
-        .eq('activo', true);
-
-      const { error: insErr } = await (supabase as any).from('documentos').insert({
-        id_persona: idPersona,
-        id_tipo_documento: target.tipoId,
-        url: urlData.publicUrl,
-        id_estatus_verificacion: 1,
-        activo: true,
-        es_draft: false,
-      });
-      if (insErr) throw insErr;
-      await qc.invalidateQueries({ queryKey });
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data ?? null;
     },
-    [idPersona, query.data, qc], // eslint-disable-line react-hooks/exhaustive-deps
+  });
+
+  // Identidad: INE (frente+reverso) o pasaporte; nunca se exigen ambos.
+  const ineRows = INE_TIPOS.map(tipoRow);
+  const pasRow = tipoRow(PASAPORTE_TIPO);
+  const usaPasaporte = !!pasRow && !ineRows.every(Boolean);
+  const identidadRows = usaPasaporte ? [pasRow] : ineRows;
+  const identidadEstados = (usaPasaporte ? [PASAPORTE_TIPO] : INE_TIPOS).map(tipoEstado);
+  const identidadStatus: ExpDocEstado = identidadRows.every(Boolean)
+    ? identidadEstados.every((e) => e === 'validado')
+      ? 'validado'
+      : identidadEstados.some((e) => e === 'expirado')
+      ? 'expirado'
+      : identidadEstados.some((e) => e === 'rechazado')
+      ? 'rechazado'
+      : 'revision'
+    : 'pendiente';
+
+  const docFor = (key: EmbajadorDocKey): EmbajadorDoc => {
+    const def = EMBAJADOR_DOC_TYPES.find((t) => t.key === key)!;
+    const base = { key, label: def.nombre, requiresApproval: def.requiresApproval };
+
+    if (key === 'bancarios') {
+      const url = cuentaBancaria?.url_evidencia || null;
+      const estatusId = cuentaBancaria?.id_estatus_verificacion ?? null;
+      const status: ExpDocEstado = url ? estadoFromEstatusId(estatusId) : 'pendiente';
+      return {
+        ...base,
+        docIds: [],
+        docId: null,
+        url,
+        estatusId,
+        status,
+        uploadedAt: cuentaBancaria?.fecha_actualizacion || cuentaBancaria?.fecha_creacion || null,
+        locked: status === 'validado',
+      };
+    }
+
+    if (key === 'id') {
+      const present = identidadRows.filter(Boolean) as NonNullable<typeof pasRow>[];
+      return {
+        ...base,
+        docIds: present.map((r) => r.id),
+        docId: present[0]?.id ?? null,
+        url: present[0]?.url ?? null,
+        estatusId: present[0]?.id_estatus_verificacion ?? null,
+        status: identidadStatus,
+        uploadedAt: present[0]?.fecha_creacion ?? null,
+        locked: identidadStatus === 'validado',
+      };
+    }
+
+    if (key === 'convenio') {
+      // Firmado (completado) → validado; enviado / firma parcial → en revisión.
+      const estadoFirma = firmaConvenio?.estado as string | undefined;
+      const status: ExpDocEstado =
+        estadoFirma === 'completado' ? 'validado'
+        : estadoFirma === 'enviado' || estadoFirma === 'firmado_parcial' ? 'revision'
+        : 'pendiente';
+      const rowConvenio = tipoRow(CONVENIO_TIPO);
+      return {
+        ...base,
+        docIds: rowConvenio ? [rowConvenio.id] : [],
+        docId: rowConvenio?.id ?? null,
+        url: firmaConvenio?.pdf_firmado_url ?? rowConvenio?.url ?? null,
+        estatusId: status === 'validado' ? 2 : status === 'revision' ? 1 : null,
+        status,
+        uploadedAt: firmaConvenio?.updated_at ?? firmaConvenio?.created_at ?? rowConvenio?.fecha_creacion ?? null,
+        locked: status === 'validado',
+      };
+    }
+
+    const tipo = CSF_TIPO;
+    const row = tipoRow(tipo);
+    const status: ExpDocEstado = row ? tipoEstado(tipo) : 'pendiente';
+    return {
+      ...base,
+      docIds: row ? [row.id] : [],
+      docId: row?.id ?? null,
+      url: row?.url ?? null,
+      estatusId: row?.id_estatus_verificacion ?? null,
+      status,
+      uploadedAt: row?.fecha_creacion ?? null,
+      locked: status === 'validado',
+    };
+  };
+
+  const docs = EMBAJADOR_DOC_TYPES.map((t) => docFor(t.key));
+
+  /** Cambia el estatus de verificación de un documento completo (uso administrativo). */
+  const setDocStatusByKey = useCallback(
+    async (key: EmbajadorDocKey, estatusId: number) => {
+      if (key === 'bancarios') {
+        if (!cuentaBancaria?.id) throw new Error('El embajador no tiene cuenta bancaria registrada.');
+        const { error } = await (supabase as any)
+          .from('cuentas_bancarias')
+          .update({ id_estatus_verificacion: estatusId, fecha_actualizacion: new Date().toISOString() })
+          .eq('id', cuentaBancaria.id);
+        if (error) throw error;
+        queryClient.invalidateQueries({ queryKey: bankQueryKey });
+        return;
+      }
+      if (key === 'convenio') {
+        throw new Error('El convenio se valida con la firma digital; no se revisa manualmente.');
+      }
+      const target = docs.find((d) => d.key === key);
+      if (!target?.docIds.length) throw new Error('El documento aún no está cargado.');
+      // El INE son dos filas (frente y reverso): se validan/rechazan juntas.
+      for (const id of target.docIds) await setDocEstatus(id, estatusId);
+    },
+    [cuentaBancaria?.id, docs, setDocEstatus, queryClient], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  /** Compat: cambio de estatus por id de fila de `documentos`. */
   const setDocStatus = useCallback(
-    async (docId: number, estatusId: number) => {
-      const { error } = await (supabase as any)
-        .from('documentos')
-        .update({ id_estatus_verificacion: estatusId, fecha_actualizacion: new Date().toISOString() })
-        .eq('id', docId);
-      if (error) throw error;
-      await qc.invalidateQueries({ queryKey });
-    },
-    [qc], // eslint-disable-line react-hooks/exhaustive-deps
+    async (docId: number, estatusId: number) => setDocEstatus(docId, estatusId),
+    [setDocEstatus],
   );
 
-  const docs = query.data ?? [];
-  // Pendiente para la card "Documentación": los que requieren aprobación y no están aprobados,
-  // más los que no requieren aprobación pero aún no tienen archivo.
-  const pendingCount = docs.filter((d) =>
-    d.requiresApproval ? d.status !== 'aprobado' : !d.url,
-  ).length;
+  // Pendiente para la card "Documentación": los que requieren aprobación y no están
+  // validados, más los que no requieren aprobación pero aún no tienen archivo.
+  const pendingCount = docs.filter((d) => (d.requiresApproval ? d.status !== 'validado' : !d.url)).length;
 
   return {
     docs,
-    isLoading: query.isLoading,
-    refetch: query.refetch,
-    uploadDoc,
+    rows,
+    cuentaBancaria,
+    isLoading,
+    refetch,
+    invalidate,
     setDocStatus,
+    setDocStatusByKey,
     pendingCount,
+    docsQueryKey,
+    bankQueryKey,
+    firmaConvenio,
   };
 }

@@ -1,10 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Combobox } from "@/components/ui/combobox";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
-import { Loader2, X, Search } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ModalFormHeader,
@@ -36,6 +35,13 @@ interface ProspectoRelacion {
   proyecto_nombre: string;
 }
 
+/** Lada del teléfono. Lista corta → el selector la pinta sin buscador. */
+const CLAVE_PAIS_OPTIONS: SearchableOption[] = [
+  { value: "MX", label: "MX" },
+  { value: "US", label: "US" },
+  { value: "CO", label: "CO" },
+];
+
 export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPersonaId }: AddProspectoFloatingDialogProps) {
   const { profile } = useAuth();
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
@@ -47,7 +53,6 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
 
   const [selectedProspectoId, setSelectedProspectoId] = useState<number | null>(null);
   const [selectedProyectoIds, setSelectedProyectoIds] = useState<number[]>([]);
-  const [projSearch, setProjSearch] = useState("");
   const [tipoPersona, setTipoPersona] = useState("pf");
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
@@ -458,7 +463,6 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     setCurp("");
     setEditProyectos([]);
     setExistingPersonaId(null);
-    setProjSearch("");
     hasTrackedFieldFill.current = false;
     onOpenChange(false);
   };
@@ -469,12 +473,39 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const rfcInvalid = !!rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc);
   const curpInvalid = !!curp && !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp);
 
-  const q = projSearch.trim().toLowerCase();
-  const filteredProyectos = q ? proyectos.filter((p) => (p.nombre || "").toLowerCase().includes(q)) : proyectos;
-
   const selectedProyectosList: { id: number; nombre: string; relId: number | null }[] = isEditMode
     ? editProyectos.map((e) => ({ id: e.id_proyecto, nombre: e.proyecto_nombre, relId: e.entidad_relacionada_id }))
     : selectedProyectoIds.map((id) => ({ id, nombre: proyectos.find((p) => p.id === id)?.nombre || `Proyecto ${id}`, relId: null }));
+
+  /**
+   * Opciones del selector de desarrollos: se excluyen los ya elegidos (viven como
+   * pastillas arriba) y, en alta, los que la persona ya tiene registrados salen
+   * deshabilitados con la nota "Ya registrado" — igual que antes, para que se
+   * entienda por qué no se pueden volver a agregar.
+   */
+  const proyectoPickerOptions = useMemo<SearchableOption[]>(() => {
+    const selectedIds = new Set(isEditMode ? editProyectos.map((e) => e.id_proyecto) : selectedProyectoIds);
+    return proyectos
+      .filter((p) => !selectedIds.has(p.id))
+      .map((p) => {
+        const already = !isEditMode && existingPersonaProjectIds.has(p.id);
+        return {
+          value: p.id.toString(),
+          label: p.nombre || `Proyecto ${p.id}`,
+          hint: already ? "Ya registrado" : undefined,
+          disabled: already,
+        };
+      });
+  }, [proyectos, isEditMode, editProyectos, selectedProyectoIds, existingPersonaProjectIds]);
+
+  /** Agrega un desarrollo: en edición persiste de inmediato; en alta acumula local. */
+  const addProyectoInteres = (proyectoId: number) => {
+    if (isEditMode) {
+      if (selectedProspectoId) addProjectToProspectMutation.mutate({ personaId: selectedProspectoId, proyectoId });
+      return;
+    }
+    setSelectedProyectoIds((prev) => (prev.includes(proyectoId) ? prev : [...prev, proyectoId]));
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -488,27 +519,16 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           {/* Search / pick existing prospect */}
           <div>
             <div className={labelBoldCls}>¿Ya lo tienes registrado? Búscalo para no duplicar</div>
-            {prospectoOptions.length >= 10 ? (
-              <Combobox
-                value={selectedProspectoId?.toString() || ""}
-                onValueChange={handleSelectProspecto}
-                options={prospectoOptions}
-                placeholder="Buscar por nombre…"
-                searchPlaceholder="Escribir nombre del prospecto…"
-                emptyText="No se encontró el prospecto"
-              />
-            ) : (
-              <Select value={selectedProspectoId?.toString() || ""} onValueChange={handleSelectProspecto}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Buscar por nombre…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {prospectoOptions.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            {/* Un solo componente: con pocos prospectos se comporta como select,
+                con muchos saca el buscador. */}
+            <SearchableSelect
+              value={selectedProspectoId?.toString() || ""}
+              onValueChange={handleSelectProspecto}
+              options={prospectoOptions}
+              placeholder="Buscar por nombre…"
+              searchPlaceholder="Escribir nombre del prospecto…"
+              itemsLabel="prospectos"
+            />
           </div>
 
           {/* Desarrollos de interés - búsqueda + lista */}
@@ -546,52 +566,19 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
               </div>
             )}
 
-            {/* Buscador */}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={projSearch}
-                onChange={(e) => setProjSearch(e.target.value)}
-                placeholder="Buscar desarrollo…"
-                className="pl-8"
-              />
-            </div>
-
-            {/* Coincidencias (solo al escribir) */}
-            {projSearch.trim() && (
-              <div className="mt-1.5 max-h-48 overflow-y-auto rounded-md border border-border">
-                {(() => {
-                  const selectedIds = new Set(isEditMode ? editProyectos.map((e) => e.id_proyecto) : selectedProyectoIds);
-                  const results = filteredProyectos.filter((p) => !selectedIds.has(p.id));
-                  if (results.length === 0) {
-                    return <div className="px-3 py-2.5 text-xs text-muted-foreground">No se encontró el desarrollo</div>;
-                  }
-                  return results.map((p) => {
-                    const already = !isEditMode && existingPersonaProjectIds.has(p.id);
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        disabled={already || (isEditMode && addProjectToProspectMutation.isPending)}
-                        onClick={() => {
-                          if (already) return;
-                          if (isEditMode) {
-                            if (selectedProspectoId) addProjectToProspectMutation.mutate({ personaId: selectedProspectoId, proyectoId: p.id });
-                          } else {
-                            setSelectedProyectoIds((prev) => [...prev, p.id]);
-                          }
-                          setProjSearch("");
-                        }}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground/60"
-                      >
-                        {p.nombre}
-                        {already && <span className="text-xs text-muted-foreground">ya registrado</span>}
-                      </button>
-                    );
-                  });
-                })()}
-              </div>
-            )}
+            {/* Selector de desarrollos: se agregan de uno en uno y se quitan desde
+                las pastillas de arriba, así que el disparador siempre queda vacío
+                (`value=""`) y actúa como "agregar". */}
+            <SearchableSelect
+              value=""
+              onValueChange={(id) => addProyectoInteres(Number(id))}
+              options={proyectoPickerOptions}
+              placeholder="Buscar desarrollo…"
+              searchPlaceholder="Buscar desarrollo…"
+              itemsLabel="desarrollos"
+              disabled={isEditMode && addProjectToProspectMutation.isPending}
+              aria-label="Desarrollos de interés"
+            />
           </div>
 
           {/* Datos de la persona (separador, sin título: los campos se explican solos) */}
@@ -642,16 +629,14 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                 <div>
                   <div className={labelCls}>Teléfono <Req /> (+52)</div>
                   <div className="flex gap-2">
-                    <Select value={clavePais} onValueChange={setClavePais}>
-                      <SelectTrigger className="w-20 shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MX">MX</SelectItem>
-                        <SelectItem value="US">US</SelectItem>
-                        <SelectItem value="CO">CO</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={clavePais}
+                      onValueChange={setClavePais}
+                      options={CLAVE_PAIS_OPTIONS}
+                      className="w-20 shrink-0"
+                      contentClassName="min-w-[120px]"
+                      aria-label="Clave de país"
+                    />
                     <Input
                       className="tabular-nums"
                       inputMode="numeric"

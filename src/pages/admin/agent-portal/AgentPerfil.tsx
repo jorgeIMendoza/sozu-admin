@@ -1,54 +1,34 @@
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
+import { ExpedienteDocsPanel, type ExpDocDef } from "@/components/admin/expediente/ExpedienteDocsPanel";
 import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
-import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
 import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FIELD_LABEL_CLS, MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalForm, ModalFormHeader, Req } from "@/components/ui/modal-form";
-import { ModalViewer } from "@/components/ui/modal-viewer";
 import { OptImg } from "@/components/ui/opt-img";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useExpedienteDocs } from "@/hooks/useExpedienteDocs";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useAgentOnboardingStatus, type OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
+import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { cn } from "@/lib/utils";
-import { extractCSFFields } from "@/utils/pdfDocumentExtractors";
-import { validateCSFPdf } from "@/utils/pdfDocumentValidators";
-import { matchRegimenId } from "@/utils/regimenMatch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
-import { AlertTriangle, ArrowLeft, CalendarDays, Camera, Check, Eye, EyeOff, FileText, GraduationCap, Landmark, Loader2, PenLine, Pencil, Plus, Receipt, Trash2, Upload, UploadCloud } from "lucide-react";
-import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
-import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, ArrowLeft, CalendarDays, Camera, Check, Eye, EyeOff, FileText, GraduationCap, Landmark, Loader2, Pencil, Plus, Receipt, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-
-GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
-
-/** Extrae el texto de un PDF (constancia SAT) en el navegador con pdf.js. */
-async function extractPdfText(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const pdf = await getDocument({ data: buffer }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    pages.push(content.items.map((it: any) => ("str" in it ? it.str : "")).join(" "));
-  }
-  return pages.join("\n").trim();
-}
 
 const ACTIVATION_BLOCKS = [
   {
@@ -81,15 +61,16 @@ const ACTIVATION_BLOCKS = [
   },
 ];
 
-// Documentos del expediente del agente (tipos reales en `documentos`).
-// La identidad es UN solo documento: INE (frente+reverso, tipos 2+3) O pasaporte
-// (tipo 4) — nunca ambos; se elige con un selector. El INE se captura en una sola
-// pasada (frente y luego reverso).
-type ExpDoc = { nombre: string; emisor: string; hint: string; tipos: number[]; kind: 'camera' | 'pdf' | 'firma'; mode?: 'ine' | 'pasaporte' };
-const INE_DOC: ExpDoc = { nombre: 'INE', emisor: 'INE', hint: 'Frente y reverso', tipos: [2, 3], kind: 'camera', mode: 'ine' };
-const PASAPORTE_DOC: ExpDoc = { nombre: 'Pasaporte', emisor: 'SRE', hint: 'Página de datos (vigente)', tipos: [4], kind: 'camera', mode: 'pasaporte' };
-const CSF_DOC: ExpDoc = { nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], kind: 'pdf' };
-const CARTA_DOC: ExpDoc = { nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], kind: 'firma' };
+// Documentos del expediente del agente (tipos reales en `documentos`), definidos con
+// el contrato global de ExpedienteDocsPanel. La identidad es UN solo documento: INE
+// (frente+reverso, tipos 2+3) O pasaporte (tipo 4) — el panel resuelve el selector y
+// la captura por cámara.
+const IDENTIDAD_DOC: ExpDocDef = { key: 'identidad', kind: 'identity' };
+const CSF_DOC: ExpDocDef = { key: 'csf', nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], kind: 'pdf', csf: true };
+const CARTA_DOC: ExpDocDef = { key: 'carta', nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], kind: 'firma' };
+// Tipos que consulta el expediente del agente (fijos: la carta se oculta para los
+// dependientes pero su estatus sigue alimentando "Documentos" en Secciones).
+const AGENT_EXP_TIPOS = [2, 3, 4, 6, 48];
 
 const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'> = {
   basic: 'identidad',
@@ -119,54 +100,22 @@ function sectionBadge(status: string) {
     : { label: 'Pendiente', color: 'text-muted-foreground', bg: 'bg-muted' };
 }
 
-// Zona profesional de subida: arrastra o selecciona (PDF).
-function DocDropzone({ accept, uploading, onFile }: { accept: string; uploading: boolean; onFile: (f: File) => void }) {
-  const [drag, setDrag] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const pick = (files: FileList | null) => {
-    const f = files?.[0];
-    if (!f) return;
-    if (accept.includes('.pdf') && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Solo se permiten archivos PDF.');
-      return;
-    }
-    onFile(f);
-  };
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-      onDragLeave={() => setDrag(false)}
-      onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
-      onClick={() => !uploading && inputRef.current?.click()}
-      className={cn(
-        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-8 text-center transition-colors",
-        drag ? "border-primary bg-primary/5" : "border-border bg-muted hover:border-primary"
-      )}
-    >
-      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
-      {uploading ? (
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      ) : (
-        <UploadCloud className="h-8 w-8 text-primary" strokeWidth={1.6} />
-      )}
-      <div>
-        <p className="text-sm font-bold text-foreground">{uploading ? 'Subiendo…' : 'Arrastra el archivo aquí'}</p>
-        <p className="mt-1 text-xs font-medium text-muted-foreground/70">o haz clic para seleccionar · Solo PDF</p>
-      </div>
-    </div>
-  );
-}
-/** Valores centinela de los selects (Radix no admite value=""). */
-const NO_REGIMEN = "__none__";
+/** Valor centinela de "vacío" en los selects (se traduce a "" al guardar). */
 const SIN_ESPECIFICAR = "__none__";
+
+const SEXO_OPTIONS: SearchableOption[] = [
+  { value: SIN_ESPECIFICAR, label: "Sin especificar" },
+  { value: "M", label: "Hombre" },
+  { value: "F", label: "Mujer" },
+  { value: "O", label: "Otro" },
+];
 
 const AgentPerfil = () => {
   const { profile, user, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const { impersonatedAgentPersonaId, impersonatedAgentName, impersonatedAgentEmail, isImpersonating } = useAgentImpersonation();
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
+  const fullAccess = useAgentPortalFullAccess();
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const displayName = isImpersonating ? impersonatedAgentName : profile?.nombre;
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
@@ -377,45 +326,12 @@ const AgentPerfil = () => {
     staleTime: 60_000,
   });
 
-  const isMobile = useIsMobile();
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
   // Cuenta bancaria: 'create' abre el alta en blanco; 'edit' carga la cuenta tocada.
   const [bankTarget, setBankTarget] = useState<{ mode: 'create' | 'edit'; id: number | null }>({ mode: 'create', id: null });
   // Pestaña inicial del modal de paso (p. ej. 'address' para ir directo a firmar la carta).
   const [activeStepTab, setActiveStepTab] = useState<string | undefined>(undefined);
-  // Captura por cámara de identidad (INE frente+reverso o pasaporte) directo desde
-  // el expediente. Reutiliza el componente del portal cliente.
-  const [ineCaptureOpen, setIneCaptureOpen] = useState(false);
-  const [cameraMode, setCameraMode] = useState<'ine' | 'pasaporte'>('ine');
   const [profileView, setProfileView] = useState<'overview' | 'expediente' | 'identidad' | 'fiscal' | 'bank' | 'training'>('overview');
-  const [docDetail, setDocDetail] = useState<ExpDoc | null>(null);
-  // Selector de identidad (INE | Pasaporte). Solo se muestra hasta que se sube uno válido.
-  const [identitySel, setIdentitySel] = useState<'ine' | 'pasaporte'>('ine');
-  // Visor del INE (dos caras apiladas).
-  const [ineViewer, setIneViewer] = useState<{ frente: string | null; reverso: string | null } | null>(null);
-  const [viewer, setViewer] = useState<{ url: string; nombre: string } | null>(null);
-  // CSF: datos extraídos para confirmar/editar antes de guardar
-  const [csfConfirm, setCsfConfirm] = useState<{
-    file: File;
-    fields: { key: string; label: string; value: string; personaCol: string | null; kind?: "text" | "regimen" }[];
-  } | null>(null);
-  const [csfEdit, setCsfEdit] = useState<Record<string, string>>({});
-  const [savingCsf, setSavingCsf] = useState(false);
-  useEffect(() => {
-    if (csfConfirm) {
-      const init: Record<string, string> = {};
-      csfConfirm.fields.forEach((f) => { init[f.key] = f.value; });
-      setCsfEdit(init);
-    }
-  }, [csfConfirm]);
-  // Catálogo de régimen fiscal (para mapear el texto de la CSF → id que guarda personas.regimen)
-  const { data: regimenCatalog = [] } = useQuery({
-    queryKey: ["agent-regimen-catalog"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("regimen").select("id, nombre, tipo").eq("activo", true).order("id");
-      return (data || []) as { id: string; nombre: string; tipo: string }[];
-    },
-  });
   const [securityOpen, setSecurityOpen] = useState(false);
   const [pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
@@ -489,6 +405,10 @@ const AgentPerfil = () => {
     },
     staleTime: Infinity,
   });
+  const usoCfdiOptions = useMemo<SearchableOption[]>(
+    () => usoCfdiCatalog.map((u: any) => ({ value: u.codigo, label: `${u.codigo} · ${u.nombre}`, keywords: u.codigo })),
+    [usoCfdiCatalog]
+  );
 
   const [savingCfdi, setSavingCfdi] = useState(false);
 
@@ -500,93 +420,6 @@ const AgentPerfil = () => {
       queryClient.invalidateQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
     } finally {
       setSavingCfdi(false);
-    }
-  };
-
-  // Subida directa de PDF (constancia fiscal) → documentos, pendiente de validación.
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-  const uploadDocPdf = async (file: File, tipo: number, opts?: { estatus?: number; personaUpdates?: Record<string, string | null> }) => {
-    if (!personaId) { toast.error('Tu usuario no tiene un perfil de persona asociado.'); return; }
-    const estatus = opts?.estatus ?? 1;
-    setUploadingDoc(true);
-    try {
-      const path = `expediente/${personaId}/${tipo}_${Date.now()}_${file.name}`;
-      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
-      await (supabase as any).from('documentos').update({ activo: false })
-        .eq('id_persona', personaId).eq('id_tipo_documento', tipo).eq('activo', true);
-      const { error: insErr } = await (supabase as any).from('documentos').insert({
-        url: publicUrl, id_tipo_documento: tipo, id_persona: personaId, activo: true, id_estatus_verificacion: estatus,
-      });
-      if (insErr) throw insErr;
-      // Captura de datos confirmados (CSF) en el perfil.
-      if (opts?.personaUpdates && Object.keys(opts.personaUpdates).length > 0) {
-        const { error: pErr } = await (supabase as any).from('personas').update(opts.personaUpdates).eq('id', personaId);
-        if (pErr) console.error('[uploadDocPdf] persona update:', pErr);
-      }
-      queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
-      toast.success(estatus === 2 ? 'Documento validado y datos guardados en tu perfil.' : 'Documento subido. Queda pendiente de validación.');
-      setDocDetail(null);
-    } catch (e: any) {
-      toast.error(e?.message || 'No se pudo subir el documento.');
-    } finally {
-      setUploadingDoc(false);
-    }
-  };
-
-  // Manejo de archivo del expediente. La CSF (tipo 6) se procesa: extrae datos → modal de
-  // confirmación editable → guarda documento (validado) + datos fiscales en el perfil.
-  const handleDocFile = async (file: File, doc: ExpDoc) => {
-    const tipo = doc.tipos[0];
-    if (!doc.tipos.includes(6)) { uploadDocPdf(file, tipo); return; }
-    setUploadingDoc(true);
-    try {
-      let text = "";
-      try { text = await extractPdfText(file); } catch { toast.error("No se pudo leer el PDF. Intenta de nuevo."); return; }
-      if (!text || text.trim().length < 20) {
-        toast.error("Debe ser el PDF original de la Constancia (no escaneo ni imagen).", { duration: 7000 });
-        return;
-      }
-      const v = validateCSFPdf(text);
-      if (!v.ok) { toast.error(v.reason, { duration: 8000 }); return; }
-      const f = extractCSFFields(text);
-      setDocDetail(null);
-      setCsfConfirm({
-        file,
-        fields: [
-          { key: "rfc",          label: "RFC",                  value: f.rfc ?? "",          personaCol: "rfc" },
-          { key: "curp",         label: "CURP",                 value: f.curp ?? "",         personaCol: "curp" },
-          { key: "nombre",       label: "Nombre / Razón social", value: f.nombre ?? "",      personaCol: "nombre_legal" },
-          { key: "regimen",      label: "Régimen fiscal",       value: matchRegimenId(f.regimen ?? "", regimenCatalog), personaCol: "regimen", kind: "regimen" },
-          { key: "codigoPostal", label: "Código postal",        value: f.codigoPostal ?? "", personaCol: "direccion_fiscal_codigo_postal" },
-          { key: "calle",        label: "Calle",                value: f.calle ?? "",        personaCol: "direccion_fiscal_calle" },
-          { key: "numExt",       label: "Núm. exterior",        value: f.numExt ?? "",       personaCol: "direccion_fiscal_num_ext" },
-          { key: "numInt",       label: "Núm. interior",        value: f.numInt ?? "",       personaCol: "direccion_fiscal_num_int" },
-          { key: "colonia",      label: "Colonia",              value: f.colonia ?? "",      personaCol: "direccion_fiscal_colonia" },
-        ],
-      });
-    } finally {
-      setUploadingDoc(false);
-    }
-  };
-
-  const handleConfirmCsf = async () => {
-    if (!csfConfirm) return;
-    setSavingCsf(true);
-    try {
-      const personaUpdates: Record<string, string | null> = {};
-      for (const fld of csfConfirm.fields) {
-        const val = (csfEdit[fld.key] ?? fld.value).trim();
-        // El régimen se elige del catálogo: si el agente lo deja vacío se guarda null.
-        if (fld.kind === "regimen") { personaUpdates["regimen"] = val || null; continue; }
-        if (fld.personaCol && val) personaUpdates[fld.personaCol] = val;
-      }
-      await uploadDocPdf(csfConfirm.file, 6, { estatus: 2, personaUpdates });
-      await queryClient.refetchQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
-      setCsfConfirm(null);
-    } finally {
-      setSavingCsf(false);
     }
   };
 
@@ -657,21 +490,13 @@ const AgentPerfil = () => {
     }
   };
 
-  // Documentos del expediente (tipos de agente)
-  const { data: expedienteDocs = [] } = useQuery({
-    queryKey: ['agent-expediente-docs', personaId],
-    queryFn: async (): Promise<any[]> => {
-      if (!personaId) return [];
-      const { data } = await (supabase as any)
-        .from('documentos')
-        .select('id, id_tipo_documento, id_estatus_verificacion, url')
-        .eq('id_persona', personaId)
-        .eq('activo', true)
-        .in('id_tipo_documento', [2, 3, 4, 6, 48]);
-      return data || [];
-    },
-    enabled: !!personaId,
-    staleTime: 30_000,
+  // Documentos del expediente (tipos de agente). Misma queryKey que consume el panel
+  // global, para que subir/reemplazar refresque también los estatus de "Secciones".
+  const expedienteDocsQueryKey = useMemo(() => ['agent-expediente-docs', personaId], [personaId]);
+  const { docs: expedienteDocs } = useExpedienteDocs({
+    personaId,
+    tipos: AGENT_EXP_TIPOS,
+    queryKey: expedienteDocsQueryKey,
   });
 
   // ¿El agente pertenece a una inmobiliaria (dependiente)? Discriminador:
@@ -695,6 +520,10 @@ const AgentPerfil = () => {
     staleTime: 60_000,
   });
   const esIndependiente = !hasInmobiliaria;
+  // Super Admin / roles con `puede_impersonar` ven el expediente completo (incluida
+  // la Carta) aunque su persona quede marcada como dependiente. La carta sigue
+  // siendo REQUISITO solo para el agente independiente (ver docsStatus).
+  const puedeVerCarta = esIndependiente || fullAccess;
 
   // Estatus agregado de Documentos (para la fila "Documentos" en Secciones).
   // Identidad = INE (frente+reverso) O pasaporte — no se exigen ambos.
@@ -1212,159 +1041,21 @@ const AgentPerfil = () => {
       </>)}
 
       {/* ===== VISTA: EXPEDIENTE ===== */}
-      {profileView === 'expediente' && (() => {
-        // La identidad es UN documento: INE (frente+reverso) O pasaporte. Se elige
-        // con un selector que se oculta al subir una identidad vigente. La carta
-        // (solo independientes) se firma con Mifiel; la CSF es PDF.
-        // Prioridad de estatus por tipo: validado > en revisión > rechazado > expirado
-        // (una recaptura marca el registro anterior como expirado, hay que ignorarlo).
-        const rank = (ev: number | null | undefined) => ev === 2 ? 4 : (ev == null || ev === 1) ? 3 : ev === 3 ? 2 : 1;
-        const tipoRow = (t: number) => {
-          const rws = expedienteDocs.filter((d: any) => d.id_tipo_documento === t);
-          if (!rws.length) return null;
-          return rws.slice().sort((a: any, b: any) => rank(b.id_estatus_verificacion) - rank(a.id_estatus_verificacion))[0];
-        };
-        const tipoEstado = (t: number): 'none' | 'validado' | 'revision' | 'rechazado' | 'expirado' => {
-          const r = tipoRow(t);
-          if (!r) return 'none';
-          const ev = r.id_estatus_verificacion;
-          return ev === 2 ? 'validado' : ev === 3 ? 'rechazado' : ev === 4 ? 'expirado' : 'revision';
-        };
-
-        const ineEstados = [tipoEstado(2), tipoEstado(3)];
-        const hasINE = ineEstados.every((e) => e !== 'none');           // ambas caras
-        const pasEstado = tipoEstado(4);
-        const hasPasaporte = pasEstado !== 'none';
-        const ineVigente = hasINE && !ineEstados.includes('expirado');
-        const pasVigente = hasPasaporte && pasEstado !== 'expirado';
-        const identityVigente = ineVigente || pasVigente;
-
-        // Doc de identidad a mostrar: el que ya se subió; si no, el del selector.
-        const identityDoc = hasPasaporte ? PASAPORTE_DOC : hasINE ? INE_DOC : (identitySel === 'pasaporte' ? PASAPORTE_DOC : INE_DOC);
-        const showSelector = !identityVigente; // se oculta una vez subida una identidad vigente
-
-        const visibleDocs: ExpDoc[] = [identityDoc, CSF_DOC, ...(esIndependiente ? [CARTA_DOC] : [])];
-
-        // Estado combinado del doc (el INE combina sus dos caras).
-        const docEstado = (doc: ExpDoc): 'pendiente' | 'validado' | 'revision' | 'rechazado' | 'expirado' => {
-          const estados = doc.tipos.map(tipoEstado);
-          if (estados.some((e) => e === 'none')) return 'pendiente';
-          if (estados.every((e) => e === 'validado')) return 'validado';
-          if (estados.some((e) => e === 'expirado')) return 'expirado';
-          if (estados.some((e) => e === 'rechazado')) return 'rechazado';
-          return 'revision';
-        };
-
-        return (
-        <div>
-          {/* Leyenda: solo mientras no haya una identidad vigente */}
-          {!identityVigente && (
-            <div className="mb-2.5 rounded-md border border-amber-100 bg-amber-50 px-4 py-3">
-              <p className="text-xs font-medium leading-relaxed text-amber-700">
-                Aún no has registrado tu identificación oficial. Elige y captura tu <span className="font-bold">INE</span> (frente y reverso) o tu <span className="font-bold">pasaporte</span> para completar tu expediente.
-              </p>
-            </div>
-          )}
-
-          {/* Selector INE | Pasaporte (solo hasta subir una identidad vigente) */}
-          {showSelector && perfilPerms.canUpdate && (
-            <div className="mb-2.5 inline-flex rounded-md border border-border bg-muted p-1">
-              {([['ine', 'INE'], ['pasaporte', 'Pasaporte']] as const).map(([m, label]) => (
-                <button
-                  key={m}
-                  onClick={() => setIdentitySel(m)}
-                  className={cn(
-                    "rounded px-4 py-1.5 text-xs font-bold transition-colors",
-                    identitySel === m ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2.5">
-            {visibleDocs.map((doc, i) => {
-              const isFirma = doc.kind === 'firma';
-              const isCamera = doc.kind === 'camera';
-              const isINE = doc.tipos.length === 2; // INE = frente + reverso
-              const estado = docEstado(doc);
-              const exists = estado !== 'pendiente';
-              const badge =
-                estado === 'validado'  ? { label: 'Validado',    color: 'text-primary', bg: 'bg-primary/10' }
-                : estado === 'revision' ? { label: 'En revisión', color: 'text-amber-700', bg: 'bg-amber-100' }
-                : estado === 'rechazado'? { label: 'Rechazado',   color: 'text-destructive', bg: 'bg-destructive/10' }
-                : estado === 'expirado' ? { label: 'Expirado',    color: 'text-muted-foreground', bg: 'bg-muted' }
-                : { label: 'Pendiente', color: 'text-muted-foreground', bg: 'bg-muted' };
-              // ¿Requiere capturar/subir uno nuevo? (falta, expiró o fue rechazado).
-              // Si ya está cargado y válido/en revisión → lápiz (reemplazar por si se equivocaron).
-              const needsUpload = !exists || estado === 'expirado' || estado === 'rechazado';
-              const showAction = perfilPerms.canUpdate && (isFirma ? !exists : true);
-              const ineFrente = tipoRow(2)?.url || null;
-              const ineReverso = tipoRow(3)?.url || null;
-              const singleUrl = doc.tipos.map(tipoRow).find((r: any) => r?.url)?.url || null;
-              const canView = isINE ? !!(ineFrente || ineReverso) : !!singleUrl;
-              const handleAction = () => {
-                // Carta: abre el modal Identidad directo en Dirección (ahí está la firma + datos por completar).
-                if (isFirma) { setActiveStepTab('address'); setActiveStep('basic'); return; }
-                if (isCamera) { setCameraMode(doc.mode || 'ine'); setIneCaptureOpen(true); return; } // INE/pasaporte
-                setDocDetail(doc);                                          // CSF (PDF)
-              };
-              const handleView = () => {
-                if (isINE) { setIneViewer({ frente: ineFrente, reverso: ineReverso }); return; }
-                if (singleUrl) setViewer({ url: singleUrl, nombre: doc.nombre });
-              };
-              const ActionIcon = isFirma ? PenLine : needsUpload ? (isCamera ? Camera : Upload) : Pencil;
-              const actionTitle = isFirma ? 'Firmar carta'
-                : needsUpload ? (isCamera ? 'Capturar documento' : 'Subir documento')
-                : 'Reemplazar documento';
-              return (
-                <div
-                  key={doc.nombre}
-                  className="flex items-center gap-3.5 rounded-md border border-border bg-card px-4 py-4"
-                >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold tabular-nums text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="text-sm font-bold text-foreground">{doc.nombre}</span>
-                      <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", badge.bg, badge.color)}>
-                        {badge.label}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs font-medium text-muted-foreground/70">
-                      {doc.emisor} · {exists ? 'Cargado' : 'Sin cargar'}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {showAction && (
-                      <button
-                        title={actionTitle}
-                        onClick={handleAction}
-                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
-                      >
-                        <ActionIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                    {canView && (
-                      <button
-                        title="Ver documento"
-                        onClick={handleView}
-                        className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        );
-      })()}
+      {profileView === 'expediente' && (
+        <ExpedienteDocsPanel
+          personaId={personaId}
+          docs={[IDENTIDAD_DOC, CSF_DOC, ...(puedeVerCarta ? [CARTA_DOC] : [])]}
+          canUpdate={perfilPerms.canUpdate}
+          docsQueryKey={expedienteDocsQueryKey}
+          queryTipos={AGENT_EXP_TIPOS}
+          // La carta se firma dentro del modal Identidad → pestaña Dirección.
+          onFirma={() => { setActiveStepTab('address'); setActiveStep('basic'); }}
+          onChanged={() => {
+            queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs', personaId] });
+            queryClient.refetchQueries({ queryKey: ['agent-perfil-persona-datos', personaId] });
+          }}
+        />
+      )}
 
       {/* ===== VISTA: IDENTIDAD ===== */}
       {profileView === 'identidad' && (() => {
@@ -1433,20 +1124,17 @@ const AgentPerfil = () => {
                 <div>
                   <div className="text-xs font-medium text-muted-foreground/70">Uso del CFDI</div>
                 </div>
-                <Select
+                <SearchableSelect
                   value={personaDatos?.uso_cfdi || ''}
                   disabled={!perfilPerms.canUpdate || savingCfdi}
                   onValueChange={(v) => saveUsoCfdi(v)}
-                >
-                  <SelectTrigger className="w-auto min-w-60">
-                    <SelectValue placeholder="Selecciona…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {usoCfdiCatalog.map((u: any) => (
-                      <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} · {u.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={usoCfdiOptions}
+                  placeholder="Selecciona…"
+                  itemsLabel="usos"
+                  searchPlaceholder="Buscar por código o nombre…"
+                  className="w-auto min-w-60"
+                  aria-label="Uso del CFDI"
+                />
               </div>
               <div className="border-t border-border pt-3 text-xs font-medium leading-relaxed text-muted-foreground">
                 Como emites CFDI de comisiones a SOZU, tu RFC, régimen y CP fiscal deben coincidir con el SAT (CFDI 4.0).
@@ -1591,53 +1279,6 @@ const AgentPerfil = () => {
         );
       })()}
 
-      {/* Modal confirmar datos de la Constancia (CSF) */}
-      <Dialog open={!!csfConfirm} onOpenChange={(o) => { if (!o && !savingCsf) setCsfConfirm(null); }}>
-        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-md p-0">
-          <ModalFormHeader
-            title="Confirma tus datos fiscales"
-            subtitle="Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal; se guardarán en tu perfil y el documento quedará validado."
-          />
-          <div className={cn(MODAL_BODY_CLS, "max-h-[52vh] gap-3")}>
-            {csfConfirm?.fields.map((f) => (
-              <div key={f.key}>
-                <div className={FIELD_LABEL_CLS}>{f.label}</div>
-                {f.kind === "regimen" ? (
-                  /* Régimen: solo valores del catálogo SAT en BD. Si la Constancia
-                     trae uno que no existe, queda vacío y el agente lo elige. */
-                  <Select
-                    value={csfEdit[f.key] ?? f.value ?? ""}
-                    onValueChange={(v) => setCsfEdit((prev) => ({ ...prev, [f.key]: v === NO_REGIMEN ? "" : v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona tu régimen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_REGIMEN}>Sin especificar</SelectItem>
-                      {regimenCatalog.map((r) => (
-                        <SelectItem key={r.id} value={String(r.id)}>{r.id} · {r.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={csfEdit[f.key] ?? f.value}
-                    onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className={MODAL_FOOTER_CLS}>
-            <Button variant="cancel" onClick={() => setCsfConfirm(null)} disabled={savingCsf}> Cancelar
-            </Button>
-            <Button variant="primary-outline" onClick={handleConfirmCsf} disabled={savingCsf}>
-              {savingCsf ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Sí, es correcta
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Modal cambiar contraseña */}
       <Dialog open={securityOpen} onOpenChange={(o) => { if (!o) { setSecurityOpen(false); setPwCurrent(''); setPwNew(''); setPwConfirm(''); setPwShow({ current: false, nueva: false, confirm: false }); } }}>
         <DialogContent className="max-w-[400px] gap-0 overflow-hidden rounded-md bg-card p-0">
@@ -1694,45 +1335,6 @@ const AgentPerfil = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Visor de documento (in-app). ModalViewer resuelve rutas del bucket privado
-          `firmas-digitales` (carta firmada) a signed URL y documentos Mifiel vía
-          Edge Function; los demás docs traen URL pública completa. */}
-      <ModalViewer
-        open={!!viewer}
-        onOpenChange={(o) => { if (!o) setViewer(null); }}
-        url={viewer?.url || ""}
-        title={viewer?.nombre || "Documento"}
-      />
-
-      {/* Captura por cámara de identidad (INE frente+reverso o pasaporte) directo
-          desde el expediente. Sube a `documentos` (tipo 2/3/4) en estatus En revisión. */}
-      {personaId && (
-        <ClienteINECameraCapture
-          open={ineCaptureOpen}
-          onOpenChange={setIneCaptureOpen}
-          personaId={personaId}
-          isDesktop={!isMobile}
-          mode={cameraMode}
-          onCompleted={() => {
-            setIneCaptureOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['agent-expediente-docs', personaId] });
-            queryClient.invalidateQueries({ queryKey: ['agent-onboarding-docs', personaId] });
-          }}
-        />
-      )}
-
-      {/* Visor del INE: frente y reverso apilados vertical (como dos hojas). */}
-      <Dialog open={!!ineViewer} onOpenChange={(o) => { if (!o) setIneViewer(null); }}>
-        <DialogContent className="w-full gap-0 overflow-hidden rounded-md bg-card p-0 sm:w-[92vw] sm:max-w-[560px]">
-          <ModalFormHeader title="INE" subtitle="Frente y reverso" />
-          <div className="max-h-[75vh] overflow-y-auto px-6 py-6 space-y-4">
-            {[ineViewer?.frente, ineViewer?.reverso].filter(Boolean).map((url, i) => (
-              <OptImg key={i} src={url as string} w={1000} alt="INE" className="w-full rounded-md border border-border" />
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Modal editar información de Identidad */}
       <Dialog open={identEditOpen} onOpenChange={(o) => { if (!o) setIdentEditOpen(false); }}>
         <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden rounded-md bg-card p-0 sm:w-[92vw] sm:max-w-[540px]">
@@ -1765,18 +1367,13 @@ const AgentPerfil = () => {
                     </div>
                     <div>
                       <label className={lbl}>Sexo</label>
-                      <Select
+                      <SearchableSelect
                         value={identForm.sexo || SIN_ESPECIFICAR}
                         onValueChange={(v) => setIdent('sexo', v === SIN_ESPECIFICAR ? '' : v)}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Sin especificar" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={SIN_ESPECIFICAR}>Sin especificar</SelectItem>
-                          <SelectItem value="M">Hombre</SelectItem>
-                          <SelectItem value="F">Mujer</SelectItem>
-                          <SelectItem value="O">Otro</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        options={SEXO_OPTIONS}
+                        placeholder="Sin especificar"
+                        aria-label="Sexo"
+                      />
                     </div>
                   </div>
                   <div>
@@ -1800,34 +1397,6 @@ const AgentPerfil = () => {
               Guardar
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal detalle de documento */}
-      <Dialog open={!!docDetail} onOpenChange={(o) => { if (!o) setDocDetail(null); }}>
-        <DialogContent className="flex max-h-[90vh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-md bg-card p-0">
-          {docDetail && (
-            <>
-              <ModalFormHeader
-                title={docDetail.nombre}
-                subtitle={`${docDetail.emisor} · ${docDetail.hint}`}
-              />
-
-              {/* Solo carga del archivo. Los datos leídos se confirman en la
-                  modal "Confirma tus datos fiscales" al subir el documento. */}
-              <div className={MODAL_BODY_CLS}>
-                {perfilPerms.canUpdate ? (
-                  <DocDropzone accept=".pdf" uploading={uploadingDoc} onFile={(f) => handleDocFile(f, docDetail)} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {expedienteDocs.some((d: any) => docDetail.tipos.includes(d.id_tipo_documento))
-                      ? 'Documento cargado.'
-                      : 'Aún no has cargado este documento.'}
-                  </p>
-                )}
-              </div>
-            </>
-          )}
         </DialogContent>
       </Dialog>
 

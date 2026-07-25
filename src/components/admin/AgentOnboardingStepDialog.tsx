@@ -1,18 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MifielSigningDialog } from "@/components/admin/MifielSigningDialog";
+import { FaceMatchTestDialog } from "@/components/admin/FaceMatchTestDialog";
 import { ModalViewer } from "@/components/ui/modal-viewer";
 import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, FileText, CalendarDays, Camera, Shield, PenTool, ChevronRight } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, Clock, RefreshCw, FileText, CalendarDays, Camera, Shield, PenTool, ChevronRight, Eye } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,6 +25,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
+import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,7 @@ import {
   Req,
   SECTION_HEADER_CLS,
   ModalFormHeader,
+  MODAL_FOOTER_CLS,
 } from "@/components/ui/modal-form";
 import {
   useStabilityDetection,
@@ -75,8 +78,42 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   training: 'Agenda tu cita de capacitación presencial',
 };
 
+/**
+ * Extrae el error real de una Edge Function. `supabase.functions.invoke` solo
+ * expone "Edge Function returned a non-2xx status code"; el motivo viaja en el
+ * body de la respuesta, accesible por `err.context` (un Response).
+ */
+async function readEdgeFunctionError(err: any): Promise<string> {
+  const ctx = err?.context;
+  if (!ctx || typeof ctx !== 'object') return '';
+  try {
+    const res = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+    if (typeof res.json === 'function') {
+      const body = await res.json();
+      const msg = body?.error || body?.message;
+      if (msg) return String(msg);
+    }
+  } catch {
+    // Body no-JSON o ya consumido: se intenta como texto abajo.
+  }
+  try {
+    if (typeof ctx.text === 'function') {
+      const txt = await ctx.text();
+      if (txt) return txt.slice(0, 500);
+    }
+  } catch {
+    // Sin body legible: el llamador cae al mensaje genérico.
+  }
+  return '';
+}
+
 // Constancia de situación fiscal (type 6) for fiscal step
 const FISCAL_DOC_TYPES = [6];
+// Lista corta: el SearchableSelect la pinta sin buscador (mismo componente que los catálogos).
+const SEXO_OPTIONS: SearchableOption[] = [
+  { value: 'M', label: 'Masculino' },
+  { value: 'F', label: 'Femenino' },
+];
 // All required doc types for onboarding queries
 const REQUIRED_DOC_TYPES = [2, 3, 4, 6, 48];
 // Document types that support camera capture
@@ -146,11 +183,11 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange,
       <Loader2 className="h-6 w-6 animate-spin text-primary" />
     </div>
   ) : step === 'documents' ? (
-    // El paso "documents" quedó dedicado exclusivamente a la firma de la Carta de
-    // comercialización (tipo 48). La identidad (INE/pasaporte) y la CSF se suben
-    // desde el Expediente / paso fiscal. Solo aplica a agentes independientes.
+    // El paso "documents" es la Carta de comercialización (tipo 48) precedida de la
+    // verificación de identidad: sin INE (frente y reverso) o pasaporte, la firma no
+    // se habilita. La CSF se sube desde el paso fiscal.
     <div>
-      <AgentDocumentsStep personaId={personaId} filterDocTypes={[48]} onTrackFieldChange={() => {
+      <AgentDocumentsStep personaId={personaId} filterDocTypes={[2, 3, 4, 48]} requireIdentityDocs onTrackFieldChange={() => {
         if (!hasTrackedFieldChange.current) {
           hasTrackedFieldChange.current = true;
           track({ page: "modal_perfil", elementId: "perfil_fase_campo_modificado", metadata: { fase: step } });
@@ -216,7 +253,18 @@ export function AgentOnboardingStepDialog({ step, personaId, open, onOpenChange,
 
 // ---------- Agent Documents Step ----------
 
-function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onTrackDocView }: { personaId: number; filterDocTypes?: number[]; onTrackFieldChange?: () => void; onTrackDocView?: (docName: string) => void }) {
+function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onTrackDocView, signGateReady, onBeforeSign, requireIdentityDocs }: {
+  personaId: number;
+  filterDocTypes?: number[];
+  onTrackFieldChange?: () => void;
+  onTrackDocView?: (docName: string) => void;
+  /** El formulario contenedor ya tiene sus obligatorios llenos (aunque no estén guardados). */
+  signGateReady?: boolean;
+  /** Persiste el formulario contenedor antes de firmar. Devuelve false si no se pudo guardar. */
+  onBeforeSign?: () => Promise<boolean>;
+  /** Exige identificación (INE frente+reverso o pasaporte) capturada antes de habilitar la firma. */
+  requireIdentityDocs?: boolean;
+}) {
   const queryClient = useQueryClient();
   const { hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
 
@@ -260,7 +308,23 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
   // Check if basic info + address + identity docs (INE/Passport) are ready — excludes carta (48) to avoid circular dependency
   const hasIdentityDocUploaded = hasINEDocs || hasPasaporteDocs;
-  const basicInfoAndDocsReady = hasBasicIdentityComplete || hasIdentityDocUploaded;
+  // Identificación COMPLETA: INE con sus dos caras, o pasaporte.
+  const ineCompleto = INE_DOC_TYPES.every((t) => existingDocs.some((d: any) => d.id_tipo_documento === t));
+  const identityDocsComplete = hasPasaporteDocs || ineCompleto;
+  // `signGateReady` cubre el caso de datos recién capturados y aún sin guardar:
+  // el botón de firma se habilita con el formulario completo y guarda al firmar.
+  const datosBasicosListos = hasBasicIdentityComplete || !!signGateReady;
+  const basicInfoAndDocsReady = datosBasicosListos || hasIdentityDocUploaded;
+
+  // Identidad VERIFICADA = la identificación pasó la validación biométrica del portal
+  // (documento + selfie con coincidencia facial → `id_estatus_verificacion = 2`).
+  const tipoVerificado = (t: number) =>
+    existingDocs.some((d: any) => d.id_tipo_documento === t && d.id_estatus_verificacion === 2);
+  const identidadVerificada = tipoVerificado(PASAPORTE_DOC_TYPE) || INE_DOC_TYPES.every(tipoVerificado);
+  // Con `requireIdentityDocs` la carta solo se desbloquea con identidad verificada.
+  const cartaHabilitada = requireIdentityDocs
+    ? identidadVerificada && datosBasicosListos
+    : basicInfoAndDocsReady;
   const [identityMode, setIdentityMode] = useState<'ine' | 'pasaporte'>('ine');
   
   // Sync identity mode from existing docs on first load
@@ -299,12 +363,16 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const [cartaPdfViewerUrl, setCartaPdfViewerUrl] = useState<string | null>(null);
   // Visor interno de documentos del expediente (PDF o imagen).
   const [docView, setDocView] = useState<{ url: string; nombre: string } | null>(null);
+  // Visor de la identificación: una sola vista con todas sus caras (frente y reverso).
+  const [identityView, setIdentityView] = useState<{ titulo: string; imagenes: { url: string; etiqueta: string }[] } | null>(null);
+  // Prueba de comparación facial local (Human): no altera el estatus del expediente.
+  const [faceTest, setFaceTest] = useState<{ url: string; label: string } | null>(null);
   const [agentSignaturePadOpen, setAgentSignaturePadOpen] = useState(false);
   const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null);
   const [pendingSignAction, setPendingSignAction] = useState<"firmar" | "continuar" | null>(null);
 
   // Fetch persona data for Mifiel (name + email)
-  const { data: personaForMifiel } = useQuery({
+  const { data: personaForMifiel, refetch: refetchPersonaForMifiel } = useQuery({
     queryKey: ['agent-persona-mifiel', personaId],
     queryFn: async () => {
       const { data } = await supabase
@@ -356,7 +424,12 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       });
 
       const upstreamStatus = Number(mifielData?.upstream_status || 0);
-      const errorMessage = [mifielError?.message, mifielData?.error, JSON.stringify(mifielData?.details ?? '')]
+      const errorMessage = [
+        mifielError ? await readEdgeFunctionError(mifielError) : '',
+        mifielError?.message,
+        mifielData?.error,
+        JSON.stringify(mifielData?.details ?? ''),
+      ]
         .filter(Boolean)
         .join(' | ');
       const mifielNotFound = upstreamStatus === 404 || /404|not found|no existe|deleted/i.test(errorMessage);
@@ -403,12 +476,33 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     refetchInterval: 30000,
   });
 
+  // Persona usada para firmar: la recién guardada gana a la del cache (que puede
+  // estar desfasada si el usuario acaba de editar el formulario).
+  const signPersonaRef = useRef<{ nombre_legal: string | null; email: string | null } | null>(null);
+
   // Step 1: Ask for autograph before creating/continuing Mifiel doc (or skip if not required)
-  const handleRequestAgentSignature = (action: "firmar" | "continuar") => {
-    if (!personaForMifiel?.email || !personaForMifiel?.nombre_legal) {
+  const handleRequestAgentSignature = async (action: "firmar" | "continuar") => {
+    // Guardar lo capturado en el formulario contenedor antes de firmar: el agente
+    // no debería tener que darle "Guardar", cerrar y volver a abrir el modal.
+    let persona = personaForMifiel;
+    if (onBeforeSign) {
+      setSendingToMifiel(true);
+      let guardado = false;
+      try {
+        guardado = await onBeforeSign();
+      } finally {
+        setSendingToMifiel(false);
+      }
+      if (!guardado) return;
+      persona = (await refetchPersonaForMifiel()).data ?? persona;
+    }
+
+    if (!persona?.email || !persona?.nombre_legal) {
       toast.error("Faltan datos del agente (nombre o email) para enviar a firma.");
       return;
     }
+    signPersonaRef.current = persona;
+
     if (!requiereFirmaAutografa) {
       // Skip autograph, proceed directly
       if (action === "firmar") {
@@ -434,12 +528,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   };
 
   const doFirmarCarta = async (firmaAutografa: string | null) => {
+    const persona = signPersonaRef.current ?? personaForMifiel;
     setSendingToMifiel(true);
     try {
       const { data, error } = await supabase.functions.invoke("mifiel-crear-documento", {
         body: {
-          agente_email: personaForMifiel!.email,
-          agente_nombre: personaForMifiel!.nombre_legal,
+          agente_email: persona!.email,
+          agente_nombre: persona!.nombre_legal,
           agente_persona_id: personaId,
           carta_acuerdo_id: CARTA_ACUERDO_ID,
           firma_autografa_agente: firmaAutografa,
@@ -448,7 +543,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Error desconocido");
-      
+
       if (data.widget_id) {
         setMifielWidgetId(data.widget_id);
         setMifielDialogOpen(true);
@@ -457,13 +552,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       }
       refetchFirma();
     } catch (err: any) {
-      const msg = err.message || "Error";
-      const isCreditError = /cr[eé]ditos|402|no puedes continuar/i.test(msg);
-      if (isCreditError) {
-        toast.error("No fue posible procesar la firma. Contacta al administrador para resolver un problema con los créditos de verificación biométrica.");
-      } else {
-        toast.error("Error al enviar a firma: " + msg);
-      }
+      // supabase-js solo expone "Edge Function returned a non-2xx status code";
+      // el motivo real viene en el body de la respuesta (err.context). Ese detalle
+      // (proveedor, créditos, credenciales) queda SOLO en consola: al agente se le
+      // da un mensaje neutro, sin información interna.
+      const detalle = (await readEdgeFunctionError(err)) || err.message || "Error";
+      console.error("[mifiel-crear-documento]", detalle);
+      toast.error("No se pudo firmar la carta en este momento. Inténtalo más tarde o contacta a tu administrador.");
     } finally {
       setSendingToMifiel(false);
     }
@@ -495,7 +590,12 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       });
 
       const upstreamStatus = Number(mifielData?.upstream_status || 0);
-      const errorMessage = [mifielError?.message, mifielData?.error, JSON.stringify(mifielData?.details ?? '')]
+      const errorMessage = [
+        mifielError ? await readEdgeFunctionError(mifielError) : '',
+        mifielError?.message,
+        mifielData?.error,
+        JSON.stringify(mifielData?.details ?? ''),
+      ]
         .filter(Boolean)
         .join(' | ');
       const mifielNotFound = upstreamStatus === 404 || /404|not found|no existe|deleted/i.test(errorMessage);
@@ -546,10 +646,12 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         setMifielWidgetId(wid);
         setMifielDialogOpen(true);
       } else {
-        toast.error("No se encontró el widget de firma del agente en Mifiel.");
+        toast.error("No se pudo abrir la firma de tu carta. Contacta a tu administrador.");
       }
     } catch (err: any) {
-      toast.error("Error al sincronizar firma: " + (err.message || "Error"));
+      // Detalle del proveedor solo en consola; al agente, mensaje neutro.
+      console.error("[mifiel-continuar-firma]", err?.message || err);
+      toast.error("No se pudo continuar con la firma en este momento. Inténtalo más tarde.");
     } finally {
       setSyncingFirma(false);
     }
@@ -654,6 +756,35 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     }
   };
 
+  /**
+   * Verificación biométrica sobre la identificación YA cargada: no vuelve a pedir el
+   * documento, solo la selfie, y la compara con las fotos que ya están en el expediente
+   * (`verificar-documento-identidad`). Al aceptar el resultado, los documentos quedan
+   * con `id_estatus_verificacion = 2` y se habilita la firma de la carta.
+   */
+  const iniciarVerificacionBiometrica = async () => {
+    const pasaporte = getDocForType(PASAPORTE_DOC_TYPE);
+    const frente = getDocForType(2);
+    const reverso = getDocForType(3);
+    const usaPasaporte = identityMode === 'pasaporte' ? !!pasaporte : !frente && !!pasaporte;
+
+    const urls = usaPasaporte
+      ? { passport: pasaporte?.url as string | undefined }
+      : { front: frente?.url as string | undefined, back: reverso?.url as string | undefined };
+    const docPrincipal = usaPasaporte ? pasaporte : frente;
+
+    if (!docPrincipal?.url) {
+      toast.error("Primero agrega tu INE o pasaporte para verificar tu identidad.");
+      return;
+    }
+
+    capturedDocUrlsRef.current = urls;
+    setCapturedDocUrls(urls);
+    setVerificationResult(null);
+    setVerificationDocId(docPrincipal.id);
+    await startCamera('selfie');
+  };
+
   // Camera functions
   const startCamera = async (step: 'front' | 'back' | 'passport' | 'selfie') => {
     setCameraStep(step);
@@ -753,7 +884,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     }
   };
 
-  // Verify document with AI
+  // Valida el documento contra el servicio de verificación de identidad
   const verifyDocument = async (imageUrl: string, expectedType: string, selfieUrl?: string) => {
     activeVerifyCallsRef.current += 1;
     setVerifying(true);
@@ -779,7 +910,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     }
   };
 
-  // Procesa un blob ya capturado: sube + avanza de paso / verifica con IA.
+  // Procesa un blob ya capturado: sube + avanza de paso / verifica el documento.
   const processShot = async (blob: Blob, step: 'front' | 'back' | 'passport' | 'selfie') => {
     if (step === 'front') {
       const file = new File([blob], `ine_frente_${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -806,7 +937,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         });
         setVerificationDocId(result.docId);
         stopCamera();
-        // Pre-verifica documento mostrando el spinner de IA
+        // Pre-verifica el documento mostrando el spinner de validación
         const urls = capturedDocUrlsRef.current;
         const [frontCheck, backCheck] = await Promise.all([
           urls.front ? verifyDocument(urls.front, 'ine_frente') : Promise.resolve(null),
@@ -839,7 +970,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         });
         setVerificationDocId(result.docId);
         stopCamera();
-        // Pre-verifica documento mostrando el spinner de IA
+        // Pre-verifica el documento mostrando el spinner de validación
         const preResult = await verifyDocument(result.url, 'pasaporte');
         if (preResult && !preResult.is_valid_document) {
           // Not a valid passport — show result immediately, no selfie
@@ -923,7 +1054,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         } else {
           toast.error("No se pudo verificar el documento", {
             duration: 8000,
-            description: "La verificación con IA falló. Intenta capturar de nuevo las fotos.",
+            description: "No se pudo completar la validación. Intenta capturar de nuevo las fotos.",
           });
           // Reset to allow retry
           autoCaptureLockRef.current = false;
@@ -1064,6 +1195,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       return !INE_DOC_TYPES.includes(typeId);
     }
   });
+
+  // Con `requireIdentityDocs` la identificación no se lista documento por documento:
+  // se resume en una tarjeta (lo que ya está cargado + acciones). Solo la carta (48)
+  // y cualquier otro tipo siguen listándose abajo.
+  const listedDocTypes = requireIdentityDocs
+    ? visibleDocTypes.filter((t) => !CAMERA_DOC_TYPES.includes(t))
+    : visibleDocTypes;
 
   // Fetch persona data for comparator
   const { data: personaData } = useQuery({
@@ -1251,8 +1389,10 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
   return (
     <div className="space-y-3 pb-4">
-      {/* Selector (filtro) del tipo de identificación — solo se usa uno */}
-      {hasIdentityDocs && (
+      {/* Selector del tipo de identificación: solo cuando NO hay ninguna cargada.
+          Si ya existe INE o pasaporte, no tiene sentido ofrecer el cambio aquí:
+          se reemplaza con "Subir una nueva". */}
+      {hasIdentityDocs && !hasIdentityDocUploaded && (
         <div className="space-y-1.5">
           <Label className={FIELD_LABEL_CLS}>Tipo de identificación</Label>
           <div className={cn(SEG_TRACK_CLS, "w-full")} role="tablist">
@@ -1275,7 +1415,101 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         </div>
       )}
 
-      {visibleDocTypes.map((typeId) => {
+      {/* Resumen de la identificación ya cargada (no se recaptura salvo que se pida). */}
+      {requireIdentityDocs && (() => {
+        const usaPasaporte = identityMode === 'pasaporte';
+        const docPrincipal = usaPasaporte ? getDocForType(PASAPORTE_DOC_TYPE) : getDocForType(2);
+        const docReverso = usaPasaporte ? null : getDocForType(3);
+        const completo = usaPasaporte ? hasPasaporteDocs : ineCompleto;
+        const estado = identidadVerificada
+          ? { label: 'Verificada', color: 'text-emerald-600', bg: 'bg-emerald-500/10', icon: CheckCircle2 }
+          : completo
+          ? { label: 'Falta verificar', color: 'text-amber-600', bg: 'bg-amber-500/10', icon: Clock }
+          : { label: 'Sin cargar', color: 'text-muted-foreground', bg: 'bg-muted', icon: Camera };
+        const EstadoIcon = estado.icon;
+
+        return (
+          <div className="rounded-md border border-border bg-card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">
+                  {usaPasaporte ? 'Pasaporte' : 'INE (frente y reverso)'}
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {completo
+                    ? identidadVerificada
+                      ? 'Tu identidad ya fue verificada. Puedes firmar tu carta.'
+                      : 'Ya tienes tu identificación cargada. Falta la verificación biométrica.'
+                    : 'Aún no tienes esta identificación cargada.'}
+                </p>
+              </div>
+              <Badge variant="outline" className={`text-xs px-2 py-0.5 shrink-0 ${estado.color} ${estado.bg} border-0`}>
+                <EstadoIcon className="h-3 w-3 mr-1" />
+                {estado.label}
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {docPrincipal?.url && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const titulo = usaPasaporte ? 'Pasaporte' : 'INE';
+                    setIdentityView({
+                      titulo,
+                      imagenes: [
+                        { url: docPrincipal.url, etiqueta: usaPasaporte ? 'Pasaporte' : 'Frente' },
+                        ...(docReverso?.url ? [{ url: docReverso.url as string, etiqueta: 'Reverso' }] : []),
+                      ],
+                    });
+                    onTrackDocView?.(titulo);
+                  }}
+                  className="h-9 px-3 rounded-md font-bold text-xs gap-1.5 border-primary text-primary hover:bg-primary/[0.06]"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Ver {usaPasaporte ? 'pasaporte' : 'INE'}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => startDocumentCamera(usaPasaporte ? PASAPORTE_DOC_TYPE : 2)}
+                className="h-9 px-3 rounded-md font-bold text-xs"
+              >
+                {completo ? 'Subir una nueva' : `Capturar ${usaPasaporte ? 'pasaporte' : 'INE'}`}
+              </Button>
+              {completo && !identidadVerificada && (
+                <Button
+                  size="sm"
+                  onClick={iniciarVerificacionBiometrica}
+                  disabled={verifying}
+                  className="h-9 px-3 rounded-md font-bold text-xs gap-1.5"
+                >
+                  {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                  Verificar identidad
+                </Button>
+              )}
+              {completo && docPrincipal?.url && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFaceTest({
+                    url: docPrincipal.url,
+                    label: usaPasaporte ? 'Pasaporte' : 'INE frente',
+                  })}
+                  className="h-9 px-3 rounded-md font-bold text-xs text-muted-foreground hover:text-foreground"
+                  title="Compara tu rostro contra tu identificación sin salir del dispositivo"
+                >
+                  Probar comparación local (beta)
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {listedDocTypes.map((typeId) => {
         const docType = docTypes.find((d: any) => d.id === typeId);
         const doc = getDocForType(typeId);
         const isCameraDoc = CAMERA_DOC_TYPES.includes(typeId);
@@ -1347,14 +1581,18 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   )}
 
                   {!firmaCompletada && !firmaEnProgreso && !isValidated && (
-                    !basicInfoAndDocsReady ? (
+                    !cartaHabilitada ? (
                       <div className="flex-1 text-center">
                         <Button
                           size="sm"
                           disabled
-                          className="w-full h-10 rounded-md font-semibold text-xs gap-1.5"
+                          className="w-full h-10 rounded-md font-semibold text-xs gap-1.5 whitespace-normal leading-tight py-2"
                         >
-                          Completa tu información básica y documentos para firmar
+                          {requireIdentityDocs && !identityDocsComplete
+                            ? 'Primero agrega tu INE (frente y reverso) o tu pasaporte'
+                            : requireIdentityDocs && !identidadVerificada
+                            ? 'Verifica tu identidad para habilitar la firma'
+                            : 'Completa tu información básica y documentos para firmar'}
                         </Button>
                       </div>
                     ) : (
@@ -1471,6 +1709,40 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         url={cartaPdfViewerUrl || ""}
         title="Carta de Cumplimiento"
       />
+
+      {/* Prueba de comparación facial local (no cambia el expediente). */}
+      {faceTest && (
+        <FaceMatchTestDialog
+          open
+          onOpenChange={(open) => { if (!open) setFaceTest(null); }}
+          docUrl={faceTest.url}
+          docLabel={faceTest.label}
+        />
+      )}
+
+      {/* Visor de la identificación: frente y reverso en una sola vista. */}
+      {identityView && (
+        <Dialog open onOpenChange={(open) => { if (!open) setIdentityView(null); }}>
+          <DialogContent className="flex h-[90vh] max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden p-0">
+            <ModalFormHeader title={identityView.titulo} subtitle="Identificación registrada" />
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted p-4">
+              {identityView.imagenes.map((img) => (
+                <div key={img.url} className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground">{img.etiqueta}</p>
+                  <img
+                    src={img.url}
+                    alt={`${identityView.titulo} ${img.etiqueta}`}
+                    className="w-full rounded-md border border-border bg-card object-contain"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className={MODAL_FOOTER_CLS}>
+              <Button variant="cancel" onClick={() => setIdentityView(null)}>Cerrar</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Visor interno del expediente (PDF o imagen): estándar ui/modal-viewer */}
       {docView && (
@@ -2211,6 +2483,10 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
     staleTime: 60_000,
   });
   const esIndependiente = !hasInmobiliaria;
+  // Super Admin / roles con `puede_impersonar` siempre ven la sección de la carta
+  // (soporte: necesitan revisarla o reenviarla), aunque la persona sea dependiente.
+  const fullAccess = useAgentPortalFullAccess();
+  const mostrarCarta = esIndependiente || fullAccess;
 
   // Basic fields
   const [nombre, setNombre] = useState('');
@@ -2361,8 +2637,24 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
   const filteredEstados = (paisId: string) => estados.filter((e: any) => e.id_pais === paisId);
   const filteredMunicipios = (estadoId: string) => municipios.filter((m: any) => m.id_estado === parseInt(estadoId));
 
-  const handleSave = async () => {
-    onTrackSave?.();
+  /** Catálogo `{ id, nombre }` → opciones del `SearchableSelect`. */
+  const toOptions = (rows: any[]): SearchableOption[] =>
+    rows.map((r: any) => ({ value: r.id.toString(), label: r.nombre }));
+
+  const paisOptions = useMemo(() => toOptions(paises), [paises]);
+  const regimenOptions = useMemo(() => toOptions(regimenes), [regimenes]);
+  // El código (G03, D01…) también busca, aunque el label ya lo muestre.
+  const usoCfdiOptions = useMemo<SearchableOption[]>(
+    () => usosCfdi.map((u: any) => ({ value: u.codigo, label: `${u.codigo} - ${u.nombre}`, keywords: u.codigo })),
+    [usosCfdi]
+  );
+
+  /**
+   * Persiste el paso actual. Devuelve true solo si se guardó: lo usan tanto el
+   * botón "Guardar y finalizar" como la firma de la carta (que guarda sola, sin
+   * obligar al agente a cerrar y reabrir el modal).
+   */
+  const savePersona = async (): Promise<boolean> => {
     setSaving(true);
     try {
       let updateData: any = {};
@@ -2373,14 +2665,14 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
         if (telefono.trim() && telefono.trim().length !== 10) {
           toast.error("El teléfono debe tener 10 dígitos.");
           setSaving(false);
-          return;
+          return false;
         }
         if (curp.trim()) {
           const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
           if (!curpRegex.test(curp.trim().toUpperCase())) {
             toast.error("El formato del CURP no es válido (18 caracteres alfanuméricos).");
             setSaving(false);
-            return;
+            return false;
           }
         }
         isIncomplete = !nombre.trim() || !email.trim() || !telefono.trim() || !calle.trim() || !numExt.trim() || !colonia.trim() || !cp.trim() || !idPais || !idEstado || !idMunicipio;
@@ -2417,7 +2709,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
           if (!rfcValidation.isValid) {
             toast.error(rfcValidation.error || "RFC inválido.");
             setSaving(false);
-            return;
+            return false;
           }
         }
         const regimenValido = !!regimen && (regimenes.length === 0 || regimenes.some((r: any) => r.id.toString() === regimen));
@@ -2441,7 +2733,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
       if (isIncomplete) {
         toast.error("Completa todos los campos obligatorios (*). No pueden quedar vacíos.");
         setSaving(false);
-        return;
+        return false;
       }
 
       const { data: updatedRow, error } = await supabase
@@ -2466,8 +2758,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
           .eq('id_persona', personaId);
       }
 
-      toast.success("Información guardada correctamente.");
-      await onSaved();
+      return true;
     } catch (err: any) {
       const msg = err.message || "Error desconocido";
       if (msg.includes("personas_rfc_key") || (msg.includes("duplicate") && msg.includes("rfc"))) {
@@ -2477,10 +2768,39 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
       } else {
         toast.error("Error al guardar: " + msg);
       }
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  const handleSave = async () => {
+    onTrackSave?.();
+    const guardado = await savePersona();
+    if (!guardado) return;
+    toast.success("Información guardada correctamente.");
+    await onSaved();
+  };
+
+  // Guardado silencioso previo a firmar la carta: mismo validador que "Guardar y
+  // finalizar", pero sin cerrar el modal (la firma continúa en el mismo flujo).
+  const handleSaveBeforeSign = async () => {
+    onTrackSave?.();
+    const guardado = await savePersona();
+    if (guardado) {
+      await queryClient.refetchQueries({ queryKey: ['agent-onboarding-persona', personaId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-onboarding-persona'] });
+    }
+    return guardado;
+  };
+
+  // Obligatorios del paso Identidad ya capturados (aunque aún sin guardar):
+  // con esto el botón "Firmar Carta" se habilita sin cerrar y reabrir el modal.
+  const identidadCompleta = Boolean(
+    nombre.trim() && email.trim() && telefono.trim().length === 10 &&
+    calle.trim() && numExt.trim() && colonia.trim() && cp.trim() &&
+    idPais && idEstado && idMunicipio
+  );
 
   // Render address fields helper
   const renderAddressFields = (
@@ -2521,47 +2841,56 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
         </div>
         <div>
           <Label className={FIELD_LABEL_CLS}>País <Req /></Label>
-          <Select value={paisVal} onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}>
-            <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-            <SelectContent>
-              {paises.map((p: any) => (
-                <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={paisVal}
+            onValueChange={(v) => { setPaisVal(v); setEstadoVal(''); setMunicipioVal(''); }}
+            options={paisOptions}
+            itemsLabel="países"
+            searchPlaceholder="Buscar país…"
+            aria-label="País"
+          />
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label className={FIELD_LABEL_CLS}>Estado <Req /></Label>
-          <Select value={estadoVal} onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}>
-            <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-            <SelectContent>
-              {filteredEstados(paisVal).map((e: any) => (
-                <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={estadoVal}
+            onValueChange={(v) => { setEstadoVal(v); setMunicipioVal(''); }}
+            options={toOptions(filteredEstados(paisVal))}
+            itemsLabel="estados"
+            searchPlaceholder="Buscar estado…"
+            disabled={!paisVal}
+            placeholder={paisVal ? 'Selecciona' : 'Elige país primero'}
+            aria-label="Estado"
+          />
         </div>
         <div>
           <Label className={FIELD_LABEL_CLS}>Municipio <Req /></Label>
-          <Select value={municipioVal} onValueChange={setMunicipioVal}>
-            <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-            <SelectContent>
-              {filteredMunicipios(estadoVal).map((m: any) => (
-                <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={municipioVal}
+            onValueChange={setMunicipioVal}
+            options={toOptions(filteredMunicipios(estadoVal))}
+            itemsLabel="municipios"
+            searchPlaceholder="Buscar municipio…"
+            disabled={!estadoVal}
+            placeholder={estadoVal ? 'Selecciona' : 'Elige estado primero'}
+            aria-label="Municipio"
+          />
         </div>
       </div>
     </div>
   );
 
-  // La identidad (INE/pasaporte) ya no se captura aquí: se sube desde el Expediente.
-  // El paso "Identidad" solo recoge datos personales + dirección.
-  const basicTabs = ['personal', 'address'] as const;
-  const basicTabLabels = ['Datos personales', 'Dirección'];
+  // Paso "Identidad": datos personales + dirección. Los agentes independientes suman
+  // una tercera pestaña donde verifican su identidad (INE o pasaporte) y firman la
+  // Carta de comercialización: sin identificación capturada, la firma no se habilita.
+  const basicTabs = (mostrarCarta
+    ? ['personal', 'address', 'carta']
+    : ['personal', 'address']) as readonly string[];
+  const basicTabLabels = mostrarCarta
+    ? ['Datos personales', 'Dirección', 'Carta']
+    : ['Datos personales', 'Dirección'];
   const fiscalTabs = ['datos', 'direccion', 'constancia'] as const;
   const fiscalTabLabels = ['Datos', 'Dirección', 'Constancia'];
 
@@ -2569,7 +2898,7 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
   const currentTabLabels = step === 'basic' ? basicTabLabels : step === 'fiscal' ? fiscalTabLabels : [];
   const currentTabIndex = currentTabs.indexOf(activeTab);
   const isLastTab = currentTabIndex === currentTabs.length - 1;
-  const isDocTab = activeTab === 'documents' || activeTab === 'constancia';
+  const isDocTab = activeTab === 'documents' || activeTab === 'constancia' || activeTab === 'carta';
 
   // Obligatorios (los marcados con *). La DB los exige: sin ellos no se guarda ni se avanza.
   const requiredMissing = (): string[] => {
@@ -2650,9 +2979,16 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
     <div className="space-y-5 pb-4">
       {step === 'basic' && (
         <Tabs value={activeTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="personal" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Datos personales</TabsTrigger>
-            <TabsTrigger value="address" className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold">Dirección</TabsTrigger>
+          <TabsList className={cn("grid w-full mb-4", mostrarCarta ? "grid-cols-3" : "grid-cols-2")}>
+            {basicTabs.map((tab, i) => (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className="text-xs pointer-events-none data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold"
+              >
+                {basicTabLabels[i]}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           {/* Indicador de progreso (solo visual, no navega) */}
@@ -2691,13 +3027,13 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Sexo <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-              <Select value={sexo} onValueChange={setSexo}>
-                <SelectTrigger><SelectValue placeholder="Selecciona sexo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="M">Masculino</SelectItem>
-                  <SelectItem value="F">Femenino</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={sexo}
+                onValueChange={setSexo}
+                options={SEXO_OPTIONS}
+                placeholder="Selecciona sexo"
+                aria-label="Sexo"
+              />
             </div>
           </TabsContent>
           <TabsContent value="address" className="space-y-4">
@@ -2705,14 +3041,26 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
               'dir', calle, setCalle, numExt, setNumExt, numInt, setNumInt,
               colonia, setColonia, cp, setCp, idPais, setIdPais, idEstado, setIdEstado, idMunicipio, setIdMunicipio
             )}
-            {/* Carta de comercialización (firma Mifiel): solo agentes independientes.
-                La identidad (INE/pasaporte) NO se captura aquí; va en el Expediente. */}
-            {esIndependiente && (
-              <div className="border-t border-border pt-4">
-                <div className="mb-2 text-sm font-bold text-foreground">Carta de comercialización</div>
-                <AgentDocumentsStep personaId={personaId} filterDocTypes={[48]} onTrackFieldChange={onTrackFieldChange} />
-              </div>
-            )}
+          </TabsContent>
+          {/* Pestaña 3 (agentes independientes + soporte con acceso completo):
+              verificación de identidad y firma de la Carta de comercialización.
+              La firma se desbloquea hasta tener INE (frente y reverso) o pasaporte. */}
+          <TabsContent value="carta" className="space-y-4">
+            <div>
+              <div className="text-sm font-bold text-foreground">Verificación de identidad</div>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground/70">
+                Esta es la identificación que tenemos registrada. Verifica tu identidad con una selfie
+                (o sube una nueva identificación) para habilitar la firma de tu carta.
+              </p>
+            </div>
+            <AgentDocumentsStep
+              personaId={personaId}
+              filterDocTypes={[...INE_DOC_TYPES, PASAPORTE_DOC_TYPE, 48]}
+              onTrackFieldChange={onTrackFieldChange}
+              signGateReady={identidadCompleta}
+              onBeforeSign={handleSaveBeforeSign}
+              requireIdentityDocs
+            />
           </TabsContent>
         </Tabs>
       )}
@@ -2750,25 +3098,25 @@ function StepForm({ step, persona, personaId, onSaved, onClose, onTrackSave, onT
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Régimen Fiscal <Req /></Label>
-              <Select value={regimen} onValueChange={setRegimen}>
-                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                <SelectContent>
-                  {regimenes.map((r: any) => (
-                    <SelectItem key={r.id} value={r.id.toString()}>{r.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={regimen}
+                onValueChange={setRegimen}
+                options={regimenOptions}
+                itemsLabel="regímenes"
+                searchPlaceholder="Buscar régimen…"
+                aria-label="Régimen fiscal"
+              />
             </div>
             <div>
               <Label className={FIELD_LABEL_CLS}>Uso CFDI <Req /></Label>
-              <Select value={usoCfdi} onValueChange={setUsoCfdi}>
-                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                <SelectContent>
-                  {usosCfdi.map((u: any) => (
-                    <SelectItem key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={usoCfdi}
+                onValueChange={setUsoCfdi}
+                options={usoCfdiOptions}
+                itemsLabel="usos"
+                searchPlaceholder="Buscar por código o nombre…"
+                aria-label="Uso CFDI"
+              />
             </div>
           </TabsContent>
           <TabsContent value="direccion" className="space-y-4">
@@ -2859,6 +3207,11 @@ function AgentBankAccountStep({
       return data || [];
     },
   });
+
+  const bankOptions = useMemo<SearchableOption[]>(
+    () => banks.map((b: any) => ({ value: b.id.toString(), label: b.nombre })),
+    [banks]
+  );
 
   // En modo 'create' no se carga ninguna cuenta: el formulario arranca vacío.
   const { data: existingAccount, isLoading } = useQuery({
@@ -2979,14 +3332,15 @@ function AgentBankAccountStep({
       )}
       <div>
         <Label className={FIELD_LABEL_CLS}>Banco <Req /></Label>
-        <Select value={bankId} onValueChange={(v) => { setBankId(v); onTrackFieldChange?.(); }}>
-          <SelectTrigger><SelectValue placeholder="Selecciona un banco" /></SelectTrigger>
-          <SelectContent>
-            {banks.map((b: any) => (
-              <SelectItem key={b.id} value={b.id.toString()}>{b.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={bankId}
+          onValueChange={(v) => { setBankId(v); onTrackFieldChange?.(); }}
+          options={bankOptions}
+          placeholder="Selecciona un banco"
+          itemsLabel="bancos"
+          searchPlaceholder="Buscar banco…"
+          aria-label="Banco"
+        />
       </div>
       <div>
         <Label className={FIELD_LABEL_CLS}>Número de Cuenta <Req /></Label>

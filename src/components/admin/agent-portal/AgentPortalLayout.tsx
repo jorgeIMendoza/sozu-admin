@@ -13,6 +13,7 @@ import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
+import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -88,6 +89,7 @@ export const AgentPortalLayout = () => {
   const navigate  = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
   const { hasInmobiliaria, isLoading: inmobLoading } = useAgentHasInmobiliaria();
+  const fullAccess = useAgentPortalFullAccess();
   const { theme, setTheme } = useTheme();
   const previousThemeRef = useRef(theme ?? "system");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -148,16 +150,22 @@ export const AgentPortalLayout = () => {
   // así que hasta que ambas resuelvan se muestran placeholders.
   const menuReady = !permLoading && !inmobLoading && !tabsLoading;
 
+  // Comisiones se oculta SOLO al agente DEPENDIENTE de una inmobiliaria (su
+  // comisión la cobra la inmobiliaria, no él). Ven el menú completo el agente
+  // independiente, el Super Admin y los roles con `puede_impersonar`
+  // (ver `useAgentPortalFullAccess`). Los permisos por rol siguen aplicando.
+  const hideComisiones = hasInmobiliaria && !fullAccess;
+
   const resolvedTabs = useMemo(
     () =>
       menuReady
         ? allTabs.filter((tab) => {
-            if (hasInmobiliaria && tab.path === '/admin/agent/comisiones') return false;
+            if (hideComisiones && tab.path === '/admin/agent/comisiones') return false;
             const perm = permissions[tab.path as keyof typeof permissions];
             return perm?.canRead !== false;
           })
         : [],
-    [menuReady, allTabs, hasInmobiliaria, permissions]
+    [menuReady, allTabs, hideComisiones, permissions]
   );
 
   // Menú de la última sesión de este usuario: evita el skeleton al recargar.
@@ -188,7 +196,7 @@ export const AgentPortalLayout = () => {
     }
   }, [tabsCachePayload, cacheEmail]);
 
-  if (menuReady && hasInmobiliaria && location.pathname.startsWith('/admin/agent/comisiones')) {
+  if (menuReady && hideComisiones && location.pathname.startsWith('/admin/agent/comisiones')) {
     return <Navigate to="/admin/agent/inicio" replace />;
   }
 

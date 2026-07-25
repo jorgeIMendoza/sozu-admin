@@ -126,9 +126,14 @@ interface ComisionesTableProps {
   /** Slot para el botón de subir factura (lo decide la página según permisos/estatus). */
   renderFacturaUpload?: (row: ComisionRow) => ReactNode;
   emptyLabel?: string;
+  /** Clave de fila. Por defecto la cuenta de cobranza; el portal de embajadores la
+   *  sobrescribe porque sus comisiones de referido no tienen cuenta (id 0). */
+  rowKey?: (row: ComisionRow, index: number) => string | number;
+  /** Segunda línea bajo la cuenta: dueño de la comisión (vista global del admin). */
+  ownerLabel?: (row: ComisionRow) => string | null | undefined;
 }
 
-export function ComisionesTable({ rows, pageSize = 15, mask = (s) => s, onView, renderFacturaUpload, emptyLabel = "Sin comisiones" }: ComisionesTableProps) {
+export function ComisionesTable({ rows, pageSize = 15, mask = (s) => s, onView, renderFacturaUpload, emptyLabel = "Sin comisiones", rowKey, ownerLabel }: ComisionesTableProps) {
   const columns: DataTableColumn<ComisionRow>[] = [
     {
       id: "account",
@@ -138,12 +143,18 @@ export function ComisionesTable({ rows, pageSize = 15, mask = (s) => s, onView, 
       sortAccessor: (r) => r.id_cuenta_cobranza || 0,
       headerClassName: "pl-3",
       cellClassName: "pl-3 pr-2",
-      cell: (r, ctx) => (
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-xs font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">{ctx.rowNumber}</span>
-          <span className="text-xs font-mono font-semibold tabular-nums truncate" title={r.cuenta_cobranza_label}>{r.cuenta_cobranza_label}</span>
-        </div>
-      ),
+      cell: (r, ctx) => {
+        const owner = ownerLabel?.(r);
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-xs font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">{ctx.rowNumber}</span>
+            <div className="min-w-0">
+              <p className="text-xs font-mono font-semibold tabular-nums truncate" title={r.cuenta_cobranza_label}>{r.cuenta_cobranza_label}</p>
+              {owner && <p className="text-xs text-muted-foreground truncate" title={owner}>{owner}</p>}
+            </div>
+          </div>
+        );
+      },
     },
     {
       id: "project",
@@ -244,7 +255,7 @@ export function ComisionesTable({ rows, pageSize = 15, mask = (s) => s, onView, 
     <DataTable
       columns={columns}
       rows={rows}
-      rowKey={(r) => r.id_cuenta_cobranza}
+      rowKey={rowKey ?? ((r) => r.id_cuenta_cobranza)}
       pageSize={pageSize}
       minWidthClass="min-w-[1200px]"
       emptyLabel={emptyLabel}

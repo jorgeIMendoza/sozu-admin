@@ -1,177 +1,99 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Info, Loader2, Upload, CheckCircle2, Clock, FileText, AlertCircle, CalendarCheck, Receipt,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Info, Loader2, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useEmbajadorComisiones, useReferidosFacturaColExists, EmbComisionStatus, EmbComision } from '@/hooks/useEmbajadorComisiones';
+import {
+  ComisionesTable,
+  comisionEstatus,
+  type ComisionRow,
+} from '@/components/admin/comisiones/ComisionesTable';
+import { FacturaUploadButton, subirFacturaComision } from '@/components/admin/comisiones/FacturaUploadButton';
+import { ModalViewer } from '@/components/ui/modal-viewer';
+import {
+  useEmbajadoresComisiones,
+  useReferidosFacturaColExists,
+  type EmbajadorComisionTarget,
+  type EmbComision,
+} from '@/hooks/useEmbajadorComisiones';
+
+/**
+ * Comisiones y pagos del embajador. Misma tabla y misma lógica que el portal de
+ * agentes (ComisionesTable + useComisionesPorEmail); lo propio del embajador son
+ * las comisiones que solo existen como referido y el copy de las tarjetas.
+ *
+ * `targets` acepta varios embajadores: con uno se ve su portal (o el del embajador
+ * impersonado) y con todos se ve la vista global del admin, que agrega los montos y
+ * pinta a quién pertenece cada comisión.
+ */
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
-const STATUS: Record<EmbComisionStatus, { label: string; tone: string; icon: typeof Clock }> = {
-  pendiente:         { label: 'Pendiente',         tone: 'bg-muted text-muted-foreground',                         icon: Clock },
-  en_revision:       { label: 'En revisión',       tone: 'bg-blue-500/10 text-blue-700 border-blue-500/30',        icon: FileText },
-  factura_requerida: { label: 'Factura requerida', tone: 'bg-amber-500/10 text-amber-700 border-amber-500/30',     icon: AlertCircle },
-  programada:        { label: 'Pago programado',   tone: 'bg-purple-500/10 text-purple-700 border-purple-500/30',  icon: CalendarCheck },
-  pagada:            { label: 'Pagada',            tone: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30', icon: CheckCircle2 },
-};
+const rowKey = (r: ComisionRow, i: number) => (r as EmbComision).referralId ?? `${r.id_cuenta_cobranza}-${i}`;
 
-function ComisionRow({ c, hideInlineFacturaLink, children }: {
-  c: EmbComision;
-  hideInlineFacturaLink?: boolean;
-  children?: React.ReactNode;
-}) {
-  const st = STATUS[c.status];
-  const Icon = st.icon;
-  return (
-    <div className="rounded-lg border border-border p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold truncate">
-            {c.proyecto || 'Sin proyecto'}{c.propiedad ? ` · ${c.propiedad}` : ''}
-          </div>
-          <div className="text-[11px] text-muted-foreground truncate">
-            {c.cuenta_cobranza_label}
-            {c.productoNombre ? ` · ${c.productoNombre}` : c.propiedad ? ` · Depto ${c.propiedad}` : ''}
-          </div>
-        </div>
-        <div className="text-base font-bold shrink-0">{fmt(c.monto_comision)}</div>
-      </div>
-      <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="outline" className={cn('text-[10px] gap-1', st.tone)}>
-            <Icon className="h-3 w-3" />{st.label}
-          </Badge>
-          {!hideInlineFacturaLink && c.factura_url && (
-            <a href={c.factura_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary font-medium underline">
-              Ver factura
-            </a>
-          )}
-          {c.pagada && c.url_evidencia_pago && (
-            <a href={c.url_evidencia_pago} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary font-medium underline">
-              Ver recibo
-            </a>
-          )}
-        </div>
-        {c.precio_final > 0 && (
-          <span className="text-[10px] text-muted-foreground">Venta: {fmt(c.precio_final)}</span>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function InlineFacturaButton({ c, email, idPersona, onUploaded }: {
-  c: EmbComision;
-  email: string;
-  idPersona: number;
-  onUploaded: () => void;
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+/** Sube la factura de la comisión: por cuenta de cobranza o, si es un referido sin
+ *  cuenta, directamente en `embajadores_referidos.url_factura`. */
+function useSubirFactura(onDone?: () => void) {
   const referidosFacturaColExists = useReferidosFacturaColExists();
 
-  if (c.status === 'pendiente') return null;
+  const render = (row: ComisionRow) => {
+    const c = row as EmbComision;
+    const est = comisionEstatus(c.detailed_status);
+    if (est !== 'aprobado' && est !== 'pagada') return null;
+    // Dueño de la comisión (en la vista global cada fila puede ser de otro embajador).
+    const email = c.embajadorEmail;
+    const idPersona = c.embajadorIdPersona;
+    if (!email || !idPersona) return null;
 
-  const isReferral = c.id_cuenta_cobranza === 0 && !!c.referralId;
-  // Si la columna url_factura aún no existe en BD, bloquear el botón para referidos
-  if (isReferral && !referidosFacturaColExists) {
-    return (
-      <div className="mt-3">
-        <Button size="sm" variant="outline" disabled title="Pendiente de configuración en BD">
-          <Upload className="h-3.5 w-3.5 mr-1" />
-          Subir factura
-        </Button>
-      </div>
-    );
-  }
-  const hasFactura = !!c.factura_url;
-
-  const handleUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const storageKey = isReferral ? `ref-${c.referralId}` : String(c.id_cuenta_cobranza);
-      const path = `facturas-comision/${storageKey}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file);
-      if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
-
-      if (isReferral) {
-        // Referidos: guardar URL directamente en la fila de embajadores_referidos
-        const { error: updErr } = await (supabase as any)
-          .from('embajadores_referidos')
-          .update({ url_factura: publicUrl })
-          .eq('id', Number(c.referralId));
-        if (updErr) throw updErr;
-      } else {
-        // Comisionistas: gestionar en tabla documentos (tipo 46)
-        if (hasFactura) {
-          await (supabase as any).from('documentos')
-            .update({ activo: false })
-            .eq('id_cuenta_cobranza', c.id_cuenta_cobranza)
-            .eq('id_tipo_documento', 46)
-            .eq('activo', true);
-        }
-        const { error: insErr } = await (supabase as any).from('documentos').insert({
-          id_cuenta_cobranza: c.id_cuenta_cobranza,
-          id_tipo_documento: 46,
-          url: publicUrl,
-          id_persona: idPersona,
-          numero: email,
-          activo: true,
-        });
-        if (insErr) throw insErr;
-      }
-
-      toast.success(hasFactura ? 'Factura actualizada correctamente.' : 'Factura subida correctamente.');
-      onUploaded();
-    } catch (err: any) {
-      toast.error(err?.message || 'Error al subir la factura.');
-    } finally {
-      setUploading(false);
+    const isReferral = c.id_cuenta_cobranza === 0 && !!c.referralId;
+    if (isReferral && !referidosFacturaColExists) {
+      return <FacturaUploadButton disabled tooltip="Pendiente de configuración en BD" onUpload={async () => {}} />;
     }
+
+    return (
+      <FacturaUploadButton
+        title="Factura de comisión"
+        subtitle="Sube el PDF de tu factura"
+        tooltip="Subir factura (PDF)"
+        onUpload={async (file) => {
+          if (isReferral) {
+            const path = `facturas-comision/ref-${c.referralId}/${Date.now()}-${file.name}`;
+            const { error: upErr } = await supabase.storage.from('documentos').upload(path, file);
+            if (upErr) throw upErr;
+            const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+            const { error: updErr } = await (supabase as any)
+              .from('embajadores_referidos')
+              .update({ url_factura: publicUrl })
+              .eq('id', Number(c.referralId));
+            if (updErr) throw updErr;
+          } else {
+            await subirFacturaComision({
+              file,
+              cuentaId: c.id_cuenta_cobranza,
+              personaId: idPersona,
+              email,
+              supabase,
+            });
+          }
+          onDone?.();
+        }}
+      />
+    );
   };
 
-  return (
-    <div className="mt-3 flex items-center gap-2 flex-wrap">
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".pdf,.xml"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ''; }}
-      />
-      {hasFactura && (
-        <Button size="sm" variant="outline" onClick={() => window.open(c.factura_url!, '_blank')}>
-          <FileText className="h-3.5 w-3.5 mr-1" />
-          Ver factura
-        </Button>
-      )}
-      <Button size="sm" variant="outline" disabled={uploading} onClick={() => fileRef.current?.click()}>
-        {uploading
-          ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-          : <Upload className="h-3.5 w-3.5 mr-1" />}
-        {uploading
-          ? (hasFactura ? 'Actualizando…' : 'Subiendo…')
-          : (hasFactura ? 'Cambiar factura' : 'Subir factura')}
-      </Button>
-    </div>
-  );
+  return render;
 }
 
 // ─────────────────────────── Comisiones ───────────────────────────
-export function EmbajadorComisionesSection({ email, ambassadorId, idPersona }: {
-  email?: string | null;
-  ambassadorId?: string | null;
-  idPersona?: number | null;
+export function EmbajadorComisionesSection({ targets, showOwner }: {
+  targets: EmbajadorComisionTarget[];
+  /** Pinta el embajador dueño de cada comisión (vista global). */
+  showOwner?: boolean;
 }) {
-  const { comisiones, totals, isLoading, refetch } = useEmbajadorComisiones(email, ambassadorId);
+  const { comisiones, totals, isLoading, refetch } = useEmbajadoresComisiones(targets);
+  const [viewerDoc, setViewerDoc] = useState<{ url: string; title: string } | null>(null);
+  const renderFacturaUpload = useSubirFactura(() => { refetch(); toast.success('Factura registrada.'); });
 
   return (
     <div className="space-y-4">
@@ -179,8 +101,9 @@ export function EmbajadorComisionesSection({ email, ambassadorId, idPersona }: {
         <div className="flex items-start gap-3">
           <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
           <p className="text-sm">
-            La comisión se genera cuando tu referido concreta una compra y la operación se valida.
-            Aquí ves tus comisiones por venta, su estatus y la factura/recibo asociados.
+            {showOwner
+              ? 'Vista global: comisiones de todos los embajadores, con su estatus y la factura/recibo asociados. Selecciona un embajador arriba para ver su portal.'
+              : 'La comisión se genera cuando tu referido concreta una compra y la operación se valida. Aquí ves tus comisiones por venta, su estatus y la factura/recibo asociados.'}
           </p>
         </div>
       </Card>
@@ -194,77 +117,39 @@ export function EmbajadorComisionesSection({ email, ambassadorId, idPersona }: {
       <Card className="p-4">
         {isLoading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-        ) : comisiones.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Aún no tienes comisiones generadas.</p>
         ) : (
-          <div className="space-y-2.5">
-            {comisiones.map((c, i) => (
-              <ComisionRow key={c.referralId ?? `${c.id_cuenta_cobranza}-${i}`} c={c} hideInlineFacturaLink>
-                {email && idPersona ? (
-                  <InlineFacturaButton
-                    c={c}
-                    email={email}
-                    idPersona={idPersona}
-                    onUploaded={() => refetch()}
-                  />
-                ) : null}
-              </ComisionRow>
-            ))}
-          </div>
+          <ComisionesTable
+            rows={comisiones}
+            rowKey={rowKey}
+            ownerLabel={showOwner ? (r) => (r as EmbComision).embajadorNombre : undefined}
+            onView={(url, title) => setViewerDoc({ url, title })}
+            renderFacturaUpload={renderFacturaUpload}
+            emptyLabel={showOwner ? 'Aún no hay comisiones generadas.' : 'Aún no tienes comisiones generadas.'}
+          />
         )}
       </Card>
+
+      <ModalViewer
+        open={!!viewerDoc}
+        onOpenChange={(v) => { if (!v) setViewerDoc(null); }}
+        url={viewerDoc?.url || ''}
+        title={viewerDoc?.title || 'Documento'}
+      />
     </div>
   );
 }
 
 // ─────────────────────────── Pagos ───────────────────────────
-function FacturaUploadButton({ cuentaId, email, idPersona, onUploaded }: {
-  cuentaId: number; email: string; idPersona: number; onUploaded: () => void;
+export function EmbajadorPagosSection({ targets, showOwner }: {
+  targets: EmbajadorComisionTarget[];
+  showOwner?: boolean;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const { comisiones, isLoading, refetch } = useEmbajadoresComisiones(targets);
+  const [viewerDoc, setViewerDoc] = useState<{ url: string; title: string } | null>(null);
+  const renderFacturaUpload = useSubirFactura(() => { refetch(); toast.success('Factura registrada.'); });
 
-  const handleUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const path = `facturas-comision/${cuentaId}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file);
-      if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
-      const { error: insErr } = await (supabase as any).from('documentos').insert({
-        id_cuenta_cobranza: cuentaId,
-        id_tipo_documento: 46,
-        url: publicUrl,
-        id_persona: idPersona,
-        numero: email,
-        activo: true,
-      });
-      if (insErr) throw insErr;
-      toast.success('Factura subida correctamente.');
-      onUploaded();
-    } catch (err: any) {
-      toast.error(err?.message || 'Error al subir la factura.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="mt-3">
-      <input ref={fileRef} type="file" accept=".pdf" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ''; }} />
-      <Button size="sm" variant="outline" disabled={uploading} onClick={() => fileRef.current?.click()}>
-        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
-        {uploading ? 'Subiendo…' : 'Subir factura'}
-      </Button>
-    </div>
-  );
-}
-
-export function EmbajadorPagosSection({ email, idPersona, ambassadorId }: { email?: string | null; idPersona?: number | null; ambassadorId?: string | null }) {
-  const { comisiones, isLoading, refetch } = useEmbajadorComisiones(email, ambassadorId);
   // Pagos = comisiones ya autorizadas (en el flujo de cobro): factura_requerida, programada, pagada
-  const pagos = comisiones.filter((c) => ['factura_requerida', 'programada', 'pagada'].includes(c.status));
+  const pagos = comisiones.filter((c) => ['factura_requerida', 'programada', 'pagada'].includes(c.detailed_status));
 
   return (
     <div className="space-y-4">
@@ -272,7 +157,9 @@ export function EmbajadorPagosSection({ email, idPersona, ambassadorId }: { emai
         <div className="flex items-start gap-3">
           <Receipt className="h-4 w-4 text-primary mt-0.5 shrink-0" />
           <p className="text-sm">
-            Cuando tu comisión es autorizada, sube tu factura. Una vez pagada, podrás descargar tu recibo.
+            {showOwner
+              ? 'Vista global: comisiones autorizadas de todos los embajadores y su factura/recibo.'
+              : 'Cuando tu comisión es autorizada, sube tu factura. Una vez pagada, podrás descargar tu recibo.'}
           </p>
         </div>
       </Card>
@@ -280,28 +167,24 @@ export function EmbajadorPagosSection({ email, idPersona, ambassadorId }: { emai
       <Card className="p-4">
         {isLoading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-        ) : pagos.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No tienes pagos autorizados todavía.</p>
         ) : (
-          <div className="space-y-2.5">
-            {pagos.map((c, i) => (
-              <ComisionRow key={c.referralId ?? `${c.id_cuenta_cobranza}-${i}`} c={c}>
-                {c.status === 'factura_requerida' && email && idPersona && (
-                  <FacturaUploadButton
-                    cuentaId={c.id_cuenta_cobranza}
-                    email={email}
-                    idPersona={idPersona}
-                    onUploaded={() => refetch()}
-                  />
-                )}
-                {c.status === 'programada' && (
-                  <div className="mt-2 text-[11px] text-muted-foreground">Factura recibida. Pago en proceso.</div>
-                )}
-              </ComisionRow>
-            ))}
-          </div>
+          <ComisionesTable
+            rows={pagos}
+            rowKey={rowKey}
+            ownerLabel={showOwner ? (r) => (r as EmbComision).embajadorNombre : undefined}
+            onView={(url, title) => setViewerDoc({ url, title })}
+            renderFacturaUpload={renderFacturaUpload}
+            emptyLabel={showOwner ? 'No hay pagos autorizados todavía.' : 'No tienes pagos autorizados todavía.'}
+          />
         )}
       </Card>
+
+      <ModalViewer
+        open={!!viewerDoc}
+        onOpenChange={(v) => { if (!v) setViewerDoc(null); }}
+        url={viewerDoc?.url || ''}
+        title={viewerDoc?.title || 'Documento'}
+      />
     </div>
   );
 }
