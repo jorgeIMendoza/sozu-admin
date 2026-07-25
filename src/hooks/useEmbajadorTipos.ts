@@ -6,7 +6,7 @@ export interface EmbajadorTipo {
   etiqueta: string;
 }
 
-// Fallback mientras la tabla embajador_tipos no exista en BD
+// Fallback solo por si la tabla queda vacía (nunca debería, pero evita un selector en blanco)
 const FALLBACK_TIPOS: EmbajadorTipo[] = [
   { id: 1, etiqueta: 'Cliente' },
   { id: 2, etiqueta: 'Socio' },
@@ -20,16 +20,15 @@ export function useEmbajadorTipos(): EmbajadorTipo[] {
   const [tipos, setTipos] = useState<EmbajadorTipo[]>([]);
 
   useEffect(() => {
-    (supabase as any)
-      .from('embajador_tipos')
+    supabase
+      .from('tipos_embajador')
       .select('id, etiqueta')
       .eq('activo', true)
       .order('orden')
-      .then(({ data, error }: any) => {
+      .then(({ data }) => {
         if (data && data.length > 0) {
           setTipos(data);
         } else {
-          // Tabla aún no existe o vacía — usar fallback hasta ejecutar DDL
           setTipos(FALLBACK_TIPOS);
         }
       });

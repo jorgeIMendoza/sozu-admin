@@ -3,7 +3,7 @@ import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/Simulato
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -29,6 +29,7 @@ const saveHistory = (h: SyncHistoryEntry[]) => localStorage.setItem(SYNC_HISTORY
 export default function CommissionsTab() {
   const {
     channels, roles, roleAssignments, motorConfig, updateMotorConfig, motorProjectId, setMotorProjectId,
+    motorLoading, motorDirty, motorSaving, saveMotorComisiones,
     commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
   } = useSimulator();
   const [syncOpen, setSyncOpen] = useState(false);
@@ -46,11 +47,22 @@ export default function CommissionsTab() {
   const commRoles = roles.filter(r => r.participatesInCommission);
 
   // La matriz canal×puesto es del proyecto seleccionado — se sincroniza cada
-  // vez que cambia el proyecto.
+  // vez que cambia el proyecto. Espera a que `motorLoading` termine: si esto
+  // corriera mientras la carga de `commissionRules` del proyecto nuevo sigue
+  // en vuelo, calcularía "faltantes" contra datos todavía del proyecto
+  // anterior (o vacíos) y agregaría filas duplicadas.
   useEffect(() => {
-    if (motorProjectId != null) syncMissingCommissionRules();
+    if (motorProjectId != null && !motorLoading) syncMissingCommissionRules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [motorProjectId]);
+  }, [motorProjectId, motorLoading]);
+
+  // Ya no autoguarda: avisa antes de cerrar/recargar si hay cambios sin guardar.
+  useEffect(() => {
+    if (!motorDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [motorDirty]);
 
   const rolesToAdd = useMemo(() => {
     let n = 0;
@@ -75,7 +87,7 @@ export default function CommissionsTab() {
     setHistory(next);
     saveHistory(next);
 
-    toast.success('Roles y comisiones sincronizados correctamente.');
+    toast.success('Roles agregados. Presiona "Guardar cambios" para persistirlos.');
     setSyncOpen(false);
   };
 
@@ -111,13 +123,15 @@ export default function CommissionsTab() {
   };
 
   const addRule = (channelId: string) => {
-    if (commRoles.length === 0) return;
+    if (roles.length === 0) return;
     // Find a role not yet in this channel
     const channelRules = commissionRules.filter(r => r.channelId === channelId);
     const unusedRole = roles.find(r => !channelRules.some(cr => cr.roleId === r.id));
-    const roleId = unusedRole?.id || roles[0]?.id;
-    if (!roleId) return;
-    addCommissionRule(channelId, roleId, 'project');
+    if (!unusedRole) {
+      toast.info('Todos los roles ya están agregados a este canal.');
+      return;
+    }
+    addCommissionRule(channelId, unusedRole.id, 'project');
   };
 
   const updateRule = (ruleId: string, updates: Partial<typeof commissionRules[0]>) => {
@@ -181,9 +195,26 @@ export default function CommissionsTab() {
               <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
                 <History className="h-3.5 w-3.5" /> Histórico
               </Button>
-              <Button variant="default" size="sm" onClick={() => setValidarOpen(true)} className="gap-1.5">
-                <Send className="h-3.5 w-3.5" /> Enviar a validar
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setValidarOpen(true)}
+                      disabled={motorDirty}
+                      className="gap-1.5"
+                    >
+                      <Send className="h-3.5 w-3.5" /> Enviar a validar
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {motorDirty && (
+                  <TooltipContent className="max-w-xs text-xs">
+                    Guarda los cambios pendientes antes de enviar a validar.
+                  </TooltipContent>
+                )}
+              </Tooltip>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground whitespace-nowrap">Comisión total</span>
                 <Input
@@ -194,6 +225,27 @@ export default function CommissionsTab() {
                   onChange={(e) => updateMotorConfig({ ...motorConfig, totalCommissionPct: +e.target.value })}
                 />
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      variant={motorDirty ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => saveMotorComisiones()}
+                      disabled={!motorDirty || motorSaving}
+                      className="gap-1.5"
+                    >
+                      {motorSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Guardar cambios
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {motorDirty
+                    ? 'Tienes cambios sin guardar en la matriz de comisiones o la Comisión Total.'
+                    : 'No hay cambios pendientes por guardar.'}
+                </TooltipContent>
+              </Tooltip>
             </>
           )}
         </div>

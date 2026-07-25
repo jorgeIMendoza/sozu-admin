@@ -74,6 +74,33 @@ const REFERRAL_STATUSES: ReferralStatus[] = [
 
 const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 
+// Cuando la Edge Function responde con status >= 400, supabase-js lanza un
+// FunctionsHttpError con mensaje genérico ("Edge Function returned a non-2xx
+// status code"); el detalle real vive en error.context (Response). Extraemos
+// el mensaje real para que el toast muestre algo accionable.
+async function extractEdgeFunctionError(error: any, fallbackAction: string): Promise<Error> {
+  try {
+    const ctx = error?.context;
+    if (ctx) {
+      let body: any = null;
+      if (typeof ctx.json === 'function') {
+        try { body = await ctx.clone().json(); } catch { /* ignore */ }
+      }
+      if (!body && typeof ctx.text === 'function') {
+        try {
+          const txt = await ctx.clone().text();
+          if (txt) {
+            try { body = JSON.parse(txt); } catch { body = { message: txt }; }
+          }
+        } catch { /* ignore */ }
+      }
+      const msg = body?.message || body?.error || body?.detail;
+      if (msg && typeof msg === 'string') return new Error(msg);
+    }
+  } catch { /* fallthrough */ }
+  return new Error((error?.message as string | undefined) ?? `No fue posible ${fallbackAction}.`);
+}
+
 // =============== Ambassador edit sheet (solo edición) ===============
 function AmbassadorEditSheet({
   open, onOpenChange, ambassador, tipos,
@@ -138,8 +165,11 @@ function AmbassadorEditSheet({
         const { data: updateResult, error: emailErr } = await supabase.functions.invoke('update-user-email', {
           body: { oldEmail: ambassador.email.toLowerCase(), newEmail },
         });
-        if (emailErr || (updateResult && updateResult.success === false)) {
-          throw new Error(emailErr?.message ?? updateResult?.message ?? 'Error al cambiar el correo');
+        if (emailErr) {
+          throw await extractEdgeFunctionError(emailErr, 'cambiar el correo');
+        }
+        if (updateResult && updateResult.success === false) {
+          throw new Error(updateResult?.message ?? 'Error al cambiar el correo');
         }
         if (ambassador.idPersona) {
           await supabase.from('personas').update({ email: newEmail }).eq('id', ambassador.idPersona);
@@ -430,9 +460,13 @@ export function ReferralFormDialog({
       if (erError || !erData) throw erError ?? new Error('Error al crear entidad_relacionada');
 
       // Crear referido en bridge table
-      // DDL probe: incluir canal solo si la columna existe
-      const canalProbe = await (supabase as any).from('embajadores_referidos').select('canal').limit(0);
+      // DDL probe: incluir canal / id_proyecto_interes solo si la columna existe
+      const [canalProbe, proyectoInteresProbe] = await Promise.all([
+        (supabase as any).from('embajadores_referidos').select('canal').limit(0),
+        (supabase as any).from('embajadores_referidos').select('id_proyecto_interes').limit(0),
+      ]);
       const canalExists = !canalProbe.error;
+      const proyectoInteresExists = !proyectoInteresProbe.error;
 
       const refPayload: any = {
         id_entidad_relacionada: erData.id,
@@ -440,7 +474,6 @@ export function ReferralFormDialog({
         id_persona_embajador: emb?.idPersona ?? 0,
         tipo_interes: form.interestType,
         producto_interes: form.productInterest || null,
-        id_proyecto_interes: form.proyectoId ? Number(form.proyectoId) : null,
         relacion_embajador: form.relationship || null,
         comentarios: form.comments || null,
         consentimiento: form.consent ?? true,
@@ -455,6 +488,9 @@ export function ReferralFormDialog({
         audit_trail: [{ timestamp: new Date().toISOString(), actor: 'admin', type: 'creado' }],
       };
       if (canalExists && canal) refPayload.canal = canal;
+      if (proyectoInteresExists) {
+        refPayload.id_proyecto_interes = form.proyectoId ? Number(form.proyectoId) : null;
+      }
 
       const { error: refError } = await supabase.from('embajadores_referidos').insert(refPayload);
       if (refError) throw refError;
