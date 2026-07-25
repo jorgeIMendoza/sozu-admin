@@ -1491,7 +1491,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">
-                      <span className="text-muted-foreground italic">Sin plan seleccionado</span>
+                      <span className="text-muted-foreground">Sin plan seleccionado</span>
                     </SelectItem>
                     {propertyPaymentSchemes.map((scheme: any) => (
                       <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -1589,7 +1589,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           {/* Badges for included products */}
           <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
             <div className="flex items-center gap-2 mb-2">
-              <Info className="h-4 w-4 text-blue-500" />
+              <Info className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Productos asociados a esta propiedad:</span>
             </div>
             {isLoadingProducts ? (
@@ -1610,10 +1610,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       <Badge 
                         key={`bodega-${bodega.id}`}
                         variant={isIncludedInPrice ? "default" : "outline"}
-                        className={cn(
-                          "flex items-center gap-1",
-                          isIncludedInPrice ? "bg-amber-500 hover:bg-amber-600" : "border-amber-500 text-amber-700"
-                        )}
+                        className="flex items-center gap-1"
                       >
                         <Warehouse className="h-3 w-3" />
                         {bodega.nombre}
@@ -1634,10 +1631,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       <Badge 
                         key={`est-${est.id}`}
                         variant={isIncludedInPrice ? "default" : "outline"}
-                        className={cn(
-                          "flex items-center gap-1",
-                          isIncludedInPrice ? "bg-blue-500 hover:bg-blue-600" : "border-blue-500 text-blue-700"
-                        )}
+                        className="flex items-center gap-1"
                       >
                         <Car className="h-3 w-3" />
                         {est.nombre}
@@ -1671,7 +1665,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">
-                              <span className="text-muted-foreground italic">Sin seleccionar</span>
+                              <span className="text-muted-foreground">Sin seleccionar</span>
                             </SelectItem>
                             {p.paymentSchemes?.map((scheme: any) => (
                               <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -1783,7 +1777,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               <>
                 <Separator />
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Esquema de Pago Personalizado</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Esquema de Pago Personalizado</h3>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -2202,7 +2196,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             {/* Person Search Section */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium">Buscar Prospecto</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Buscar Prospecto</h3>
                 {selectedPerson && (
                   <Button
                     type="button"
@@ -2300,7 +2294,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
           {/* Prospect Information Section */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Información del Prospecto</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Información del Prospecto</h3>
               
               <div className="grid grid-cols-2 gap-4">
                 <FormField
@@ -2469,7 +2463,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
              {/* Opciones de visualización en PDF - Hidden if hidePdfOptions is true */}
              {!hidePdfOptions && (
                <div className="space-y-4">
-                 <h3 className="text-sm font-semibold">Opciones de visualización en PDF</h3>
+                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Opciones de visualización en PDF</h3>
                  <p className="text-xs text-muted-foreground">
                    Selecciona qué información deseas mostrar en esta oferta
                  </p>
@@ -2599,7 +2593,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">
-                        <span className="text-muted-foreground italic">Sin seleccionar</span>
+                        <span className="text-muted-foreground">Sin seleccionar</span>
                       </SelectItem>
                       {propertyPaymentSchemes?.map((scheme: any) => (
                         <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -2664,7 +2658,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">
-                                  <span className="text-muted-foreground italic">Sin seleccionar</span>
+                                  <span className="text-muted-foreground">Sin seleccionar</span>
                                 </SelectItem>
                                 {p.paymentSchemes?.map((scheme: any) => (
                                   <SelectItem key={scheme.id} value={scheme.id.toString()}>
