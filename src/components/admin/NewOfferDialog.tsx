@@ -71,9 +71,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Switch } from "@/components/ui/switch";
-import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
 import {
   Tooltip,
   TooltipContent,
@@ -146,18 +147,13 @@ const formSchema = z.object({
   numero_pagos_enganche: z.string().optional(),
   porcentaje_descuento_aumento: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (!data.digital) {
-    const tel = data.telefono ?? "";
-    if (tel.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono es requerido", path: ["telefono"] });
-    } else if (!/^[0-9]{10}$/.test(tel)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
-    }
-  } else {
-    const tel = data.telefono ?? "";
-    if (tel.length > 0 && !/^[0-9]{10}$/.test(tel)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
-    }
+  // El teléfono es obligatorio también en oferta digital: es el destino del
+  // envío por WhatsApp desde el popup de compartir.
+  const tel = data.telefono ?? "";
+  if (tel.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono es requerido", path: ["telefono"] });
+  } else if (!/^[0-9]{10}$/.test(tel)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
   }
 }).refine((data) => {
   if (data.mode === "manual") {
@@ -196,6 +192,15 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+/** Datos necesarios para regenerar los PDFs de una oferta ya creada. */
+type OfferPdfContext = {
+  offerId: number;
+  productOffers: { offerId: number; productId: number; productName: string }[];
+  leadName: string;
+  leadEmail: string;
+  leadPhone: string;
+};
+
 interface NewOfferDialogProps {
   propertyId: number;
   propertyNumber: string;
@@ -226,6 +231,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const [localSchemeId, setLocalSchemeId] = useState<number | null>(null);
   const [usarTramosPersonalizados, setUsarTramosPersonalizados] = useState(false);
   const [tramosMensualidad, setTramosMensualidad] = useState<TramoMensualidad[]>([]);
+  // Datos del popup para compartir la oferta digital recién generada.
+  const [shareOffer, setShareOffer] = useState<{
+    url: string;
+    leadName: string;
+    leadEmail: string;
+    leadPhone: string;
+    leadPhoneCountry: string;
+    projectName?: string;
+    pdfContext: OfferPdfContext;
+  } | null>(null);
+  const [downloadingSharePdf, setDownloadingSharePdf] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
@@ -361,7 +377,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       form.setValue("nombre_completo", selectedPerson.nombre_legal);
       form.setValue("email", selectedPerson.email);
       form.setValue("clave_pais_telefono", selectedPerson.clave_pais_telefono || "MX");
-      form.setValue("telefono", selectedPerson.telefono || "");
+      // Normaliza teléfonos legacy con espacios/guiones al formato de 10 dígitos.
+      form.setValue("telefono", (selectedPerson.telefono || "").replace(/\D/g, "").slice(0, 10));
       form.setValue("rfc", selectedPerson.rfc || "");
       form.setValue("curp", selectedPerson.curp || "");
     }
@@ -603,8 +620,96 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     }
   }, [propertyDetails, form]);
 
+  /**
+   * Genera los PDFs de la oferta (propiedad + productos) y los descarga.
+   * Se usa tanto en el flujo de "Generar Oferta" (PDF) como bajo demanda desde
+   * el popup de compartir de la oferta digital.
+   */
+  const generateAndDownloadOfferPdfs = React.useCallback(async (ctx: OfferPdfContext) => {
+    const { generateOfferPDFAsBase64 } = await import('@/services/htmlToPdfService');
+    const generatedPdfFiles: { blob: Blob; filename: string; offerId: number; tipo: string; url: string }[] = [];
+    const attachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
+
+    const mainPdfs = await generateOfferPDFAsBase64({
+      propertyId,
+      offerId: ctx.offerId,
+      propertyNumber,
+      leadName: ctx.leadName,
+      leadEmail: ctx.leadEmail,
+      leadPhone: ctx.leadPhone || '',
+      creatorEmail: profile?.email || '',
+    });
+    for (const pdf of mainPdfs) {
+      generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: ctx.offerId, tipo: 'propiedad' });
+      if (pdf.base64) {
+        attachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: ctx.offerId, tipo: 'propiedad' });
+      }
+    }
+
+    for (const productOffer of ctx.productOffers) {
+      try {
+        const productPdfs = await generateOfferPDFAsBase64({
+          propertyId,
+          offerId: productOffer.offerId,
+          propertyNumber,
+          leadName: ctx.leadName,
+          leadEmail: ctx.leadEmail,
+          leadPhone: ctx.leadPhone || '',
+          creatorEmail: profile?.email || '',
+          isProductOffer: true,
+          productId: productOffer.productId,
+        });
+        for (const pdf of productPdfs) {
+          generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: productOffer.offerId, tipo: 'producto' });
+          if (pdf.base64) {
+            attachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: productOffer.offerId, tipo: 'producto' });
+          }
+        }
+      } catch (prodPdfErr) {
+        console.error(`Error generating product PDF for ${productOffer.productName}:`, prodPdfErr);
+      }
+    }
+
+    for (const file of generatedPdfFiles) {
+      try {
+        const url = URL.createObjectURL(file.blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (dlErr) {
+        console.error('Error downloading PDF:', dlErr);
+      }
+    }
+
+    return { count: generatedPdfFiles.length, attachments };
+  }, [propertyId, propertyNumber, profile?.email]);
+
+  /** Descarga de PDFs a demanda desde el popup de compartir oferta digital. */
+  const handleDownloadSharePdfs = async () => {
+    if (!shareOffer) return;
+    setDownloadingSharePdf(true);
+    try {
+      toast({ title: "Generando PDF...", description: "Preparando la oferta para descarga." });
+      const { count } = await generateAndDownloadOfferPdfs(shareOffer.pdfContext);
+      toast({ title: "PDF descargado", description: `Se descargaron ${count} PDF(s).` });
+    } catch (err) {
+      console.error('Error generating offer PDFs on demand:', err);
+      toast({
+        title: "Error al generar el PDF",
+        description: "No se pudo generar el PDF de la oferta. Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingSharePdf(false);
+    }
+  };
+
   const createOfferMutation = useMutation({
-    mutationFn: async ({ data, schemeSelections, propertySchemeId }: { 
+    mutationFn: async ({ data, schemeSelections, propertySchemeId }: {
       data: FormData; 
       schemeSelections: Record<number, number | null>;
       propertySchemeId?: number | null;
@@ -1040,104 +1145,52 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
       }
       
-      // Generate PDFs client-side and download
-      let allOfferIdsForEmail: number[] = [];
+      const isDigital = !!variables.data.digital;
+      const allOfferIdsForEmail = [
+        result.offerId,
+        ...result.productOffersResults.createdOffers.map((po) => po.offerId),
+      ];
+      const pdfContext: OfferPdfContext = {
+        offerId: result.offerId,
+        productOffers: result.productOffersResults.createdOffers,
+        leadName: result.leadName,
+        leadEmail: result.leadEmail,
+        leadPhone: result.leadPhone || '',
+      };
       let digitalAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
       const emailServicePromise = import('@/services/offerEmailService');
-      try {
-        const allOfferIds = [result.offerId];
-        for (const productOffer of result.productOffersResults.createdOffers) {
-          allOfferIds.push(productOffer.offerId);
+
+      // En oferta digital el PDF ya NO se genera en automático: se descarga a
+      // demanda desde el popup de compartir.
+      if (!isDigital) {
+        try {
+          toast({
+            title: "Generando PDFs...",
+            description: `Preparando ${allOfferIdsForEmail.length} PDF(s) para descarga`,
+          });
+          const { count, attachments } = await generateAndDownloadOfferPdfs(pdfContext);
+          digitalAttachments = attachments;
+          toast({
+            title: "Oferta generada",
+            description: `Se descargaron ${count} PDF(s).`,
+          });
+        } catch (pdfErr) {
+          console.error('Error generating/downloading PDFs:', pdfErr);
+          toast({
+            title: "Error al generar oferta",
+            description: "La oferta se creó correctamente, pero hubo un error al generar los PDFs.",
+            variant: "destructive",
+          });
+          queryClient.invalidateQueries({ queryKey: ["properties"] });
+          setOpen(false);
+          form.reset();
+          setSelectedPerson(null);
+          setSearchTerm("");
+          return;
         }
-        allOfferIdsForEmail = allOfferIds;
-
-        toast({
-          title: "Generando PDFs...",
-          description: `Preparando ${allOfferIds.length} PDF(s) para descarga`,
-        });
-
-        const { generateOfferPDFAsBase64 } = await import('@/services/htmlToPdfService');
-        const generatedPdfFiles: { blob: Blob; filename: string; offerId: number; tipo: string; url: string }[] = [];
-        const preGeneratedAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
-
-        // Generate main property offer PDF
-        const mainPdfs = await generateOfferPDFAsBase64({
-          propertyId,
-          offerId: result.offerId,
-          propertyNumber,
-          leadName: result.leadName,
-          leadEmail: result.leadEmail,
-          leadPhone: result.leadPhone || '',
-          creatorEmail: profile?.email || '',
-        });
-        for (const pdf of mainPdfs) {
-          generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: result.offerId, tipo: 'propiedad' });
-          if (pdf.base64) {
-            preGeneratedAttachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: result.offerId, tipo: 'propiedad' });
-          }
-        }
-
-        // Generate product offer PDFs
-        for (const productOffer of result.productOffersResults.createdOffers) {
-          try {
-            const productPdfs = await generateOfferPDFAsBase64({
-              propertyId,
-              offerId: productOffer.offerId,
-              propertyNumber,
-              leadName: result.leadName,
-              leadEmail: result.leadEmail,
-              leadPhone: result.leadPhone || '',
-              creatorEmail: profile?.email || '',
-              isProductOffer: true,
-              productId: productOffer.productId,
-            });
-            for (const pdf of productPdfs) {
-              generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: productOffer.offerId, tipo: 'producto' });
-              if (pdf.base64) {
-                preGeneratedAttachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: productOffer.offerId, tipo: 'producto' });
-              }
-            }
-          } catch (prodPdfErr) {
-            console.error(`Error generating product PDF for ${productOffer.productName}:`, prodPdfErr);
-          }
-        }
-
-        // Download PDFs directly for all roles
-        for (const attachment of generatedPdfFiles) {
-          try {
-            const url = URL.createObjectURL(attachment.blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = attachment.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-          } catch (dlErr) {
-            console.error('Error downloading PDF:', dlErr);
-          }
-        }
-        digitalAttachments = preGeneratedAttachments;
-        toast({
-          title: "Oferta generada",
-          description: `Se descargaron ${generatedPdfFiles.length} PDF(s).`,
-        });
-      } catch (pdfErr) {
-        console.error('Error generating/downloading PDFs:', pdfErr);
-        toast({
-          title: "Error al generar oferta",
-          description: "La oferta se creó correctamente, pero hubo un error al generar los PDFs.",
-          variant: "destructive",
-        });
-        queryClient.invalidateQueries({ queryKey: ["properties"] });
-        setOpen(false);
-        form.reset();
-        setSelectedPerson(null);
-        setSearchTerm("");
-        return;
       }
 
-      if (variables.data.digital) {
+      if (isDigital) {
         try {
           const { data: reservacion, error: aptError } = await (supabase as any)
             .from('reservaciones')
@@ -1149,6 +1202,16 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           if (import.meta.env.DEV) {
             console.log('[DEV] Link oferta digital (no se envía correo en dev sin secret):', ofertaLink);
           }
+          // Popup para compartir el link (WhatsApp / correo / copiar / web).
+          setShareOffer({
+            url: ofertaLink,
+            leadName: result.leadName,
+            leadEmail: result.leadEmail,
+            leadPhone: result.leadPhone || '',
+            leadPhoneCountry: variables.data.clave_pais_telefono || 'MX',
+            projectName: propertyDetails?.entidades_relacionadas?.proyectos?.nombre,
+            pdfContext,
+          });
           if (sendEmailOnGenerate) {
             const { sendMultipleOffersEmailDirect } = await emailServicePromise;
             await sendMultipleOffersEmailDirect({
@@ -1180,7 +1243,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             title: "Oferta generada",
             description: digitalErr?.code === '42P01'
               ? "DDL reservaciones pendiente de ejecutar en BD."
-              : "No se pudo completar el flujo digital. Oferta y PDFs generados.",
+              : "No se pudo completar el flujo digital. La oferta sí quedó creada.",
             variant: "destructive",
           });
         }
@@ -1405,7 +1468,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     if (!pendingFormData) return [] as string[];
 
     const reasons: string[] = [];
-    if (!isValidRFC(pendingFormData.rfc)) reasons.push("el prospecto no tiene un RFC válido");
+    // La CLABE de apartado se expone al cliente si el prospecto está
+    // identificado con RFC **o** CURP (ver el gate en lib/offers/use-offer-db).
+    if (!isValidRFC(pendingFormData.rfc) && !isValidCURP(pendingFormData.curp)) {
+      reasons.push("el prospecto no tiene un RFC ni una CURP válidos");
+    }
     if (pendingFormData.mode === "precargada" && !propertySchemeSelection) reasons.push("no se seleccionó un plan de pago");
 
     return reasons;
@@ -1416,7 +1483,20 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     onTrackSubmit?.();
 
     const missingScheme = data.mode === "precargada" && !localSchemeId;
-    const missingRFC = !isValidRFC(data.rfc);
+
+    // Sin plan de pago la oferta digital no puede mostrar la CLABE de apartado
+    // ni el plan al cliente, así que se bloquea antes de crearla.
+    if (data.digital && missingScheme) {
+      toast({
+        title: "Selecciona un plan de pago",
+        description: "La oferta digital necesita un esquema de pago para mostrar la CLABE de apartado y el plan al cliente.",
+        variant: "destructive",
+      });
+      setPendingButton(null);
+      return;
+    }
+
+    const missingRFC = !isValidRFC(data.rfc) && !isValidCURP(data.curp);
     const shouldShowBankingConfirm = missingScheme || missingRFC;
 
     if (productsWithPriceInfo.total > 0 || shouldShowBankingConfirm) {
@@ -1452,6 +1532,16 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
+  // Si el prospecto seleccionado no trae teléfono, el campo queda editable para
+  // poder capturarlo (es obligatorio y se guarda en `personas` al generar).
+  // Un teléfono legacy con formato inválido también queda editable, si no la
+  // validación de 10 dígitos dejaría el formulario bloqueado sin salida.
+  const phoneLocked = selectedPerson !== null && (selectedPerson.telefono ?? "").replace(/\D/g, "").length === 10;
+  // Mismo criterio para RFC/CURP: si el prospecto guardado no los trae (o son
+  // inválidos) el asesor debe poder capturarlos, porque de ellos depende que la
+  // oferta digital muestre la CLABE de apartado.
+  const rfcLocked = selectedPerson !== null && isValidRFC(selectedPerson.rfc);
+  const curpLocked = selectedPerson !== null && isValidCURP(selectedPerson.curp);
   const proyectoFechaEntrega = (propertyDetails?.entidades_relacionadas?.proyectos as any)?.fecha_entrega as string | null | undefined;
   const efectivaMesesHoy = proyectoFechaEntrega ? mesesEntreFechas(new Date(), proyectoFechaEntrega) : 0;
 
@@ -2366,10 +2456,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   render={({ field }) => (
                     <FormItem className="w-24">
                       <FormLabel>País <Req /></FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
+                      <Select
+                        onValueChange={field.onChange}
                         value={field.value}
-                        disabled={selectedPerson !== null}
+                        disabled={phoneLocked}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -2394,9 +2484,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     <FormItem className="flex-1">
                       <FormLabel>Teléfono <Req /></FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="10 dígitos" 
-                          disabled={selectedPerson !== null}
+                        <Input
+                          placeholder="10 dígitos"
+                          disabled={phoneLocked}
                           {...field}
                           onChange={(e) => {
                             const value = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -2419,11 +2509,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                        <FormItem>
                             <FormLabel>RFC</FormLabel>
                              <FormControl>
-                             <Input 
-                               placeholder="PEGJ850101H2A" 
+                             <Input
+                               placeholder="PEGJ850101H2A"
                                maxLength={13}
-                               disabled={selectedPerson !== null}
-                               {...field} 
+                               disabled={rfcLocked}
+                               {...field}
                              />
                            </FormControl>
                            <FormMessage />
@@ -2439,11 +2529,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                            <FormItem>
                              <FormLabel>CURP</FormLabel>
                               <FormControl>
-                                <Input 
-                                  placeholder="PEGJ850101HDFRRN09" 
+                                <Input
+                                  placeholder="PEGJ850101HDFRRN09"
                                   maxLength={18}
-                                  disabled={selectedPerson !== null}
-                                  {...field} 
+                                  disabled={curpLocked}
+                                  {...field}
                                 />
                               </FormControl>
                              <FormMessage />
@@ -2753,7 +2843,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </label>
             </div>
 
-            {productsWithPriceInfo.total > 0 ? (
+            {pendingButton === 'digital' ? (
+              <p className="text-sm text-muted-foreground">
+                Se generará la oferta digital. El PDF podrás descargarlo desde el popup de compartir.
+              </p>
+            ) : productsWithPriceInfo.total > 0 ? (
               <p className="text-sm text-muted-foreground">
                 Se descargarán {1 + productsWithPriceInfo.valid.length} PDF(s) automáticamente.
               </p>
@@ -2777,6 +2871,24 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* Compartir la oferta digital generada */}
+    {shareOffer && (
+      <ShareDigitalOfferDialog
+        open={!!shareOffer}
+        onOpenChange={(o) => { if (!o) setShareOffer(null); }}
+        url={shareOffer.url}
+        leadName={shareOffer.leadName}
+        leadEmail={shareOffer.leadEmail}
+        leadPhone={shareOffer.leadPhone}
+        leadPhoneCountry={shareOffer.leadPhoneCountry}
+        propertyNumber={propertyNumber}
+        projectName={shareOffer.projectName}
+        forceLight={forceLight}
+        onDownloadPdf={handleDownloadSharePdfs}
+        downloadingPdf={downloadingSharePdf}
+      />
+    )}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, Fragment } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -192,6 +192,8 @@ type ContactRow = {
   meta_created_time: string | null;
   meta_field_data: any[] | null;
   categoria_ids: number[];
+  otros_count?: number;
+  id_persona?: number | null;
 };
 
 type View = "all" | "mine" | "unassigned" | "no_followup";
@@ -293,6 +295,101 @@ function saveContactsSearch(uid: string, s: string) {
   try { window.sessionStorage.setItem(`${CONTACTS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
 }
 
+// Fila expandible: muestra los OTROS contactos (entidades) de la misma persona,
+// con contexto (proyecto, propietario, si ya tiene negocio) para entender cuál usar.
+function ContactExpansion({ personaId, principalId, colSpan }: { personaId: number; principalId: number; colSpan: number }) {
+  const navigate = useNavigate();
+  const { data: others = [], isLoading } = useQuery({
+    queryKey: ["contact-others", personaId, principalId],
+    enabled: !!personaId,
+    queryFn: async () => {
+      const { data: es } = await (supabase as any).from("entidades_relacionadas")
+        .select("id, id_tipo_entidad, id_proyecto, fecha_creacion")
+        .eq("id_persona", personaId).in("id_tipo_entidad", [2, 7]).eq("activo", true)
+        .neq("id", principalId).order("fecha_creacion", { ascending: false });
+      const list = es ?? [];
+      if (!list.length) return [];
+      const ids = list.map((e: any) => e.id);
+      const { data: atr } = await (supabase as any).from("crm_leads_atribucion")
+        .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario").in("id_entidad_relacionada", ids).eq("activo", true);
+      const am = new Map((atr ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
+      // Nombres de proyecto
+      const proyIds = Array.from(new Set(list.map((e: any) => e.id_proyecto).filter(Boolean)));
+      let proyMap = new Map<number, string>();
+      if (proyIds.length) {
+        const { data: ps } = await (supabase as any).from("proyectos").select("id, nombre").in("id", proyIds);
+        proyMap = new Map((ps ?? []).map((p: any) => [p.id, p.nombre]));
+      }
+      // Nombres de propietario
+      const ownerIds = Array.from(new Set((atr ?? []).map((a: any) => a.id_propietario).filter(Boolean)));
+      let ownerMap = new Map<string, string>();
+      if (ownerIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
+        ownerMap = new Map((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      // ¿ya tiene negocio?
+      const { data: neg } = await (supabase as any).from("crm_negocios").select("id_entidad_relacionada").in("id_entidad_relacionada", ids);
+      const negCount = new Map<number, number>();
+      (neg ?? []).forEach((n: any) => negCount.set(n.id_entidad_relacionada, (negCount.get(n.id_entidad_relacionada) ?? 0) + 1));
+      return list.map((e: any) => {
+        const a: any = am.get(e.id);
+        return {
+          id: e.id, fecha: e.fecha_creacion,
+          estado: a?.estatus_lead ?? "nuevo",
+          etapa: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
+          proyecto: e.id_proyecto ? (proyMap.get(e.id_proyecto) ?? `Proyecto ${e.id_proyecto}`) : null,
+          owner: a?.id_propietario ? (ownerMap.get(a.id_propietario) ?? null) : null,
+          negocios: negCount.get(e.id) ?? 0,
+        };
+      });
+    },
+  });
+  return (
+    <tr className="bg-muted/40 border-t border-border">
+      <td></td>
+      <td colSpan={colSpan} className="px-3 py-3">
+        <div className="pl-8 space-y-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Otros contactos de esta persona</div>
+            <div className="text-xs text-muted-foreground">Cada renglón es un contacto distinto (una compra o un proyecto). Para asignarle un negocio, entra al de tipo <b>Cliente</b> del proyecto correcto.</div>
+          </div>
+          {isLoading ? (
+            <div className="text-xs text-muted-foreground">Cargando…</div>
+          ) : others.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Sin otros contactos.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {others.map((o: any) => (
+                <div key={o.id} className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-md px-2.5 py-1.5">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${o.etapa === "customer" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                    {o.etapa === "customer" ? "Cliente" : "Lead"}
+                  </span>
+                  <span className="text-sm font-medium text-foreground inline-flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    {o.proyecto ?? "Sin proyecto"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">· {leadStatusLabel[o.estado] ?? o.estado}</span>
+                  {o.owner && <span className="text-xs text-muted-foreground">· {o.owner}</span>}
+                  <span className="text-xs text-muted-foreground tabular-nums">· {fmtDate(o.fecha)}</span>
+                  {o.negocios > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                      <Briefcase className="h-3 w-3" />{o.negocios} negocio{o.negocios === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  <Button size="sm" variant="outline" className="h-7 shrink-0 ml-1"
+                    onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${o.id}`)}>
+                    Abrir contacto
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
@@ -346,6 +443,7 @@ export function CrmContacts() {
   const pageSize = 25;
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
   const [editColumnsOpen, setEditColumnsOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
 
   const persistColumns = (next: ColumnConfig[]) => {
@@ -408,7 +506,7 @@ export function CrmContacts() {
   );
 
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, page, isSuperAdmin, effUserId],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, filterStatus, page, isSuperAdmin, effUserId],
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -416,6 +514,93 @@ export function CrmContacts() {
         ? filterLifecycle === "customer" ? [2] : [7]
         : [2, 7];
       const proyectoId = filterDev !== "all" ? Number(filterDev) : null;
+      const p_owner = stageTab === "mine" ? effUserId : null;
+      const p_unassigned = stageTab === "unassigned";
+
+      // Hidrata una lista de entidades (ers) a filas de contacto (personas + atribución + propietario + categorías).
+      const hydrateRows = async (list: any[]): Promise<ContactRow[]> => {
+        if (!list.length) return [];
+        const { data: personas } = await (supabase as any).from("personas")
+          .select("id, nombre_legal, nombre_comercial, email, telefono")
+          .in("id", list.map((e: any) => e.id_persona)).eq("activo", true);
+        const pMap: Record<number, any> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p]));
+        let atrMap: Record<number, any> = {};
+        const atrRes = await (supabase as any).from("crm_leads_atribucion")
+          .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
+          .in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
+        if (!atrRes.error) atrMap = Object.fromEntries((atrRes.data ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
+        const ownerIds = Array.from(new Set(Object.values(atrMap).map((a: any) => a?.id_propietario).filter(Boolean)));
+        let ownerNameMap: Record<string, string> = {};
+        if (ownerIds.length) {
+          const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
+          ownerNameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+        }
+        const catByEr: Record<number, number[]> = {};
+        const catAllRes = await (supabase as any).from("entidades_relacionadas_categorias")
+          .select("id_entidad_relacionada, id_categoria").in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
+        if (!catAllRes.error) for (const r of (catAllRes.data ?? [])) (catByEr[r.id_entidad_relacionada] ??= []).push(r.id_categoria);
+        return list.filter((e: any) => pMap[e.id_persona]).map((e: any) => {
+          const p = pMap[e.id_persona]; const a = atrMap[e.id] ?? null;
+          return {
+            id: String(e.id),
+            full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
+            email: p.email ?? null, phone: p.telefono ?? null,
+            development_id: e.id_proyecto ? String(e.id_proyecto) : null,
+            lead_status: a?.estatus_lead ?? "nuevo",
+            lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
+            source_platform: a?.meta_platform ?? null, source_name: a?.meta_form_name ?? null,
+            contact_owner: a?.id_propietario ?? null,
+            owner_name: a?.id_propietario ? (ownerNameMap[a.id_propietario] ?? null) : null,
+            last_activity_at: e.fecha_actualizacion ?? null, next_task_at: null, lead_score: 0,
+            created_at: e.fecha_creacion ?? new Date().toISOString(),
+            meta_form_name: a?.meta_form_name ?? null, meta_campaign_id: a?.meta_campaign_id ?? null,
+            meta_ad_id: a?.meta_ad_id ?? null, meta_platform: a?.meta_platform ?? null,
+            meta_created_time: a?.meta_created_time ?? null, meta_field_data: a?.meta_field_data ?? null,
+            categoria_ids: catByEr[e.id] ?? [],
+          };
+        });
+      };
+
+      // ── Camino AGRUPADO (una fila por persona) vía RPC. Si el RPC no existe, cae al fallback por-entidad. ──
+      const rpc = await (supabase as any).rpc("get_crm_contactos_agrupados", {
+        p_tipos: tipoFilter,
+        p_proyecto: proyectoId,
+        p_search: search.trim() || null,
+        p_fuente: (filterSource === "meta" || filterSource === "manual") ? filterSource : null,
+        p_categoria: filterCategoria !== "all" ? Number(filterCategoria) : null,
+        p_estatus: filterStatus !== "all" ? filterStatus : null,
+        p_owner,
+        p_unassigned,
+        p_limit: pageSize,
+        p_offset: page * pageSize,
+      });
+      if (!rpc.error) {
+        const grouped: any[] = rpc.data ?? [];
+        const total = grouped[0]?.total_personas ?? 0;
+        if (!grouped.length) return { rows: [], count: 0, grouped: true };
+        const principalIds = grouped.map((g) => Number(g.id_entidad));
+        const persMap = new Map(grouped.map((g) => [Number(g.id_entidad), Number(g.id_persona)]));
+        // "+N" = TODOS los contactos (tipo 2/7) de la persona (independiente del filtro),
+        // para que el número coincida con lo que se ve al desplegar.
+        const pagePersonaIds = Array.from(new Set(grouped.map((g) => Number(g.id_persona))));
+        const totalPorPersona = new Map<number, number>();
+        {
+          const { data: allEnts } = await (supabase as any).from("entidades_relacionadas")
+            .select("id_persona").in("id_persona", pagePersonaIds).in("id_tipo_entidad", [2, 7]).eq("activo", true);
+          (allEnts ?? []).forEach((e: any) => totalPorPersona.set(e.id_persona, (totalPorPersona.get(e.id_persona) ?? 0) + 1));
+        }
+        const { data: ersData } = await (supabase as any).from("entidades_relacionadas")
+          .select("id, id_persona, id_proyecto, id_tipo_entidad, fecha_creacion, fecha_actualizacion")
+          .in("id", principalIds);
+        const ers = (ersData ?? []).slice().sort((a: any, b: any) => principalIds.indexOf(a.id) - principalIds.indexOf(b.id));
+        const rows = await hydrateRows(ers);
+        rows.forEach((r) => {
+          const pid = persMap.get(Number(r.id)) ?? null;
+          r.id_persona = pid;
+          r.otros_count = pid != null ? Math.max((totalPorPersona.get(pid) ?? 1) - 1, 0) : 0;
+        });
+        return { rows, count: total, grouped: true };
+      }
 
       // Búsqueda por nombre/email/teléfono → resolver ids de persona primero.
       let searchPersonaIds: number[] | null = null;
@@ -476,81 +661,16 @@ export function CrmContacts() {
       const ers: any[] = pageRes.data ?? [];
       if (!ers.length) return { rows: [], count: countRes.count ?? 0 };
 
-      // Datos de contacto desde personas.
-      const { data: personas } = await (supabase as any).from("personas")
-        .select("id, nombre_legal, nombre_comercial, email, telefono")
-        .in("id", ers.map((e: any) => e.id_persona))
-        .eq("activo", true);
-      const pMap: Record<number, any> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p]));
-
-      // Atribución de Meta (opcional): puede no existir la tabla todavía (DDL pendiente).
-      let atrMap: Record<number, any> = {};
-      const atrRes = await (supabase as any).from("crm_leads_atribucion")
-        .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
-        .in("id_entidad_relacionada", ers.map((e: any) => e.id))
-        .eq("activo", true);
-      if (!atrRes.error) {
-        atrMap = Object.fromEntries((atrRes.data ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
-      }
-
-      // Resolver nombres de los propietarios (id_propietario es un auth_user_id / UUID).
-      const ownerIds = Array.from(new Set(Object.values(atrMap).map((a: any) => a?.id_propietario).filter(Boolean)));
-      let ownerNameMap: Record<string, string> = {};
-      if (ownerIds.length) {
-        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
-        ownerNameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
-      }
-
-      // Categorías (procedencia) de cada contacto de la página.
-      const catByEr: Record<number, number[]> = {};
-      const catAllRes = await (supabase as any).from("entidades_relacionadas_categorias")
-        .select("id_entidad_relacionada, id_categoria")
-        .in("id_entidad_relacionada", ers.map((e: any) => e.id))
-        .eq("activo", true);
-      if (!catAllRes.error) {
-        for (const r of (catAllRes.data ?? [])) {
-          (catByEr[r.id_entidad_relacionada] ??= []).push(r.id_categoria);
-        }
-      }
-
-      const rows: ContactRow[] = ers
-        .filter((e: any) => pMap[e.id_persona])
-        .map((e: any) => {
-          const p = pMap[e.id_persona];
-          const a = atrMap[e.id] ?? null;
-          return {
-            id: String(e.id),
-            full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
-            email: p.email ?? null,
-            phone: p.telefono ?? null,
-            development_id: e.id_proyecto ? String(e.id_proyecto) : null,
-            lead_status: a?.estatus_lead ?? "nuevo",
-            lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
-            source_platform: a?.meta_platform ?? null,
-            source_name: a?.meta_form_name ?? null,
-            contact_owner: a?.id_propietario ?? null,
-            owner_name: a?.id_propietario ? (ownerNameMap[a.id_propietario] ?? null) : null,
-            last_activity_at: e.fecha_actualizacion ?? null,
-            next_task_at: null,
-            lead_score: 0,
-            created_at: e.fecha_creacion ?? new Date().toISOString(),
-            meta_form_name: a?.meta_form_name ?? null,
-            meta_campaign_id: a?.meta_campaign_id ?? null,
-            meta_ad_id: a?.meta_ad_id ?? null,
-            meta_platform: a?.meta_platform ?? null,
-            meta_created_time: a?.meta_created_time ?? null,
-            meta_field_data: a?.meta_field_data ?? null,
-            categoria_ids: catByEr[e.id] ?? [],
-          };
-        });
-
-      return { rows, count: countRes.count ?? 0 };
+      const rows = await hydrateRows(ers);
+      return { rows, count: countRes.count ?? 0, grouped: false };
     },
   });
 
   const effectiveTab: StageTab = stageTab;
   const allRows = contacts?.rows ?? [];
-  const rows = allRows.filter((c) => {
+  // Con el RPC agrupado, los filtros (estado / mis / no asignados) ya vienen aplicados;
+  // solo filtramos client-side en el fallback por-entidad.
+  const rows = (contacts as any)?.grouped ? allRows : allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
     if (effectiveTab === "mine" && c.contact_owner !== effUserId) return false;
     if (effectiveTab === "unassigned" && c.contact_owner !== null) return false;
@@ -670,7 +790,8 @@ export function CrmContacts() {
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={c.id} role="button" tabIndex={0}
+                  <Fragment key={c.id}>
+                  <tr role="button" tabIndex={0}
                     onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${c.id}`)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
                     className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
@@ -689,11 +810,19 @@ export function CrmContacts() {
                           return (
                             <td key={col.id} className="p-3 font-medium whitespace-nowrap"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2.5 max-w-[260px]">
+                              <span className="inline-flex items-center gap-2 max-w-[320px]">
+                                {c.otros_count ? (
+                                  <button type="button" aria-label="Ver otros contactos de esta persona"
+                                    onClick={(e) => { e.stopPropagation(); setExpanded((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; }); }}
+                                    className="shrink-0 text-muted-foreground hover:text-primary">
+                                    {expanded.has(c.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </button>
+                                ) : <span className="w-4 shrink-0" />}
                                 <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
                                 <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
+                                {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
                               </span>
                             </td>
                           );
@@ -843,6 +972,10 @@ export function CrmContacts() {
                       </Button>
                     </td>
                   </tr>
+                  {expanded.has(c.id) && (contacts as any)?.grouped && (
+                    <ContactExpansion personaId={c.id_persona ?? 0} principalId={Number(c.id)} colSpan={visibleColumns.length + 1} />
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -923,8 +1056,11 @@ function CFilter({ value, onChange, options, placeholder }: { value: string; onC
 
 function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: string; developments: { id: string; name: string }[]; onCreated: () => void }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [duplicates, setDuplicates] = useState<any[]>([]);
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "", contact_owner: "" });
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
@@ -935,13 +1071,51 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
     if (uid) setForm((f) => (f.contact_owner ? f : { ...f, contact_owner: uid }));
   }, [user?.id]);
 
-  const submit = async () => {
+  // Busca personas activas con el mismo correo o los mismos últimos 10 dígitos de teléfono.
+  const findDuplicates = async (email: string, phone: string): Promise<any[]> => {
+    const emailNorm = email.toLowerCase();
+    const digits = phone.replace(/\D/g, "");
+    const tel10 = digits.length >= 10 ? digits.slice(-10) : "";
+    if (!emailNorm && !tel10) return [];
+    const ors: string[] = [];
+    if (emailNorm) ors.push(`email.ilike.${emailNorm}`);
+    if (tel10) ors.push(`telefono.ilike.%${tel10}`);
+    const { data: personas } = await (supabase as any).from("personas")
+      .select("id, nombre_legal, email, telefono").eq("activo", true).or(ors.join(",")).limit(10);
+    if (!personas?.length) return [];
+    const personaIds = personas.map((p: any) => p.id);
+    const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+      .select("id, id_persona, id_tipo_entidad").in("id_persona", personaIds).in("id_tipo_entidad", [2, 7]).eq("activo", true);
+    // compradores = tiene cuenta de cobranza (best-effort; si RLS bloquea, no muestra el badge).
+    const { data: comps } = await (supabase as any).from("compradores").select("id_persona").in("id_persona", personaIds);
+    const compSet = new Set((comps ?? []).map((c: any) => c.id_persona));
+    return personas.map((p: any) => {
+      const es = (ents ?? []).filter((e: any) => e.id_persona === p.id);
+      const clienteEnt = es.find((e: any) => e.id_tipo_entidad === 2);
+      const anyEnt = clienteEnt ?? [...es].sort((a: any, b: any) => b.id - a.id)[0];
+      return {
+        persona_id: p.id, nombre: p.nombre_legal, email: p.email, telefono: p.telefono,
+        es_cliente: !!clienteEnt, tiene_cobranza: compSet.has(p.id), abrir_entidad_id: anyEnt?.id ?? null,
+      };
+    });
+  };
+
+  const submit = async (force = false) => {
     if (!form.full_name) return;
     const email = form.email.trim();
     const phone = form.phone.trim();
     // Validación acorde a los CHECK de la tabla personas (evita error crudo de BD).
     if (email && !PERSONA_EMAIL_RE.test(email)) { toast.error(MSG_EMAIL_INVALIDO); return; }
     if (phone && !PERSONA_PHONE_RE.test(phone)) { toast.error(MSG_TELEFONO_INVALIDO); return; }
+    // Prevención de duplicados: avisar si ya existe alguien con ese correo/teléfono.
+    if (!force) {
+      setChecking(true);
+      let dups: any[] = [];
+      try { dups = await findDuplicates(email, phone); } catch { /* best-effort */ }
+      setChecking(false);
+      setDuplicates(dups);
+      if (dups.length) return;
+    }
     setBusy(true);
     try {
       // 1. Persona (datos de contacto)
@@ -975,6 +1149,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
       }
       toast.success("Contacto creado");
       setOpen(false);
+      setDuplicates([]);
       setForm({ ...form, full_name: "", email: "", phone: "", categoria: "" });
       onCreated();
     } catch (e: any) {
@@ -985,10 +1160,13 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setDuplicates([]); }}>
       <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="h-4 w-4 mr-1" />Nuevo contacto</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Crear contacto</DialogTitle></DialogHeader>
+      <DialogContent className="flex flex-col max-h-[85vh] gap-0 p-0">
+        <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b">
+          <DialogTitle>Crear contacto</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
         <div className="grid gap-3">
           <CField label="Nombre completo *"><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></CField>
           <div className="grid grid-cols-2 gap-3">
@@ -1030,9 +1208,39 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
             </Select>
           </CField>
         </div>
-        <DialogFooter>
+        {duplicates.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
+            <div className="flex items-center gap-1.5 text-amber-800 font-medium">
+              <TriangleAlert className="h-4 w-4 shrink-0" /> Ya existe {duplicates.length === 1 ? "un contacto" : `${duplicates.length} contactos`} con este teléfono o correo
+            </div>
+            {duplicates.map((d) => (
+              <div key={d.persona_id} className={`flex items-center justify-between gap-2 rounded p-2 border ${d.es_cliente ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "bg-card border-border"}`}>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{d.nombre}</div>
+                  <div className="text-xs text-muted-foreground truncate">{d.email || "sin correo"} · {d.telefono || "sin teléfono"}</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {d.es_cliente && <Badge variant="secondary" className="text-[10px]">Cliente</Badge>}
+                    {d.tiene_cobranza && <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700">Ya tiene cuenta de cobranza</Badge>}
+                  </div>
+                </div>
+                {d.abrir_entidad_id && (
+                  <Button size="sm" variant="outline" className="shrink-0"
+                    onClick={() => { setOpen(false); setDuplicates([]); navigate(`/admin/portal-crm/ventas/contactos/${d.abrir_entidad_id}`); }}>
+                    Abrir
+                  </Button>
+                )}
+              </div>
+            ))}
+            <p className="text-xs text-amber-700">Si de verdad es otra persona, puedes crearlo de todos modos.</p>
+          </div>
+        )}
+        </div>
+        <DialogFooter className="px-6 py-3 border-t shrink-0 gap-2">
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button onClick={submit} disabled={busy || !form.full_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear contacto</Button>
+          {duplicates.length > 0 && (
+            <Button variant="outline" onClick={() => submit(true)} disabled={busy}>Crear de todos modos</Button>
+          )}
+          <Button onClick={() => submit()} disabled={busy || checking || !form.full_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">{checking ? "Revisando…" : "Crear contacto"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1577,6 +1785,22 @@ export function CrmContactDetail() {
   );
 }
 
+// Fallback si la tabla crm_meta_conversion_stages aún no existe. El mapa real
+// (etapa CRM → event_name de Meta) se administra desde /marketing/meta → Eventos.
+const CAPI_STAGE_FALLBACK: Record<string, string> = { mql: "mql" };
+
+// Lee las etapas ACTIVAS de crm_meta_conversion_stages y arma el mapa etapa→event_name.
+const fetchCapiStageMap = async (): Promise<Record<string, string>> => {
+  const { data, error } = await (supabase as any)
+    .from("crm_meta_conversion_stages")
+    .select("etapa_ciclo_vida, meta_event_name, activo")
+    .eq("activo", true);
+  if (error || !data || !data.length) return CAPI_STAGE_FALLBACK;
+  const map: Record<string, string> = {};
+  for (const r of data) map[r.etapa_ciclo_vida] = r.meta_event_name;
+  return map;
+};
+
 function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: any) {
   const [form, setForm] = useState({
     email: contact.email ?? "", phone: contact.phone ?? "",
@@ -1585,6 +1809,7 @@ function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: a
   });
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
+  const { data: capiStageMap = CAPI_STAGE_FALLBACK } = useQuery({ queryKey: ["crm-capi-stage-map"], queryFn: fetchCapiStageMap });
 
   // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
   const run = async (fn: () => Promise<{ error: any }>) => {
@@ -1620,12 +1845,25 @@ function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: a
     }).eq("id", Number(contact.id)));
 
   const persistAtribucion = (override: { lead_status?: string; lifecycle_stage?: string; contact_owner?: string }) =>
-    run(() => (supabase as any).from("crm_leads_atribucion").upsert({
-      id_entidad_relacionada: Number(contact.id),
-      estatus_lead: override.lead_status ?? form.lead_status,
-      etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
-      id_propietario: (override.contact_owner ?? form.contact_owner) || null,
-    }, { onConflict: "id_entidad_relacionada" }));
+    run(async () => {
+      const resp = await (supabase as any).from("crm_leads_atribucion").upsert({
+        id_entidad_relacionada: Number(contact.id),
+        estatus_lead: override.lead_status ?? form.lead_status,
+        etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
+        id_propietario: (override.contact_owner ?? form.contact_owner) || null,
+      }, { onConflict: "id_entidad_relacionada" });
+      // Señal a Meta (Conversions API for Leads) cuando la etapa entra a una mapeada (ej. MQL).
+      // Fire-and-forget: no bloquea el guardado; la Edge Function omite leads que no vinieron de Meta.
+      const stage = override.lifecycle_stage;
+      if (!resp.error && stage && capiStageMap[stage]) {
+        (supabase as any).functions
+          .invoke("meta-capi-lead-stage", {
+            body: { id_entidad_relacionada: Number(contact.id), event_name: capiStageMap[stage] },
+          })
+          .catch((e: any) => console.warn("meta-capi-lead-stage:", e?.message ?? e));
+      }
+      return resp;
+    });
 
   return (
     <div className="space-y-3 text-sm">

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  ShoppingBag,
+  Boxes,
   Clock,
   PackageCheck,
   Layers3,
@@ -11,13 +11,16 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PageHeader, Kpi, Panel } from "@/components/admin/portal-socio-bancario/ui";
 import { DesarrolloNoAsignado } from "@/components/admin/portal-socio-bancario/EmptyStates";
 import { useSocioProyecto } from "@/hooks/usePortalSocioBancario/useSocioProyecto";
-import { usePropiedadesEstatusKpis } from "@/hooks/usePortalSocioBancario/usePropiedadesEstatusKpis";
+import {
+  usePropiedadesEstatusKpis,
+  type EstatusBucket,
+} from "@/hooks/usePortalSocioBancario/usePropiedadesEstatusKpis";
 import { useHistoricoComercial } from "@/hooks/usePortalSocioBancario/useHistoricoComercial";
-import { useForecastIngresos } from "@/hooks/usePortalSocioBancario/useForecastIngresos";
 
 function fmtMxn(n: number): string {
   return new Intl.NumberFormat("es-MX", {
@@ -45,6 +48,53 @@ function labelMes(iso: string): string {
 
 type Modo = "unidades" | "monto";
 
+/**
+ * Tarjeta "Inventario y Asignado": desglosa, dentro de una sola card, las
+ * propiedades en estatus Asignado(10) e Inventario(1) — cantidad y Σ precio de
+ * lista de cada estatus. Sustituye a la antigua tarjeta de un solo valor.
+ */
+function InventarioAsignadoKpi({
+  asignado,
+  inventario,
+}: {
+  asignado: EstatusBucket;
+  inventario: EstatusBucket;
+}) {
+  const filas = [
+    { label: "Asignado", bucket: asignado },
+    { label: "Inventario", bucket: inventario },
+  ];
+  return (
+    <Card className="rounded-xl border border-border shadow-sm">
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground">
+            Inventario y Asignado
+          </p>
+          <span className="grid h-10 w-10 place-items-center rounded-lg shrink-0 bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+            <Boxes className="h-5 w-5" strokeWidth={1.75} />
+          </span>
+        </div>
+        <div className="mt-3 space-y-2">
+          {filas.map((f) => (
+            <div key={f.label} className="flex items-baseline justify-between gap-2">
+              <span className="text-[13px] text-muted-foreground">{f.label}</span>
+              <span className="flex items-baseline gap-2 min-w-0">
+                <span className="text-lg font-bold tabular-nums text-foreground">
+                  {f.bucket.count}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground truncate">
+                  {fmtMxn(f.bucket.valor_lista)}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SocioBancarioVentasInventarioPage() {
   const { idProyecto, nombre, noAsignado, isLoading: loadingProyecto } = useSocioProyecto();
   const [modo, setModo] = useState<Modo>("unidades");
@@ -56,16 +106,6 @@ export default function SocioBancarioVentasInventarioPage() {
     canal: null,
     tipo: "todos",
   });
-  const forecast = useForecastIngresos();
-
-  // Inventario disponible a precio de lista (Σ precio_lista de Disponibles del
-  // desarrollo). Reusa la rama fuente:"inventario" del forecast, SIN comisión.
-  const inventarioPrecioLista = useMemo(() => {
-    const rows = forecast.data ?? [];
-    return rows
-      .filter((r) => r.fuente === "inventario" && r.proyecto_id === idProyecto)
-      .reduce((s, r) => s + r.monto, 0);
-  }, [forecast.data, idProyecto]);
 
   const valorComercializado = useMemo(
     () => (historico.data ?? []).reduce((s, r) => s + r.ventas_monto, 0),
@@ -96,9 +136,16 @@ export default function SocioBancarioVentasInventarioPage() {
   const k = kpis.data;
   const vendidas = k?.ventas_totales ?? 0;
   const apartadas = k?.apartados ?? 0;
-  const disponibles = k?.disponibles ?? 0;
+  const disponibles = k?.disponibles ?? 0; // estatus Disponible(2): base de % colocado
   const total = vendidas + apartadas + disponibles;
   const pctColocado = total > 0 ? (vendidas / total) * 100 : 0;
+
+  // Desglose de la tarjeta "Inventario y Asignado" (por estatus).
+  const inventario = k?.inventario ?? { count: 0, valor_lista: 0 };
+  const asignado = k?.asignado ?? { count: 0, valor_lista: 0 };
+  // Tarjeta "Inventario disponible": propiedades en estatus Disponible(2) —
+  // las realmente disponibles a la venta (cantidad + Σ valor de lista).
+  const disponiblesValorLista = k?.disponibles_valor_lista ?? 0;
 
   const detalle = (historico.data ?? []).filter(
     (r) => r.ventas_count > 0 || r.apartados_count > 0,
@@ -122,10 +169,13 @@ export default function SocioBancarioVentasInventarioPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Kpi icon={PackageCheck} tone="success" label="Vendidas" value={vendidas} hint={`${fmtPct(pctColocado)} colocado`} />
             <Kpi icon={Clock} tone="warning" label="Apartadas" value={apartadas} hint="Estatus Apartada" />
-            <Kpi icon={ShoppingBag} tone="info" label="Disponibles" value={disponibles} hint="Inventario en venta" />
+            <InventarioAsignadoKpi
+              asignado={asignado}
+              inventario={inventario}
+            />
             <Kpi icon={TrendingUp} tone="primary" label="% colocado" value={fmtPct(pctColocado)} hint={`${vendidas} de ${total} unidades`} />
             <Kpi icon={Wallet} tone="default" label="Valor comercializado" value={fmtMxn(valorComercializado)} hint="Ventas reconocidas (sin comisión)" />
-            <Kpi icon={Layers3} tone="warning" label="Inventario disponible" value={fmtMxn(inventarioPrecioLista)} hint={`${disponibles} unidades · precio de lista`} />
+            <Kpi icon={Layers3} tone="warning" label="Inventario disponible" value={fmtMxn(disponiblesValorLista)} hint={`${disponibles} unidades · precio de lista`} />
           </div>
 
           {/* Meta de colocación: oculta — no existe meta en la base. No se inventa.

@@ -7,15 +7,18 @@ import { toast } from 'sonner';
 import {
   useEmbajadorDocumentos,
   EmbajadorDocEstatus,
+  EmbajadorDocKey,
   EMB_DOC_STATUS_LABEL,
 } from '@/hooks/useEmbajadorDocumentos';
 import { PdfViewerDialog } from '@/components/admin/PdfViewerDialog';
 import { DocumentStatusChangeDialog } from '@/components/admin/DocumentStatusChangeDialog';
 
 const TONE: Record<EmbajadorDocEstatus, string> = {
-  pendiente: 'bg-amber-500/10 text-amber-700 border-amber-500/30',
-  aprobado: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
+  pendiente: 'bg-muted text-muted-foreground',
+  revision: 'bg-amber-500/10 text-amber-700 border-amber-500/30',
+  validado: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
   rechazado: 'bg-destructive/10 text-destructive border-destructive/30',
+  expirado: 'bg-muted text-muted-foreground',
 };
 
 interface Props {
@@ -26,10 +29,10 @@ interface Props {
 }
 
 export function AmbassadorDocsVerifyDialog({ open, onOpenChange, idPersona, ambassadorName }: Props) {
-  const { docs, isLoading, setDocStatus } = useEmbajadorDocumentos(open ? idPersona : null);
+  const { docs, isLoading, setDocStatusByKey } = useEmbajadorDocumentos(open ? idPersona : null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState('Documento');
-  const [statusDoc, setStatusDoc] = useState<{ docId: number; name: string; current: number } | null>(null);
+  const [statusDoc, setStatusDoc] = useState<{ key: EmbajadorDocKey; name: string; current: number } | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Solo los documentos del embajador que requieren aprobación
@@ -83,12 +86,12 @@ export function AmbassadorDocsVerifyDialog({ open, onOpenChange, idPersona, amba
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    {d.url && d.docId != null && (
+                    {d.url && (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() =>
-                          setStatusDoc({ docId: d.docId!, name: d.label, current: d.estatusId ?? 1 })
+                          setStatusDoc({ key: d.key, name: d.label, current: d.estatusId ?? 1 })
                         }
                       >
                         Revisar
@@ -119,7 +122,7 @@ export function AmbassadorDocsVerifyDialog({ open, onOpenChange, idPersona, amba
           onConfirm={async (newStatus) => {
             setSaving(true);
             try {
-              await setDocStatus(statusDoc.docId, newStatus);
+              await setDocStatusByKey(statusDoc.key, newStatus);
               toast.success('Estatus del documento actualizado.');
             } catch (err: any) {
               toast.error(err?.message || 'No se pudo actualizar el documento.');

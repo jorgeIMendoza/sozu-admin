@@ -32,10 +32,7 @@ import {
 } from "@/components/ui/table";
 import { fmtMXN, fmtNum, fmtPct, fmtDateTime, relTime } from "@/data/portal-crm/mockData";
 import { type DateRange, RANGE_LABEL, rangeToSince } from "@/lib/crm-marketing";
-import {
-  isMetaConfigured, fetchMetaCampaigns, fetchMetaAdAccount,
-  type MetaCampaign,
-} from "@/lib/meta-ads-client";
+import { type MetaCampaign } from "@/lib/meta-ads-client";
 
 const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
 
@@ -1012,24 +1009,25 @@ const STATUS_MAP: Record<MetaCampaign["status"], string> = {
 };
 
 export function CrmMetaAds() {
-  const configured = isMetaConfigured();
-
-  const { data: campaigns, isLoading, error, refetch, isFetching } = useQuery<MetaCampaign[], { message: string }>({
-    queryKey: ["meta-campaigns"],
-    queryFn: fetchMetaCampaigns,
-    enabled: configured,
+  // Datos vía Edge Function `meta-ads-insights` (token server-side, NO en el navegador).
+  const { data, isLoading, error, refetch, isFetching } = useQuery<
+    { configured: boolean; campaigns: MetaCampaign[]; account: { name: string; currency: string; id: string } | null; error?: string },
+    { message: string }
+  >({
+    queryKey: ["meta-ads-insights"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).functions.invoke("meta-ads-insights", { body: {} });
+      if (error) throw { message: error.message };
+      if (data?.error) throw { message: data.error };
+      return data;
+    },
     staleTime: 5 * 60_000,
     retry: 1,
   });
 
-  const { data: account } = useQuery({
-    queryKey: ["meta-account"],
-    queryFn: fetchMetaAdAccount,
-    enabled: configured,
-    staleTime: 60 * 60_000,
-  });
-
-  const rows = campaigns ?? [];
+  const configured = data?.configured ?? false;
+  const account = data?.account ?? null;
+  const rows = data?.campaigns ?? [];
   const totals = useMemo(() => ({
     active: rows.filter(c => c.status === "active").length,
     spend: rows.reduce((s, c) => s + c.spend, 0),
@@ -1057,11 +1055,11 @@ export function CrmMetaAds() {
         <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-amber-800 dark:text-amber-400">Sin credenciales — modo mock</p>
+            <p className="font-medium text-amber-800 dark:text-amber-400">Sin conexión a Meta</p>
             <p className="text-amber-700 dark:text-amber-500 text-xs mt-0.5">
-              Configura <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">VITE_META_ACCESS_TOKEN</code> y{" "}
-              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">VITE_META_AD_ACCOUNT_ID</code> en{" "}
-              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env.development</code> para ver datos reales.
+              Configura los secrets <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">META_ADS_TOKEN</code> y{" "}
+              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">META_AD_ACCOUNT_ID</code> en la Edge Function{" "}
+              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">meta-ads-insights</code> para ver campañas reales.
             </p>
           </div>
         </div>

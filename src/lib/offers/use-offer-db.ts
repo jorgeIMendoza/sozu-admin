@@ -5,7 +5,7 @@ import type { Agent } from "./agent-data";
 import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
 import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
-import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
 import { getBodegasIncluidasCosto } from "./included-bodegas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     (oferta as any).id_persona_lead
       ? supabase
           .from("personas")
-          .select("email, rfc, nombre_legal, telefono, clave_pais_telefono")
+          .select("email, rfc, curp, nombre_legal, telefono, clave_pais_telefono")
           .eq("id", (oferta as any).id_persona_lead)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -508,11 +508,17 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // plan queda congelado: se muestra SOLO el seleccionado (no el selector completo).
   const { data: cuentasOferta } = await (supabase as any)
     .from("cuentas_cobranza")
-    .select("id")
+    .select("id, clabe_stp")
     .eq("id_oferta", numId)
     .eq("activo", true)
+    .order("id", { ascending: true })
     .limit(1);
-  const ofertaTieneCuenta = Array.isArray(cuentasOferta) && cuentasOferta.length > 0;
+  const cuentaOferta = Array.isArray(cuentasOferta) ? cuentasOferta[0] ?? null : null;
+  const ofertaTieneCuenta = !!cuentaOferta;
+  // CLABE dedicada de la cuenta de cobranza: se crea con la cuenta, después del
+  // primer pago. Manda sobre la temporal de la propiedad.
+  const clabeCuentaCobranza: string | undefined =
+    (cuentaOferta as any)?.clabe_stp || undefined;
 
   const allEsqs      = esquemasAug.filter((e: any) => !e.es_manual);
   const selectedIsManual = selectedId
@@ -711,9 +717,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // oferta de producto del MISMO lead que la oferta de la unidad (misma propiedad),
   // que es la que corresponde a este comprador. Fuente: id_esquema_pago_seleccionado +
   // clabe_stp_tmp_producto (ver NewProductOfferDialog).
-  // Gate CLABE: solo se muestra si el lead tiene RFC válido (oferta formalizada con
-  // datos fiscales del cliente). Mismo criterio que el PDF (offerPdfStorageService).
-  const leadRfcValido = isValidRFC((leadPersona as any)?.rfc);
+  // Gate CLABE: se muestra si el lead está identificado con RFC **o** CURP
+  // válidos (la CURP llega con los datos del INE que captura el asesor). El PDF
+  // usa solo RFC (offerPdfStorageService), aquí basta cualquiera de los dos.
+  const leadRfcValido =
+    isValidRFC((leadPersona as any)?.rfc) || isValidCURP((leadPersona as any)?.curp);
   const leadIdOferta = (oferta as any).id_persona_lead ?? null;
   const bodegaPagoByProducto = new Map<
     number,
@@ -790,11 +798,17 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     incluido: !!e.es_incluido,
     tipo: e.id_tipo != null ? tipoEstacMap.get(e.id_tipo) : undefined,
   }));
-  // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido)
-  // Y si la oferta tiene un esquema de pago seleccionado (sin esquema no aplica pago).
-  const clabeStp = (leadRfcValido && selectedId != null)
+  // CLABE a mostrar, en orden de prioridad:
+  //  1. `cuentas_cobranza.clabe_stp` — dedicada de esta cuenta; existe una vez que
+  //     el primer pago generó la cuenta. Ya está formalizada, no lleva gate.
+  //  2. `propiedades.clabe_stp_tmp_apartado` — temporal/universal de la unidad,
+  //     solo para el primer pago (apartado). Requiere que el lead esté
+  //     identificado con RFC o CURP (ver leadRfcValido) y que la oferta tenga
+  //     esquema de pago seleccionado (sin esquema no aplica pago).
+  const clabeTemporalPropiedad = (leadRfcValido && selectedId != null)
     ? (propiedad as any).clabe_stp_tmp_apartado || undefined
     : undefined;
+  const clabeStp = clabeCuentaCobranza ?? clabeTemporalPropiedad;
 
   // ── Desarrolladora que lleva el proyecto: entidad relacionada tipo 4
   // (Dueño Vendedor — es donde vive el dato real, ej. Tallwood en Daiku).
@@ -888,7 +902,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     generatedBy: oferta.email_creador ?? "SOZU",
     agentId,
     validUntil: validUntilDate.toISOString(),
-    status: "active",
+    // Con cuenta de cobranza activa la unidad ya tiene dueño: la oferta deja de
+    // ser vendible y la UI muestra la leyenda correspondiente.
+    status: ofertaTieneCuenta ? "converted_to_account" : "active",
+    hasCuentaCobranza: ofertaTieneCuenta,
     // development: siempre presente si hay proyecto — fallbacks para campos opcionales
     development: {
       website:        (proyectoMkt as any)?.url_sitio_web ?? undefined,

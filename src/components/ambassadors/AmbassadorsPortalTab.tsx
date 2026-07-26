@@ -33,9 +33,10 @@ import { ReferralFormDialog } from './AmbassadorsAdminTab';
 import { ReferralPortalDrawer } from './ReferralPortalDrawer';
 import { EmbajadorDocsCard } from './EmbajadorDocsCard';
 import { EmbajadorComisionesSection, EmbajadorPagosSection } from './EmbajadorComisionesSections';
+import type { EmbajadorComisionTarget } from '@/hooks/useEmbajadorComisiones';
 import { EmbajadorComoFuncionaDialog } from './EmbajadorComoFuncionaDialog';
 import { useEmbajadorDocumentos } from '@/hooks/useEmbajadorDocumentos';
-import { useEmbajadorComisiones } from '@/hooks/useEmbajadorComisiones';
+import { useEmbajadoresComisiones } from '@/hooks/useEmbajadorComisiones';
 import { Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -185,25 +186,40 @@ export default function AmbassadorsPortalTab() {
     if (!isAdmin || ambassadors.length === 0) return;
     if (impersonatedEmbajadorId) {
       if (impersonatedEmbajadorId !== activeId) setActiveId(impersonatedEmbajadorId);
-    } else if (!activeId) {
-      setActiveId(ambassadors[0].id);
+    } else if (activeId) {
+      // Sin impersonación no se muestra un embajador arbitrario: antes caía en
+      // ambassadors[0] y el portal parecía vacío aunque otros sí tuvieran datos.
+      setActiveId('');
     }
   }, [isAdmin, impersonatedEmbajadorId, ambassadors, activeId]);
 
   const active = ambassadors.find((a) => a.id === activeId);
+  // Admin sin impersonar → vista global: todo el programa agregado. Al impersonar se
+  // ve exactamente lo que ve ese embajador.
+  const globalView = isAdmin && !impersonatedEmbajadorId;
+
+  const comisionTargets = useMemo<EmbajadorComisionTarget[]>(() => {
+    const list = globalView ? ambassadors : active ? [active] : [];
+    return list.map((a) => ({ id: a.id, email: a.email, nombre: a.fullName, idPersona: a.idPersona ?? null }));
+  }, [globalView, ambassadors, active]);
+
+  const nombrePorEmbajador = useMemo(
+    () => new Map(ambassadors.map((a) => [a.id, a.fullName])),
+    [ambassadors],
+  );
 
   const myRefs = useMemo(
-    () => referrals.filter((r) => r.ambassadorId === activeId),
-    [referrals, activeId],
+    () => (globalView ? referrals : referrals.filter((r) => r.ambassadorId === activeId)),
+    [referrals, activeId, globalView],
   );
   const myNotifs = useMemo(
-    () => notifications.filter((n) => n.ambassadorId === activeId),
-    [notifications, activeId],
+    () => (globalView ? notifications : notifications.filter((n) => n.ambassadorId === activeId)),
+    [notifications, activeId, globalView],
   );
   const unread = myNotifs.filter((n) => !n.read).length;
 
-  const { pendingCount: pendingDocs } = useEmbajadorDocumentos(active?.idPersona);
-  const { totals: comTotals } = useEmbajadorComisiones(active?.email);
+  const { pendingCount: pendingDocs } = useEmbajadorDocumentos(globalView ? null : active?.idPersona);
+  const { totals: comTotals } = useEmbajadoresComisiones(comisionTargets);
 
   const stats = useMemo(() => {
     const total = myRefs.length;
@@ -249,10 +265,14 @@ export default function AmbassadorsPortalTab() {
     return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [myRefs]);
 
-  if (!active) {
+  if (!active && !globalView) {
     return (
       <Card className="p-8 text-center">
-        <p className="text-muted-foreground">No hay embajadores registrados aún.</p>
+        <p className="text-muted-foreground">
+          {ambassadors.length === 0
+            ? 'No hay embajadores registrados aún.'
+            : 'Tu usuario aún no está ligado a un embajador.'}
+        </p>
       </Card>
     );
   }
@@ -281,9 +301,11 @@ export default function AmbassadorsPortalTab() {
               Recomienda nuestros proyectos inmobiliarios y nosotros hacemos el resto.
             </p>
             <div className="flex flex-col sm:flex-row gap-2.5 mt-1">
-              <Button data-cta="embajadores.referidos.abrir-registrar" onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto shadow-sm">
-                <Plus className="h-4 w-4 mr-1.5" /> Registrar nuevo referido
-              </Button>
+              {!globalView && (
+                <Button data-cta="embajadores.referidos.abrir-registrar" onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto shadow-sm">
+                  <Plus className="h-4 w-4 mr-1.5" /> Registrar nuevo referido
+                </Button>
+              )}
               <Button data-cta="embajadores.referidos.ver-como-funciona" variant="outline" size="lg" onClick={() => setShowHowItWorks(true)} className="w-full sm:w-auto">
                 Ver cómo funciona <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
               </Button>
@@ -336,38 +358,57 @@ export default function AmbassadorsPortalTab() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-primary uppercase tracking-[0.14em] font-semibold">
-              <Sparkles className="h-3.5 w-3.5" /> Portal del Embajador
+              <Sparkles className="h-3.5 w-3.5" /> {globalView ? 'Programa de Embajadores' : 'Portal del Embajador'}
             </div>
-            <h1 className="text-2xl font-semibold mt-2">Hola, {active.fullName.split(' ')[0]}</h1>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
-              <span>Código: <code className="text-foreground font-mono">{active.code}</code></span>
-              <span>·</span>
-              <span>Comisión: <span className="text-foreground font-medium">{active.commissionPct}%{active.fixedAmount ? ` + ${fmt(active.fixedAmount)}` : ''}</span></span>
-              <span>·</span>
-              <span className="inline-flex items-center gap-1">
-                <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />
-                {active.status === 'activo' ? 'Verificado' : active.status}
-              </span>
-            </div>
+            {globalView ? (
+              <>
+                <h1 className="text-2xl font-semibold mt-2">Vista global</h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
+                  <span>{ambassadors.length} embajador{ambassadors.length === 1 ? '' : 'es'}</span>
+                  <span>·</span>
+                  <span>{referrals.length} referido{referrals.length === 1 ? '' : 's'}</span>
+                  <span>·</span>
+                  <span>Elige un embajador arriba para ver su portal tal como lo ve él</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-semibold mt-2">Hola, {active!.fullName.split(' ')[0]}</h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
+                  <span>Código: <code className="text-foreground font-mono">{active!.code}</code></span>
+                  <span>·</span>
+                  <span>Comisión: <span className="text-foreground font-medium">{active!.commissionPct}%{active!.fixedAmount ? ` + ${fmt(active!.fixedAmount)}` : ''}</span></span>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1">
+                    <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    {active!.status === 'activo' ? 'Verificado' : active!.status}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
             {/* Selector de embajador eliminado: el único punto de impersonación es el del
                 header (EmbajadorImpersonationSelector). Este activeId ya sigue ese context. */}
-            <Button onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto">
-              <Plus className="h-4 w-4 mr-1" /> Registrar nuevo referido
-            </Button>
+            {!globalView && (
+              <Button onClick={() => setShowForm(true)} size="lg" className="w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-1" /> Registrar nuevo referido
+              </Button>
+            )}
           </div>
         </div>
       </Card>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
-        <KpiCard label="Mis referidos" value={String(stats.total)} accent />
+        <KpiCard label={globalView ? 'Referidos' : 'Mis referidos'} value={String(stats.total)} accent />
         <KpiCard label="En seguimiento" value={String(stats.active)} />
         <KpiCard label="Vendidos" value={String(stats.sold)} />
         <KpiCard label="Comisión generada" value={comTotals.generada ? fmt(comTotals.generada) : 'Sin generar'} help={COMMISSION_STATUS_HELP.generada} />
         <KpiCard label="Comisión autorizada" value={comTotals.autorizada ? fmt(comTotals.autorizada) : '—'} help={COMMISSION_STATUS_HELP.autorizada} />
         <KpiCard label="Comisión pagada" value={comTotals.pagada ? fmt(comTotals.pagada) : '—'} help={COMMISSION_STATUS_HELP.pagada} />
-        <KpiCard label="Documentación" value={pendingDocs === 0 ? 'Al día' : `${pendingDocs} pend.`} sub={pendingDocs === 0 ? 'Todo en orden' : 'Revisa tu perfil'} />
+        {!globalView && (
+          <KpiCard label="Documentación" value={pendingDocs === 0 ? 'Al día' : `${pendingDocs} pend.`} sub={pendingDocs === 0 ? 'Todo en orden' : 'Revisa tu perfil'} />
+        )}
       </div>
 
       {/* Feed de notificaciones */}
@@ -457,9 +498,11 @@ export default function AmbassadorsPortalTab() {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => setShowForm(true)} className="sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" /> Registrar referido
-        </Button>
+        {!globalView && (
+          <Button onClick={() => setShowForm(true)} className="sm:w-auto">
+            <Plus className="h-4 w-4 mr-1" /> Registrar referido
+          </Button>
+        )}
       </div>
 
       {/* Mobile: cards */}
@@ -480,6 +523,11 @@ export default function AmbassadorsPortalTab() {
                 </div>
                 <Badge variant="outline">{mapStatusForAmbassador(r.status)}</Badge>
               </div>
+              {globalView && (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Embajador: <span className="text-foreground">{nombrePorEmbajador.get(r.ambassadorId) ?? '—'}</span>
+                </div>
+              )}
               <div className="mt-2 text-xs text-muted-foreground">
                 Próx: {r.nextStepOverride ?? nextStepFor(r.status)}
               </div>
@@ -504,6 +552,7 @@ export default function AmbassadorsPortalTab() {
           <TableHeader>
             <TableRow>
               <TableHead>Cliente referido</TableHead>
+              {globalView && <TableHead>Embajador</TableHead>}
               <TableHead>Registro</TableHead>
               <TableHead>Estatus</TableHead>
               <TableHead>Próximo paso</TableHead>
@@ -517,7 +566,7 @@ export default function AmbassadorsPortalTab() {
           <TableBody>
             {filteredRefs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
+                <TableCell colSpan={globalView ? 10 : 9} className="text-center text-sm text-muted-foreground py-8">
                   No hay referidos que coincidan.
                 </TableCell>
               </TableRow>
@@ -528,6 +577,9 @@ export default function AmbassadorsPortalTab() {
               return (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.clientName}</TableCell>
+                  {globalView && (
+                    <TableCell className="text-xs">{nombrePorEmbajador.get(r.ambassadorId) ?? '—'}</TableCell>
+                  )}
                   <TableCell className="text-xs">{dateShort(r.registeredAt)}</TableCell>
                   <TableCell><Badge variant="outline">{mapStatusForAmbassador(r.status)}</Badge></TableCell>
                   <TableCell className="text-xs">{next}</TableCell>
@@ -585,34 +637,73 @@ export default function AmbassadorsPortalTab() {
   );
 
   // ─── Section: Comisiones ───
-  const CommissionsSection = <EmbajadorComisionesSection email={active.email} ambassadorId={active.id} idPersona={active.idPersona} />;
+  const CommissionsSection = <EmbajadorComisionesSection targets={comisionTargets} showOwner={globalView} />;
 
   // ─── Section: Pagos ───
-  const PaymentsSection = <EmbajadorPagosSection email={active.email} idPersona={active.idPersona} ambassadorId={active.id} />;
+  const PaymentsSection = <EmbajadorPagosSection targets={comisionTargets} showOwner={globalView} />;
 
   // ─── Section: Perfil ───
-  const ProfileSection = (
+  // Vista global: el perfil y la documentación son por persona, así que se lista a
+  // los embajadores y se invita a entrar al portal de uno.
+  const ProfileSection = globalView ? (
+    <div className="space-y-4">
+      <Card className="p-4 border-primary/30 bg-primary/5">
+        <div className="flex items-start gap-3">
+          <UserCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+          <p className="text-sm">
+            El perfil y la documentación de pago son de cada embajador. Elige uno en el selector de
+            arriba para ver (y validar) su expediente.
+          </p>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        {ambassadors.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No hay embajadores registrados aún.</p>
+        ) : (
+          <ul className="space-y-2">
+            {ambassadors.map((a) => (
+              <li key={a.id} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{a.fullName}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    {[a.code, a.email].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {referrals.filter((r) => r.ambassadorId === a.id).length} referidos
+                  </span>
+                  <Badge variant="outline">{a.status}</Badge>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  ) : (
     <div className="space-y-4">
       <Card className="p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="h-12 w-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold">
-            {active.fullName.split(' ').map(p => p[0]).slice(0, 2).join('')}
+            {active!.fullName.split(' ').map(p => p[0]).slice(0, 2).join('')}
           </div>
           <div>
-            <div className="font-semibold">{active.fullName}</div>
-            <div className="text-xs text-muted-foreground">{active.email ?? '—'} · {active.phone ?? '—'}</div>
+            <div className="font-semibold">{active!.fullName}</div>
+            <div className="text-xs text-muted-foreground">{active!.email ?? '—'} · {active!.phone ?? '—'}</div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Código</div><div className="font-mono">{active.code}</div></div>
-          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Comisión</div><div>{active.commissionPct}%{active.fixedAmount ? ` + ${fmt(active.fixedAmount)}` : ''}</div></div>
-          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Trigger</div><div>{active.commissionTrigger}</div></div>
-          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Estatus</div><Badge variant="outline">{active.status}</Badge></div>
+          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Código</div><div className="font-mono">{active!.code}</div></div>
+          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Comisión</div><div>{active!.commissionPct}%{active!.fixedAmount ? ` + ${fmt(active!.fixedAmount)}` : ''}</div></div>
+          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Trigger</div><div>{active!.commissionTrigger}</div></div>
+          <div><div className="text-[11px] text-muted-foreground uppercase tracking-wide">Estatus</div><Badge variant="outline">{active!.status}</Badge></div>
         </div>
       </Card>
 
       {/* Documentos */}
-      <EmbajadorDocsCard idPersona={active.idPersona} />
+      <EmbajadorDocsCard idPersona={active!.idPersona} />
 
       {/* Notificaciones */}
       <Card className="p-4">
@@ -622,7 +713,7 @@ export default function AmbassadorsPortalTab() {
             {unread > 0 && <Badge variant="default">{unread}</Badge>}
           </div>
           {unread > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => markAllRead(active.id)}>
+            <Button size="sm" variant="ghost" onClick={() => markAllRead(active!.id)}>
               Marcar todas como leídas
             </Button>
           )}
@@ -675,13 +766,13 @@ export default function AmbassadorsPortalTab() {
           </div>
           <div>
             <h4 className="font-medium mb-1">Comisión</h4>
-            <p className="text-muted-foreground">La comisión se calculará al cierre validado de la venta, cuando el referido cumpla el evento <strong>{active.commissionTrigger}</strong>.</p>
+            <p className="text-muted-foreground">La comisión se calculará al cierre validado de la venta, cuando el referido cumpla el evento <strong>{active!.commissionTrigger}</strong>.</p>
           </div>
           <div className="flex items-start gap-2">
             <CalendarDays className="h-4 w-4 text-primary mt-0.5" />
             <div>
               <h4 className="font-medium mb-1">Vigencia de protección</h4>
-              <p className="text-muted-foreground">Tu referido queda protegido por {active.protectionDays ?? 90} días desde el registro.</p>
+              <p className="text-muted-foreground">Tu referido queda protegido por {active!.protectionDays ?? 90} días desde el registro.</p>
             </div>
           </div>
         </div>
