@@ -202,7 +202,7 @@ const ProductDetailSheet = ({ product, open, onClose }: Props) => {
               <InfoRow
                 icon={Clock}
                 label="Próximo vencimiento"
-                value={`${fmt(product.nextDueAmount)} — ${product.nextDueDate}`}
+                value={`${fmt(product.nextDueAmount)} - ${product.nextDueDate}`}
               />
             )}
             {product.estimatedDelivery && (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Eye, ChevronsUpDown, RotateCcw, FileCheck } from "lucide-react";
+import { Search, Eye, ChevronsUpDown, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,7 +24,6 @@ export default function BandejaTitularidad() {
   const { profile } = useAuth();
   const solicitudes = useTitularidadStore((s) => s.solicitudes);
   const setUsuario = useTitularidadStore((s) => s.setUsuario);
-  const reset = useTitularidadStore((s) => s.reset);
 
   useEffect(() => {
     if (profile?.nombre) setUsuario(`${profile.nombre} (revisor)`);
@@ -121,19 +120,6 @@ export default function BandejaTitularidad() {
       <PageHeader
         title="Titularidad"
         subtitle="Solicitudes de validación de propiedad · Margot"
-        actions={
-          import.meta.env.DEV ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 gap-1.5 text-[13px]"
-              onClick={reset}
-              title="Repoblar datos mock (solo desarrollo)"
-            >
-              <RotateCcw className="h-4 w-4" /> Repoblar demo
-            </Button>
-          ) : undefined
-        }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">

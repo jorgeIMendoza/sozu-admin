@@ -255,6 +255,12 @@ export interface OfertaComercial {
   propertyId: string;
   /** Email del prospecto/cliente vinculado al crear la oferta. Pre-llena y bloquea el campo email en el flujo de captura de datos. */
   prospectEmail?: string;
+  /** Nombre legal del prospecto/cliente vinculado. Pre-llena el campo nombre en la captura de datos. */
+  prospectName?: string;
+  /** Teléfono (solo dígitos) del prospecto/cliente vinculado. Pre-llena el campo teléfono. */
+  prospectPhone?: string;
+  /** Lada internacional del prospecto (ej. "+52"). Pre-selecciona el país en el campo teléfono. */
+  prospectDialCode?: string;
   property: PropertyDetails;
   estimatedDelivery: string;
   highlights: string[];
@@ -274,6 +280,8 @@ export interface OfertaComercial {
   amenities: string[];
   location: { address: string; lat: number; lng: number; nearby: string[] };
   paymentPlans: PaymentPlan[];
+  /** Id del esquema de pago seleccionado en la oferta (para resaltar su precio). */
+  selectedPlanId?: string;
   generatedAt: string;
   generatedBy: string;
   agentId: string;
@@ -288,8 +296,17 @@ export interface OfertaComercial {
   // ── Extras reales de la unidad (tablas bodegas / estacionamientos) ──
   bodegas?: OfertaBodega[];
   estacionamientos?: OfertaEstacionamiento[];
-  /** CLABE STP temporal del apartado (propiedades.clabe_stp_tmp_apartado). undefined → ocultar. */
+  /**
+   * CLABE STP para pagar. Prioridad: `cuentas_cobranza.clabe_stp` (dedicada de la
+   * cuenta, existe tras el primer pago) → `propiedades.clabe_stp_tmp_apartado`
+   * (temporal/universal del apartado). undefined → ocultar.
+   */
   clabeStp?: string;
+  /**
+   * La oferta ya tiene cuenta de cobranza activa: la unidad tiene dueño y ya no
+   * se comercializa (implica `status: "converted_to_account"`).
+   */
+  hasCuentaCobranza?: boolean;
   /** Meses restantes de mensualidades (hoy→entrega−1 mes) desde RPC. Para nota legal. */
   mesesRestantes?: number;
   /** Plano del nivel (edificios_niveles_planos.imagen_url) para señalar la ubicación de la unidad. */
@@ -323,6 +340,8 @@ export interface OfertaBodega {
   incluido: boolean;
   /** Producto al que pertenece (bodegas.id_producto) — enlaza con su oferta/esquema. */
   idProducto?: number;
+  /** Costo de la bodega = productos_servicios.precio_lista (precio/m²) × m². */
+  costo?: number;
   /** Esquema de pago + CLABE de la bodega (oferta de producto del mismo lead). */
   pago?: OfertaBodegaPago;
 }

@@ -85,6 +85,7 @@ export interface PropiedadDetalle {
   planoUbicacionUrl: string | null;
   planoUbicacionRegiones: any[];
   numeroDepa: string;
+  idModelo: number | null;
 }
 
 // Transforms Supabase Cloud Storage URLs to WebP via the image render API.
@@ -499,6 +500,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
         planoUbicacionUrl: toWebP(planoUbicacionUrl),
         planoUbicacionRegiones,
         numeroDepa,
+        idModelo: (emData as any)?.id_modelo ?? null,
       };
     },
     enabled: !!cuentaId,

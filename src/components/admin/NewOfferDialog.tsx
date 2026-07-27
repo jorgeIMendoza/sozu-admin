@@ -5,11 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -36,6 +32,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SELECT_TRIGGER_CLS,
 } from "@/components/ui/select";
 import {
   Command,
@@ -53,23 +50,31 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import {
+  ModalFormHeader,
+  Req,
+  SECTION_CLS,
+  SECTION_HEADER_CLS,
+  MODAL_BODY_CLS,
+  MODAL_FOOTER_CLS,
+} from "@/components/ui/modal-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Check, ChevronsUpDown, UserPlus, Warehouse, Car, Info, AlertTriangle, Plus, Trash2, X, Mail } from "lucide-react";
+import { FileText, Check, ChevronDown, Warehouse, Car, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Switch } from "@/components/ui/switch";
-import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
 import {
   Tooltip,
   TooltipContent,
@@ -142,18 +147,13 @@ const formSchema = z.object({
   numero_pagos_enganche: z.string().optional(),
   porcentaje_descuento_aumento: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (!data.digital) {
-    const tel = data.telefono ?? "";
-    if (tel.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono es requerido", path: ["telefono"] });
-    } else if (!/^[0-9]{10}$/.test(tel)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
-    }
-  } else {
-    const tel = data.telefono ?? "";
-    if (tel.length > 0 && !/^[0-9]{10}$/.test(tel)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
-    }
+  // El teléfono es obligatorio también en oferta digital: es el destino del
+  // envío por WhatsApp desde el popup de compartir.
+  const tel = data.telefono ?? "";
+  if (tel.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono es requerido", path: ["telefono"] });
+  } else if (!/^[0-9]{10}$/.test(tel)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El teléfono debe tener exactamente 10 dígitos numéricos", path: ["telefono"] });
   }
 }).refine((data) => {
   if (data.mode === "manual") {
@@ -192,6 +192,15 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+/** Datos necesarios para regenerar los PDFs de una oferta ya creada. */
+type OfferPdfContext = {
+  offerId: number;
+  productOffers: { offerId: number; productId: number; productName: string }[];
+  leadName: string;
+  leadEmail: string;
+  leadPhone: string;
+};
+
 interface NewOfferDialogProps {
   propertyId: number;
   propertyNumber: string;
@@ -222,6 +231,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const [localSchemeId, setLocalSchemeId] = useState<number | null>(null);
   const [usarTramosPersonalizados, setUsarTramosPersonalizados] = useState(false);
   const [tramosMensualidad, setTramosMensualidad] = useState<TramoMensualidad[]>([]);
+  // Datos del popup para compartir la oferta digital recién generada.
+  const [shareOffer, setShareOffer] = useState<{
+    url: string;
+    leadName: string;
+    leadEmail: string;
+    leadPhone: string;
+    leadPhoneCountry: string;
+    projectName?: string;
+    pdfContext: OfferPdfContext;
+  } | null>(null);
+  const [downloadingSharePdf, setDownloadingSharePdf] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
@@ -357,7 +377,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       form.setValue("nombre_completo", selectedPerson.nombre_legal);
       form.setValue("email", selectedPerson.email);
       form.setValue("clave_pais_telefono", selectedPerson.clave_pais_telefono || "MX");
-      form.setValue("telefono", selectedPerson.telefono || "");
+      // Normaliza teléfonos legacy con espacios/guiones al formato de 10 dígitos.
+      form.setValue("telefono", (selectedPerson.telefono || "").replace(/\D/g, "").slice(0, 10));
       form.setValue("rfc", selectedPerson.rfc || "");
       form.setValue("curp", selectedPerson.curp || "");
     }
@@ -599,8 +620,96 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     }
   }, [propertyDetails, form]);
 
+  /**
+   * Genera los PDFs de la oferta (propiedad + productos) y los descarga.
+   * Se usa tanto en el flujo de "Generar Oferta" (PDF) como bajo demanda desde
+   * el popup de compartir de la oferta digital.
+   */
+  const generateAndDownloadOfferPdfs = React.useCallback(async (ctx: OfferPdfContext) => {
+    const { generateOfferPDFAsBase64 } = await import('@/services/htmlToPdfService');
+    const generatedPdfFiles: { blob: Blob; filename: string; offerId: number; tipo: string; url: string }[] = [];
+    const attachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
+
+    const mainPdfs = await generateOfferPDFAsBase64({
+      propertyId,
+      offerId: ctx.offerId,
+      propertyNumber,
+      leadName: ctx.leadName,
+      leadEmail: ctx.leadEmail,
+      leadPhone: ctx.leadPhone || '',
+      creatorEmail: profile?.email || '',
+    });
+    for (const pdf of mainPdfs) {
+      generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: ctx.offerId, tipo: 'propiedad' });
+      if (pdf.base64) {
+        attachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: ctx.offerId, tipo: 'propiedad' });
+      }
+    }
+
+    for (const productOffer of ctx.productOffers) {
+      try {
+        const productPdfs = await generateOfferPDFAsBase64({
+          propertyId,
+          offerId: productOffer.offerId,
+          propertyNumber,
+          leadName: ctx.leadName,
+          leadEmail: ctx.leadEmail,
+          leadPhone: ctx.leadPhone || '',
+          creatorEmail: profile?.email || '',
+          isProductOffer: true,
+          productId: productOffer.productId,
+        });
+        for (const pdf of productPdfs) {
+          generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: productOffer.offerId, tipo: 'producto' });
+          if (pdf.base64) {
+            attachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: productOffer.offerId, tipo: 'producto' });
+          }
+        }
+      } catch (prodPdfErr) {
+        console.error(`Error generating product PDF for ${productOffer.productName}:`, prodPdfErr);
+      }
+    }
+
+    for (const file of generatedPdfFiles) {
+      try {
+        const url = URL.createObjectURL(file.blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (dlErr) {
+        console.error('Error downloading PDF:', dlErr);
+      }
+    }
+
+    return { count: generatedPdfFiles.length, attachments };
+  }, [propertyId, propertyNumber, profile?.email]);
+
+  /** Descarga de PDFs a demanda desde el popup de compartir oferta digital. */
+  const handleDownloadSharePdfs = async () => {
+    if (!shareOffer) return;
+    setDownloadingSharePdf(true);
+    try {
+      toast({ title: "Generando PDF...", description: "Preparando la oferta para descarga." });
+      const { count } = await generateAndDownloadOfferPdfs(shareOffer.pdfContext);
+      toast({ title: "PDF descargado", description: `Se descargaron ${count} PDF(s).` });
+    } catch (err) {
+      console.error('Error generating offer PDFs on demand:', err);
+      toast({
+        title: "Error al generar el PDF",
+        description: "No se pudo generar el PDF de la oferta. Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingSharePdf(false);
+    }
+  };
+
   const createOfferMutation = useMutation({
-    mutationFn: async ({ data, schemeSelections, propertySchemeId }: { 
+    mutationFn: async ({ data, schemeSelections, propertySchemeId }: {
       data: FormData; 
       schemeSelections: Record<number, number | null>;
       propertySchemeId?: number | null;
@@ -868,7 +977,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       const { data: allBodegas } = await supabase
         .from("bodegas")
         .select(`
-          id, nombre, id_producto, m2,
+          id, nombre, id_producto, m2, es_incluido,
           productos_servicios!bodegas_id_producto_fkey(id, nombre, precio_lista, id_entidad_relacionada_dueno)
         `)
         .eq("id_propiedad", propertyId)
@@ -878,7 +987,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       const { data: allEstacionamientos } = await supabase
         .from("estacionamientos")
         .select(`
-          id, nombre, id_producto, m2,
+          id, nombre, id_producto, m2, es_incluido,
           productos_servicios!estacionamientos_id_producto_fkey(id, nombre, precio_lista, id_entidad_relacionada_dueno)
         `)
         .eq("id_propiedad", propertyId)
@@ -895,8 +1004,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         const precioLista = productService?.precio_lista || 0;
         const m2 = product.m2 || 0;
         const precioFinal = precioLista * m2;
-        
-        // Only generate offer if price is greater than 0
+
+        // Bodega/estacionamiento incluido (es_incluido) NO genera oferta ni PDF aparte:
+        // su valor ya suma al precio total de la propiedad. Tampoco si el precio es 0.
+        if ((product as any).es_incluido) {
+          console.log(`Skipping product offer for ${product.nombre} - es_incluido (incluido en el precio total del depa)`);
+          continue;
+        }
         if (precioFinal <= 0) {
           console.log(`Skipping product offer for ${product.nombre} - price is 0 (included in apartment)`);
           continue;
@@ -1031,104 +1145,52 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         });
       }
       
-      // Generate PDFs client-side and download
-      let allOfferIdsForEmail: number[] = [];
+      const isDigital = !!variables.data.digital;
+      const allOfferIdsForEmail = [
+        result.offerId,
+        ...result.productOffersResults.createdOffers.map((po) => po.offerId),
+      ];
+      const pdfContext: OfferPdfContext = {
+        offerId: result.offerId,
+        productOffers: result.productOffersResults.createdOffers,
+        leadName: result.leadName,
+        leadEmail: result.leadEmail,
+        leadPhone: result.leadPhone || '',
+      };
       let digitalAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
       const emailServicePromise = import('@/services/offerEmailService');
-      try {
-        const allOfferIds = [result.offerId];
-        for (const productOffer of result.productOffersResults.createdOffers) {
-          allOfferIds.push(productOffer.offerId);
+
+      // En oferta digital el PDF ya NO se genera en automático: se descarga a
+      // demanda desde el popup de compartir.
+      if (!isDigital) {
+        try {
+          toast({
+            title: "Generando PDFs...",
+            description: `Preparando ${allOfferIdsForEmail.length} PDF(s) para descarga`,
+          });
+          const { count, attachments } = await generateAndDownloadOfferPdfs(pdfContext);
+          digitalAttachments = attachments;
+          toast({
+            title: "Oferta generada",
+            description: `Se descargaron ${count} PDF(s).`,
+          });
+        } catch (pdfErr) {
+          console.error('Error generating/downloading PDFs:', pdfErr);
+          toast({
+            title: "Error al generar oferta",
+            description: "La oferta se creó correctamente, pero hubo un error al generar los PDFs.",
+            variant: "destructive",
+          });
+          queryClient.invalidateQueries({ queryKey: ["properties"] });
+          setOpen(false);
+          form.reset();
+          setSelectedPerson(null);
+          setSearchTerm("");
+          return;
         }
-        allOfferIdsForEmail = allOfferIds;
-
-        toast({
-          title: "Generando PDFs...",
-          description: `Preparando ${allOfferIds.length} PDF(s) para descarga`,
-        });
-
-        const { generateOfferPDFAsBase64 } = await import('@/services/htmlToPdfService');
-        const generatedPdfFiles: { blob: Blob; filename: string; offerId: number; tipo: string; url: string }[] = [];
-        const preGeneratedAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
-
-        // Generate main property offer PDF
-        const mainPdfs = await generateOfferPDFAsBase64({
-          propertyId,
-          offerId: result.offerId,
-          propertyNumber,
-          leadName: result.leadName,
-          leadEmail: result.leadEmail,
-          leadPhone: result.leadPhone || '',
-          creatorEmail: profile?.email || '',
-        });
-        for (const pdf of mainPdfs) {
-          generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: result.offerId, tipo: 'propiedad' });
-          if (pdf.base64) {
-            preGeneratedAttachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: result.offerId, tipo: 'propiedad' });
-          }
-        }
-
-        // Generate product offer PDFs
-        for (const productOffer of result.productOffersResults.createdOffers) {
-          try {
-            const productPdfs = await generateOfferPDFAsBase64({
-              propertyId,
-              offerId: productOffer.offerId,
-              propertyNumber,
-              leadName: result.leadName,
-              leadEmail: result.leadEmail,
-              leadPhone: result.leadPhone || '',
-              creatorEmail: profile?.email || '',
-              isProductOffer: true,
-              productId: productOffer.productId,
-            });
-            for (const pdf of productPdfs) {
-              generatedPdfFiles.push({ blob: pdf.blob, filename: pdf.filename, url: pdf.url, offerId: productOffer.offerId, tipo: 'producto' });
-              if (pdf.base64) {
-                preGeneratedAttachments.push({ base64: pdf.base64, filename: pdf.filename, offerId: productOffer.offerId, tipo: 'producto' });
-              }
-            }
-          } catch (prodPdfErr) {
-            console.error(`Error generating product PDF for ${productOffer.productName}:`, prodPdfErr);
-          }
-        }
-
-        // Download PDFs directly for all roles
-        for (const attachment of generatedPdfFiles) {
-          try {
-            const url = URL.createObjectURL(attachment.blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = attachment.filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-          } catch (dlErr) {
-            console.error('Error downloading PDF:', dlErr);
-          }
-        }
-        digitalAttachments = preGeneratedAttachments;
-        toast({
-          title: "Oferta generada",
-          description: `Se descargaron ${generatedPdfFiles.length} PDF(s).`,
-        });
-      } catch (pdfErr) {
-        console.error('Error generating/downloading PDFs:', pdfErr);
-        toast({
-          title: "Error al generar oferta",
-          description: "La oferta se creó correctamente, pero hubo un error al generar los PDFs.",
-          variant: "destructive",
-        });
-        queryClient.invalidateQueries({ queryKey: ["properties"] });
-        setOpen(false);
-        form.reset();
-        setSelectedPerson(null);
-        setSearchTerm("");
-        return;
       }
 
-      if (variables.data.digital) {
+      if (isDigital) {
         try {
           const { data: reservacion, error: aptError } = await (supabase as any)
             .from('reservaciones')
@@ -1140,6 +1202,16 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           if (import.meta.env.DEV) {
             console.log('[DEV] Link oferta digital (no se envía correo en dev sin secret):', ofertaLink);
           }
+          // Popup para compartir el link (WhatsApp / correo / copiar / web).
+          setShareOffer({
+            url: ofertaLink,
+            leadName: result.leadName,
+            leadEmail: result.leadEmail,
+            leadPhone: result.leadPhone || '',
+            leadPhoneCountry: variables.data.clave_pais_telefono || 'MX',
+            projectName: propertyDetails?.entidades_relacionadas?.proyectos?.nombre,
+            pdfContext,
+          });
           if (sendEmailOnGenerate) {
             const { sendMultipleOffersEmailDirect } = await emailServicePromise;
             await sendMultipleOffersEmailDirect({
@@ -1171,7 +1243,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             title: "Oferta generada",
             description: digitalErr?.code === '42P01'
               ? "DDL reservaciones pendiente de ejecutar en BD."
-              : "No se pudo completar el flujo digital. Oferta y PDFs generados.",
+              : "No se pudo completar el flujo digital. La oferta sí quedó creada.",
             variant: "destructive",
           });
         }
@@ -1331,7 +1403,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   const watchedDescuentoAumento = form.watch("porcentaje_descuento_aumento");
   
   const manualSchemeCalculations = React.useMemo(() => {
-    const basePrice = priceCalculations.propertyPrice;
+    // Base = precio_lista + valor de bodegas incluidas (es_incluido): el descuento/aumento
+    // del esquema manual se aplica sobre esta base (igual que PDF, RPC y oferta digital).
+    const bodegasIncluidasTotal = (includedProducts?.bodegas ?? []).reduce((s: number, b: any) => {
+      if (!b.es_incluido) return s;
+      const precio = (b.productos_servicios as any)?.precio_lista || 0;
+      return s + precio * (b.m2 || 0);
+    }, 0);
+    const basePrice = priceCalculations.propertyPrice + bodegasIncluidasTotal;
     const descuentoAumento = parseFloat(watchedDescuentoAumento || "0");
     const precioAjustado = basePrice * (1 + descuentoAumento / 100);
     
@@ -1355,7 +1434,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       montoPorMensualidad,
       numMensualidades
     };
-  }, [priceCalculations.propertyPrice, watchedEnganche, watchedMensualidades, watchedEntrega, watchedNumeroMensualidades, watchedDescuentoAumento]);
+  }, [priceCalculations.propertyPrice, includedProducts, watchedEnganche, watchedMensualidades, watchedEntrega, watchedNumeroMensualidades, watchedDescuentoAumento]);
 
   // Validate tramos sum equals numero_mensualidades and amounts match expected total
   const tramosValidation = React.useMemo(() => {
@@ -1389,7 +1468,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     if (!pendingFormData) return [] as string[];
 
     const reasons: string[] = [];
-    if (!isValidRFC(pendingFormData.rfc)) reasons.push("el prospecto no tiene un RFC válido");
+    // La CLABE de apartado se expone al cliente si el prospecto está
+    // identificado con RFC **o** CURP (ver el gate en lib/offers/use-offer-db).
+    if (!isValidRFC(pendingFormData.rfc) && !isValidCURP(pendingFormData.curp)) {
+      reasons.push("el prospecto no tiene un RFC ni una CURP válidos");
+    }
     if (pendingFormData.mode === "precargada" && !propertySchemeSelection) reasons.push("no se seleccionó un plan de pago");
 
     return reasons;
@@ -1400,7 +1483,20 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     onTrackSubmit?.();
 
     const missingScheme = data.mode === "precargada" && !localSchemeId;
-    const missingRFC = !isValidRFC(data.rfc);
+
+    // Sin plan de pago la oferta digital no puede mostrar la CLABE de apartado
+    // ni el plan al cliente, así que se bloquea antes de crearla.
+    if (data.digital && missingScheme) {
+      toast({
+        title: "Selecciona un plan de pago",
+        description: "La oferta digital necesita un esquema de pago para mostrar la CLABE de apartado y el plan al cliente.",
+        variant: "destructive",
+      });
+      setPendingButton(null);
+      return;
+    }
+
+    const missingRFC = !isValidRFC(data.rfc) && !isValidCURP(data.curp);
     const shouldShowBankingConfirm = missingScheme || missingRFC;
 
     if (productsWithPriceInfo.total > 0 || shouldShowBankingConfirm) {
@@ -1436,6 +1532,16 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   };
 
   const projectName = propertyDetails?.entidades_relacionadas?.proyectos?.nombre;
+  // Si el prospecto seleccionado no trae teléfono, el campo queda editable para
+  // poder capturarlo (es obligatorio y se guarda en `personas` al generar).
+  // Un teléfono legacy con formato inválido también queda editable, si no la
+  // validación de 10 dígitos dejaría el formulario bloqueado sin salida.
+  const phoneLocked = selectedPerson !== null && (selectedPerson.telefono ?? "").replace(/\D/g, "").length === 10;
+  // Mismo criterio para RFC/CURP: si el prospecto guardado no los trae (o son
+  // inválidos) el asesor debe poder capturarlos, porque de ellos depende que la
+  // oferta digital muestre la CLABE de apartado.
+  const rfcLocked = selectedPerson !== null && isValidRFC(selectedPerson.rfc);
+  const curpLocked = selectedPerson !== null && isValidCURP(selectedPerson.curp);
   const proyectoFechaEntrega = (propertyDetails?.entidades_relacionadas?.proyectos as any)?.fecha_entrega as string | null | undefined;
   const efectivaMesesHoy = proyectoFechaEntrega ? mesesEntreFechas(new Date(), proyectoFechaEntrega) : 0;
 
@@ -1454,37 +1560,36 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className={cn("sm:max-w-[600px] max-h-[90vh] overflow-y-auto", forceLight && "light")}>
-        <DialogHeader>
-          <DialogTitle>Configurar Oferta</DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            Propiedad <span className="font-semibold">{propertyNumber}</span>
-            {projectName && <span className="font-semibold"> de {projectName}</span>}
-          </p>
-          
+      <DialogContent className={cn("flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-md p-0 sm:max-w-[600px]", forceLight && "light")}>
+        <ModalFormHeader
+          title="Configurar Oferta"
+          subtitle={
+            <>
+              Propiedad <span className="font-semibold">{propertyNumber}</span>
+              {projectName && <span className="font-semibold"> de {projectName}</span>}
+            </>
+          }
+        />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+            <div className={cn(MODAL_BODY_CLS, "min-h-0 flex-1")}>
+        {/* Plan / precio / productos */}
+        <div className="space-y-3">
           {/* Plan Selector - unified */}
           {selectedMode !== "manual" && propertyPaymentSchemes && propertyPaymentSchemes.length > 0 && (
-            <div className={`mt-2 rounded-lg border p-2.5 transition-colors ${
-              selectedSchemeDetails
-                ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800"
-                : "bg-muted/40 border-border/60"
-            }`}>
-              <div className="flex items-center gap-2">
-                <FileText className={`h-3.5 w-3.5 shrink-0 ${selectedSchemeDetails ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`} />
+            <div className="mt-2 space-y-2">
                 <Select
                   value={localSchemeId?.toString() || "none"}
                   onValueChange={(value) => {
                     setLocalSchemeId(value === "none" ? null : parseInt(value));
                   }}
                 >
-                  <SelectTrigger className={`h-8 text-xs border-0 shadow-none bg-transparent px-1 ${
-                    selectedSchemeDetails ? "text-emerald-700 font-medium dark:text-emerald-300" : "text-muted-foreground"
-                  }`}>
+                  <SelectTrigger>
                     <SelectValue placeholder="Seleccionar plan de pago..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">
-                      <span className="text-muted-foreground italic">Sin plan seleccionado</span>
+                      <span className="text-muted-foreground">Sin plan seleccionado</span>
                     </SelectItem>
                     {propertyPaymentSchemes.map((scheme: any) => (
                       <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -1519,25 +1624,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedSchemeDetails?.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails?.porcentaje_descuento_aumento != null && (
-                  <Badge variant="outline" className={`text-[10px] shrink-0 ${
-                    selectedSchemeDetails.porcentaje_descuento_aumento < 0
-                      ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}>
-                    {selectedSchemeDetails.porcentaje_descuento_aumento > 0 ? "+" : ""}{selectedSchemeDetails.porcentaje_descuento_aumento}%
-                  </Badge>
-                )}
                 {selectedSchemeDetails && (
-                  <button
-                    type="button"
-                    onClick={() => setLocalSchemeId(null)}
-                    className="ml-auto text-muted-foreground hover:text-foreground shrink-0"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedSchemeDetails.porcentaje_descuento_aumento !== 0 && selectedSchemeDetails.porcentaje_descuento_aumento != null && (
+                      <Badge variant="outline" className={`text-xs ${
+                        selectedSchemeDetails.porcentaje_descuento_aumento < 0
+                          ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "border-destructive/30 bg-destructive/10 text-destructive"
+                      }`}>
+                        {selectedSchemeDetails.porcentaje_descuento_aumento > 0 ? "+" : ""}{selectedSchemeDetails.porcentaje_descuento_aumento}%
+                      </Badge>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLocalSchemeId(null)}
+                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" /> Quitar plan
+                    </button>
+                  </div>
                 )}
-              </div>
             </div>
           )}
           {selectedMode !== "manual" && (!propertyPaymentSchemes || propertyPaymentSchemes.length === 0) && (
@@ -1554,17 +1660,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 <span className="text-muted-foreground">Precio Propiedad:</span>
                 {priceCalculations.schemeAdjustment !== 0 ? (
                   <>
-                    <p className="text-xs text-muted-foreground line-through">${priceCalculations.propertyPrice.toLocaleString()}</p>
-                    <p className="font-semibold text-lg">${priceCalculations.adjustedPropertyPrice.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground line-through">${priceCalculations.propertyPrice.toLocaleString("es-MX")}</p>
+                    <p className="font-semibold text-lg">${priceCalculations.adjustedPropertyPrice.toLocaleString("es-MX")}</p>
                   </>
                 ) : (
-                  <p className="font-semibold text-lg">${priceCalculations.propertyPrice.toLocaleString()}</p>
+                  <p className="font-semibold text-lg">${priceCalculations.propertyPrice.toLocaleString("es-MX")}</p>
                 )}
               </div>
               {priceCalculations.productsTotal > 0 && (
                 <div>
                   <span className="text-muted-foreground">Productos adicionales:</span>
-                  <p className="font-medium text-amber-600">+${priceCalculations.productsTotal.toLocaleString()}</p>
+                  <p className="font-medium text-amber-600">+${priceCalculations.productsTotal.toLocaleString("es-MX")}</p>
                 </div>
               )}
             </div>
@@ -1572,7 +1678,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               <div className="mt-2 pt-2 border-t border-primary/20">
                 <div className="flex justify-between items-center">
                   <span className="font-medium">Total:</span>
-                  <span className="font-bold text-xl text-primary">${priceCalculations.grandTotal.toLocaleString()}</span>
+                  <span className="font-bold text-xl text-primary">${priceCalculations.grandTotal.toLocaleString("es-MX")}</span>
                 </div>
               </div>
             )}
@@ -1581,7 +1687,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           {/* Badges for included products */}
           <div className="mt-3 p-3 bg-muted/50 rounded-lg border">
             <div className="flex items-center gap-2 mb-2">
-              <Info className="h-4 w-4 text-blue-500" />
+              <Info className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Productos asociados a esta propiedad:</span>
             </div>
             {isLoadingProducts ? (
@@ -1595,22 +1701,21 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     const precioLista = bodega.productos_servicios?.precio_lista || 0;
                     const m2 = bodega.m2 || 0;
                     const precioFinal = precioLista * m2;
-                    const isIncludedInPrice = precioFinal === 0;
+                    // Incluida = es_incluido (su valor va en el precio del depa, sin oferta aparte),
+                    // no depende de que el precio sea 0.
+                    const isIncludedInPrice = bodega.es_incluido === true;
                     return (
                       <Badge 
                         key={`bodega-${bodega.id}`}
                         variant={isIncludedInPrice ? "default" : "outline"}
-                        className={cn(
-                          "flex items-center gap-1",
-                          isIncludedInPrice ? "bg-amber-500 hover:bg-amber-600" : "border-amber-500 text-amber-700"
-                        )}
+                        className="flex items-center gap-1"
                       >
                         <Warehouse className="h-3 w-3" />
                         {bodega.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(incluida)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")} · incluida en el precio total del depa)</span>
                         ) : (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")})</span>
                         )}
                       </Badge>
                     );
@@ -1619,22 +1724,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     const precioLista = est.productos_servicios?.precio_lista || 0;
                     const m2 = est.m2 || 0;
                     const precioFinal = precioLista * m2;
-                    const isIncludedInPrice = precioFinal === 0;
+                    const isIncludedInPrice = est.es_incluido === true;
                     return (
                       <Badge 
                         key={`est-${est.id}`}
                         variant={isIncludedInPrice ? "default" : "outline"}
-                        className={cn(
-                          "flex items-center gap-1",
-                          isIncludedInPrice ? "bg-blue-500 hover:bg-blue-600" : "border-blue-500 text-blue-700"
-                        )}
+                        className="flex items-center gap-1"
                       >
                         <Car className="h-3 w-3" />
                         {est.nombre}
                         {isIncludedInPrice ? (
-                          <span className="text-xs ml-1">(incluido)</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")} · incluido en el precio total del depa)</span>
                         ) : (
-                          <span className="text-xs ml-1">(${precioFinal.toLocaleString()})</span>
+                          <span className="text-xs ml-1">(${precioFinal.toLocaleString("es-MX")})</span>
                         )}
                       </Badge>
                     );
@@ -1656,12 +1758,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             }));
                           }}
                         >
-                          <SelectTrigger className="h-7 text-[11px] w-48">
+                          <SelectTrigger className="h-7 text-xs w-48">
                             <SelectValue placeholder="Sin seleccionar" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">
-                              <span className="text-muted-foreground italic">Sin seleccionar</span>
+                              <span className="text-muted-foreground">Sin seleccionar</span>
                             </SelectItem>
                             {p.paymentSchemes?.map((scheme: any) => (
                               <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -1696,12 +1798,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 {(includedProducts.bodegas.some((b: any) => {
                   const precio = b.productos_servicios?.precio_lista || 0;
                   const m2 = b.m2 || 0;
-                  return (precio * m2) > 0;
+                  return !b.es_incluido && (precio * m2) > 0;
                 }) ||
                   includedProducts.estacionamientos.some((e: any) => {
                     const precio = e.productos_servicios?.precio_lista || 0;
                     const m2 = e.m2 || 0;
-                    return (precio * m2) > 0;
+                    return !e.es_incluido && (precio * m2) > 0;
                   })) && (
                   <p className="text-xs text-muted-foreground mt-2">
                     Los productos No incluidos generan ofertas adicionales.
@@ -1710,9 +1812,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </>
             )}
           </div>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        </div>
             {/* Mode Selection - Manual available for all roles except Agente Inmobiliario, hidden if hideManualMode is true */}
             {(() => {
               // If hideManualMode is true, don't show the manual option
@@ -1771,9 +1871,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             {/* Manual Payment Scheme Section */}
             {selectedMode === "manual" && (
               <>
-                <Separator />
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Esquema de Pago Personalizado</h3>
+                <div className={cn(SECTION_CLS, "space-y-4")}>
+                  <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Esquema de Pago Personalizado</h3>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -1781,7 +1880,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_enganche"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Enganche (%) *</FormLabel>
+                          <FormLabel>Porcentaje Enganche (%) <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1796,7 +1895,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         name="numero_pagos_enganche"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Número de Pagos de Enganche *</FormLabel>
+                            <FormLabel>Número de Pagos de Enganche <Req /></FormLabel>
                             <FormControl>
                               <Input 
                                 type="number" 
@@ -1831,7 +1930,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="porcentaje_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Porcentaje Mensualidades (%) *</FormLabel>
+                          <FormLabel>Porcentaje Mensualidades (%) <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
@@ -1887,7 +1986,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       name="numero_mensualidades"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Número de Mensualidades *</FormLabel>
+                          <FormLabel>Número de Mensualidades <Req /></FormLabel>
                           <FormControl>
                             <Input type="number" placeholder="12" {...field} />
                           </FormControl>
@@ -1924,7 +2023,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                             onClick={addTramo}
                             className="h-8"
                           >
-                            <Plus className="h-4 w-4 mr-1" />
                             Agregar tramo
                           </Button>
                         )}
@@ -1968,7 +2066,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                   </div>
                                   <div className="flex flex-col items-center gap-1">
                                     {index > 0 && (
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-xs text-muted-foreground">
                                         (mes {mensualidadesAcumuladas + 1}+)
                                       </span>
                                     )}
@@ -1979,7 +2077,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                       className="h-8 w-8 text-destructive hover:text-destructive"
                                       onClick={() => removeTramo(tramo.id)}
                                     >
-                                      <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 </div>
@@ -2026,17 +2123,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                   <AlertTriangle className="h-4 w-4" />
                                 )}
                                 <span>
-                                  Suma tramos: ${tramosValidation.sumaMontos.toLocaleString()}
+                                  Suma tramos: ${tramosValidation.sumaMontos.toLocaleString("es-MX")}
                                 </span>
                                 <span className="text-muted-foreground">
-                                  (esperado: ${tramosValidation.montoEsperado.toLocaleString()})
+                                  (esperado: ${tramosValidation.montoEsperado.toLocaleString("es-MX")})
                                 </span>
                               </div>
                               {!tramosValidation.isMontosValid && (
                                 <span className="font-medium">
                                   {tramosValidation.diferenciaMonto > 0 
-                                    ? `Faltan $${tramosValidation.diferenciaMonto.toLocaleString()}`
-                                    : `Excede $${Math.abs(tramosValidation.diferenciaMonto).toLocaleString()}`
+                                    ? `Faltan $${tramosValidation.diferenciaMonto.toLocaleString("es-MX")}`
+                                    : `Excede $${Math.abs(tramosValidation.diferenciaMonto).toLocaleString("es-MX")}`
                                   }
                                 </span>
                               )}
@@ -2047,7 +2144,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                           {tramosValidation.hasTramos && !tramosValidation.isMontosValid && tramosValidation.isCountValid && (
                             <p className="text-xs text-muted-foreground mt-2">
                               💡 Monto sugerido por mensualidad (uniforme): $
-                              {(tramosValidation.montoEsperado / parseInt(form.watch("numero_mensualidades") || "1")).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              {(tramosValidation.montoEsperado / parseInt(form.watch("numero_mensualidades") || "1")).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
                             </p>
                           )}
                         </>
@@ -2103,19 +2200,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         <div className="mb-3 pb-3 border-b">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Precio original:</span>
-                            <span>${manualSchemeCalculations.precioOriginal.toLocaleString()}</span>
+                            <span>${manualSchemeCalculations.precioOriginal.toLocaleString("es-MX")}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className={manualSchemeCalculations.diferencia < 0 ? "text-green-600" : "text-amber-600"}>
                               {manualSchemeCalculations.diferencia < 0 ? "Descuento:" : "Aumento:"}
                             </span>
                             <span className={manualSchemeCalculations.diferencia < 0 ? "text-green-600" : "text-amber-600"}>
-                              {manualSchemeCalculations.diferencia < 0 ? "-" : "+"}${Math.abs(manualSchemeCalculations.diferencia).toLocaleString()}
+                              {manualSchemeCalculations.diferencia < 0 ? "-" : "+"}${Math.abs(manualSchemeCalculations.diferencia).toLocaleString("es-MX")}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm font-semibold mt-1">
                             <span>Precio ajustado:</span>
-                            <span className="text-primary">${manualSchemeCalculations.precioAjustado.toLocaleString()}</span>
+                            <span className="text-primary">${manualSchemeCalculations.precioAjustado.toLocaleString("es-MX")}</span>
                           </div>
                         </div>
                       )}
@@ -2125,14 +2222,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         {parseFloat(watchedEnganche || "0") > 0 && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Enganche ({watchedEnganche}%):</span>
-                            <span className="font-medium">${manualSchemeCalculations.montoEnganche.toLocaleString()}</span>
+                            <span className="font-medium">${manualSchemeCalculations.montoEnganche.toLocaleString("es-MX")}</span>
                           </div>
                         )}
                         {parseFloat(watchedMensualidades || "0") > 0 && (
                           <>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Mensualidades ({watchedMensualidades}%):</span>
-                              <span className="font-medium">${manualSchemeCalculations.montoMensualidades.toLocaleString()}</span>
+                              <span className="font-medium">${manualSchemeCalculations.montoMensualidades.toLocaleString("es-MX")}</span>
                             </div>
                             {usarTramosPersonalizados && tramosMensualidad.length > 0 ? (
                               // Show tiered breakdown
@@ -2147,7 +2244,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                                         {tramo.numero_mensualidades} pagos de:
                                       </span>
                                       <span>
-                                        ${(tramo.monto / 100).toLocaleString()}
+                                        ${(tramo.monto / 100).toLocaleString("es-MX")}
                                         {index > 0 && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
@@ -2168,7 +2265,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               manualSchemeCalculations.numMensualidades > 0 && (
                                 <div className="flex justify-between pl-4 text-xs">
                                   <span className="text-muted-foreground">{manualSchemeCalculations.numMensualidades} pagos de:</span>
-                                  <span>${manualSchemeCalculations.montoPorMensualidad.toLocaleString()}</span>
+                                  <span>${manualSchemeCalculations.montoPorMensualidad.toLocaleString("es-MX")}</span>
                                 </div>
                               )
                             )}
@@ -2177,7 +2274,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                         {parseFloat(watchedEntrega || "0") > 0 && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Entrega ({watchedEntrega}%):</span>
-                            <span className="font-medium">${manualSchemeCalculations.montoEntrega.toLocaleString()}</span>
+                            <span className="font-medium">${manualSchemeCalculations.montoEntrega.toLocaleString("es-MX")}</span>
                           </div>
                         )}
                       </div>
@@ -2187,12 +2284,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </>
             )}
 
-            <Separator />
-
             {/* Person Search Section */}
-            <div className="space-y-4">
+            <div className={cn(SECTION_CLS, "space-y-4")}>
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium">Buscar Prospecto</h3>
+                <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Buscar Prospecto</h3>
                 {selectedPerson && (
                   <Button
                     type="button"
@@ -2200,7 +2295,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     size="sm"
                     onClick={clearPersonSelection}
                   >
-                    <UserPlus className="h-4 w-4 mr-2" />
                     Nuevo Prospecto
                   </Button>
                 )}
@@ -2210,19 +2304,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 <div className="space-y-2">
                   <Popover open={searchOpen} onOpenChange={setSearchOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
+                      <button
+                        type="button"
                         role="combobox"
                         aria-expanded={searchOpen}
-                        className="w-full justify-between"
+                        className={cn(SELECT_TRIGGER_CLS, !selectedPerson && "font-normal text-muted-foreground")}
                       >
-                        {selectedPerson
-                          ? selectedPerson.nombre_legal
-                          : "Buscar por nombre..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
+                        <span className="truncate text-left">
+                          {selectedPerson ? selectedPerson.nombre_legal : "Buscar por nombre…"}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
+                    <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
                       <Command>
                         <CommandInput 
                           placeholder="Buscar persona..." 
@@ -2286,26 +2380,22 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               )}
             </div>
 
-            <Separator />
-
           {/* Prospect Information Section */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Información del Prospecto</h3>
-              
+            <div className={cn(SECTION_CLS, "space-y-4")}>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="tipo_persona"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tipo de Persona *</FormLabel>
+                      <FormLabel>Tipo de Persona <Req /></FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
                         disabled={selectedPerson !== null}
                       >
                         <FormControl>
-                          <SelectTrigger className="neu-input h-auto">
+                          <SelectTrigger>
                             <SelectValue placeholder="Seleccionar" />
                           </SelectTrigger>
                         </FormControl>
@@ -2325,13 +2415,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        {selectedPersonType === "pm" ? "Razón Social *" : "Nombre Completo *"}
+                        {selectedPersonType === "pm" ? "Razón Social" : "Nombre Completo"} <Req />
                       </FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder={selectedPersonType === "pm" ? "Ingresa la razón social" : "Ingresa el nombre completo"} 
+                          placeholder={selectedPersonType === "pm" ? "Constructora del Valle S.A. de C.V." : "Juan Pérez García"} 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field} 
                         />
                       </FormControl>
@@ -2347,13 +2436,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email *</FormLabel>
+                      <FormLabel>Email <Req /></FormLabel>
                       <FormControl>
                         <Input 
                           type="email" 
-                          placeholder="Ingresa el email" 
+                          placeholder="juan.perez@correo.com" 
                           disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
                           {...field} 
                         />
                       </FormControl>
@@ -2367,14 +2455,14 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="clave_pais_telefono"
                   render={({ field }) => (
                     <FormItem className="w-24">
-                      <FormLabel>País *</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
+                      <FormLabel>País <Req /></FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
                         value={field.value}
-                        disabled={selectedPerson !== null}
+                        disabled={phoneLocked}
                       >
                         <FormControl>
-                          <SelectTrigger className="neu-input h-auto">
+                          <SelectTrigger>
                             <SelectValue placeholder="--" />
                           </SelectTrigger>
                         </FormControl>
@@ -2394,12 +2482,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                   name="telefono"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Teléfono *</FormLabel>
+                      <FormLabel>Teléfono <Req /></FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="10 dígitos" 
-                          disabled={selectedPerson !== null}
-                          className="neu-input h-auto"
+                        <Input
+                          placeholder="10 dígitos"
+                          disabled={phoneLocked}
                           {...field}
                           onChange={(e) => {
                             const value = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -2422,12 +2509,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                        <FormItem>
                             <FormLabel>RFC</FormLabel>
                              <FormControl>
-                             <Input 
-                               placeholder="Ingresa el RFC (Ej: ABC123456DEF)" 
+                             <Input
+                               placeholder="PEGJ850101H2A"
                                maxLength={13}
-                               disabled={selectedPerson !== null}
-                               className="neu-input h-auto"
-                               {...field} 
+                               disabled={rfcLocked}
+                               {...field}
                              />
                            </FormControl>
                            <FormMessage />
@@ -2443,12 +2529,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                            <FormItem>
                              <FormLabel>CURP</FormLabel>
                               <FormControl>
-                                <Input 
-                                  placeholder="Ingresa la CURP (Ej: ABCD123456HMNEFFD01)" 
+                                <Input
+                                  placeholder="PEGJ850101HDFRRN09"
                                   maxLength={18}
-                                  disabled={selectedPerson !== null}
-                                  className="neu-input h-auto"
-                                  {...field} 
+                                  disabled={curpLocked}
+                                  {...field}
                                 />
                               </FormControl>
                              <FormMessage />
@@ -2459,12 +2544,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              </div>
 
-             <Separator />
-
              {/* Opciones de visualización en PDF - Hidden if hidePdfOptions is true */}
              {!hidePdfOptions && (
-               <div className="space-y-4">
-                 <h3 className="text-sm font-semibold">Opciones de visualización en PDF</h3>
+               <div className={cn(SECTION_CLS, "space-y-4")}>
+                 <h3 className={cn(SECTION_HEADER_CLS, "mb-0")}>Opciones de visualización en PDF</h3>
                  <p className="text-xs text-muted-foreground">
                    Selecciona qué información deseas mostrar en esta oferta
                  </p>
@@ -2531,32 +2614,32 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                </div>
              )}
 
-            <div className="flex justify-end space-x-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-                className="rounded-2xl px-6"
-              >
+            </div>
+
+            <div className={MODAL_FOOTER_CLS}>
+              <Button type="button" variant="cancel" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <button
-                type="submit"
-                disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
-                onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
-                className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-primary/90 flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
-              </button>
-              {enableDigitalOffer && (
-                <button
+              {/* Con oferta digital habilitada, ese es el único camino: el PDF suelto
+                  se omite para que el footer quepa en una sola fila. */}
+              {enableDigitalOffer ? (
+                <Button
                   type="button"
+                  variant="primary-outline"
                   disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
                   onClick={() => { setPendingButton('digital'); form.setValue('digital', true); form.handleSubmit(onSubmit)(); }}
-                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm tracking-wide transition-all duration-300 hover:bg-emerald-700 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {createOfferMutation.isPending && pendingButton === 'digital' ? "Generando..." : "Generar Oferta Digital"}
-                </button>
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="primary-outline"
+                  disabled={createOfferMutation.isPending || (usarTramosPersonalizados && !tramosValidation.isValid)}
+                  onClick={() => { setPendingButton('pdf'); form.setValue('digital', false); }}
+                >
+                  {createOfferMutation.isPending && pendingButton === 'pdf' ? "Generando..." : "Generar Oferta"}
+                </Button>
               )}
             </div>
           </form>
@@ -2600,7 +2683,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">
-                        <span className="text-muted-foreground italic">Sin seleccionar</span>
+                        <span className="text-muted-foreground">Sin seleccionar</span>
                       </SelectItem>
                       {propertyPaymentSchemes?.map((scheme: any) => (
                         <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -2647,7 +2730,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       {productsWithPriceInfo.valid.map((p: any, i: number) => (
                         <div key={i} className="bg-background rounded-md p-2 border">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-foreground">• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString()})</span>
+                            <span className="text-foreground">• {p.tipo} "{p.nombre}" (${p.precioFinal.toLocaleString("es-MX")})</span>
                           </div>
                           <div className="ml-2">
                             <label className="text-xs text-muted-foreground block mb-1">Esquema de pago:</label>
@@ -2665,7 +2748,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">
-                                  <span className="text-muted-foreground italic">Sin seleccionar</span>
+                                  <span className="text-muted-foreground">Sin seleccionar</span>
                                 </SelectItem>
                                 {p.paymentSchemes?.map((scheme: any) => (
                                   <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -2760,7 +2843,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </label>
             </div>
 
-            {productsWithPriceInfo.total > 0 ? (
+            {pendingButton === 'digital' ? (
+              <p className="text-sm text-muted-foreground">
+                Se generará la oferta digital. El PDF podrás descargarlo desde el popup de compartir.
+              </p>
+            ) : productsWithPriceInfo.total > 0 ? (
               <p className="text-sm text-muted-foreground">
                 Se descargarán {1 + productsWithPriceInfo.valid.length} PDF(s) automáticamente.
               </p>
@@ -2784,6 +2871,24 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* Compartir la oferta digital generada */}
+    {shareOffer && (
+      <ShareDigitalOfferDialog
+        open={!!shareOffer}
+        onOpenChange={(o) => { if (!o) setShareOffer(null); }}
+        url={shareOffer.url}
+        leadName={shareOffer.leadName}
+        leadEmail={shareOffer.leadEmail}
+        leadPhone={shareOffer.leadPhone}
+        leadPhoneCountry={shareOffer.leadPhoneCountry}
+        propertyNumber={propertyNumber}
+        projectName={shareOffer.projectName}
+        forceLight={forceLight}
+        onDownloadPdf={handleDownloadSharePdfs}
+        downloadingPdf={downloadingSharePdf}
+      />
+    )}
     </>
   );
 }

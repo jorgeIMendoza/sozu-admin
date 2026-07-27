@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronLeft,
@@ -28,11 +28,11 @@ import { usePaymentPlan, type PaymentApplication } from "@/lib/portal-cliente/pa
 import DocViewerPortal from "@/components/admin/portal-cliente/DocViewerPortal";
 import { fmtMXN, fmtMXNDecimals } from "@/lib/utils";
 import { getPropertyImage } from "@/lib/portal-cliente/property-images";
-import { useProjectPhotos } from "@/lib/portal-cliente/construction-progress-data";
+import { useProjectPhotos, useModelPhotos } from "@/lib/portal-cliente/construction-progress-data";
 import { useAgentForCuenta } from "@/lib/portal-cliente/agent-data";
 import PropertyDocuments from "./PropertyDocuments";
 import FichaTecnicaSection from "./FichaTecnicaSection";
-import { useClientePropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
+import { useClientePropiedadDetalle, type PropiedadDetalle } from "@/hooks/useClientePropiedadDetalle";
 import ConstructionProgressSection from "@/components/admin/portal-cliente/detail/ConstructionProgress";
 import AdditionalProducts from "@/components/admin/portal-cliente/detail/AdditionalProducts";
 import AcquisitionPaymentSheet from "@/components/admin/portal-cliente/detail/AcquisitionPaymentSheet";
@@ -66,6 +66,14 @@ const STAGES = [
   },
 ] as const;
 
+type DetailTab = "pagos" | "obra" | "docs" | "ficha";
+const DETAIL_TABS: { id: DetailTab; label: string; Icon: typeof CreditCard }[] = [
+  { id: "pagos", label: "Pagos", Icon: CreditCard },
+  { id: "obra", label: "Avance de obra", Icon: Building2 },
+  { id: "docs", label: "Documentos", Icon: FileText },
+  { id: "ficha", label: "Ficha técnica", Icon: Layers },
+];
+
 const PropertyAcquisitionDetail = ({ investment }: Props) => {
   const { property, stages } = investment;
   const activeStage = stages.find((s) => s.status === "active");
@@ -77,6 +85,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
 
   const [showPaySheet, setShowPaySheet] = useState(false);
   const [showPagoFinalSheet, setShowPagoFinalSheet] = useState(false);
+  const [tab, setTab] = useState<DetailTab>("pagos");
   const propertyLabel = `${property.projectName} · U-${property.unitNumber}`;
   const enDemanda = !!property.enDemanda;
 
@@ -136,27 +145,22 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
       </div>
 
       {/* ── 2-col grid ── */}
-      <div className="md:grid md:grid-cols-[1fr_300px] md:gap-6 space-y-4 md:space-y-0">
+      <div className="md:grid md:grid-cols-[minmax(0,1fr)_300px] md:gap-6 space-y-4 md:space-y-0">
 
         {/* ── Left column ── */}
-        <div className="space-y-4">
-          {/* 0 · Confirmación de forma de pago final elegida */}
+        <div className="space-y-4 min-w-0">
+          {/* Confirmación de forma de pago final elegida (si aplica) */}
           <PaymentMethodBadge cuentaId={Number(property.id)} tipo={property.tipoFinanciamiento} />
 
-          {/* 1 · Imagen */}
-          <PropertyImage investment={investment} />
+          {/* Galería (portada → planos → modelo → multimedia) */}
+          <PropertyImage investment={investment} propDetalle={propDetalle ?? null} />
 
-          {/* 2 · Avance de obra */}
-          <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} />
+          {/* Resumen financiero (mobile) — lo primero que quiere ver el cliente */}
+          <div className="md:hidden">
+            <FinancialSideCard investment={investment} onPay={handlePay} />
+          </div>
 
-          {/* 3 · Productos adicionales */}
-          {(investment.additionalProducts?.length ?? 0) > 0 && (
-            <div className="rounded-2xl bg-card border border-border overflow-hidden">
-              <AdditionalProducts products={investment.additionalProducts!} />
-            </div>
-          )}
-
-          {/* 4 · Etapa actual */}
+          {/* Etapa actual */}
           <section className="rounded-2xl bg-card border border-border p-5">
             <div className="flex items-center gap-2 mb-5">
               <Building2 className="w-4 h-4 text-muted-foreground" />
@@ -213,29 +217,61 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
             </div>
           </section>
 
-          {/* Precio de compra (mobile only — desktop shows in right col) */}
-          <div className="md:hidden">
-            <FinancialSideCard investment={investment} onPay={handlePay} />
+          {/* Pestañas: organiza el resto de la información */}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/60 overflow-x-auto scrollbar-none">
+              {DETAIL_TABS.map(({ id, label, Icon }) => {
+                const active = tab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className={`flex-1 min-w-fit inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${
+                      active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 space-y-4 min-w-0">
+              {tab === "pagos" && <PaymentSchedule investment={investment} />}
+
+              {tab === "obra" && (
+                <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} />
+              )}
+
+              {tab === "docs" && <PropertyDocuments propertyId={property.id} />}
+
+              {tab === "ficha" && (
+                <>
+                  {loadingFicha ? (
+                    <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
+                      <div className="h-3 w-32 bg-muted rounded" />
+                      <div className="h-3 w-48 bg-muted rounded" />
+                      <div className="h-40 bg-muted rounded-xl" />
+                    </div>
+                  ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
+                    <FichaTecnicaSection propDetalle={propDetalle} />
+                  ) : (
+                    <p className="text-[13px] text-muted-foreground px-1 py-4">Sin ficha técnica disponible.</p>
+                  )}
+
+                  {(investment.additionalProducts?.length ?? 0) > 0 && (
+                    <div className="rounded-2xl bg-card border border-border overflow-hidden">
+                      <AdditionalProducts products={investment.additionalProducts!} />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* 5 · Cronograma de pagos */}
-          <PaymentSchedule investment={investment} />
-
-          {/* 6 · Documentos */}
-          <PropertyDocuments propertyId={property.id} />
-
-          {/* 7 · Ficha técnica */}
-          {loadingFicha ? (
-            <div className="rounded-2xl border border-border bg-card p-5 md:p-6 animate-pulse space-y-3">
-              <div className="h-3 w-32 bg-muted rounded" />
-              <div className="h-3 w-48 bg-muted rounded" />
-              <div className="h-40 bg-muted rounded-xl" />
-            </div>
-          ) : propDetalle && (propDetalle.numeroPiso != null || propDetalle.planoUbicacionUrl || propDetalle.planoArquitectonico) ? (
-            <FichaTecnicaSection propDetalle={propDetalle} />
-          ) : null}
-
-          {/* Agente (mobile only — desktop shows in right col) */}
+          {/* Agente (mobile only - desktop shows in right col) */}
           <div className="md:hidden">
             <AgentSideCard investment={investment} />
           </div>
@@ -324,90 +360,127 @@ const Lightbox = ({ src, alt = "", open, onClose }: LightboxProps) => {
 
 // ── Property image ──
 
-const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
+const GALLERY_CAT_LABEL: Record<string, string> = {
+  proyecto: "Proyecto",
+  nivel: "Plano de nivel",
+  depto: "Plano del depto",
+  modelo: "Modelo",
+  galeria: "Galería",
+};
+const isPlano = (cat: string) => cat === "nivel" || cat === "depto";
+
+const PropertyImage = ({
+  investment,
+  propDetalle,
+}: {
+  investment: InvestmentProperty;
+  propDetalle: PropiedadDetalle | null;
+}) => {
   const { property } = investment;
-  const heroImg = property.image || getPropertyImage(property.id, property.projectName);
+  const heroImg = property.image || propDetalle?.imageUrl || getPropertyImage(property.id, property.projectName);
+  const { data: modelPhotos } = useModelPhotos(propDetalle?.idModelo ?? undefined);
   const { data: projectPhotos } = useProjectPhotos(property.projectId);
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  const allUrls: string[] = projectPhotos?.length
-    ? projectPhotos.map((p) => p.url).filter(Boolean)
-    : heroImg
-    ? [heroImg]
-    : [];
+  // Orden pedido: 1) portada del proyecto · 2) planos (nivel + depto) ·
+  // 3) imágenes del modelo · 4) multimedia general del proyecto.
+  const items = useMemo(() => {
+    const list: { url: string; cat: string }[] = [];
+    const seen = new Set<string>();
+    const push = (url: string | null | undefined, cat: string) => {
+      if (url && !seen.has(url)) { seen.add(url); list.push({ url, cat }); }
+    };
+    push(heroImg, "proyecto");
+    push(propDetalle?.planoUbicacionUrl, "nivel");
+    push(propDetalle?.planoArquitectonico, "depto");
+    (modelPhotos ?? []).forEach((p) => push(p.url, "modelo"));
+    (projectPhotos ?? []).forEach((p) => push(p.url, "galeria"));
+    return list;
+  }, [heroImg, propDetalle, modelPhotos, projectPhotos]);
 
-  const goTo = (idx: number) =>
-    setActiveIdx(Math.max(0, Math.min(allUrls.length - 1, idx)));
-
-  const current = allUrls[activeIdx] ?? null;
+  const safeIdx = Math.min(activeIdx, Math.max(0, items.length - 1));
+  const current = items[safeIdx] ?? null;
+  const goTo = (idx: number) => setActiveIdx(Math.max(0, Math.min(items.length - 1, idx)));
 
   if (!current) {
     return (
-      <div
-        className={`aspect-video rounded-2xl bg-gradient-to-br ${property.imageGradient} flex flex-col items-center justify-end p-5 pb-6`}
-      >
+      <div className={`aspect-video rounded-2xl bg-gradient-to-br ${property.imageGradient} flex flex-col items-center justify-end p-5 pb-6`}>
         <p className="font-display font-bold text-foreground/50 text-xl text-center">{property.projectName}</p>
         <p className="text-foreground/35 text-[13px] mt-1">U-{property.unitNumber}</p>
       </div>
     );
   }
 
+  const plano = isPlano(current.cat);
+
   return (
     <>
       <div className="space-y-2">
         <div
-          className="relative w-full aspect-video rounded-2xl overflow-hidden bg-muted cursor-zoom-in group"
+          className={`relative w-full aspect-video rounded-2xl overflow-hidden cursor-zoom-in group ${plano ? "bg-white dark:bg-neutral-100" : "bg-muted"}`}
           onClick={() => setLightboxOpen(true)}
         >
           <img
-            src={current}
-            alt={`${property.projectName} U-${property.unitNumber}`}
-            className="w-full h-full object-cover object-bottom"
+            src={current.url}
+            alt={`${property.projectName} · ${GALLERY_CAT_LABEL[current.cat]}`}
+            className={`w-full h-full ${plano ? "object-contain p-2" : "object-cover object-center"}`}
             loading="lazy"
             decoding="async"
           />
+
+          {/* Categoría de la imagen */}
+          <span className="absolute top-3 left-3 text-[10px] font-bold px-2.5 py-1 rounded-full bg-black/60 text-white backdrop-blur-md shadow-sm">
+            {GALLERY_CAT_LABEL[current.cat] ?? "Imagen"}
+          </span>
+
           <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <Maximize2 className="w-3.5 h-3.5" />
           </div>
-          {allUrls.length > 1 && (
+
+          {items.length > 1 && (
             <>
               <button
-                onClick={(e) => { e.stopPropagation(); goTo(activeIdx - 1); }}
-                disabled={activeIdx === 0}
+                onClick={(e) => { e.stopPropagation(); goTo(safeIdx - 1); }}
+                disabled={safeIdx === 0}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60 disabled:opacity-30"
                 aria-label="Anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); goTo(activeIdx + 1); }}
-                disabled={activeIdx === allUrls.length - 1}
+                onClick={(e) => { e.stopPropagation(); goTo(safeIdx + 1); }}
+                disabled={safeIdx === items.length - 1}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur text-white flex items-center justify-center hover:bg-black/60 disabled:opacity-30"
                 aria-label="Siguiente"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
               <div className="absolute bottom-2 right-3 px-1.5 py-0.5 rounded bg-black/50 text-white text-[10px] tabular-nums">
-                {activeIdx + 1} / {allUrls.length}
+                {safeIdx + 1} / {items.length}
               </div>
             </>
           )}
         </div>
 
-        {allUrls.length > 1 && (
+        {items.length > 1 && (
           <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-            {allUrls.map((url, i) => (
+            {items.map((it, i) => (
               <button
-                key={i}
+                key={`${it.cat}-${i}`}
                 onClick={() => goTo(i)}
+                title={GALLERY_CAT_LABEL[it.cat]}
                 className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
-                  i === activeIdx
-                    ? "border-primary ring-1 ring-primary/30"
-                    : "border-transparent opacity-60 hover:opacity-90"
-                }`}
+                  i === safeIdx ? "border-primary ring-1 ring-primary/30" : "border-transparent opacity-60 hover:opacity-90"
+                } ${isPlano(it.cat) ? "bg-white dark:bg-neutral-100" : ""}`}
               >
-                <img src={url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <img
+                  src={it.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className={`w-full h-full ${isPlano(it.cat) ? "object-contain p-0.5" : "object-cover"}`}
+                />
               </button>
             ))}
           </div>
@@ -415,8 +488,8 @@ const PropertyImage = ({ investment }: { investment: InvestmentProperty }) => {
       </div>
 
       <Lightbox
-        src={current}
-        alt={`${property.projectName} U-${property.unitNumber}`}
+        src={current.url}
+        alt={`${property.projectName} · ${GALLERY_CAT_LABEL[current.cat]}`}
         open={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
       />
@@ -490,15 +563,19 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
         const planned = inst.amount;
         const isPaid = inst.status === "pagado";
         const status: ScheduleStatus = isPaid ? "pagado" : applied > 0.01 ? "parcial" : "pendiente";
+        const apps = inst.applications ?? [];
+        // Fecha mostrada: la más reciente de los pagos aplicados (dispersiones);
+        // si no hay pagos, la fecha programada del acuerdo (próximo pago).
+        const latestAppDate = apps.reduce<string>((max, a) => (a.date > max ? a.date : max), "");
         return {
           id: inst.id,
           label: inst.concepto,
           planned,
           applied,
           pending: Math.max(0, planned - applied),
-          date: inst.dueDate,
+          date: latestAppDate || inst.dueDate,
           status,
-          applications: inst.applications ?? [],
+          applications: apps,
         };
       })
     : investment.payments.map((p, i) => {
@@ -658,7 +735,7 @@ const PaymentSchedule = ({ investment }: { investment: InvestmentProperty }) => 
         </button>
       )}
 
-      {/* Comprobante / CEP — misma modal chica que en Pagos */}
+      {/* Comprobante / CEP - misma modal chica que en Pagos */}
       <DocViewerPortal
         open={!!preview}
         onClose={() => setPreview(null)}
@@ -710,7 +787,74 @@ const FinancialSideCard = ({ investment, onPay }: { investment: InvestmentProper
         </div>
       </div>
 
-      {property.deliveryDate && property.deliveryDate !== "—" && (
+      {/* Desglose a escrituración: departamento + estacionamiento (cat 1) y bodega
+          (cat 2). Informativo — cada uno se paga en su propia cuenta, no se mezcla.
+          Precio 0 = incluido (no es gratis, ya viene en el depa). El total suma los
+          saldos pendientes (lo que falta pagar para escriturar). */}
+      {(() => {
+        const complementos = (investment.additionalProducts ?? []).filter(
+          (p) => p.categoriaId === 1 || p.categoriaId === 2,
+        );
+        if (complementos.length === 0) return null;
+        const precioDepto = Math.max(0, financials.initialPrice);
+        const restanteDepto = Math.max(0, financials.pendingBalance);
+        const precioComplementos = complementos.reduce((s, p) => s + Math.max(0, p.totalPrice), 0);
+        const restanteComplementos = complementos.reduce((s, p) => s + Math.max(0, p.pendingBalance), 0);
+        const precioTotal = precioDepto + precioComplementos;
+        const totalEscriturar = restanteDepto + restanteComplementos;
+        return (
+          <div className="pb-4 border-b border-border mb-4">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">
+              Desglose a escrituración
+            </p>
+            <div className="rounded-xl border border-border bg-muted/30 divide-y divide-border/60">
+              <div className="flex items-start justify-between gap-3 px-3 py-2">
+                <span className="text-[12px] text-muted-foreground min-w-0">Departamento</span>
+                <div className="text-right shrink-0">
+                  <p className="text-[13px] font-semibold tabular-nums text-foreground leading-tight">{fmtMXN(restanteDepto)}</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">Lista {fmtMXN(precioDepto)}</p>
+                </div>
+              </div>
+              {complementos.map((p) => {
+                const incluido = p.totalPrice <= 0.01;
+                const pagado = !incluido && p.pendingBalance <= 0.01;
+                return (
+                  <div key={p.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                    <span className="text-[12px] text-muted-foreground min-w-0 break-words">{p.name}</span>
+                    <div className="text-right shrink-0">
+                      {incluido ? (
+                        <span className="inline-flex items-center text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Incluido</span>
+                      ) : pagado ? (
+                        <>
+                          <span className="inline-flex items-center text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5">Pagado</span>
+                          <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">Lista {fmtMXN(p.totalPrice)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[13px] font-semibold tabular-nums text-foreground leading-tight">{fmtMXN(p.pendingBalance)}</p>
+                          <p className="text-[10px] text-muted-foreground tabular-nums">Lista {fmtMXN(p.totalPrice)}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex items-start justify-between gap-3 px-3 py-2 bg-primary/[0.04]">
+                <span className="text-[12px] font-semibold text-foreground min-w-0">Total a escriturar</span>
+                <div className="text-right shrink-0">
+                  <p className="text-[13px] font-bold tabular-nums text-foreground leading-tight">{fmtMXN(totalEscriturar)}</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">Lista {fmtMXN(precioTotal)}</p>
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
+              El monto grande es lo que falta pagar (restante) para escriturar; "Lista" es el precio total. Cada complemento se paga en su propia cuenta, aparte del departamento.
+            </p>
+          </div>
+        );
+      })()}
+
+      {property.deliveryDate && property.deliveryDate !== "-" && (
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-4">
           <Calendar className="w-3.5 h-3.5 shrink-0" />
           <span>Entrega: <span className="font-medium text-foreground">{property.deliveryDate}</span></span>
@@ -765,7 +909,14 @@ const TechCell = ({ label, value }: { label: string; value: string }) => (
 
 const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
   const { property } = investment;
-  const { data: contact } = useAgentForCuenta(property.id, "comercial");
+  // En la fase de adquisición (aún se manejan pagos) el contacto relevante es el
+  // asesor de seguimiento (Luz). Si además hay un agente comercial asignado a la
+  // cuenta, ese tiene prioridad. Ambos hooks se llaman siempre (reglas de hooks).
+  const { data: comercial } = useAgentForCuenta(property.id, "comercial");
+  const { data: seguimiento } = useAgentForCuenta(property.id, "seguimiento");
+
+  const isComercial = !!comercial;
+  const contact = comercial ?? seguimiento;
 
   if (!contact) {
     return (
@@ -779,27 +930,42 @@ const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
     );
   }
 
+  const title = isComercial ? "Tu agente comercial" : "Tu asesor de seguimiento";
   const subjectLabel = `${property.projectName} U-${property.unitNumber}`;
   const waMsg = `Hola ${contact.firstName}, tengo una pregunta sobre mi propiedad ${subjectLabel}.`;
   const waLink = `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(waMsg)}`;
+
+  const hasWhatsapp = !!contact.whatsapp;
+  const hasPhone = !!contact.phone;
+  const actionsCount = (hasWhatsapp ? 1 : 0) + (hasPhone ? 1 : 0) + 1;
+  const gridColsClass = actionsCount === 3 ? "grid-cols-3" : actionsCount === 2 ? "grid-cols-2" : "grid-cols-1";
+
+  const nameParts = contact.fullName.trim().split(/\s+/).filter(Boolean);
+  const initials =
+    nameParts.length > 0
+      ? (nameParts[0][0] + (nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : "")).toUpperCase()
+      : "?";
 
   return (
     <div className="rounded-2xl bg-card border border-border p-5">
       <div className="flex items-center gap-2 mb-4">
         <User className="w-3.5 h-3.5 text-muted-foreground" />
         <h2 className="text-[11px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-          Tu agente comercial
+          {title}
         </h2>
       </div>
 
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-11 h-11 rounded-full overflow-hidden bg-muted flex-shrink-0">
-          <img
-            src={contact.photoUrl}
-            alt={contact.fullName}
-            className="w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
+        <div className="relative w-11 h-11 rounded-full overflow-hidden bg-primary/10 flex-shrink-0 flex items-center justify-center">
+          <span className="text-[13px] font-semibold text-primary select-none">{initials}</span>
+          {contact.photoUrl && (
+            <img
+              src={contact.photoUrl}
+              alt={contact.fullName}
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
         </div>
         <div className="min-w-0">
           <p className="text-[13px] font-semibold font-display text-foreground leading-tight truncate">{contact.fullName}</p>
@@ -810,15 +976,19 @@ const AgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <a href={waLink} target="_blank" rel="noopener noreferrer"
-          className="h-9 rounded-lg bg-success text-success-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-success/90 transition-colors">
-          <MessageCircle className="w-3.5 h-3.5" /> WA
-        </a>
-        <a href={`tel:${contact.phone.replace(/\s/g, "")}`}
-          className="h-9 rounded-lg border border-border bg-background text-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-muted transition-colors">
-          <Phone className="w-3.5 h-3.5" /> Tel
-        </a>
+      <div className={`grid ${gridColsClass} gap-2`}>
+        {hasWhatsapp && (
+          <a href={waLink} target="_blank" rel="noopener noreferrer"
+            className="h-9 rounded-lg bg-success text-success-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-success/90 transition-colors">
+            <MessageCircle className="w-3.5 h-3.5" /> WA
+          </a>
+        )}
+        {hasPhone && (
+          <a href={`tel:${contact.phone.replace(/\s/g, "")}`}
+            className="h-9 rounded-lg border border-border bg-background text-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-muted transition-colors">
+            <Phone className="w-3.5 h-3.5" /> Tel
+          </a>
+        )}
         <a href={`mailto:${contact.email}?subject=${encodeURIComponent(`Sobre ${subjectLabel}`)}`}
           className="h-9 rounded-lg border border-border bg-background text-foreground text-[11px] font-semibold inline-flex items-center justify-center gap-1 hover:bg-muted transition-colors">
           <Mail className="w-3.5 h-3.5" /> Email
@@ -862,25 +1032,38 @@ function getStageInfo(stageId: string) {
 }
 
 function getContextualCTA(investment: InvestmentProperty, onPay: () => void) {
-  const { financials, stages } = investment;
+  const { financials, stages, payments, property } = investment;
   const active = stages.find((s) => s.status === "active");
+  const tipoFin = property.tipoFinanciamiento;
+  const primary = "bg-primary text-primary-foreground hover:bg-primary/90";
 
-  if (active?.id === "pago_final" && financials.pendingBalance > 0) {
-    if (investment.property.tipoFinanciamiento === "CREDITO_HIPOTECARIO") {
-      return { label: "Ver crédito hipotecario", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <Landmark className="w-4 h-4" />, onClick: onPay };
+  // Solo queda el pago a escrituración (último pago) → aquí SÍ se confirma la
+  // forma de pago (recursos propios vs crédito hipotecario).
+  const pendingPayments = payments.filter((p) => p.status !== "pagado");
+  const isLastPayment = pendingPayments.length === 1;
+
+  // Fases con saldo pendiente (preventa / pago)
+  if ((active?.id === "pago_final" || active?.id === "preventa") && financials.pendingBalance > 0) {
+    if (isLastPayment) {
+      if (tipoFin === "CREDITO_HIPOTECARIO") {
+        return { label: "Ver crédito hipotecario", classes: primary, icon: <Landmark className="w-4 h-4" />, onClick: onPay };
+      }
+      if (tipoFin === "RECURSOS_PROPIOS") {
+        return { label: "Ver datos de pago", classes: primary, icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
+      }
+      // Falta elegir: este es el único momento donde se "confirma" la forma de pago.
+      return { label: "Confirmar forma de pago", classes: primary, icon: <Landmark className="w-4 h-4" />, onClick: onPay };
     }
-    return { label: `Pagar ${fmtMXN(financials.pendingBalance)}`, classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
+    // Aún hay parcialidades pendientes → solo mostrar datos de pago (monto + CLABE STP).
+    return { label: "Ver datos de pago", classes: "bg-warning text-warning-foreground hover:bg-warning/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
   }
   if (active?.id === "escrituracion") {
-    return { label: "Agendar firma con notaría", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <FileText className="w-4 h-4" />, onClick: () => console.log("escritura") };
+    return { label: "Agendar firma con notaría", classes: primary, icon: <FileText className="w-4 h-4" />, onClick: () => console.log("escritura") };
   }
   if (active?.id === "entrega") {
     return { label: "Agendar visita de entrega", classes: "bg-success text-success-foreground hover:bg-success/90", icon: <Calendar className="w-4 h-4" />, onClick: () => console.log("entrega") };
   }
-  if (active?.id === "preventa") {
-    return { label: "Confirmar plan de pagos", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <CreditCard className="w-4 h-4" />, onClick: onPay };
-  }
-  return { label: "Hablar con mi agente", classes: "bg-primary text-primary-foreground hover:bg-primary/90", icon: <User className="w-4 h-4" />, onClick: () => console.log("agente") };
+  return { label: "Hablar con mi agente", classes: primary, icon: <User className="w-4 h-4" />, onClick: () => console.log("agente") };
 }
 
 export default PropertyAcquisitionDetail;

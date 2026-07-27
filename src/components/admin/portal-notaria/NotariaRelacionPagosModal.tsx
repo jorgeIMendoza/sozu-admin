@@ -163,7 +163,7 @@ export function NotariaRelacionPagosModal({
 
   // ── Exportar Excel ────────────────────────────────────────────────────────
   // Reutiliza exactamente el mismo mecanismo que Portal Escrituración:
-  // useExportToExcel → Edge Function exportar-reporte → descarga CSV.
+  // useExportToExcel → Edge Function exportar-reporte → descarga XLSX.
   // Alcance: unidad principal + bodegas + estacionamientos (exclusivo, sin extras).
   const { exportToExcel, isExporting } = useExportToExcel();
 

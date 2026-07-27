@@ -8,13 +8,28 @@ interface AmenitiesGridSectionProps {
   amenities: Amenity[];
 }
 
+interface FlatImage {
+  url: string;
+  caption?: string;
+  amenityName: string;
+}
+
 const AmenitiesGridSection = ({ amenities }: AmenitiesGridSectionProps) => {
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const [openImg, setOpenImg] = useState<number | null>(null);
 
   if (!amenities || amenities.length === 0) return null;
 
-  const withImages = amenities.filter((a) => a.images.length > 0);
-  const active = openIdx !== null ? amenities[openIdx] : null;
+  // Carrusel plano: TODAS las imágenes de todas las amenidades, en orden.
+  const allImages: FlatImage[] = [];
+  const startByAmenity: Record<string, number> = {};
+  for (const a of amenities) {
+    if (a.images.length > 0) {
+      startByAmenity[a.id] = allImages.length;
+      for (const img of a.images) {
+        allImages.push({ url: img.url, caption: img.caption, amenityName: a.name });
+      }
+    }
+  }
 
   return (
     <SectionCard
@@ -27,48 +42,24 @@ const AmenitiesGridSection = ({ amenities }: AmenitiesGridSectionProps) => {
       }
       bodyClassName="p-4"
     >
-        {/* Grid uniforme y compacto - todas del mismo tamaño */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-          {amenities.map((amenity, i) => (
-            <AmenityTile
-              key={amenity.id}
-              amenity={amenity}
-              onOpen={amenity.images.length > 0 ? () => setOpenIdx(i) : undefined}
-            />
-          ))}
-        </div>
+      {/* Grid uniforme y compacto - todas del mismo tamaño, sin bento */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+        {amenities.map((amenity) => (
+          <AmenityTile
+            key={amenity.id}
+            amenity={amenity}
+            onOpen={amenity.images.length > 0 ? () => setOpenImg(startByAmenity[amenity.id]) : undefined}
+          />
+        ))}
+      </div>
 
-      {active && active.images.length > 0 && createPortal(
-        <AmenityLightbox
-          amenity={active}
-          hasPrev={hasPrevWithImages(amenities, openIdx!)}
-          hasNext={hasNextWithImages(amenities, openIdx!)}
-          onPrev={() => setOpenIdx(prevWithImages(amenities, openIdx!))}
-          onNext={() => setOpenIdx(nextWithImages(amenities, openIdx!))}
-          onClose={() => setOpenIdx(null)}
-          totalWithImages={withImages.length}
-        />,
+      {openImg !== null && allImages.length > 0 && createPortal(
+        <AmenitiesCarousel images={allImages} startIndex={openImg} onClose={() => setOpenImg(null)} />,
         document.body
       )}
     </SectionCard>
   );
 };
-
-/* ── Navegación entre amenidades que SÍ tienen imágenes ── */
-function nextWithImages(list: Amenity[], from: number): number {
-  for (let i = from + 1; i < list.length; i++) if (list[i].images.length > 0) return i;
-  return from;
-}
-function prevWithImages(list: Amenity[], from: number): number {
-  for (let i = from - 1; i >= 0; i--) if (list[i].images.length > 0) return i;
-  return from;
-}
-function hasNextWithImages(list: Amenity[], from: number): boolean {
-  return nextWithImages(list, from) !== from;
-}
-function hasPrevWithImages(list: Amenity[], from: number): boolean {
-  return prevWithImages(list, from) !== from;
-}
 
 interface AmenityTileProps {
   amenity: Amenity;
@@ -92,7 +83,7 @@ const AmenityTile = ({ amenity, onOpen }: AmenityTileProps) => {
     <button
       type="button"
       onClick={onOpen}
-      className="group relative aspect-[4/3] overflow-hidden rounded-md border border-border bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      className="group relative aspect-[4/3] overflow-hidden rounded-md border border-border bg-muted text-left"
       aria-label={`Ver ${amenity.name}`}
     >
       <img
@@ -116,67 +107,55 @@ const AmenityTile = ({ amenity, onOpen }: AmenityTileProps) => {
   );
 };
 
-/* ── Lightbox fullscreen con carrusel de la amenidad ── */
-interface AmenityLightboxProps {
-  amenity: Amenity;
-  hasPrev: boolean;
-  hasNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
+/* ── Carrusel fullscreen con TODAS las imágenes de amenidades ── */
+interface AmenitiesCarouselProps {
+  images: FlatImage[];
+  startIndex: number;
   onClose: () => void;
-  totalWithImages: number;
 }
 
-const AmenityLightbox = ({ amenity, hasPrev, hasNext, onPrev, onNext, onClose }: AmenityLightboxProps) => {
-  const [imgIdx, setImgIdx] = useState(0);
+const AmenitiesCarousel = ({ images, startIndex, onClose }: AmenitiesCarouselProps) => {
+  const [idx, setIdx] = useState(startIndex);
   const touchStartX = useRef<number | null>(null);
-
-  const images = amenity.images;
   const total = images.length;
-  const current = images[Math.min(imgIdx, total - 1)];
+  const current = images[Math.min(idx, total - 1)];
 
-  // Reinicia al cambiar de amenidad
-  useEffect(() => { setImgIdx(0); }, [amenity.id]);
+  const step = (dir: 1 | -1) => setIdx((i) => (i + dir + total) % total);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
-
-  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight") stepImg(1);
-      else if (e.key === "ArrowLeft") stepImg(-1);
+      else if (e.key === "ArrowRight") setIdx((i) => (i + 1) % total);
+      else if (e.key === "ArrowLeft") setIdx((i) => (i - 1 + total) % total);
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total]);
-
-  const stepImg = (dir: 1 | -1) =>
-    setImgIdx((i) => (i + dir + total) % total);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.body.style.overflow = "";
+    };
+  }, [total, onClose]);
 
   const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 50) { if (dx < 0) stepImg(1); else stepImg(-1); }
+    if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
     touchStartX.current = null;
   };
 
   return (
     <div
-      role="dialog" aria-modal="true" aria-label={amenity.name}
+      role="dialog" aria-modal="true" aria-label="Galería de amenidades"
       className="fixed inset-0 z-[100] bg-black/95 flex flex-col"
       onClick={onClose}
     >
-      {/* Top bar: título + descripción + cerrar */}
+      {/* Top bar */}
       <div className="flex items-start justify-between gap-4 px-4 md:px-8 pt-4 md:pt-6" onClick={(e) => e.stopPropagation()}>
         <div className="min-w-0">
-          <h3 className="text-white text-lg md:text-2xl font-bold leading-tight">{amenity.name}</h3>
-          {amenity.shortDescription && (
-            <p className="text-white/60 text-xs md:text-sm mt-1 max-w-2xl line-clamp-2">{amenity.shortDescription}</p>
+          <h3 className="text-white text-lg md:text-2xl font-bold leading-tight">{current?.amenityName}</h3>
+          {current?.caption && (
+            <p className="text-white/60 text-xs md:text-sm mt-1 max-w-2xl line-clamp-2">{current.caption}</p>
           )}
         </div>
         <button
@@ -198,21 +177,21 @@ const AmenityLightbox = ({ amenity, hasPrev, hasNext, onPrev, onNext, onClose }:
         <img
           key={current?.url}
           src={current?.url}
-          alt={current?.caption ?? amenity.name}
+          alt={current?.caption ?? current?.amenityName}
           className="max-w-full max-h-full object-contain rounded-lg animate-in fade-in-50 duration-300"
         />
 
         {total > 1 && (
           <>
             <button
-              onClick={() => stepImg(-1)}
+              onClick={() => step(-1)}
               className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20 transition-colors"
               aria-label="Imagen anterior"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
-              onClick={() => stepImg(1)}
+              onClick={() => step(1)}
               className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20 transition-colors"
               aria-label="Imagen siguiente"
             >
@@ -222,50 +201,29 @@ const AmenityLightbox = ({ amenity, hasPrev, hasNext, onPrev, onNext, onClose }:
         )}
       </div>
 
-      {/* Caption + contador */}
-      <div className="px-4 md:px-8 text-center" onClick={(e) => e.stopPropagation()}>
-        {current?.caption && (
-          <p className="text-white/70 text-xs md:text-sm mb-2">{current.caption}</p>
-        )}
-        {total > 1 && (
-          <p className="text-white/50 text-xs font-semibold tabular-nums">{Math.min(imgIdx, total - 1) + 1} / {total}</p>
-        )}
-      </div>
+      {/* Contador */}
+      {total > 1 && (
+        <div className="px-4 md:px-8 text-center" onClick={(e) => e.stopPropagation()}>
+          <p className="text-white/50 text-xs font-semibold tabular-nums">{Math.min(idx, total - 1) + 1} / {total}</p>
+        </div>
+      )}
 
-      {/* Tira de miniaturas */}
+      {/* Tira de miniaturas - todas las imágenes */}
       {total > 1 && (
         <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 md:px-8 py-4 justify-start md:justify-center" onClick={(e) => e.stopPropagation()}>
           {images.map((img, i) => (
             <button
               key={i}
-              onClick={() => setImgIdx(i)}
+              onClick={() => setIdx(i)}
               className={`flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                Math.min(imgIdx, total - 1) === i ? "border-white" : "border-transparent opacity-50 hover:opacity-80"
+                Math.min(idx, total - 1) === i ? "border-white" : "border-transparent opacity-50 hover:opacity-80"
               }`}
             >
-              <img src={img.url} alt={img.caption ?? `${amenity.name} ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+              <img src={img.url} alt={img.caption ?? img.amenityName} loading="lazy" className="w-full h-full object-cover" />
             </button>
           ))}
         </div>
       )}
-
-      {/* Navegación entre amenidades */}
-      <div className="flex items-center justify-between gap-3 px-4 md:px-8 pb-5" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={onPrev}
-          disabled={!hasPrev}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-        >
-          <ChevronLeft className="w-4 h-4" /> Amenidad anterior
-        </button>
-        <button
-          onClick={onNext}
-          disabled={!hasNext}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-        >
-          Siguiente amenidad <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
     </div>
   );
 };

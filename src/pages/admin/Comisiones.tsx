@@ -230,6 +230,7 @@ export default function Comisiones() {
               id,
               nombre,
               id_categoria,
+              id_entidad_relacionada_dueno,
               categorias_producto!productos_servicios_id_categoria_fkey(nombre)
             `).in("id", productoIds) : {
         data: [],
@@ -237,8 +238,11 @@ export default function Comisiones() {
       };
       if (productosError) throw productosError;
 
-      // Paso 6.5: Obtener entidades relacionadas (dueños) de las propiedades
-      const entidadIds = propiedades?.map(p => p.id_entidad_relacionada_dueno).filter(Boolean) || [];
+      // Paso 6.5: Obtener entidades relacionadas (dueños) de propiedades Y de productos
+      // (las cuentas de producto/servicio facturan al dueño del producto, no al de la propiedad)
+      const entidadIdsPropiedad = propiedades?.map(p => p.id_entidad_relacionada_dueno).filter(Boolean) || [];
+      const entidadIdsProducto = productos?.map((pr: any) => pr.id_entidad_relacionada_dueno).filter(Boolean) || [];
+      const entidadIds = Array.from(new Set([...entidadIdsPropiedad, ...entidadIdsProducto]));
       const {
         data: entidadesRelacionadas,
         error: entidadesError
@@ -265,17 +269,25 @@ export default function Comisiones() {
         const proyecto = proyectos?.find(pr => pr.id === edificio?.id_proyecto);
         const producto = productos?.find(prod => prod.id === oferta?.id_producto);
 
-        // Obtener cuenta_stp_comisiones y nombre del dueño desde la entidad relacionada de la propiedad
-        const entidadDueno = entidadesRelacionadas?.find(e => e.id === propiedad?.id_entidad_relacionada_dueno);
-        const cuenta_stp_comisiones = entidadDueno?.cuenta_stp_comisiones;
-        const nombre_dueno = entidadDueno?.personas?.nombre_comercial || entidadDueno?.personas?.nombre_legal;
-
         // Determinar tipo de cuenta
         let tipo: 'Propiedad' | 'Producto' | 'Servicio' = 'Propiedad';
         if (oferta?.id_producto && producto) {
           const categoriaNombre = producto.categorias_producto?.nombre?.toLowerCase();
           tipo = categoriaNombre === 'servicios' ? 'Servicio' : 'Producto';
         }
+
+        // El dueño (y su config de facturación/STP) depende del tipo de cuenta:
+        // - Producto/Servicio: dueño del PRODUCTO (productos_servicios.id_entidad_relacionada_dueno)
+        // - Propiedad: dueño de la PROPIEDAD
+        // Antes se usaba siempre el dueño de la propiedad, lo que en cuentas de producto
+        // mostraba la entidad equivocada y leía la bandera facturar_comision_sozu / STP del dueño incorrecto.
+        const duenoEntidadId = (tipo === 'Producto' || tipo === 'Servicio')
+          ? ((producto as any)?.id_entidad_relacionada_dueno ?? propiedad?.id_entidad_relacionada_dueno)
+          : propiedad?.id_entidad_relacionada_dueno;
+        const entidadDueno = entidadesRelacionadas?.find(e => e.id === duenoEntidadId);
+        const cuenta_stp_comisiones = entidadDueno?.cuenta_stp_comisiones;
+        const nombre_dueno = entidadDueno?.personas?.nombre_comercial || entidadDueno?.personas?.nombre_legal;
+
         return {
           ...cuenta,
           proyecto_nombre: proyecto?.nombre,

@@ -167,6 +167,50 @@ export default function CobranzaCuentaDetalle() {
     staleTime: 15_000,
   });
 
+  // tipo_financiamiento no viene en la RPC: se lee directo (fuente de verdad del
+  // método de pago del cliente). Query aparte, front-only.
+  const { data: tipoFinanciamiento = null } = useQuery({
+    queryKey: ['cobranza-cuenta-tipo-fin', cuentaId],
+    enabled: !!cuentaId,
+    staleTime: 15_000,
+    queryFn: async (): Promise<string | null> => {
+      const { data: row } = await (supabase as any)
+        .from('cuentas_cobranza')
+        .select('tipo_financiamiento')
+        .eq('id', cuentaId)
+        .maybeSingle();
+      return row?.tipo_financiamiento ?? null;
+    },
+  });
+
+  // Empresa vendedora / dueña del proyecto (ej. Bottura → Tallwood). Es el dueño
+  // de la propiedad: propiedades.id_entidad_relacionada_dueno → entidad → persona.
+  const { data: empresaVendedora = null } = useQuery({
+    queryKey: ['cobranza-cuenta-empresa-vendedora', data?.propiedadId],
+    enabled: !!data?.propiedadId,
+    staleTime: 60_000,
+    queryFn: async (): Promise<string | null> => {
+      const propId = data?.propiedadId;
+      if (!propId) return null;
+      // Waterfall plano (sin embed PostgREST, que fallaba en silencio):
+      // propiedad → entidad dueña → persona.
+      const { data: prop } = await (supabase as any)
+        .from('propiedades').select('id_entidad_relacionada_dueno').eq('id', propId).maybeSingle();
+      const entId = prop?.id_entidad_relacionada_dueno;
+      if (!entId) return null;
+      const { data: ent } = await (supabase as any)
+        .from('entidades_relacionadas').select('id_persona').eq('id', entId).maybeSingle();
+      const personaId = ent?.id_persona;
+      if (!personaId) return null;
+      const { data: per } = await (supabase as any)
+        .from('personas').select('nombre_legal').eq('id', personaId).maybeSingle();
+      return per?.nombre_legal ?? null;
+    },
+  });
+
+  const [reiniciarFinDialog, setReiniciarFinDialog] = useState(false);
+  const [reiniciarFinSaving, setReiniciarFinSaving] = useState(false);
+
   const { data: metodosPago = [] } = useQuery({
     queryKey: ['metodos-pago'],
     queryFn: fetchMetodosPago,
@@ -357,6 +401,7 @@ export default function CobranzaCuentaDetalle() {
       setUploadIdTipo('');
       setUploadFile(null);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-docs', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['cuenta-expediente-docs', cuentaId] });
     } catch (err: any) {
       toast.error(err.message ?? 'Error');
     } finally {
@@ -465,6 +510,38 @@ export default function CobranzaCuentaDetalle() {
       toast.error(err.message ?? 'Error');
     } finally {
       setQuitarDemandaSaving(false);
+    }
+  }
+
+  // Reinicia/cancela el financiamiento (acción INTERNA de emergencia). Limpia el
+  // campo maestro tipo_financiamiento en la propiedad y sus productos, y da de
+  // baja el crédito y la solicitud vigentes. No borra pagos. Tras esto el cliente
+  // vuelve a elegir su método de pago en el portal.
+  async function handleReiniciarFinanciamiento() {
+    setReiniciarFinSaving(true);
+    try {
+      const propId = data?.propiedadId ?? null;
+      let cuentaIds: number[] = [cuentaId];
+      if (propId != null) {
+        const { data: hermanas } = await (supabase as any)
+          .from('cuentas_cobranza').select('id').eq('id_propiedad', propId);
+        if (hermanas?.length) cuentaIds = hermanas.map((c: any) => Number(c.id));
+      }
+      const now = new Date().toISOString();
+      await (supabase as any).from('cuentas_cobranza')
+        .update({ tipo_financiamiento: null }).in('id', cuentaIds);
+      await (supabase as any).from('creditos_hipotecarios')
+        .update({ activo: false, fecha_actualizacion: now }).in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
+      await (supabase as any).from('bancos_solicitudes')
+        .update({ activo: false, fecha_actualizacion: now }).in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
+      toast.success('Financiamiento reiniciado. El cliente puede elegir de nuevo su método de pago.');
+      setReiniciarFinDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-tipo-fin', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
+    } catch (err: any) {
+      toast.error(err?.message ?? 'No se pudo reiniciar el financiamiento');
+    } finally {
+      setReiniciarFinSaving(false);
     }
   }
 
@@ -656,6 +733,10 @@ export default function CobranzaCuentaDetalle() {
     setTransferDialog: (v) => setTransferDialog(v),
     canDeletePago: canDelete,
     openEliminarPago,
+    tipoFinanciamiento,
+    empresaVendedora,
+    compradorPersonaIds: data?.compradorPersonaIds ?? [],
+    setReiniciarFinDialog: (v) => setReiniciarFinDialog(v),
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -993,6 +1074,38 @@ export default function CobranzaCuentaDetalle() {
         captureClaveRastreo
         logActivity
       />
+
+      {/* Dialog: Reiniciar financiamiento (interno / emergencia) */}
+      <Dialog open={reiniciarFinDialog} onOpenChange={open => { if (!reiniciarFinSaving) setReiniciarFinDialog(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-[15px]">Reiniciar financiamiento</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 flex items-center justify-between">
+              <span className="text-[12px] text-muted-foreground">Método actual</span>
+              <span className="text-[12px] font-semibold text-foreground">
+                {tipoFinanciamiento === 'CREDITO_HIPOTECARIO' ? 'Crédito hipotecario'
+                  : tipoFinanciamiento === 'RECURSOS_PROPIOS' ? 'Recursos propios' : '—'}
+              </span>
+            </div>
+            <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5">
+              <AlertTriangle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Se limpiará el método de financiamiento de la propiedad y sus productos, y se darán de baja
+                el crédito y la solicitud vigentes. <span className="font-semibold">No borra pagos.</span> El
+                cliente volverá a elegir su método de pago.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setReiniciarFinDialog(false)} disabled={reiniciarFinSaving}
+              className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50">Cancelar</button>
+            <button onClick={handleReiniciarFinanciamiento} disabled={reiniciarFinSaving}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-amber-600 text-white text-[13px] font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors">
+              {reiniciarFinSaving && <Loader2 className="size-3.5 animate-spin" />}Reiniciar
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: Poner en Demanda */}
       <Dialog open={demandaDialog} onOpenChange={open => { if (!demandaSaving) setDemandaDialog(open); }}>

@@ -49,6 +49,7 @@ import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
 import { formatEscalonadoLabel, mesesMensualidadesRestantes, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { getBodegasIncluidasCosto } from "@/lib/offers/included-bodegas";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -961,22 +962,34 @@ const Propiedades = () => {
   const { data: precioRange } = useQuery({
     queryKey: ['precio-range-filter', accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      // Select con join para poder filtrar por proyectos accesibles (usuarios restringidos).
-      const selectWithJoin =
-        'precio_lista, edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(edificios!edificios_modelos_id_edificio_fkey!inner(proyectos!edificios_id_proyecto_fkey!inner(id)))';
+      // NO usar embed !inner a proyectos aquí: el join de 4 tablas sobre ~50k propiedades
+      // provocaba `statement timeout` (57014). Para usuarios restringidos resolvemos los
+      // id_edificio_modelo accesibles y filtramos por esa columna directa (indexada).
+      let emIdsAccesibles: number[] | null = null;
+      if (!hasUnrestrictedAccess) {
+        if (accessibleProjectIds.length === 0) return { min: 0, max: 100000000 };
+        const { data: edificiosAcc } = await supabase
+          .from('edificios').select('id').in('id_proyecto', accessibleProjectIds).eq('activo', true);
+        const edificioIds = (edificiosAcc || []).map((e: any) => e.id);
+        if (edificioIds.length === 0) return { min: 0, max: 100000000 };
+        const { data: emsAcc } = await supabase
+          .from('edificios_modelos').select('id').in('id_edificio', edificioIds).eq('activo', true);
+        emIdsAccesibles = (emsAcc || []).map((m: any) => m.id);
+        if (emIdsAccesibles.length === 0) return { min: 0, max: 100000000 };
+      }
 
       const applyFilters = (q: any) => {
         q = q.eq('activo', true).eq('es_aprobado', true).gt('precio_lista', 0);
         q = q.or('id_tipo_propiedad.is.null,id_tipo_propiedad.lte.10');
-        if (!hasUnrestrictedAccess && accessibleProjectIds.length > 0) {
-          q = q.in('edificios_modelos.edificios.proyectos.id', accessibleProjectIds);
+        if (emIdsAccesibles) {
+          q = q.in('id_edificio_modelo', emIdsAccesibles);
         }
         return q;
       };
 
       // Total de propiedades elegibles: se usa para ubicar los percentiles por posición.
       const { count } = await applyFilters(
-        supabase.from('propiedades').select(selectWithJoin, { count: 'exact', head: true })
+        supabase.from('propiedades').select('precio_lista', { count: 'exact', head: true })
       );
       const n = count || 0;
       if (n === 0) return { min: 0, max: 100000000 };
@@ -986,7 +999,7 @@ const Propiedades = () => {
       const idxHigh = Math.min(Math.floor(n * 0.99), n - 1);
 
       const fetchAt = async (idx: number): Promise<number | null> => {
-        const { data } = await applyFilters(supabase.from('propiedades').select(selectWithJoin))
+        const { data } = await applyFilters(supabase.from('propiedades').select('precio_lista'))
           .order('precio_lista', { ascending: true })
           .range(idx, idx);
         return (data?.[0] as any)?.precio_lista ?? null;
@@ -2000,7 +2013,13 @@ const Propiedades = () => {
             es_aprobado,
             id_edificio_modelo,
             id_vista
-          `, { count: 'exact' })
+          `, { count: 'estimated' })
+          // count:'estimated' — con `exact`, PostgREST emite COUNT(*) OVER() en la misma
+          // query que trae las 15 columnas, materializando las ~54k filas activas por el heap
+          // (spill a temp) → excede el statement_timeout (8s) del rol authenticated → la query
+          // caía al catch y devolvía count 0 → tab "Activos (0)" en blanco. El estimado del
+          // planner es exacto al ~0.1% en esta tabla y no escanea. Al aplicar filtros el set se
+          // reduce (o se usa el conteo local del branch needsFullFetch), así que no afecta ahí.
           .eq('activo', true)
           .eq('es_aprobado', true);
         // Segmentación residencial: excluir activos comerciales (id_tipo_propiedad > 10).
@@ -3582,12 +3601,13 @@ const Propiedades = () => {
         nombre,
         m2,
         ubicacion,
+        es_incluido,
         productos_servicios!bodegas_id_producto_fkey(precio_lista)
       `)
       .eq('id_propiedad', propertyId)
       .eq('activo', true)
       .order('nombre');
-    
+
     if (error) {
       console.error('Error fetching bodegas:', error);
       return [];
@@ -3601,6 +3621,7 @@ const Propiedades = () => {
         nombre: item.nombre,
         m2: item.m2,
         ubicacion: item.ubicacion,
+        es_incluido: item.es_incluido,
         precio_m2: precioM2,
         precio_final: precioFinal
       };
@@ -3687,9 +3708,11 @@ const Propiedades = () => {
 
   const handleSchemeSelection = async (offerId: number, schemeId: number) => {
     try {
+      // Al cambiar el esquema, invalidar el PDF cacheado (url=null) para que se
+      // regenere con el nuevo esquema/precio en la próxima descarga.
       const { error } = await supabase
         .from('ofertas')
-        .update({ id_esquema_pago_seleccionado: schemeId })
+        .update({ id_esquema_pago_seleccionado: schemeId, url: null })
         .eq('id', offerId);
 
       if (error) {
@@ -3819,9 +3842,15 @@ const Propiedades = () => {
         precio_lista = precio_base;
       } else {
         precio_lista = property?.precio_lista || 0;
+        // Bodegas incluidas (es_incluido): su valor suma a la base antes del descuento.
+        const { total: bodegasIncluidasTotal } = await getBodegasIncluidasCosto(propertyId);
+        if (bodegasIncluidasTotal > 0) {
+          console.log('🏬 Bodegas incluidas suman a base:', bodegasIncluidasTotal);
+          precio_lista += bodegasIncluidasTotal;
+        }
       }
 
-      console.log('💰 Precio lista:', precio_lista);
+      console.log('💰 Precio lista (base, incluye bodegas incluidas):', precio_lista);
 
       // Get porcentaje_descuento_aumento from payment scheme
       const porcentaje_descuento_aumento = currentOffer.porcentaje_descuento_aumento || 0;

@@ -38,10 +38,25 @@ interface UsuarioRow {
 
 // ── Row → Agent mapper ──
 
+// `usuarios/personas.clave_pais_telefono` es FK a `paises.id` (código ISO, p.ej.
+// "MX"), NO la lada numérica. La lada real vive en `paises.clave_pais_telefono`
+// (p.ej. "+521"). Casi todo el padrón es "MX", así que mapeamos ISO→lada aquí en
+// vez de embeber otro join. Si el valor ya es numérico (dato legacy) se respeta.
+const ISO_A_LADA: Record<string, string> = {
+  MX: "52", US: "1", CA: "1", ES: "34", AR: "54", CO: "57", PE: "51", CL: "56",
+};
+
+function claveALada(raw: string | null | undefined): string {
+  if (!raw) return "52";
+  const t = raw.trim();
+  if (/^\d+$/.test(t)) return t; // ya numérico
+  return ISO_A_LADA[t.toUpperCase()] ?? "52";
+}
+
 function mapUsuario(u: UsuarioRow): Agent {
   const p = u.personas;
   const rawPhone = p?.telefono ?? u.telefono ?? null;
-  const rawClave = (p?.clave_pais_telefono ?? u.clave_pais_telefono ?? "52").replace(/\D/g, "");
+  const rawClave = claveALada(p?.clave_pais_telefono ?? u.clave_pais_telefono);
   const digitsOnly = rawPhone ? rawPhone.replace(/\D/g, "") : "";
   const whatsapp = digitsOnly ? `${rawClave}${digitsOnly}` : "";
   const phoneDisplay = digitsOnly ? `+${rawClave} ${rawPhone}` : "";
@@ -69,21 +84,14 @@ export function useAgentForCuenta(
   return useQuery({
     queryKey: ["agent-for-cuenta", cuentaId, tipo],
     queryFn: async (): Promise<Agent | null> => {
-      // Step 1: explicit assignment from asesores_cuenta
-      const { data: asig, error: e1 } = await (supabase as any)
-        .from("asesores_cuenta")
-        .select("email_asesor")
-        .eq("id_cuenta_cobranza", Number(cuentaId))
-        .eq("tipo", tipo)
-        .eq("activo", true)
-        .maybeSingle();
-      // Ignore table-not-found while DDL hasn't been applied yet
-      if (e1 && !e1.message?.includes("does not exist")) throw e1;
+      let email: string | null = null;
 
-      let email: string | null = (asig as { email_asesor: string } | null)?.email_asesor ?? null;
-
-      // Fallback for comercial: top comisionista by porcentaje_comision
-      if (!email && tipo === "comercial") {
+      if (tipo === "seguimiento") {
+        // Asesor de pagos/seguimiento: único global durante la fase de pago = Luz Ochoa.
+        // (No hay asignación por-cuenta; cuando existan varios, resolver aquí.)
+        email = "luz.ochoa@sozu.com";
+      } else {
+        // comercial: top comisionista por porcentaje_comision de la cuenta
         const { data: com, error: e2 } = await supabase
           .from("comisionistas")
           .select("email_usuario")

@@ -1,4 +1,4 @@
-// Technical Annexes mock data — plans, specs, and inventory per property
+// Technical Annexes mock data - plans, specs, and inventory per property
 
 export interface PlanData {
   title: string;
@@ -37,7 +37,7 @@ export const technicalAnnexes: Record<string, TechnicalAnnex> = {
         type: "ubicacion",
         previewGradient: "from-emerald-50 to-emerald-100",
         level: "Nivel 7",
-        model: "Modelo A — Esquina",
+        model: "Modelo A - Esquina",
         totalArea: "78.0 m²",
       },
       {
@@ -150,7 +150,7 @@ export const technicalAnnexes: Record<string, TechnicalAnnex> = {
         type: "ubicacion",
         previewGradient: "from-amber-50 to-amber-100",
         level: "Nivel 7",
-        model: "Modelo B — Interior",
+        model: "Modelo B - Interior",
         totalArea: "62.0 m²",
       },
       {
@@ -259,7 +259,7 @@ export const technicalAnnexes: Record<string, TechnicalAnnex> = {
         type: "ubicacion",
         previewGradient: "from-amber-50 to-amber-100",
         level: "Nivel 8",
-        model: "Modelo C — Esquina",
+        model: "Modelo C - Esquina",
         totalArea: "75.0 m²",
       },
       {
@@ -371,7 +371,7 @@ export const technicalAnnexes: Record<string, TechnicalAnnex> = {
         type: "ubicacion",
         previewGradient: "from-amber-50 to-amber-100",
         level: "Nivel 9",
-        model: "Modelo B — Interior",
+        model: "Modelo B - Interior",
         totalArea: "68.0 m²",
       },
       {

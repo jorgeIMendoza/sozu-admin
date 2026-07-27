@@ -64,7 +64,7 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
   const historialReal: MantenimientoHistorial[] = propDetalle?.mantenimientoHistorial ?? [];
   const hasMaintenance = !loadingMaint && (cuotaMensual > 0 || clabe !== null);
 
-  // Only derive status after data loads — avoids "Al día" flicker
+  // Only derive status after data loads - avoids "Al día" flicker
   const maintenanceStatus: MaintenanceUiStatus = loadingMaint
     ? "current"
     : mesesAtrasados > 0 ? "overdue"
@@ -174,6 +174,11 @@ const PropertyPatrimonyDetail = ({ investment }: Props) => {
 const PatrimonyAgentSideCard = ({ investment }: { investment: InvestmentProperty }) => {
   const { property } = investment;
   const { data: contact } = useAgentForCuenta(property.id, "seguimiento");
+
+  // Tras culminar los pagos ya no hay asesor de seguimiento (se atiende con SOZU) → no mostrar card.
+  if (investment.financials.pendingBalance <= 0.01) {
+    return null;
+  }
 
   if (!contact) {
     return (
@@ -490,7 +495,7 @@ const PatrimonyImage = ({ investment }: { investment: InvestmentProperty }) => {
           )}
         </div>
 
-        {/* Thumbnail strip — horizontal scroll */}
+        {/* Thumbnail strip - horizontal scroll */}
         {allUrls.length > 1 && (
           <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
             {allUrls.map((url, i) => (
@@ -510,7 +515,7 @@ const PatrimonyImage = ({ investment }: { investment: InvestmentProperty }) => {
         )}
       </div>
 
-      {/* Lightbox — portalled to body */}
+      {/* Lightbox - portalled to body */}
       {lightboxOpen &&
         createPortal(
           <div
@@ -730,7 +735,7 @@ const MaintenanceSection = ({
     ? new Date(proximoVencimiento + "T12:00:00").toLocaleDateString("es-MX", {
         day: "2-digit", month: "short", year: "numeric",
       })
-    : "—";
+    : "-";
 
   const cfg = {
     current: {
@@ -814,7 +819,7 @@ const MaintenanceSection = ({
                 ? new Date(item.fechaPago + "T12:00:00").toLocaleDateString("es-MX", {
                     month: "long", year: "numeric",
                   })
-                : "—";
+                : "-";
               return (
                 <div
                   key={item.id}

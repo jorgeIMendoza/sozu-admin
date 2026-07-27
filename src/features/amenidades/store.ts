@@ -1,19 +1,27 @@
 // =============================================================
 // Portal Condominio · Amenidades — store (Zustand, mock)
-// Máquina de estados del SLOT, doble caducidad (48h/24h), reloj de demo y
-// conciliación STP simulada. Sin backend real: cada integración es `// SWAP POINT`.
-// En memoria (sin persist) porque el estado es sensible al tiempo.
+// UN catálogo `amenidades`; `espacios` (lo que consume el motor de reservas) se
+// DERIVA de las amenidades reservable && activo. La máquina de estados del slot,
+// la doble caducidad (48h/24h) y la conciliación STP simulada quedan intactas:
+// solo cambia su FUENTE de datos y se agrega el CRUD del catálogo.
+// En memoria (sin persist) porque el estado de reservas es sensible al tiempo.
+// SWAP POINT: persistencia real (BD/Storage) y localStorage opcional del catálogo.
 // =============================================================
 import { create } from "zustand";
 import type {
   AbonoExcepcion,
+  Amenidad,
   BloqueoMantenimiento,
+  ConfiguracionReserva,
   EntradaAuditoria,
   EspacioReservable,
   EstadoSlot,
+  ModalidadUso,
+  MediaItem,
   Reserva,
+  TipoAmenidad,
 } from "./types";
-import { MOCK_ABONOS_EXCEPCION, MOCK_BLOQUEOS, MOCK_ESPACIOS, MOCK_RESERVAS } from "./mockData";
+import { MOCK_ABONOS_EXCEPCION, MOCK_AMENIDADES, MOCK_BLOQUEOS, MOCK_RESERVAS } from "./mockData";
 import { estadoDeSlot, limiteHold, limitePago } from "./logic";
 
 // SWAP POINT: duraciones de caducidad y umbral de morosidad configurables por
@@ -36,6 +44,49 @@ function entrada(usuario: string, accion: string, detalle: string): EntradaAudit
   };
 }
 
+/**
+ * Deriva la lista que consume el motor de reservas a partir del catálogo.
+ * Solo amenidades reservable && activo entran al calendario/bandejas.
+ * `requierePago` = modeloCobro no gratuito y (tarifa + depósito) > 0.
+ */
+export function derivarEspacios(amenidades: Amenidad[]): EspacioReservable[] {
+  return amenidades
+    .filter((a) => a.modalidadUso === "reservable" && a.activo && a.reserva)
+    .map((a) => {
+      const r = a.reserva as ConfiguracionReserva;
+      const requierePago = r.modeloCobro !== "gratuito" && r.tarifa + r.depositoGarantia > 0;
+      return {
+        id: a.id,
+        nombre: a.nombre,
+        tipo: a.tipo,
+        capacidad: r.capacidad,
+        cuotaRenta: r.tarifa,
+        depositoGarantia: r.depositoGarantia,
+        requierePago,
+        franjasHorarias: r.franjasHorarias,
+        clabeStp: r.clabeStp,
+        activo: a.activo,
+      };
+    });
+}
+
+// Valores editables de una amenidad (lo que produce el editor de ficha).
+export interface AmenidadFormValues {
+  nombre: string;
+  tipo: TipoAmenidad;
+  ubicacion: string;
+  descripcion: string;
+  media: MediaItem[];
+  modalidadUso: ModalidadUso;
+  reserva: ConfiguracionReserva | null;
+}
+
+// Normaliza integridad: libre ⇒ reserva null; reservable ⇒ reserva obligatorio.
+function normalizar(v: AmenidadFormValues): AmenidadFormValues {
+  if (v.modalidadUso === "libre") return { ...v, reserva: null };
+  return v;
+}
+
 export interface SolicitarInput {
   espacioId: string;
   fecha: string;
@@ -47,7 +98,8 @@ export interface SolicitarInput {
 }
 
 interface AmenidadesState {
-  espacios: EspacioReservable[];
+  amenidades: Amenidad[];
+  espacios: EspacioReservable[]; // DERIVADO de amenidades (recalculado en cada mutación de catálogo)
   reservas: Reserva[];
   bloqueos: BloqueoMantenimiento[];
   abonosExcepcion: AbonoExcepcion[];
@@ -56,10 +108,16 @@ interface AmenidadesState {
   usuario: string;
 
   setUsuario: (n: string) => void;
+  amenidadById: (id: string) => Amenidad | undefined;
   espacioById: (id: string) => EspacioReservable | undefined;
   reservaById: (id: string) => Reserva | undefined;
 
-  // Transiciones
+  // CRUD del catálogo
+  crearAmenidad: (v: AmenidadFormValues) => string;
+  editarAmenidad: (id: string, v: AmenidadFormValues) => void;
+  toggleActivo: (id: string) => void;
+
+  // Transiciones del motor de reservas (sin cambios)
   solicitar: (input: SolicitarInput) => { ok: boolean; motivo?: string };
   validar: (reservaId: string) => void;
   rechazar: (reservaId: string, motivo: string) => void;
@@ -69,12 +127,14 @@ interface AmenidadesState {
 
   // Reloj / caducidades / conciliación
   aplicarCaducidades: () => void;
-  sincronizarReloj: () => void; // avanza a tiempo real (nunca retrocede) + caduca
+  sincronizarReloj: () => void;
   avanzarReloj: (horas: number) => void; // DEV
   simularAbonoStp: (reservaId: string) => void; // DEV
 
   reset: () => void;
 }
+
+const AMENIDADES_INIT = structuredClone(MOCK_AMENIDADES);
 
 export const useAmenidadesStore = create<AmenidadesState>((set, get) => {
   const mutarReserva = (
@@ -92,8 +152,13 @@ export const useAmenidadesStore = create<AmenidadesState>((set, get) => {
     }));
   };
 
+  // Aplica un cambio al catálogo y recalcula `espacios` en la misma transacción.
+  const setCatalogo = (amenidades: Amenidad[]) =>
+    set({ amenidades, espacios: derivarEspacios(amenidades) });
+
   return {
-    espacios: structuredClone(MOCK_ESPACIOS),
+    amenidades: structuredClone(AMENIDADES_INIT),
+    espacios: derivarEspacios(AMENIDADES_INIT),
     reservas: structuredClone(MOCK_RESERVAS),
     bloqueos: structuredClone(MOCK_BLOQUEOS),
     abonosExcepcion: structuredClone(MOCK_ABONOS_EXCEPCION),
@@ -102,9 +167,91 @@ export const useAmenidadesStore = create<AmenidadesState>((set, get) => {
     usuario: "Administración (demo)",
 
     setUsuario: (n) => set({ usuario: n || "Administración (demo)" }),
+    amenidadById: (id) => get().amenidades.find((a) => a.id === id),
     espacioById: (id) => get().espacios.find((e) => e.id === id),
     reservaById: (id) => get().reservas.find((r) => r.id === id),
 
+    // ── CRUD del catálogo ────────────────────────────────────
+    crearAmenidad: (v) => {
+      const val = normalizar(v);
+      const id = `amn-${Date.now()}-${Math.round(Math.random() * 1e4)}`;
+      const nueva: Amenidad = {
+        id,
+        condominioId: "margot", // SWAP POINT: condominio activo real; nunca default a 1
+        nombre: val.nombre,
+        tipo: val.tipo,
+        ubicacion: val.ubicacion,
+        descripcion: val.descripcion,
+        media: val.media,
+        modalidadUso: val.modalidadUso,
+        reserva: val.reserva,
+        activo: true,
+        auditoria: [
+          entrada(
+            get().usuario,
+            "Amenidad creada",
+            `Alta de ${val.nombre} (${val.modalidadUso === "reservable" ? "reservable" : "uso libre"}).`,
+          ),
+        ],
+      };
+      setCatalogo([...get().amenidades, nueva]);
+      return id;
+    },
+
+    editarAmenidad: (id, v) => {
+      const val = normalizar(v);
+      const next = get().amenidades.map((a) => {
+        if (a.id !== id) return a;
+        const cambios: string[] = [];
+        if (a.nombre !== val.nombre) cambios.push("nombre");
+        if (a.tipo !== val.tipo) cambios.push("tipo");
+        if (a.ubicacion !== val.ubicacion) cambios.push("ubicación");
+        if (a.descripcion !== val.descripcion) cambios.push("descripción");
+        if (a.media.length !== val.media.length) cambios.push("media");
+        if (a.modalidadUso !== val.modalidadUso) cambios.push(`modalidad → ${val.modalidadUso}`);
+        if (JSON.stringify(a.reserva) !== JSON.stringify(val.reserva)) cambios.push("config. de reserva");
+        return {
+          ...a,
+          nombre: val.nombre,
+          tipo: val.tipo,
+          ubicacion: val.ubicacion,
+          descripcion: val.descripcion,
+          media: val.media,
+          modalidadUso: val.modalidadUso,
+          reserva: val.reserva,
+          auditoria: [
+            ...a.auditoria,
+            entrada(get().usuario, "Amenidad actualizada", cambios.length ? `Cambios: ${cambios.join(", ")}.` : "Sin cambios de campos."),
+          ],
+        };
+      });
+      setCatalogo(next);
+    },
+
+    // Soft-disable / re-enable. NUNCA hard-delete: preserva historial de reservas.
+    toggleActivo: (id) => {
+      const next = get().amenidades.map((a) => {
+        if (a.id !== id) return a;
+        const activo = !a.activo;
+        return {
+          ...a,
+          activo,
+          auditoria: [
+            ...a.auditoria,
+            entrada(
+              get().usuario,
+              activo ? "Amenidad activada" : "Amenidad desactivada",
+              activo
+                ? `${a.nombre} vuelve a estar disponible en el catálogo.`
+                : `${a.nombre} se retira del catálogo${a.modalidadUso === "reservable" ? " y del motor de reservas (historial preservado)" : ""}.`,
+            ),
+          ],
+        };
+      });
+      setCatalogo(next);
+    },
+
+    // ── Motor de reservas (preservado) ───────────────────────
     // disponible → apartado (con guarda de concurrencia)
     solicitar: (input) => {
       const s = get();
@@ -212,7 +359,7 @@ export const useAmenidadesStore = create<AmenidadesState>((set, get) => {
       set((s) => ({ bloqueos: s.bloqueos.filter((b) => b.id !== bloqueoId) })),
 
     aplicarCaducidades: () => {
-      const { reservas, config, ahora, usuario } = get();
+      const { reservas, config, ahora } = get();
       let cambio = false;
       const next = reservas.map((r) => {
         if (r.estado === "apartado") {
@@ -254,14 +401,17 @@ export const useAmenidadesStore = create<AmenidadesState>((set, get) => {
 
     simularAbonoStp: (reservaId) => get().conciliarPago(reservaId),
 
-    reset: () =>
+    reset: () => {
+      const amenidades = structuredClone(MOCK_AMENIDADES);
       set({
-        espacios: structuredClone(MOCK_ESPACIOS),
+        amenidades,
+        espacios: derivarEspacios(amenidades),
         reservas: structuredClone(MOCK_RESERVAS),
         bloqueos: structuredClone(MOCK_BLOQUEOS),
         abonosExcepcion: structuredClone(MOCK_ABONOS_EXCEPCION),
         config: { ...CONFIG_DEFAULT },
         ahora: Date.now(),
-      }),
+      });
+    },
   };
 });

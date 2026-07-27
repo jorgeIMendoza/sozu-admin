@@ -1,17 +1,19 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock, ExternalLink } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { ENVIRONMENT } from "@/lib/config";
 import { toast } from "sonner";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
+const MODAL_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 interface PipelineOfferDetailDialogProps {
   open: boolean;
@@ -237,33 +239,27 @@ export function PipelineOfferDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="light max-w-md mx-auto p-0 gap-0 rounded-2xl max-h-[90vh]">
-        <DialogHeader className="p-4 pb-2 border-b">
-          <DialogTitle className="text-base font-bold text-center">
-            Detalle de Oferta
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground text-center">
-            {isProducto ? oferta.producto_nombre : oferta.propiedad_nombre}
-            {oferta.proyecto_nombre ? ` de ${oferta.proyecto_nombre}` : ''}
-          </p>
-          <div className="flex justify-center pt-1">
-            <button
-              onClick={() => window.open(`/oferta/${oferta.id}`, '_blank')}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 transition-colors"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Ver oferta pública
-            </button>
-          </div>
-        </DialogHeader>
+      <DialogContent
+        className="light max-w-[480px] mx-auto p-0 gap-0 rounded-md overflow-hidden max-h-[90vh]"
+        style={{ fontFamily: MODAL_FONT }}
+      >
+        <ModalFormHeader
+          title="Detalle de Oferta"
+          subtitle={
+            <>
+              {isProducto ? oferta.producto_nombre : oferta.propiedad_nombre}
+              {oferta.proyecto_nombre ? ` de ${oferta.proyecto_nombre}` : ''}
+            </>
+          }
+        />
 
-        <ScrollArea className="max-h-[75vh]">
-          <div className="p-4 space-y-4">
+        <div className={cn(MODAL_BODY_CLS, "max-h-[calc(90vh-11rem)]")}>
+          <div className="space-y-5">
             {/* Offer info */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground font-mono">Oferta: {ofertaLabel}</span>
-                <Badge className={cn("text-[10px] border-0", stageInfo.color)}>{stageInfo.label}</Badge>
+                <span className="text-xs text-muted-foreground font-mono">Oferta: {ofertaLabel}</span>
+                <Badge className={cn("text-xs border-0", stageInfo.color)}>{stageInfo.label}</Badge>
               </div>
 
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -333,7 +329,7 @@ export function PipelineOfferDetailDialog({
                       key={i}
                       variant="outline"
                       className={cn(
-                        "text-[11px]",
+                        "text-xs",
                         a.es_incluido
                           ? "bg-blue-50 text-blue-700 border-blue-300"
                           : "bg-orange-50 text-orange-700 border-orange-300"
@@ -345,7 +341,7 @@ export function PipelineOfferDetailDialog({
                   ))}
                 </div>
                 {productosAdicionales.length > 0 && (
-                  <p className="text-[10px] text-muted-foreground italic">
+                  <p className="text-xs text-muted-foreground italic">
                     Los productos No incluidos generan ofertas adicionales.
                   </p>
                 )}
@@ -420,7 +416,7 @@ export function PipelineOfferDetailDialog({
                             </div>
                             {descuento != null && descuento !== 0 && (
                               <Badge className={cn(
-                                "text-[10px]",
+                                "text-xs",
                                 descuento < 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
                               )}>
                                 {descuento > 0 ? '+' : ''}{descuento}%
@@ -433,7 +429,7 @@ export function PipelineOfferDetailDialog({
                             {numMens > 1 && <p>{numMens} meses</p>}
                           </div>
 
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-2 text-[11px]">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-2 text-xs">
                             {enganche > 0 && <span className="text-emerald-700 dark:text-emerald-400">Enganche: {formatCurrency(enganche)}</span>}
                             {mensualidad > 0 && <span className="text-purple-700 dark:text-purple-400">Mensualidad: {formatCurrency(mensualidad)}</span>}
                             {entrega > 0 && <span className="text-emerald-700 dark:text-emerald-400">Entrega: {formatCurrency(entrega)}</span>}
@@ -448,33 +444,22 @@ export function PipelineOfferDetailDialog({
             </div>
 
           </div>
-        </ScrollArea>
+        </div>
 
-        {/* Sticky save button */}
-        {!alreadyHasScheme && selectedSchemeId && (
-          <div className="border-t p-3 bg-background">
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
-              className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              Guardar plan seleccionado
-            </Button>
-          </div>
-        )}
-
-        {alreadyHasScheme && (
-          <div className="border-t p-2 bg-background text-center">
-            <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+        {/* Footer estándar: nota informativa a la izquierda + acciones a la derecha */}
+        <div className={cn(MODAL_FOOTER_CLS, "items-center bg-background")}>
+          {alreadyHasScheme && (
+            <p className="mr-auto flex items-center gap-1 text-xs text-muted-foreground">
               <Lock className="h-3 w-3" /> Plan ya seleccionado - no se puede cambiar
             </p>
-          </div>
-        )}
+          )}
+          <Button variant="cancel" onClick={() => onOpenChange(false)}>Cerrar</Button>
+          {!alreadyHasScheme && selectedSchemeId && (
+            <Button variant="primary-outline" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}> {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Guardar plan seleccionado
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

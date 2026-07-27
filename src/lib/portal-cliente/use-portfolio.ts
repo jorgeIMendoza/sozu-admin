@@ -69,7 +69,7 @@ function buildStages(estatusId: number, pendingBalance: number, deliveryDate: st
     case 7: activeIdx = 2; break;  // Escrituración
     case 8: activeIdx = 4; break;  // Entregado → post_entrega
     case 5:                        // Vendida
-    case 11:                       // En demanda (legal) — no bloquear el flujo de pago
+    case 11:                       // En demanda (legal) - no bloquear el flujo de pago
     default:                       // Cualquier otro estatus: derivar del saldo, no asumir preventa
       activeIdx = byPaymentProgress();
       break;
@@ -139,7 +139,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
     ...new Set((compradorRowsRes.data ?? []).map((r) => r.id_cuenta_cobranza as number).filter(Boolean)),
   ];
 
-  // cuentaIds del path lead (via id_oferta) — aprobadas y activas
+  // cuentaIds del path lead (via id_oferta) - aprobadas y activas
   const { data: leadCuentasIdRows } = leadOfferIds.length
     ? await supabase
         .from("cuentas_cobranza")
@@ -161,7 +161,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   // Datos completos de esas cuentas (incluye clabe_stp para el modal de recibo)
   const { data: cuentasFull } = await supabase
     .from("cuentas_cobranza")
-    .select("id, id_oferta, id_propiedad, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
+    .select("id, id_oferta, id_propiedad, id_cuenta_cobranza_padre, precio_final, moneda, fecha_compra, fecha_escritura, clabe_stp, id_notario")
     .in("id", allCuentaIds)
     .eq("activo", true)
     .eq("es_aprobado", true);
@@ -187,10 +187,15 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const mainCuentasRaw: Record<string, unknown>[] = [];
   const productCuentas: Record<string, unknown>[] = [];
   for (const c of cuentasFull as Record<string, unknown>[]) {
+    // Cuentas HIJAS (mantenimiento/sub-cuentas con padre) no son propiedades
+    // por sí mismas; se procesan aparte (paso 3.6). Incluirlas aquí generaba
+    // "cards fantasma" sin proyecto/unidad (ej. cuenta sin oferta ni propiedad).
+    if (c.id_cuenta_cobranza_padre != null) continue;
     const of = ofertaMap[c.id_oferta as number];
     if (c.id_propiedad == null) c.id_propiedad = of?.id_propiedad ?? null;
     if (of?.id_producto != null) productCuentas.push(c);
-    else mainCuentasRaw.push(c);
+    // Cuenta principal sin propiedad resoluble = malformada → no se puede pintar.
+    else if (c.id_propiedad != null) mainCuentasRaw.push(c);
   }
 
   const cuentas = mainCuentasRaw;
@@ -199,7 +204,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
   const cuentaIds = cuentas.map((c) => c.id as number);
   const propiedadIds = [...new Set(cuentas.map((c) => c.id_propiedad as number).filter(Boolean))];
 
-  // Fetch tipo_financiamiento per cuenta (graceful — column added via DDL 20260610_08)
+  // Fetch tipo_financiamiento per cuenta (graceful - column added via DDL 20260610_08)
   const tipoFinMap: Record<number, 'RECURSOS_PROPIOS' | 'CREDITO_HIPOTECARIO' | null> = {};
   try {
     const { data: tfRows } = await (supabase as any)
@@ -228,8 +233,8 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
 
     const [productosRes, productPagosRes] = await Promise.all([
       productoIds.length
-        ? supabase.from("productos_servicios").select("id, nombre, descripcion").in("id", productoIds)
-        : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null }[] }),
+        ? supabase.from("productos_servicios").select("id, nombre, descripcion, id_categoria").in("id", productoIds)
+        : Promise.resolve({ data: [] as { id: number; nombre: string; descripcion: string | null; id_categoria: number | null }[] }),
       supabase
         .from("pagos")
         .select("id_cuenta_cobranza, monto")
@@ -237,11 +242,15 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
         .eq("activo", true),
     ]);
 
-    const productosMap: Record<number, { nombre: string; descripcion: string | null }> =
+    const productosMap: Record<number, { nombre: string; descripcion: string | null; categoriaId: number | null }> =
       Object.fromEntries(
         (productosRes.data ?? []).map((p) => [
           p.id as number,
-          { nombre: String(p.nombre), descripcion: p.descripcion ? String(p.descripcion) : null },
+          {
+            nombre: String(p.nombre),
+            descripcion: p.descripcion ? String(p.descripcion) : null,
+            categoriaId: (p as any).id_categoria ?? null,
+          },
         ]),
       );
 
@@ -270,6 +279,7 @@ async function fetchPortfolio(personaId: number): Promise<InvestmentProperty[]> 
       const prod: AdditionalProduct = {
         id: String(cc.id),
         name: ps?.nombre ?? "Producto",
+        categoriaId: ps?.categoriaId ?? null,
         description: ps?.descripcion ?? undefined,
         totalPrice,
         totalPaid,
@@ -544,12 +554,12 @@ function buildFromData(
     return {
       property: {
         id: String(cc.id),
-        projectName: String(proyecto?.nombre ?? "—"),
-        unitNumber: String(prop?.numero_propiedad ?? "—"),
+        projectName: String(proyecto?.nombre ?? "-"),
+        unitNumber: String(prop?.numero_propiedad ?? "-"),
         location: String(proyecto?.direccion ?? ""),
         type: String(tipo?.nombre ?? "Propiedad"),
-        area: m2 > 0 ? `${m2.toFixed(1)} m²` : "—",
-        floor: String(prop?.numero_piso ?? "—"),
+        area: m2 > 0 ? `${m2.toFixed(1)} m²` : "-",
+        floor: String(prop?.numero_piso ?? "-"),
         bedrooms: Number(modelo?.numero_recamaras ?? 0),
         bathrooms:
           Number(modelo?.numero_completo_banos ?? 0) +

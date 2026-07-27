@@ -8,21 +8,49 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Building2, MapPin, Calendar, CalendarPlus, Loader2, Download, Share2, ChevronRight, ChevronDown, HardHat, Maximize2, BedDouble, Bath, Mail, Copy } from "lucide-react";
+import { Building2, MapPin, Calendar, Loader2, Download, ChevronRight, ChevronDown, HardHat, Maximize2, BedDouble, Bath, Sparkles, Layers, Images, FileText, CalendarPlus, Share2, Mail, Copy, Globe } from "lucide-react";
+import SectionCard from "@/components/offer/SectionCard";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { GoogleMapComponent } from "@/components/admin/GoogleMapComponent";
-import { VistasCarousel } from "@/components/admin/VistasCarousel";
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import useEmblaCarousel from "embla-carousel-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { ModalViewer } from "@/components/ui/modal-viewer";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
-import { Globe, Play, X, ChevronLeft, CheckCircle2, Circle } from "lucide-react";
+import { Play, X, ChevronLeft } from "lucide-react";
 import { desarrolloUrl } from "@/utils/desarrolloUrl";
-import { optimizedImage } from "@/utils/optimizedImage";
-import { OptImg } from "@/components/ui/OptImg";
+import { OptImg } from "@/components/ui/opt-img";
+import { cn } from "@/lib/utils";
+import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus, deriveStages, currentStageOf } from "@/utils/avanceObra";
+
+/** Detecta si un contenedor con scroll horizontal puede desplazarse a izq/der.
+ *  Sirve para mostrar las flechas SOLO cuando hay overflow. */
+function useScrollControls(ref: React.RefObject<HTMLElement>, key?: unknown) {
+  const [nav, setNav] = useState({ prev: false, next: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      setNav({ prev: scrollLeft > 1, next: scrollLeft + clientWidth < scrollWidth - 1 });
+    };
+    update();
+    // Re-mide tras el layout (imágenes/anchos) por si al montar aún no había overflow.
+    const raf = requestAnimationFrame(update);
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => { cancelAnimationFrame(raf); el.removeEventListener("scroll", update); ro.disconnect(); };
+    // `key` fuerza re-suscripción cuando el contenido (y el ref) ya está montado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref, key]);
+  return nav;
+}
 
 /** Monta children solo al entrar (o acercarse) al viewport — para diferir mapas/iframes pesados. */
 const LazyVisible = ({ children, minHeight = 200, rootMargin = "250px" }: { children: ReactNode; minHeight?: number; rootMargin?: string }) => {
@@ -84,7 +112,7 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
   }, [emblaApi, onSelect]);
 
   if (images.length === 1) {
-    return <img src={optimizedImage(images[0], { width: 560, resize: "cover" })} alt={alt} className="w-full h-40 object-cover" loading="lazy" decoding="async" />;
+    return <OptImg src={images[0]} w={640} h={480} resize="cover" alt={alt} className="w-full aspect-[4/3] object-cover object-center" />;
   }
 
   return (
@@ -93,7 +121,7 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
         <div className="flex">
           {images.map((url, i) => (
             <div key={i} className="flex-[0_0_100%] min-w-0">
-              <img src={optimizedImage(url, { width: 560, resize: "cover" })} alt={`${alt} ${i + 1}`} className="w-full h-40 object-cover" loading="lazy" decoding="async" />
+              <OptImg src={url} w={640} h={480} resize="cover" alt={`${alt} ${i + 1}`} className="w-full aspect-[4/3] object-cover object-center" />
             </div>
           ))}
         </div>
@@ -103,11 +131,11 @@ const ModelCardCarousel = ({ images, alt }: { images: string[]; alt: string }) =
           <button
             key={i}
             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollTo(i); }}
-            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-white' : 'bg-white/50'}`}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? 'bg-card' : 'bg-card/50'}`}
           />
         ))}
       </div>
-      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-md px-2 py-0.5 text-[10px] font-medium text-white">
+      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm rounded-md px-2 py-0.5 text-xs font-medium text-white">
         {selectedIndex + 1}/{images.length}
       </div>
     </div>
@@ -132,17 +160,17 @@ const Lightbox = ({ images, index, onClose, onIndex }: { images: string[]; index
   }, []);
   return createPortal(
     <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col" onClick={onClose}>
-      <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><X className="h-5 w-5" /></button>
+      <button onClick={onClose} className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><X className="h-5 w-5" /></button>
       <div className="flex-1 flex items-center justify-center px-4 py-14" onClick={(e) => e.stopPropagation()}>
-        <img src={optimizedImage(images[index], { width: 1600 })} alt="" className="max-h-[82vh] max-w-full object-contain rounded-md" decoding="async" />
+        <OptImg src={images[index]} w={1600} alt="" loading="eager" className="max-h-[82vh] max-w-full object-contain rounded-md" />
       </div>
       {images.length > 1 && (
         <>
-          <button onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }} className="absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><ChevronLeft className="h-6 w-6" /></button>
-          <button onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }} className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"><ChevronRight className="h-6 w-6" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }} className="absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><ChevronLeft className="h-6 w-6" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }} className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-card/10 text-white flex items-center justify-center hover:bg-card/20"><ChevronRight className="h-6 w-6" /></button>
           <div className="pb-6 flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             {images.map((_, i) => (
-              <button key={i} onClick={() => onIndex(i)} className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-white" : "w-1.5 bg-white/40"}`} />
+              <button key={i} onClick={() => onIndex(i)} className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-card" : "w-1.5 bg-card/40"}`} />
             ))}
           </div>
         </>
@@ -169,8 +197,8 @@ const HeroGallery = ({ images, projectName, direccion, avanceObra, badgeText, on
       <div className="h-full overflow-hidden" ref={ref}>
         <div className="flex h-full">
           {images.map((url, i) => (
-            <div key={i} onClick={() => onOpenFull(i)} className="relative flex-[0_0_100%] min-w-0 h-full cursor-zoom-in">
-              <OptImg src={url} w={1400} resize="cover" loading={i === 0 ? "eager" : "lazy"} alt={projectName} className="h-full w-full object-cover object-center" />
+            <div key={i} onClick={() => onOpenFull(i)} className="relative flex-[0_0_100%] min-w-0 h-full cursor-pointer">
+              <OptImg src={url} w={1400} loading={i === 0 ? "eager" : "lazy"} alt={projectName} className="h-full w-full object-cover object-[center_75%]" />
             </div>
           ))}
         </div>
@@ -180,11 +208,11 @@ const HeroGallery = ({ images, projectName, direccion, avanceObra, badgeText, on
         <>
           <button onClick={() => api?.scrollPrev()} className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"><ChevronLeft className="h-5 w-5" /></button>
           <button onClick={() => api?.scrollNext()} className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"><ChevronRight className="h-5 w-5" /></button>
-          <div className="absolute top-3 right-3 rounded-md bg-black/50 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums">{idx + 1}/{images.length}</div>
+          <div className="absolute top-3 right-3 rounded-md bg-black/50 px-2 py-0.5 text-xs font-medium text-white tabular-nums">{idx + 1}/{images.length}</div>
         </>
       )}
       {avanceObra > 0 && (
-        <div className="absolute bottom-20 left-4 bg-[#16A45E] rounded-md px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
+        <div className="absolute bottom-20 left-4 bg-primary rounded-md px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
           <HardHat className="h-3.5 w-3.5 text-white" /><span className="text-xs font-semibold text-white">{badgeText}</span>
         </div>
       )}
@@ -214,9 +242,10 @@ const AgentProyectoDetalle = () => {
   const [agendarCitaOpen, setAgendarCitaOpen] = useState(false);
   const [showAllAmenidades, setShowAllAmenidades] = useState(false);
   const [planoModeloUrl, setPlanoModeloUrl] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
-  const [showAllStages, setShowAllStages] = useState(false);
   const modelosRef = useRef<HTMLDivElement>(null);
+  const vistasRef = useRef<HTMLDivElement>(null);
 
   // Log page view
   useEffect(() => {
@@ -256,7 +285,7 @@ const AgentProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("proyectos")
-        .select("id, nombre, descripcion, direccion, url_imagen_portada, fecha_entrega, fecha_entrega_proyecto, fecha_inicio_construccion, id_estatus_proyecto, latitud, longitud")
+        .select("id, nombre, descripcion, direccion, url_imagen_portada, fecha_entrega, fecha_entrega_proyecto, fecha_inicio_construccion, fecha_lanzamiento, fecha_actualizacion, id_estatus_proyecto, latitud, longitud")
         .eq("id", projectId)
         .single();
       if (error) throw error;
@@ -267,24 +296,36 @@ const AgentProyectoDetalle = () => {
 
   const publicUrl = desarrolloUrl(project?.nombre || "");
 
-  // Fetch estatus_proyecto for avance calculation
-  const { data: estatusData } = useQuery({
-    queryKey: ["estatus-proyecto-all"],
+  // Showroom de ventas (misma fuente que la oferta digital)
+  const { data: showroom } = useQuery({
+    queryKey: ["agent-showroom", projectId],
     queryFn: async () => {
-      const { data: allEstatus } = await (supabase as any)
-        .from("estatus_proyecto")
-        .select("id, nombre")
-        .eq("activo", true)
-        .order("id");
-      return allEstatus || [];
+      const { data } = await (supabase as any)
+        .from("showrooms_proyecto")
+        .select("nombre, descripcion_direccion, latitud, longitud")
+        .eq("id_proyecto", projectId)
+        .maybeSingle();
+      return data;
     },
+    enabled: projectId > 0,
   });
 
-  // Calculate avance from estatus
-  const totalEstatus = estatusData?.length || 13;
-  const idEstatus = project?.id_estatus_proyecto || 0;
-  const avanceObra = totalEstatus > 0 ? Math.round((idEstatus / totalEstatus) * 100) : 0;
-  const nombreEstatus = estatusData?.find((e: any) => e.id === idEstatus)?.nombre || "";
+  // Avance de obra — fuente única: etapa (id_estatus_proyecto) vía catálogo
+  // estatus_proyecto.porcentaje_avance. Igual que la oferta digital y Editar Proyecto.
+  const { data: estatusRows } = useQuery({
+    queryKey: ["estatus-proyecto-catalog"],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("estatus_proyecto")
+        .select("*")
+        .eq("activo", true);
+      return data || [];
+    },
+  });
+  const estatusCatalog = mapEstatusCatalog(estatusRows ?? []);
+  const avanceObra = progressFromEstatus(estatusCatalog, project?.id_estatus_proyecto);
+  const milestones = deriveStages(avanceObra, milestonesFromEstatus(estatusCatalog));
+  const currentStage = currentStageOf(milestones);
 
   // Fetch amenidades
   const { data: amenidades = [] } = useQuery({
@@ -292,11 +333,14 @@ const AgentProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("amenidades_proyectos")
-        .select("amenidades(id, nombre, url)")
+        .select("url_imagen, amenidades(id, nombre)")
         .eq("id_proyecto", projectId)
         .eq("activo", true);
       if (error) throw error;
-      return (data || []).map((a: any) => a.amenidades).filter(Boolean);
+      // foto = url_imagen (foto real de la amenidad en el proyecto). El icono (amenidades.url) NO se usa.
+      return (data || [])
+        .map((a: any) => (a.amenidades ? { ...a.amenidades, foto: a.url_imagen } : null))
+        .filter(Boolean);
     },
     enabled: projectId > 0,
   });
@@ -388,7 +432,8 @@ const AgentProyectoDetalle = () => {
         .select("id, url")
         .eq("id_proyecto", projectId)
         .eq("activo", true)
-        .eq("es_imagen", true);
+        .eq("es_imagen", true)
+        .eq("id_categoria", 1); // solo categoría General
       if (error) throw error;
       return data || [];
     },
@@ -401,7 +446,7 @@ const AgentProyectoDetalle = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("videos_youtube")
-        .select("id, link, nombre")
+        .select("id, link, nombre, fecha_creacion")
         .eq("id_proyecto", projectId)
         .eq("activo", true)
         .order("fecha_creacion", { ascending: false })
@@ -525,6 +570,9 @@ const AgentProyectoDetalle = () => {
     enabled: projectId > 0,
   });
 
+  const vistasNav = useScrollControls(vistasRef, vistas.length);
+  const modelosNav = useScrollControls(modelosRef, modelos.length);
+
   const brochure = documentos.find((d: any) => d.id_tipo_documento === 30);
   const fichaTecnica = documentos.find((d: any) => d.id_tipo_documento === 49);
 
@@ -555,7 +603,7 @@ const AgentProyectoDetalle = () => {
 
   if (loadingProject) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
       </div>
@@ -564,7 +612,7 @@ const AgentProyectoDetalle = () => {
 
   if (!project) {
     return (
-      <div className="pb-24">
+      <div >
         <AgentPortalHeader />
         <div className="text-center py-12 text-sm text-muted-foreground">Proyecto no encontrado</div>
       </div>
@@ -572,12 +620,24 @@ const AgentProyectoDetalle = () => {
   }
 
   const list = showAllAmenidades ? amenidades : amenidades.slice(0, 8);
-  const avanceBadge = avanceObra >= 100 ? (nombreEstatus || "Finalizado") : `${avanceObra}% avance de obra`;
-  const stages = estatusData || [];
-  const visibleStages = showAllStages ? stages : stages.slice(0, 5);
+  const avanceBadge = avanceObra >= 100 ? "Finalizado" : `${avanceObra}% avance de obra`;
+  const fmtLargo = (ts: string) => new Date(ts).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+  const avanceLastUpdated = latestVideo?.fecha_creacion
+    ? fmtLargo(latestVideo.fecha_creacion)
+    : (project?.fecha_actualizacion ? fmtLargo(project.fecha_actualizacion) : null);
+  const vistaImgs: string[] = (vistas || []).map((v: any) => v.url).filter(Boolean);
+  const hasProjCoords = project?.latitud != null && project?.longitud != null;
+  const desarrolloEmbed = hasProjCoords ? `https://www.google.com/maps?q=${project.latitud},${project.longitud}&z=15&output=embed` : null;
+  const mapsUrl = hasProjCoords
+    ? `https://www.google.com/maps?q=${project.latitud},${project.longitud}`
+    : (project?.direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.direccion)}` : null);
+  const showroomHasCoords = (showroom as any)?.latitud != null && (showroom as any)?.longitud != null;
+  const showroomEmbed = showroomHasCoords ? `https://www.google.com/maps?q=${(showroom as any).latitud},${(showroom as any).longitud}&output=embed` : null;
+  const showroomMapsUrl = showroomHasCoords ? `https://www.google.com/maps?q=${(showroom as any).latitud},${(showroom as any).longitud}` : null;
+  const showroomAddr = (showroom as any)?.descripcion_direccion || null;
 
   return (
-    <div className="pb-24 bg-[hsl(var(--agent-bg))]">
+    <div className="bg-background">
       {/* Portada = carrusel de galería */}
       {galleryImages.length > 0 ? (
         <HeroGallery
@@ -597,53 +657,118 @@ const AgentProyectoDetalle = () => {
 
       {/* Stats row */}
       {stats && (
-        <div className="px-4 lg:px-8 -mt-2">
-          <div className="mx-auto max-w-[1000px] bg-white rounded-md shadow-sm border border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
+        <div className="-mt-2">
+          <div className="bg-card rounded-md shadow-sm border border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
             <div className="text-center py-3">
-              <p className="text-2xl font-bold text-[hsl(var(--agent-primary))] tabular-nums">{stats.available}</p>
-              <p className="text-[11px] font-semibold text-[hsl(var(--agent-primary))]/80">Disponibles</p>
+              <p className="text-2xl font-bold text-primary tabular-nums">{stats.available}</p>
+              <p className="text-xs font-semibold text-primary/80">Disponibles</p>
             </div>
             <div className="text-center py-3">
               <p className="text-2xl font-bold text-foreground tabular-nums">{stats.total}</p>
-              <p className="text-[11px] text-muted-foreground">Total unidades</p>
+              <p className="text-xs text-muted-foreground">Total unidades</p>
             </div>
           </div>
         </div>
       )}
 
-      <div className="mx-auto max-w-[1000px] px-4 lg:px-8 mt-5 space-y-7">
+      <div className="mt-5 space-y-7">
+        {/* CTA — botones en una sola fila */}
+        <section className="rounded-md p-5">
+          <p className="mb-3 text-center text-sm font-semibold text-foreground">¿Tu cliente está interesado en este proyecto?</p>
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <ActionButton
+              icon={Building2}
+              className="h-11 flex-1"
+              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
+            >
+              Ver inventario
+            </ActionButton>
+            <ActionButton
+              icon={CalendarPlus}
+              variant="outline"
+              className="h-11 flex-1"
+              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
+            >
+              Agendar cita
+            </ActionButton>
+            <ActionButton
+              icon={Share2}
+              variant="outline"
+              className="h-11 flex-1"
+              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
+            >
+              Compartir
+            </ActionButton>
+          </div>
+        </section>
+
         {/* Concepto */}
         {project.descripcion && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-2">Concepto</h2>
+          <SectionCard icon={FileText} title="Concepto" bodyClassName="p-4 md:p-5 space-y-3">
             <p className="text-sm text-foreground leading-relaxed">{project.descripcion}</p>
             {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
-              <p className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-[#4B5563]">
-                <Calendar className="h-4 w-4 text-[hsl(var(--agent-primary))]" />
-                Fecha de entrega:{" "}
-                <span className="font-bold text-foreground">
-                  {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
-                </span>
-              </p>
+              <>
+                <p className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <Calendar className="h-4 w-4 text-foreground" />
+                  Posible fecha de entrega:{" "}
+                  <span className="font-bold text-foreground">
+                    {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground/70 leading-snug">
+                  Fecha estimada y sujeta a cambios según el avance de obra. No constituye una
+                  fecha de entrega contractual.
+                </p>
+              </>
             )}
-          </section>
+          </SectionCard>
+        )}
+
+        {/* Vistas */}
+        {vistaImgs.length > 0 && (
+          <SectionCard icon={Images} title="Vistas" bodyClassName="p-4">
+            <div className="relative">
+              <div ref={vistasRef} className="flex gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x pb-1">
+                {vistas.map((v: any, i: number) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => openLightbox(vistaImgs, i)}
+                    className="group relative snap-start w-[240px] shrink-0 aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-gray-100 cursor-pointer"
+                  >
+                    <OptImg src={v.url} w={640} h={480} resize="cover" alt={v.nombre || "Vista"} className="h-full w-full object-cover object-center transition-transform group-hover:scale-[1.03]" />
+                    {v.nombre && (
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5 text-left text-xs font-medium text-white">
+                        {v.nombre}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {vistasNav.prev && (
+                <button onClick={() => vistasRef.current?.scrollBy({ left: -280, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+              )}
+              {vistasNav.next && (
+                <button onClick={() => vistasRef.current?.scrollBy({ left: 280, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
+              )}
+            </div>
+          </SectionCard>
         )}
 
         {/* Modelos (arriba, debajo de Concepto) */}
         {modelos.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Modelos</h2>
+          <SectionCard icon={Layers} title="Modelos" bodyClassName="p-4">
             <div className="relative">
               <div ref={modelosRef} className="flex gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x pb-1">
                 {modelos.map((m: any) => {
                   const imgs = modeloImages(m);
                   return (
-                    <div key={m.id} className="snap-start min-w-[260px] max-w-[280px] flex-shrink-0 bg-white rounded-md border border-gray-100 shadow-sm overflow-hidden">
-                      <div className="cursor-zoom-in" onClick={() => imgs.length && openLightbox(imgs, 0)}>
+                    <div key={m.id} className="snap-start min-w-[240px] max-w-[260px] flex-shrink-0 bg-card rounded-md border border-gray-100 shadow-sm overflow-hidden">
+                      <div className="cursor-pointer" onClick={() => imgs.length && openLightbox(imgs, 0)}>
                         {imgs.length > 0 ? (
                           <ModelCardCarousel images={imgs} alt={m.nombre} />
                         ) : (
-                          <div className="w-full h-40 bg-gray-100 flex items-center justify-center"><Building2 className="h-10 w-10 text-gray-300" /></div>
+                          <div className="w-full aspect-[4/3] bg-gray-100 flex items-center justify-center"><Building2 className="h-10 w-10 text-gray-300" /></div>
                         )}
                       </div>
                       <div className="p-3.5">
@@ -655,223 +780,266 @@ const AgentProyectoDetalle = () => {
                         </div>
                         {m.minPrice && (
                           <div className="mt-2">
-                            <p className="text-[10px] text-muted-foreground">Desde</p>
+                            <p className="text-xs text-muted-foreground">Desde</p>
                             <p className="text-base font-bold text-foreground">{formatCurrency(m.minPrice)}</p>
                           </div>
                         )}
                         {m.availableCount > 0 && (
-                          <button
+                          <Button
+                            variant="primary-outline"
+                            className="mt-2.5 w-full"
                             onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario_modelo', elementLabel: 'Ver inventario', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
-                            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-md bg-[hsl(var(--agent-primary))] py-2.5 text-sm font-semibold text-white hover:brightness-110 transition"
-                          >
-                            Ver inventario <ChevronRight className="h-4 w-4" />
-                          </button>
+                          > Ver inventario 
+                          </Button>
                         )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {modelos.length > 1 && (
-                <>
-                  <button onClick={() => modelosRef.current?.scrollBy({ left: -320, behavior: 'smooth' })} className="hidden md:flex absolute -left-3 top-[72px] h-9 w-9 rounded-full bg-white border border-gray-200 shadow-sm items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
-                  <button onClick={() => modelosRef.current?.scrollBy({ left: 320, behavior: 'smooth' })} className="hidden md:flex absolute -right-3 top-[72px] h-9 w-9 rounded-full bg-white border border-gray-200 shadow-sm items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
-                </>
+              {modelosNav.prev && (
+                <button onClick={() => modelosRef.current?.scrollBy({ left: -320, behavior: 'smooth' })} className="hidden md:flex absolute left-1 top-20 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+              )}
+              {modelosNav.next && (
+                <button onClick={() => modelosRef.current?.scrollBy({ left: 320, behavior: 'smooth' })} className="hidden md:flex absolute right-1 top-20 h-9 w-9 rounded-full bg-card border border-gray-200 shadow-md items-center justify-center hover:bg-gray-50"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
               )}
             </div>
-          </section>
+          </SectionCard>
         )}
 
         {/* Amenidades — texto (+ imagen si existe) */}
         {amenidades.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Amenidades</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <SectionCard icon={Sparkles} title="Amenidades" bodyClassName="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {list.map((a: any) => (
-                <div key={a.id} className="flex items-center gap-2.5 bg-white rounded-md border border-gray-100 p-2.5">
-                  {a.url ? (
-                    <OptImg src={a.url} w={72} h={72} resize="cover" alt={a.nombre} className="h-9 w-9 rounded-md object-cover shrink-0" />
+                <div key={a.id} className="relative aspect-[4/3] overflow-hidden rounded-md border border-gray-100 bg-card">
+                  {a.foto ? (
+                    <>
+                      <OptImg src={a.foto} w={320} h={240} resize="cover" alt={a.nombre} className="h-full w-full object-cover object-center" />
+                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 py-2 text-xs font-bold text-white leading-tight">{a.nombre}</span>
+                    </>
                   ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--agent-primary))] shrink-0" />
+                    <span className="flex h-full w-full items-center justify-center px-2 text-center text-sm font-medium text-foreground leading-tight">{a.nombre}</span>
                   )}
-                  <span className="text-[12px] font-medium text-foreground leading-tight">{a.nombre}</span>
                 </div>
               ))}
             </div>
             {amenidades.length > 8 && (
               <button
                 onClick={() => setShowAllAmenidades(!showAllAmenidades)}
-                className="mt-2.5 flex items-center gap-1 text-xs font-semibold text-[hsl(var(--agent-primary))]"
+                className="mt-2.5 flex items-center gap-1 text-xs font-semibold text-primary"
               >
                 {showAllAmenidades ? 'Ver menos' : `Ver todas (${amenidades.length})`}
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllAmenidades ? 'rotate-180' : ''}`} />
               </button>
             )}
-          </section>
+          </SectionCard>
         )}
 
-        {/* Vistas */}
-        {vistas.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Vistas</h2>
-            <VistasCarousel vistas={vistas} />
-          </section>
-        )}
-
-        {/* Ubicación + Puntos de interés — 2 cards en la misma fila */}
-        {(project.direccion || (project.latitud && project.longitud) || puntosInteres.length > 0) && (
-          <section className="grid gap-4 md:grid-cols-8">
-            {(project.direccion || (project.latitud && project.longitud)) && (
-              <div className="md:col-span-5 bg-white rounded-md border border-gray-100 p-4">
-                <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Ubicación</h2>
-                {project.latitud && project.longitud && (
-                  <div className="rounded-md overflow-hidden border border-gray-100 mb-3">
-                    <LazyVisible minHeight={300}>
-                      <GoogleMapComponent onLocationSelect={() => {}} initialLocation={{ lat: project.latitud, lng: project.longitud }} readOnly />
-                    </LazyVisible>
-                  </div>
-                )}
-                {project.direccion && (
-                  <p className="text-sm text-foreground flex items-start gap-1.5">
-                    <MapPin className="h-4 w-4 text-[hsl(var(--agent-primary))] flex-shrink-0 mt-0.5" />
-                    {project.direccion}
-                  </p>
-                )}
-              </div>
-            )}
-            {puntosInteres.length > 0 && (
-              <div className="md:col-span-3 bg-white rounded-md border border-gray-100 p-4">
-                <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Puntos de interés</h2>
-                <div className="space-y-2">
-                  {puntosInteres.map((p: any) => (
-                    <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-[#F6F7F8] px-3 py-2.5">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[hsl(var(--agent-primary))]/10">
-                        <MapPin className="h-3.5 w-3.5 text-[hsl(var(--agent-primary))]" />
-                      </span>
-                      <span className="flex-1 text-sm text-foreground leading-tight">{p.nombre}</span>
-                      <span className="text-xs font-semibold text-[#4B5563] tabular-nums whitespace-nowrap">
-                        {p.distancia_km < 1 ? `${(p.distancia_km * 1000).toFixed(0)} m` : `${p.distancia_km} km`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Avance de obra — video (izq) + desglose (der) */}
+        {/* Avance de obra */}
         {(avanceObra > 0 || latestVideoEmbed) && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Avance de obra</h2>
-            <div className="grid gap-4 lg:grid-cols-2">
-              {latestVideoEmbed && (
-                <div className="rounded-md overflow-hidden border border-gray-100 bg-white self-start">
-                  <YouTubeFacade embedUrl={latestVideoEmbed} title={latestVideo?.nombre} />
-                  {latestVideo?.nombre && <p className="px-4 py-3 text-sm font-medium text-foreground">{latestVideo.nombre}</p>}
-                </div>
-              )}
+          <SectionCard icon={HardHat} title="Avance de obra" bodyClassName="p-4 space-y-4">
+            <>
               {avanceObra > 0 && (
-                <div className="bg-white rounded-md border border-gray-100 p-4 md:p-5 self-start">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-muted-foreground">Avance global del proyecto</span>
-                    <span className="text-2xl font-bold text-[hsl(var(--agent-primary))] tabular-nums">{avanceObra}%</span>
+                <div className="rounded-md border border-gray-100 bg-muted/30 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Avance global del proyecto</span>
+                    <span className="text-2xl font-bold text-primary tabular-nums">{avanceObra}%</span>
                   </div>
-                  <Progress value={avanceObra} className="h-2 mb-1" />
-                  {nombreEstatus && <p className="text-[11px] text-muted-foreground mb-4">Etapa actual: <span className="font-semibold text-foreground">{nombreEstatus}</span></p>}
-                  <ul className="space-y-2.5">
-                    {visibleStages.map((e: any) => {
-                      const done = e.id <= idEstatus;
-                      const pct = Math.round((e.id / (stages.length || 1)) * 100);
-                      return (
-                        <li key={e.id} className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2">
-                            {done ? <CheckCircle2 className="h-4 w-4 text-[hsl(var(--agent-primary))]" /> : <Circle className="h-4 w-4 text-muted-foreground/40" />}
-                            <span className={done ? "text-foreground" : "text-muted-foreground"}>{e.nombre}</span>
-                          </span>
-                          <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {stages.length > 5 && (
-                    <button
-                      onClick={() => setShowAllStages((v) => !v)}
-                      className="mt-2.5 flex items-center gap-1 text-xs font-semibold text-[hsl(var(--agent-primary))]"
-                    >
-                      {showAllStages ? "Ver menos etapas" : `Ver ${stages.length - 5} etapas más`}
-                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllStages ? "rotate-180" : ""}`} />
-                    </button>
-                  )}
-                  {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
-                    <p className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-muted-foreground flex items-center gap-1.5">
-                      <Calendar className="h-3 w-3" />
-                      Entrega estimada · {new Date(project.fecha_entrega || project.fecha_entrega_proyecto).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                  )}
+                  <Progress value={avanceObra} className="my-2 h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Etapa actual: <span className="font-semibold text-foreground">{currentStage}</span>
+                    {avanceLastUpdated && <span className="text-muted-foreground/70"> · Actualizado: {avanceLastUpdated}</span>}
+                  </p>
                 </div>
               )}
+              <div className="grid items-start gap-4 md:grid-cols-2">
+                {latestVideoEmbed && (
+                  <div className="flex flex-col overflow-hidden rounded-md border border-gray-100">
+                    <YouTubeFacade embedUrl={latestVideoEmbed} title={latestVideo?.nombre} />
+                    {latestVideo?.nombre && <p className="px-4 py-3 text-sm font-medium text-foreground">{latestVideo.nombre}</p>}
+                  </div>
+                )}
+                {avanceObra > 0 && (
+                  <div className={cn("rounded-md border border-gray-100 p-4", !latestVideoEmbed && "md:col-span-2")}>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Etapas de obra</h3>
+                    {(() => {
+                      const renderStage = (m: typeof milestones[number], i: number) => {
+                        const isCurrent = !m.done && m.phase === currentStage;
+                        return (
+                          <li key={m.phase} className="flex items-center gap-2.5 text-sm">
+                            <span className={cn(
+                              "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-semibold leading-none tabular-nums",
+                              m.done ? "border-primary text-primary"
+                                : isCurrent ? "border-amber-500 bg-amber-50 text-amber-600"
+                                : "border-muted-foreground/30 text-muted-foreground/50",
+                            )}>
+                              {i + 1}
+                            </span>
+                            <span className={cn("flex-1 truncate", m.done ? "text-foreground" : isCurrent ? "font-semibold text-foreground" : "text-muted-foreground")}>{m.phase}</span>
+                            <span className={cn("shrink-0 text-xs tabular-nums", m.done ? "font-medium text-primary" : isCurrent ? "font-semibold text-amber-600" : "text-muted-foreground/60")}>{m.ownPct}%</span>
+                          </li>
+                        );
+                      };
+                      const mid = Math.ceil(milestones.length / 2);
+                      return (
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
+                          <ul className="space-y-2.5">{milestones.slice(0, mid).map((m, j) => renderStage(m, j))}</ul>
+                          <ul className="space-y-2.5">{milestones.slice(mid).map((m, j) => renderStage(m, mid + j))}</ul>
+                        </div>
+                      );
+                    })()}
+                    {(project.fecha_entrega || project.fecha_entrega_proyecto) && (
+                      <div className="mt-4 pt-3 border-t border-gray-100 space-y-0.5">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3 text-foreground" />
+                          Posible fecha de entrega · {fmtLargo(project.fecha_entrega || project.fecha_entrega_proyecto)}
+                        </p>
+                        <p className="text-xs text-muted-foreground/70 leading-snug">
+                          Fecha estimada y sujeta a cambios según el avance de obra.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          </SectionCard>
+        )}
+
+        {/* Ubicación — El desarrollo + Showroom (estilo oferta digital) */}
+        {(desarrolloEmbed || project.direccion || showroomAddr || puntosInteres.length > 0) && (
+          <SectionCard icon={MapPin} title="Ubicación" bodyClassName="p-4">
+            {(() => {
+              const puntosDerecha = !showroomAddr && puntosInteres.length > 0;
+              const hasRight = !!showroomAddr || puntosDerecha;
+              return (
+                <div className={cn("grid gap-4", hasRight && "md:grid-cols-2")}>
+                  {/* El desarrollo */}
+                  <div className={cn("overflow-hidden rounded-md border border-gray-100", !hasRight && "md:max-w-xl")}>
+                    <div className="border-b border-gray-100 bg-muted/30 px-4 py-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">El desarrollo</p>
+                    </div>
+                    {desarrolloEmbed ? (
+                      <LazyVisible minHeight={200}>
+                        <div className="aspect-video w-full overflow-hidden bg-gray-100">
+                          <iframe src={desarrolloEmbed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Mapa del desarrollo" className="h-full w-full" style={{ border: "none" }} />
+                        </div>
+                      </LazyVisible>
+                    ) : (
+                      <div className="flex aspect-video w-full items-center justify-center bg-gray-50"><MapPin className="h-8 w-8 text-gray-300" /></div>
+                    )}
+                    <div className="space-y-3 px-4 py-3.5">
+                      {project.direccion && <p className="text-sm font-medium leading-snug text-foreground">{project.direccion}</p>}
+                      {mapsUrl && (
+                        <Button asChild variant="primary-outline" size="sm">
+                          <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                            <MapPin className="h-3.5 w-3.5" /> Cómo llegar
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Derecha: showroom o puntos de interés */}
+                  {showroomAddr ? (
+                    <div className="overflow-hidden rounded-md border border-gray-100">
+                      <div className="border-b border-gray-100 bg-muted/30 px-4 py-2.5">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Showroom de ventas</p>
+                      </div>
+                      {showroomEmbed ? (
+                        <LazyVisible minHeight={200}>
+                          <div className="aspect-video w-full overflow-hidden bg-gray-100">
+                            <iframe src={showroomEmbed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Mapa del showroom" className="h-full w-full" style={{ border: "none" }} />
+                          </div>
+                        </LazyVisible>
+                      ) : (
+                        <div className="flex aspect-video w-full items-center justify-center bg-gray-50"><MapPin className="h-8 w-8 text-gray-300" /></div>
+                      )}
+                      <div className="space-y-3 px-4 py-3.5">
+                        <p className="text-sm font-medium leading-snug text-foreground">{showroomAddr}</p>
+                        {showroomMapsUrl && (
+                          <Button asChild variant="primary-outline" size="sm">
+                            <a href={showroomMapsUrl} target="_blank" rel="noopener noreferrer">
+                            <MapPin className="h-3.5 w-3.5" /> Cómo llegar
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : puntosDerecha ? (
+                    <div className="overflow-hidden rounded-md border border-gray-100">
+                      <div className="border-b border-gray-100 bg-muted/30 px-4 py-2.5">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Puntos de interés</p>
+                      </div>
+                      <div className="space-y-2 p-3">
+                        {puntosInteres.map((p: any) => (
+                          <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted"><MapPin className="h-3.5 w-3.5 text-foreground" /></span>
+                            <span className="flex-1 text-sm text-foreground leading-tight">{p.nombre}</span>
+                            <span className="text-xs font-semibold text-muted-foreground tabular-nums whitespace-nowrap">
+                              {p.distancia_km < 1 ? `${(p.distancia_km * 1000).toFixed(0)} m` : `${p.distancia_km} km`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
+          </SectionCard>
+        )}
+
+        {/* Puntos de interés — sección aparte solo si el lado derecho lo ocupó el showroom */}
+        {showroomAddr && puntosInteres.length > 0 && (
+          <SectionCard icon={MapPin} title="Puntos de interés" bodyClassName="p-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {puntosInteres.map((p: any) => (
+                <div key={p.id} className="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted"><MapPin className="h-3.5 w-3.5 text-foreground" /></span>
+                  <span className="flex-1 text-sm text-foreground leading-tight">{p.nombre}</span>
+                  <span className="text-xs font-semibold text-muted-foreground tabular-nums whitespace-nowrap">
+                    {p.distancia_km < 1 ? `${(p.distancia_km * 1000).toFixed(0)} m` : `${p.distancia_km} km`}
+                  </span>
+                </div>
+              ))}
             </div>
-          </section>
+          </SectionCard>
         )}
 
         {/* Material comercial */}
         {(brochure || fichaTecnica) && (
-          <section>
-            <h2 className="text-xs font-semibold text-[hsl(var(--agent-primary))] tracking-widest uppercase mb-3">Material comercial</h2>
+          <SectionCard icon={FileText} title="Material comercial" bodyClassName="p-4">
             <div className="grid gap-2 sm:grid-cols-2">
               {brochure && (
                 <div
-                  className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); window.open(brochure.url, '_blank'); }}
+                  className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); setPreviewFile({ url: brochure.url, name: 'Brochure' }); }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-md bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center"><Download className="h-5 w-5 text-[hsl(var(--agent-primary))]" /></div>
-                    <div><p className="text-sm font-semibold text-foreground">Brochure</p><p className="text-[11px] text-muted-foreground">PDF · Presentación</p></div>
+                    <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
+                    <div><p className="text-sm font-semibold text-foreground">Brochure</p><p className="text-xs text-muted-foreground">PDF · Presentación</p></div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
               )}
               {fichaTecnica && (
                 <div
-                  className="bg-white rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                   onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_ficha', elementLabel: 'Ficha técnica' }); registrarExportacion('ficha_tecnica', { proyecto_id: projectId }); window.open(fichaTecnica.url, '_blank'); }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-md bg-[hsl(var(--agent-primary))]/10 flex items-center justify-center"><Download className="h-5 w-5 text-[hsl(var(--agent-primary))]" /></div>
-                    <div><p className="text-sm font-semibold text-foreground">Ficha técnica</p><p className="text-[11px] text-muted-foreground">PDF · Especificaciones</p></div>
+                    <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
+                    <div><p className="text-sm font-semibold text-foreground">Ficha técnica</p><p className="text-xs text-muted-foreground">PDF · Especificaciones</p></div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
               )}
             </div>
-          </section>
+          </SectionCard>
         )}
 
-        {/* CTA — botones en una sola fila */}
-        <section className="rounded-md bg-[hsl(var(--agent-primary))]/[0.08] p-5">
-          <p className="mb-3 text-center text-sm font-semibold text-foreground">¿Tu cliente está interesado en este proyecto?</p>
-          <div className="flex flex-col gap-2.5 sm:flex-row">
-            <button
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#16A45E] text-sm font-semibold text-white transition-colors hover:bg-[#128A4F]"
-            >
-              <Building2 className="h-4 w-4" /> Ver inventario
-            </button>
-            <button
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <CalendarPlus className="h-4 w-4" /> Agendar cita
-            </button>
-            <button
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
-              className="flex-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#E7E9EC] bg-white text-sm font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <Share2 className="h-4 w-4" /> Compartir
-            </button>
-          </div>
-        </section>
       </div>
 
       {/* Agendar cita dialog */}
@@ -879,47 +1047,57 @@ const AgentProyectoDetalle = () => {
 
       {/* Share Dialog */}
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Compartir - {project.nombre}</DialogTitle>
-          </DialogHeader>
-          <button
-            onClick={() => handleShareMethod("web")}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[#16A45E] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#128A4F]"
-          >
+        <DialogContent className="max-w-sm gap-0 overflow-hidden p-0">
+          <ModalFormHeader title={`Compartir - ${project.nombre}`} />
+          <div className={cn(MODAL_BODY_CLS, "gap-3")}>
+          <Button variant="primary-outline" className="w-full" onClick={() => handleShareMethod("web")}>
             <Globe className="h-4 w-4" /> Ver página web
-          </button>
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          </Button>
+          <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("whatsapp")}>
-              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              WhatsApp
+              <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> WhatsApp
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("facebook")}>
-              <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              Facebook
+              <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> Facebook
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("email")}>
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              Correo
+              <Mail className="h-5 w-5 text-muted-foreground" /> Correo
             </Button>
             <Button variant="outline" className="gap-2 justify-start" onClick={() => handleShareMethod("copy")}>
-              <Copy className="h-5 w-5 text-muted-foreground" />
-              Copiar link
+              <Copy className="h-5 w-5 text-muted-foreground" /> Copiar link
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
       {/* Plano de modelo dialog */}
       <Dialog open={!!planoModeloUrl} onOpenChange={() => setPlanoModeloUrl(null)}>
-        <DialogContent className="max-w-lg p-2">
-          <DialogHeader>
-            <DialogTitle>Plano arquitectónico</DialogTitle>
-          </DialogHeader>
-          {planoModeloUrl && (
-            <img src={planoModeloUrl} alt="Plano del modelo" className="w-full object-contain max-h-[70vh] rounded-md" />
-          )}
+        <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+          <ModalFormHeader title="Plano arquitectónico" />
+          <div className={MODAL_BODY_CLS}>
+            {planoModeloUrl && (
+              <OptImg src={planoModeloUrl} w={1600} alt="Plano del modelo" className="max-h-[65vh] w-full rounded-md object-contain" />
+            )}
+          </div>
+          <div className={MODAL_FOOTER_CLS}>
+            <Button variant="cancel" onClick={() => setPlanoModeloUrl(null)}>Cerrar</Button>
+            {planoModeloUrl && (
+              <Button variant="primary-outline" asChild>
+                <a href={planoModeloUrl} download target="_blank" rel="noopener noreferrer"> Descargar
+                </a>
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* Visor in-app de material comercial (PDF) sin salir de la plataforma. */}
+      <ModalViewer
+        open={!!previewFile}
+        onOpenChange={(o) => { if (!o) setPreviewFile(null); }}
+        url={previewFile?.url || ""}
+        title={previewFile?.name || "Documento"}
+      />
 
       {/* Visor pantalla completa */}
       {lightbox && (

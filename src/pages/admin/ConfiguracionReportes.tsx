@@ -483,7 +483,7 @@ export default function ConfiguracionReportes() {
             </TableCell>
             <TableCell>
               <code className="text-xs bg-muted px-2 py-1 rounded">
-                {reporte.nombre_archivo}.csv
+                {reporte.nombre_archivo}.xlsx
               </code>
             </TableCell>
             <TableCell>
@@ -704,7 +704,7 @@ export default function ConfiguracionReportes() {
                   onChange={(e) => setFormData({ ...formData, nombre_archivo: e.target.value })}
                   placeholder="inventario_propiedades"
                 />
-                <p className="text-xs text-muted-foreground">Sin extensión, se añadirá .csv automáticamente</p>
+                <p className="text-xs text-muted-foreground">Sin extensión, se añadirá .xlsx automáticamente</p>
               </div>
             </div>
 

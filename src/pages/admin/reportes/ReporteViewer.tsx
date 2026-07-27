@@ -1122,10 +1122,10 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
 
     setIsExporting(true);
     try {
-      // Export does NOT apply filters - exports all data
-      // Exception: Restricted users (Representante de empresa dueña) must have their access filters applied
-      let exportFilters: Record<string, string> = {};
-      
+      // Export applies the SAME filters the user selected on-screen so the CSV
+      // matches the visible table (e.g. filtering by proyecto = bottura).
+      let exportFilters: Record<string, string> = { ...filtros };
+
       if (isPagosMensualesReport) {
         // Pagos Mensuales report requires the date range filter - use first/last day of selected months
         const fromMonth = dateRangeFilter.from;
@@ -1158,11 +1158,17 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
         throw new Error(response.error.message);
       }
 
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' });
+      // La Edge Function ahora devuelve un .xlsx (OOXML). supabase-js decodifica
+      // según Content-Type: si es el MIME xlsx llega ya como Blob; en otros casos
+      // envolvemos el buffer con el MIME correcto.
+      const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: XLSX_MIME });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${reporte.nombre_archivo}_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `${reporte.nombre_archivo}_${new Date().toISOString().split('T')[0]}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -1171,10 +1177,10 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
       await registrarExportacion('reportes', {
         id_reporte: reporte.id,
         nombre_reporte: reporte.nombre,
-        filtros_aplicados: {},
+        filtros_aplicados: exportFilters,
       });
 
-      toast({ title: "Éxito", description: "Reporte exportado correctamente (todos los datos)" });
+      toast({ title: "Éxito", description: "Reporte exportado correctamente" });
     } catch (error) {
       console.error('Export error:', error);
       toast({

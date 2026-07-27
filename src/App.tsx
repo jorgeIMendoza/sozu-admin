@@ -64,6 +64,7 @@ const Inmobiliarias = lazyRetry(() => import("./pages/admin/Inmobiliarias"));
 const Administradoras = lazyRetry(() => import("./pages/admin/Administradoras"));
 const Notarias = lazyRetry(() => import("./pages/admin/Notarias"));
 const Bancos = lazyRetry(() => import("./pages/admin/Bancos"));
+const SociosBancarios = lazyRetry(() => import("./pages/admin/SociosBancarios"));
 const CuentasSozu = lazyRetry(() => import("./pages/admin/CuentasSozu"));
 const Prospectos = lazyRetry(() => import("./pages/admin/Prospectos"));
 const Compradores = lazyRetry(() => import("./pages/admin/Compradores"));
@@ -145,6 +146,7 @@ const AgentPipeline = lazyRetry(() => import("./pages/admin/agent-portal/AgentPi
 const AgentComisiones = lazyRetry(() => import("./pages/admin/agent-portal/AgentComisiones"));
 const AgentPerfil = lazyRetry(() => import("./pages/admin/agent-portal/AgentPerfil"));
 const AgentProspectos = lazyRetry(() => import("./pages/admin/agent-portal/AgentProspectos"));
+const AgentProspectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/AgentProspectoDetalle"));
 const AgentUnidadesProyecto = lazyRetry(() => import("./pages/admin/agent-portal/AgentUnidadesProyecto"));
 const AgentProyectoDetalle = lazyRetry(() => import("./pages/admin/agent-portal/AgentProyectoDetalle"));
 
@@ -158,10 +160,12 @@ const ClientePropiedadPago = lazyRetry(() => import("./pages/admin/portal-client
 const ClienteDetallesTecnicos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDetallesTecnicos"));
 const ClienteDocumentos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteDocumentos"));
 const ClienteNotificaciones = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteNotificaciones"));
-const ClienteEnAdquisicion = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEnAdquisicion"));
-const ClientePatrimonio = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePatrimonio"));
+const ClientePropiedades = lazyRetry(() => import("./pages/admin/portal-cliente/ClientePropiedades"));
 const ClienteEstadoCuenta = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteEstadoCuenta"));
 const ClienteProductos = lazyRetry(() => import("./pages/admin/portal-cliente/ClienteProductos"));
+
+// Onboarding "Registrar mi propiedad" (público — Fase 1 mock)
+const RegistrarPropiedadPage = lazyRetry(() => import("./pages/public/RegistrarPropiedadPage"));
 
 // Portal Cobranza pages
 const CollectionDashboard = lazyRetry(() => import("./pages/admin/portal-cobranza/CollectionDashboard"));
@@ -272,6 +276,14 @@ const MedicionesPortales = lazyRetry(() => import("./pages/admin/portal-alta-dir
 const MedicionesMenus = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesMenusPage"));
 const MedicionesCtas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/MedicionesCtasPage"));
 
+// Portal Socio Bancario V1 (reencuadre: Resumen → Obra → Comercialización → Evidencia).
+// Las páginas Histórico/Cobranza/Ingresos-Egresos/Forecast quedan @deprecated (fuera
+// de scope / confidencial), sin ruta ni lazy import en el portal del banco.
+const SocioBancarioResumen = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioResumenPage"));
+const SocioBancarioVentasInventario = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioVentasInventarioPage"));
+const SocioBancarioExpedientes = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioExpedientesPage"));
+const SocioBancarioAvanceObra = lazyRetry(() => import("./pages/admin/portal-socio-bancario/SocioBancarioAvanceObraPage"));
+
 // Portal de Administración (módulo independiente, copia de Alta Dirección)
 const AdminDashboard            = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionDashboard })));
 const AdminCitas                = lazyRetry(() => import("./pages/admin/portal-administracion/index").then(m => ({ default: m.AdministracionCitas })));
@@ -311,6 +323,7 @@ const CondominioAuditoria     = lazyRetry(() => import("./pages/admin/portal-con
 const CondominioConfiguracion = lazyRetry(() => import("./pages/admin/portal-condominio/Configuracion"));
 const CondominioTitularidad       = lazyRetry(() => import("./features/titularidad/BandejaTitularidad"));
 const CondominioTitularidadDetalle = lazyRetry(() => import("./features/titularidad/DetalleTitularidad"));
+const CondominioPresupuesto        = lazyRetry(() => import("./features/presupuesto/PresupuestoPage"));
 
 // Portal Embajadores
 const GestionEmbajadores       = lazyRetry(() => import("./pages/admin/embajadores/GestionEmbajadores"));
@@ -345,15 +358,16 @@ const CrmExecutiveWeeklyDigest  = lazyRetry(() => import("./pages/admin/portal-c
 const CrmContacts          = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContacts })));
 const CrmContactDetail     = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmContactDetail })));
 const CrmDeals             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDeals })));
+const CrmDealDetail        = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmDealDetail })));
 const CrmAppointments      = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAppointments })));
 const CrmTasks             = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmTasks })));
-const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSequences })));
-const CrmRouting           = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmRouting })));
-const CrmAutomationRules   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAutomationRules })));
-const CrmEscalations       = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmEscalations })));
-const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmLeadIntelligence })));
-const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmAgentPerformance })));
-const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm").then(m => ({ default: m.CrmSalesOperations })));
+const CrmSequences         = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmSequences })));
+const CrmRouting           = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmRouting })));
+const CrmAutomationRules   = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmAutomationRules })));
+const CrmEscalations       = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmEscalations })));
+const CrmLeadIntelligence  = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmLeadIntelligence })));
+const CrmAgentPerformance  = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmAgentPerformance })));
+const CrmSalesOperations   = lazyRetry(() => import("./pages/admin/portal-crm/crm-advanced").then(m => ({ default: m.CrmSalesOperations })));
 
 // Portal CRM Sozu — Inteligencia de marketing
 const CrmCampaigns              = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmCampaigns })));
@@ -373,6 +387,7 @@ const CrmMarketingDevelopments  = lazyRetry(() => import("./pages/admin/portal-c
 const CrmMarketingFunnel        = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingFunnel })));
 const CrmMarketingCampaignMapping = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingCampaignMapping })));
 const CrmMarketingSyncJobs      = lazyRetry(() => import("./pages/admin/portal-crm/marketing").then(m => ({ default: m.CrmMarketingSyncJobs })));
+const MetaAdsModule             = lazyRetry(() => import("./pages/admin/portal-crm/meta-ads").then(m => ({ default: m.MetaAdsModule })));
 
 // Portal CRM Sozu — Inteligencia de ingresos
 const CrmExecutiveKpis     = lazyRetry(() => import("./pages/admin/portal-crm/revenue").then(m => ({ default: m.CrmExecutiveKpis })));
@@ -410,6 +425,7 @@ const CrmSettingsIntegrationChecklist = lazyRetry(() => import("./pages/admin/po
 const CrmSettingsOrganization         = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsOrganization })));
 const CrmSettingsDevelopments         = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsDevelopments })));
 const CrmSettingsPipelines            = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelines })));
+const CrmSettingsLeadStates           = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsLeadStates })));
 
 // Portal Bancos
 const BancosBandeja  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBandeja })));
@@ -417,6 +433,7 @@ const BancosPipeline = lazyRetry(() => import("./pages/admin/portal-bancos/index
 const BancosTablero  = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosTablero })));
 const BancosEquipo   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosEquipo })));
 const BancosBancos   = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosBancos })));
+const BancosNotarias = lazyRetry(() => import("./pages/admin/portal-bancos/index").then(m => ({ default: m.BancosNotarias })));
 
 const Registro = lazyRetry(() => import("./pages/public/Registro"));
 const RegistroInmobiliaria = lazyRetry(() => import("./pages/public/RegistroInmobiliaria"));
@@ -537,6 +554,7 @@ const App = () => (
                     <Route path="agent/pipeline" element={<AgentPipeline />} />
                     <Route path="agent/comisiones" element={<AgentComisiones />} />
                     <Route path="agent/prospectos" element={<AgentProspectos />} />
+                    <Route path="agent/prospectos/:id" element={<AgentProspectoDetalle />} />
                     <Route path="agent/perfil" element={<AgentPerfil />} />
                     <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                     <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
@@ -636,6 +654,7 @@ const App = () => (
                   <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
                   <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />
                   <Route path="/reservar/:apartadoId/confirmacion" element={<ConfirmacionApartadoPage />} />
+                  <Route path="/registrar-propiedad" element={<RegistrarPropiedadPage />} />
                   <Route path="/" element={<Navigate to="/login" replace />} />
                   <Route path="/admin" element={
                     <ProtectedRoute>
@@ -649,9 +668,10 @@ const App = () => (
                     <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                     <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
-                    <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                    <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                    <Route path="portal-cliente/en-adquisicion" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=adquisicion" replace />} />
                     <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
-                    <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                    <Route path="portal-cliente/patrimonio" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=patrimonio" replace />} />
                     <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                     <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
@@ -679,6 +699,7 @@ const App = () => (
                 {/* Public Routes */}
                 <Route path="/registro" element={<Registro />} />
                 <Route path="/registro-inmobiliaria" element={<RegistroInmobiliaria />} />
+                <Route path="/registrar-propiedad" element={<RegistrarPropiedadPage />} />
                 <Route path="/agentes" element={<AgentesLanding />} />
                 <Route path="/app-notaria/login" element={<AppNotariaLogin />} />
                 <Route path="/oferta/:offerId" element={<OfferPage />} />
@@ -734,6 +755,7 @@ const App = () => (
                   <Route path="administradoras" element={<Administradoras />} />
                   <Route path="notarias" element={<Notarias />} />
                   <Route path="bancos" element={<Bancos />} />
+                  <Route path="socios-bancarios" element={<SociosBancarios />} />
                   <Route path="cuentas-sozu" element={<CuentasSozu />} />
                   <Route path="prospectos" element={<Prospectos />} />
                   <Route path="compradores" element={<Compradores />} />
@@ -823,6 +845,7 @@ const App = () => (
                   <Route path="agent/pipeline" element={<AgentPipeline />} />
                   <Route path="agent/comisiones" element={<AgentComisiones />} />
                   <Route path="agent/prospectos" element={<AgentProspectos />} />
+                  <Route path="agent/prospectos/:id" element={<AgentProspectoDetalle />} />
                   <Route path="agent/perfil" element={<AgentPerfil />} />
                   <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
@@ -832,9 +855,10 @@ const App = () => (
                   <Route path="portal-cliente/historial-pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/pagos" element={<ClienteHistorialPagos />} />
                   <Route path="portal-cliente/estado-de-cuenta" element={<ClienteEstadoCuenta />} />
-                  <Route path="portal-cliente/en-adquisicion" element={<ClienteEnAdquisicion />} />
+                  <Route path="portal-cliente/propiedades" element={<ClientePropiedades />} />
+                  <Route path="portal-cliente/en-adquisicion" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=adquisicion" replace />} />
                   <Route path="portal-cliente/en-adquisicion/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
-                  <Route path="portal-cliente/patrimonio" element={<ClientePatrimonio />} />
+                  <Route path="portal-cliente/patrimonio" element={<Navigate to="/admin/portal-cliente/propiedades?filtro=patrimonio" replace />} />
                   <Route path="portal-cliente/patrimonio/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId" element={<ClientePropiedadDetalle />} />
                   <Route path="portal-cliente/propiedad/:cuentaId/detalles-tecnicos" element={<ClienteDetallesTecnicos />} />
@@ -952,6 +976,7 @@ const App = () => (
                   <Route path="portal-crm/ventas/contactos" element={<CrmContacts />} />
                   <Route path="portal-crm/ventas/contactos/:contactId" element={<CrmContactDetail />} />
                   <Route path="portal-crm/ventas/negocios" element={<CrmDeals />} />
+                  <Route path="portal-crm/ventas/negocios/:dealId" element={<CrmDealDetail />} />
                   <Route path="portal-crm/ventas/tareas" element={<CrmTasks />} />
                   <Route path="portal-crm/ventas/citas" element={<CrmAppointments />} />
                   <Route path="portal-crm/ventas/rendimiento-asesores" element={<CrmAgentPerformance />} />
@@ -967,7 +992,7 @@ const App = () => (
                   <Route path="portal-crm/marketing/atribucion"      element={<CrmAttribution />} />
                   <Route path="portal-crm/marketing/campanas"        element={<CrmCampaigns />} />
                   <Route path="portal-crm/marketing/creativos"        element={<CrmCreatives />} />
-                  <Route path="portal-crm/marketing/meta"             element={<CrmMetaAds />} />
+                  <Route path="portal-crm/marketing/meta"             element={<MetaAdsModule />} />
                   <Route path="portal-crm/marketing/google"           element={<CrmGoogleAds />} />
                   <Route path="portal-crm/marketing/desarrollos"     element={<CrmMarketingDevelopments />} />
                   <Route path="portal-crm/marketing/embudo"           element={<CrmMarketingFunnel />} />
@@ -1013,6 +1038,7 @@ const App = () => (
                   <Route path="portal-crm/configuracion/usuarios"                 element={<CrmSettingsUsers />} />
                   <Route path="portal-crm/configuracion/desarrollos"          element={<CrmSettingsDevelopments />} />
                   <Route path="portal-crm/configuracion/pipelines"             element={<CrmSettingsPipelines />} />
+                  <Route path="portal-crm/configuracion/estados-lead"          element={<CrmSettingsLeadStates />} />
                   {/* rutas antiguas (conservadas) */}
                   <Route path="portal-crm/configuracion/roles"                       element={<CrmSettingsRoles />} />
                   <Route path="portal-crm/configuracion/etapas-pipeline"             element={<CrmSettingsPipelineStages />} />
@@ -1028,6 +1054,7 @@ const App = () => (
                   <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
                   <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
                   <Route path="portal-bancos/bancos"   element={<BancosBancos />} />
+                  <Route path="portal-bancos/notarias" element={<BancosNotarias />} />
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
@@ -1057,6 +1084,18 @@ const App = () => (
                   <Route path="portal-alta-direccion/mediciones/portales" element={<MedicionesPortales />} />
                   <Route path="portal-alta-direccion/mediciones/menus" element={<MedicionesMenus />} />
                   <Route path="portal-alta-direccion/mediciones/ctas" element={<MedicionesCtas />} />
+
+                  {/* Portal Socio Bancario V1 — Resumen → Obra → Comercialización → Evidencia */}
+                  <Route path="portal-socio-bancario" element={<Navigate to="/admin/portal-socio-bancario/resumen" replace />} />
+                  <Route path="portal-socio-bancario/resumen" element={<SocioBancarioResumen />} />
+                  <Route path="portal-socio-bancario/avance-obra" element={<SocioBancarioAvanceObra />} />
+                  <Route path="portal-socio-bancario/ventas-inventario" element={<SocioBancarioVentasInventario />} />
+                  <Route path="portal-socio-bancario/expedientes" element={<SocioBancarioExpedientes />} />
+                  {/* Rutas deprecadas (confidencial / fuera de scope V1): historico-comercial,
+                      analisis-cobranza, ingresos-egresos, forecast-ingresos → removidas del router.
+                      Catch-all: cualquier subruta obsoleta (bookmarks/menús viejos en BD) redirige
+                      al Resumen en vez de un 404 duro. NO reexpone las páginas confidenciales. */}
+                  <Route path="portal-socio-bancario/*" element={<Navigate to="/admin/portal-socio-bancario/resumen" replace />} />
 
                  {/* Portal de Administración (clon de Alta Dirección) */}
                  <Route path="portal-administracion/dashboard" element={<AdminDashboard />} />
@@ -1095,6 +1134,7 @@ const App = () => (
                  <Route path="portal-condominio/titularidad"      element={<CondominioTitularidad />} />
                  <Route path="portal-condominio/titularidad/:id"  element={<CondominioTitularidadDetalle />} />
                  <Route path="portal-condominio/tesoreria"        element={<CondominioTesoreria />} />
+                 <Route path="portal-condominio/presupuesto"      element={<CondominioPresupuesto />} />
                  <Route path="portal-condominio/amenidades"       element={<CondominioAmenidades />} />
                  <Route path="portal-condominio/auditoria"        element={<CondominioAuditoria />} />
                  <Route path="portal-condominio/configuracion"    element={<CondominioConfiguracion />} />

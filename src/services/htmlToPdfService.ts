@@ -1400,7 +1400,7 @@ class HTMLToPDFService {
   
   private async fetchBodegas(propertyId: number): Promise<any[]> {
     console.log('Fetching bodegas for property:', propertyId);
-    
+
     const { data, error } = await supabase
       .from('bodegas')
       .select(`
@@ -1408,7 +1408,8 @@ class HTMLToPDFService {
         nombre,
         m2,
         ubicacion,
-        es_incluido
+        es_incluido,
+        id_producto
       `)
       .eq('id_propiedad', propertyId)
       .eq('activo', true);
@@ -1418,7 +1419,24 @@ class HTMLToPDFService {
       return [];
     }
 
-    return data || [];
+    const rows = data || [];
+
+    // Costo de cada bodega = productos_servicios.precio_lista (precio/m²) × m2.
+    // Se usa para sumar el valor de las bodegas incluidas a la base del precio final.
+    const productoIds = [...new Set(rows.map((b: any) => b.id_producto).filter((v: any) => v != null))];
+    const precioByProducto: Record<number, number> = {};
+    if (productoIds.length > 0) {
+      const { data: prods } = await supabase
+        .from('productos_servicios')
+        .select('id, precio_lista')
+        .in('id', productoIds);
+      for (const p of (prods as any[]) || []) precioByProducto[p.id] = Number(p.precio_lista ?? 0);
+    }
+
+    return rows.map((b: any) => {
+      const precioM2 = b.id_producto != null ? precioByProducto[b.id_producto] ?? 0 : 0;
+      return { ...b, costo: precioM2 * Number(b.m2 ?? 0) };
+    });
   }
 
   private async fetchProductDetails(productId: number, propertyId?: number): Promise<any> {

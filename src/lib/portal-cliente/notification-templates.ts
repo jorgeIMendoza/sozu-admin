@@ -104,7 +104,7 @@ Han pasado 5 días desde que pre-apartaste {{propertyLabel}}. Te quedan {{daysRe
 
 {{agentFirstName}} aquí. Vi que llevas 5 días con tu pre-apartado de {{propertyLabel}}. Solo paso a saludarte.
 
-¿Hay alguna duda con la que te pueda ayudar? Sin compromiso — solo estoy aquí.
+¿Hay alguna duda con la que te pueda ayudar? Sin compromiso - solo estoy aquí.
 
 Te quedan {{daysRemaining}} días.`,
       quickReplies: ["Tengo una duda", "Quiero visitar la obra", "Todo bien por ahora"],
@@ -127,7 +127,7 @@ Solo quedan 5 días en tu pre-apartado de {{propertyLabel}}. Es un buen momento 
 Tus \${{amountMXN}} retenidos se aplican directamente al enganche. {{agentFirstName}} te guía con los documentos (INE, comprobante de domicilio, RFC) y la firma del contrato preliminar.
 
 **Si necesitas más tiempo**
-Conversemos. A veces hay opciones que no consideraste — un esquema de pago distinto, una visita guiada, hablar con quien decide contigo.
+Conversemos. A veces hay opciones que no consideraste - un esquema de pago distinto, una visita guiada, hablar con quien decide contigo.
 
 **Si decidiste no continuar**
 Está bien. Puedes cancelar desde tu panel cuando quieras y procesamos el reembolso completo en 3-5 días hábiles.
@@ -141,7 +141,7 @@ No hay decisión incorrecta. Solo nos interesa que sea la decisión correcta **p
 
 Te quedan 5 días en tu pre-apartado de {{propertyLabel}}. ¿Cómo estás con la decisión?
 
-Sin presión — solo para que lo tengas presente. Estoy aquí para lo que necesites.
+Sin presión - solo para que lo tengas presente. Estoy aquí para lo que necesites.
 
 – {{agentFirstName}}`,
       quickReplies: ["Quiero avanzar", "Necesito más info", "Voy a cancelar"],
@@ -154,7 +154,7 @@ Sin presión — solo para que lo tengas presente. Estoy aquí para lo que neces
     scheduledOffsetMinutes: 14 * 24 * 60,
     channels: ["email", "whatsapp"],
     email: {
-      subject: "Mañana vence tu pre-apartado — ¿avanzamos o cerramos?",
+      subject: "Mañana vence tu pre-apartado - ¿avanzamos o cerramos?",
       preheader: "Último aviso · Decisión flexible hasta el último minuto",
       body: `Hola {{firstName}},
 

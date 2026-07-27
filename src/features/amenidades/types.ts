@@ -1,8 +1,55 @@
 // =============================================================
-// Portal Condominio · Amenidades — Reservas de espacios reservables
-// Modelo de datos (mock). Solo UI — sin STP/RLS reales todavía.
-// Todo punto de integración se marca `// SWAP POINT:`.
+// Portal Condominio · Amenidades — modelo de datos (mock)
+// UN solo catálogo de `Amenidad`; `modalidadUso` decide si enciende el motor
+// de reservas. Solo UI — sin STP/RLS/Storage reales. Cada integración: // SWAP POINT.
 // =============================================================
+
+// ── Catálogo unificado ─────────────────────────────────────
+
+export type ModalidadUso = "libre" | "reservable";
+
+export type TipoAmenidad =
+  | "sala_juntas" | "sala_tv" | "asador" | "cocina_equipada"
+  | "gimnasio" | "lobby" | "roof_garden" | "sky_bar" | "sala_juegos"
+  | "coworking" | "area_comercial" | "parque" | "otro";
+
+export type ModeloCobro = "gratuito" | "por_franja" | "por_uso" | "por_hora";
+
+export interface MediaItem {
+  id: string;
+  tipo: "imagen" | "video";
+  url: string;              // SWAP POINT: Supabase Storage. En mock, placeholder/URL local.
+  titulo?: string;
+  orden: number;
+  esPortada?: boolean;
+}
+
+export interface ConfiguracionReserva {
+  modeloCobro: ModeloCobro;
+  tarifa: number;                 // MXN (0 si gratuito)
+  depositoGarantia: number;       // MXN; 0 = sin depósito
+  franjasHorarias: string[];      // ["08:00-12:00", ...] resolución de bloque, NO por minuto
+  capacidad: number;
+  clabeStp: string;               // SWAP POINT: CLABE STP real por espacio
+  requiereValidacionAdmin: boolean; // default true
+  umbralMorosidadDias: number | null;
+}
+
+export interface Amenidad {
+  id: string;
+  condominioId: string;       // "margot" — NUNCA default a 1
+  nombre: string;
+  tipo: TipoAmenidad;
+  ubicacion: string;
+  descripcion: string;
+  media: MediaItem[];
+  modalidadUso: ModalidadUso;
+  reserva: ConfiguracionReserva | null; // null si modalidadUso === "libre"
+  activo: boolean;            // soft-disable, NUNCA hard-delete
+  auditoria: EntradaAuditoria[];
+}
+
+// ── Motor de reservas (preservado) ─────────────────────────
 
 // Estado del SLOT (espacio + fecha + franja), no de la amenidad.
 export type EstadoSlot =
@@ -12,16 +59,23 @@ export type EstadoSlot =
   | "reservada" // pago conciliado por STP; confirmada
   | "mantenimiento"; // bloqueado por admin, no reservable
 
-export type TipoEspacio = "sala_juntas" | "sala_tv" | "asador" | "cocina_equipada";
+// Alias de compatibilidad: el motor tipa espacios con el conjunto amplio.
+export type TipoEspacio = TipoAmenidad;
 
+/**
+ * Vista que consume el motor de reservas (calendario, bandejas, SlotModal).
+ * NO se persiste: se DERIVA del catálogo (`amenidades` reservable && activo)
+ * en el store. Cambiar la tarifa/franjas de una `Amenidad.reserva` se refleja
+ * aquí para reservas NUEVAS; las confirmadas guardan su propio snapshot.
+ */
 export interface EspacioReservable {
-  id: string;
-  nombre: string; // "Sala de Juntas 1", "Asador 3", "Cocina Equipada A"
+  id: string;                // === Amenidad.id
+  nombre: string;
   tipo: TipoEspacio;
   capacidad: number;
   cuotaRenta: number; // MXN; 0 = sin costo
   depositoGarantia: number; // MXN; 0 = sin depósito
-  requierePago: boolean; // derivado: cuotaRenta + deposito > 0
+  requierePago: boolean; // derivado: modeloCobro !== gratuito && cuota+deposito > 0
   franjasHorarias: string[]; // ["08:00-12:00", ...]
   clabeStp: string; // CLABE STP dedicada; tabular-nums // SWAP POINT
   activo: boolean;
@@ -31,14 +85,14 @@ export interface EntradaAuditoria {
   id: string;
   timestamp: string; // ISO
   usuario: string;
-  accion: string; // "Solicitud creada", "Reserva validada", "Pago conciliado", ...
+  accion: string; // "Solicitud creada", "Reserva validada", "Amenidad creada", ...
   detalle: string;
 }
 
 export interface Reserva {
   id: string;
   codigoReserva: string | null; // se genera al pasar a 'por_pagar'; tabular-nums
-  espacioId: string;
+  espacioId: string;            // === Amenidad.id
   fecha: string; // ISO date (YYYY-MM-DD)
   franja: string; // una de franjasHorarias
   estado: EstadoSlot; // estado del slot para esa fecha/franja
@@ -48,7 +102,7 @@ export interface Reserva {
   // Elegibilidad (lo que valida el humano)
   unidadAlCorriente: boolean; // ¿mantenimiento al corriente? // SWAP POINT
   saldoVencidoDias: number; // para regla de morosidad
-  // Pago
+  // Pago (snapshot al crear la solicitud)
   cuota: number;
   deposito: number;
   montoTotal: number;

@@ -1,6 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { Badge } from "@/components/ui/badge";
+import { OptImg } from "@/components/ui/opt-img";
 import { CheckCircle2, User } from "lucide-react";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 
@@ -31,7 +32,7 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
         <div className="fixed top-3 right-4 z-50">
           <Badge
             variant="outline"
-            className="border-destructive/30 text-destructive gap-1 bg-white shadow-sm"
+            className="border-destructive/30 text-destructive gap-1 bg-card shadow-sm"
           >
             <span className="h-2 w-2 rounded-full bg-destructive inline-block" />
             No verificado
@@ -39,18 +40,21 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
         </div>
       )}
 
-      <div className="sticky top-0 lg:top-16 z-10 bg-[hsl(var(--agent-bg))]">
+      <div className="sticky top-0 lg:top-16 z-10 bg-background">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             {showAgentName && (
               photoUrl ? (
-                <img
+                <OptImg
                   src={photoUrl}
+                  w={72}
+                  h={72}
+                  resize="cover"
                   alt={nombreCompleto}
                   className="h-9 w-9 rounded-full object-cover shrink-0"
                 />
               ) : (
-                <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary))] flex items-center justify-center shrink-0">
+                <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center shrink-0">
                   {initials ? (
                     <span className="text-sm font-bold text-white leading-none">{initials}</span>
                   ) : (
@@ -61,10 +65,10 @@ export const AgentPortalHeader = ({ title, children, showAgentName = false }: Ag
             )}
             <div>
               {showAgentName && (
-                <p className="text-sm font-medium text-[hsl(var(--agent-text))]">{nombreCompleto}</p>
+                <p className="text-sm font-medium text-foreground">{nombreCompleto}</p>
               )}
               {title ? (
-                <h1 className="text-xl font-bold text-[hsl(var(--agent-text))]">{title}</h1>
+                <h1 className="text-xl font-bold text-foreground">{title}</h1>
               ) : <div />}
             </div>
           </div>

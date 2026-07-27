@@ -11,8 +11,9 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Plus, User, Building2, Calendar, FileText, Lock, Mail, Search, X, Link2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Lock, Mail, Search, EyeOff, Plus, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { ActionButton } from "@/components/ui/action-button";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -244,7 +245,7 @@ const AgentPipeline = () => {
   const nonExpiredOfertas = useMemo(() => ofertas.filter((o: any) => o.stage !== 'expiradas'), [ofertas]);
 
   const displayOfertas = useMemo(() => {
-    let result = activeStage === 'all' ? nonExpiredOfertas : (grouped[activeStage] || []);
+    let result = activeStage === 'all' ? ofertas : (grouped[activeStage] || []);
     if (searchProspecto.trim()) {
       const q = searchProspecto.trim().toLowerCase();
       result = result.filter((o: any) => (o.lead_nombre || "").toLowerCase().includes(q));
@@ -264,87 +265,81 @@ const AgentPipeline = () => {
   };
 
   return (
-    <div className="pb-24">
-      <AgentPortalHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[26px] font-extrabold tracking-[-0.5px] text-[#171A1D]">Pipeline</h1>
-            {!isLoading && (
-              <p className="mt-1 text-[12.5px] font-medium tabular-nums text-[#9AA3AD]">
-                {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} en proceso · Últimos 30 días
-              </p>
-            )}
-          </div>
-          {pipelinePerms.canCreate && (
-            isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-[#9AA3AD]">
-                <Lock className="h-3.5 w-3.5" />
-                Completa tu capacitación
-              </span>
-            ) : (
-              <button
-                onClick={() => {
-                  track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
-                  navigate('/admin/agent/inventario/unidades?openFilters=true');
-                }}
-                className="flex items-center gap-1.5 rounded-[10px] bg-[#16A45E] px-4 py-2.5 text-[13px] font-bold text-white transition-transform active:scale-95"
-              >
-                <Plus className="h-4 w-4" />
-                Nueva oferta
-              </button>
-            )
-          )}
-        </div>
-      </AgentPortalHeader>
+    <div >
+      <AgentPortalHeader />
 
-      {/* Stage Filters */}
-      <ScrollArea className="mx-auto w-full max-w-[1000px] px-4 pb-3">
-        <div className="flex gap-2 py-1">
-          {STAGES.map(stage => {
-            const count = stage.key === 'all' ? nonExpiredOfertas.length : (grouped[stage.key]?.length || 0);
-            const isActive = activeStage === stage.key;
-            if (stage.key !== 'all' && count === 0) return null;
-            return (
-              <button
-                key={stage.key}
-                onClick={() => {
-                  track({ page: 'agent_pipeline', elementId: 'btn_filtro_etapa', elementLabel: stage.label, metadata: { etapa: stage.key } });
-                  setActiveStage(stage.key);
-                }}
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-colors tabular-nums",
-                  isActive
-                    ? "border-[#16A45E] bg-[#16A45E] text-white"
-                    : "border-[#ECEEF0] bg-white text-[#4B5563] hover:border-[#D6DBDF]"
-                )}
-              >
-                {stage.label} {count > 0 && `(${count})`}
-              </button>
-            );
-          })}
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+      {/* Toolbar */}
+      <div className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-between gap-3 pt-1 pb-3">
+        {!isLoading ? (
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+            {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} · últimos 30 días
+          </p>
+        ) : <span />}
+        {pipelinePerms.canCreate && (
+          isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
+            <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground/70">
+              <Lock className="h-3.5 w-3.5" /> Completa tu capacitación
+            </span>
+          ) : (
+            <ActionButton
+              icon={Plus}
+              onClick={() => {
+                track({ page: 'agent_pipeline', elementId: 'btn_nueva_oferta', elementLabel: 'Nueva oferta' });
+                navigate('/admin/agent/inventario/unidades?openFilters=true');
+              }}
+            >
+              Nueva oferta
+            </ActionButton>
+          )
+        )}
+      </div>
 
-      {/* Prospect search */}
-      <div className="mx-auto max-w-[1000px] px-4 pb-2">
-        <div className="relative flex items-center">
-          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#9AA3AD]" />
+      {/* Búsqueda (izquierda) + filtros de etapa (derecha) en una fila */}
+      <div className="mx-auto flex max-w-[1040px] items-center gap-3 pb-3">
+        <div className="relative flex w-full max-w-[240px] shrink-0 items-center">
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground/70" />
           <Input
             placeholder="Buscar prospecto…"
             value={searchProspecto}
             onChange={(e) => setSearchProspecto(e.target.value)}
-            className="h-11 rounded-[10px] border-[#ECEEF0] bg-white pl-9 text-[13px] shadow-none focus-visible:ring-[#16A45E]/30"
+            className="h-10 rounded-md border-border bg-card pl-9 text-sm shadow-none focus-visible:ring-primary/30"
           />
         </div>
+        <ScrollArea className="min-w-0 flex-1">
+          <div className="flex w-max gap-1 rounded-lg bg-muted p-1">
+            {STAGES.map(stage => {
+              const count = stage.key === 'all' ? ofertas.length : (grouped[stage.key]?.length || 0);
+              const isActive = activeStage === stage.key;
+              if (stage.key !== 'all' && count === 0) return null;
+              return (
+                <button
+                  key={stage.key}
+                  onClick={() => {
+                    track({ page: 'agent_pipeline', elementId: 'btn_filtro_etapa', elementLabel: stage.label, metadata: { etapa: stage.key } });
+                    setActiveStage(stage.key);
+                  }}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors tabular-nums",
+                    isActive
+                      ? "bg-card text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {stage.label} {count > 0 && `(${count})`}
+                </button>
+              );
+            })}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </div>
 
       {/* Banner modo presentación */}
       {presentationMode && (
-        <div className="mx-auto mb-2 max-w-[1000px] px-4">
-          <div className="flex items-center gap-2.5 rounded-xl border border-[#EBC089] bg-[#FBE3CE] px-4 py-2.5">
-            <EyeOff className="h-4 w-4 shrink-0 text-[#B5601C]" />
-            <span className="text-[12px] font-semibold text-[#B5601C]">
+        <div className="mx-auto mb-2 max-w-[1040px]">
+          <div className="flex items-center gap-2.5 rounded-md border border-amber-300 bg-orange-100 px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-orange-700" />
+            <span className="text-xs font-semibold text-orange-700">
               Modo presentación · nombres de prospecto y montos ocultos. Desactívalo arriba para verlos.
             </span>
           </div>
@@ -352,13 +347,13 @@ const AgentPipeline = () => {
       )}
 
       {/* Offer Cards */}
-      <div className="mx-auto max-w-[1000px] space-y-2.5 px-4">
+      <div className="mx-auto max-w-[1040px] space-y-2.5">
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--agent-muted))]" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
           </div>
         ) : displayOfertas.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[hsl(var(--agent-text-secondary))]">
+          <div className="text-center py-12 text-sm text-muted-foreground">
             No hay ofertas en esta etapa
           </div>
         ) : (
@@ -400,20 +395,25 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     : `O-${String(oferta.id).padStart(6, '0')}`;
 
   const unitLabel = oferta.is_producto
-    ? `${oferta.producto_nombre || 'Producto'} (${oferta.propiedad_nombre})`
+    ? `${oferta.producto_nombre || 'Producto'} · ${oferta.propiedad_nombre}`
     : (oferta.proyecto_nombre
-      ? `${oferta.proyecto_nombre} - ${oferta.propiedad_nombre}`
+      ? `${oferta.proyecto_nombre} · ${oferta.propiedad_nombre}`
       : oferta.propiedad_nombre);
 
   const cuentaTipo = oferta.is_producto ? 'Producto' : 'Propiedad';
   const hasUrl = !!oferta.url;
+  const ccLabel = oferta.cuenta_cobranza_id
+    ? formatCuentaCobranzaId(oferta.cuenta_cobranza_id, cuentaTipo as any)
+    : '';
 
-  const [apartadoDialogOpen, setApartadoDialogOpen] = useState(false);
-  const [apartadoEmail, setApartadoEmail] = useState("");
-  const [sendingApartado, setSendingApartado] = useState(false);
+  const subParts = [mask(oferta.lead_nombre), oferta.proyecto_nombre, ccLabel].filter(Boolean);
 
-  // Botón "Enviar" original - envía PDF al email del lead ya registrado
-  const handleSendEmail = async (e: React.MouseEvent) => {
+  const genDate = oferta.fecha_generacion ? new Date(oferta.fecha_generacion) : null;
+  const venceDate = genDate ? new Date(genDate) : null;
+  if (venceDate) venceDate.setDate(venceDate.getDate() + 5);
+
+  // Reenviar - envía PDF al email del lead ya registrado
+  const handleReenviar = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasUrl) {
       toast({
@@ -431,198 +431,78 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
     });
   };
 
-  // Botón "Apartar" nuevo - captura email → crea apartado_provisional → envía PDF + link
-  const handleOpenApartado = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasUrl) {
-      toast({
-        title: "PDF no disponible",
-        description: "Descarga la oferta primero para generar el PDF.",
-        duration: 5000,
-      });
-      return;
-    }
-    setApartadoEmail("");
-    setApartadoDialogOpen(true);
-  };
-
-  const handleConfirmApartado = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const trimmedEmail = apartadoEmail.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      toast({ title: "Correo inválido", description: "Verifica el formato del correo.", duration: 4000 });
-      return;
-    }
-    setSendingApartado(true);
-    try {
-      const { data: apartado, error: insertError } = await (supabase as any)
-        .from("reservaciones")
-        .insert({ email: trimmedEmail, id_oferta: oferta.id })
-        .select("id")
-        .single();
-
-      if (insertError || !apartado) throw new Error("Error creando apartado");
-
-      const reservationLink = `${window.location.origin}/reservar/${apartado.id}`;
-
-      // Enviar PDF + link de apartado (fire-and-forget - el servicio muestra su propio toast)
-      import('@/services/offerEmailService').then(({ sendMultipleOffersEmailDirect }) => {
-        sendMultipleOffersEmailDirect({
-          offerIds: [oferta.id],
-          propertyNumber: oferta.propiedad_nombre || '',
-          recipientEmail: trimmedEmail,
-          reservationLink,
-        });
-      });
-
-      toast({
-        title: "Reservación creada",
-        description: `Link enviado a ${trimmedEmail} - ${reservationLink}`,
-        duration: 8000,
-      });
-      setApartadoDialogOpen(false);
-    } catch {
-      toast({ title: "Error", description: "No se pudo crear la reservación. Intenta de nuevo.", duration: 4000 });
-    } finally {
-      setSendingApartado(false);
-    }
-  };
-
   return (
-    <div onClick={onClick} className="relative cursor-pointer rounded-2xl border border-[#ECEEF0] bg-white p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-shadow hover:shadow-[0_6px_18px_rgba(20,30,25,0.08)]">
-      {/* Overlay: captura email para apartado provisional */}
-      {apartadoDialogOpen && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute inset-0 rounded-xl bg-white z-10 flex flex-col p-3.5 gap-3"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold text-gray-700">Correo del prospecto</p>
-            <button
-              onClick={(e) => { e.stopPropagation(); setApartadoDialogOpen(false); }}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+    <div
+      onClick={onClick}
+      className="cursor-pointer rounded-md border border-border bg-card p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-border"
+    >
+      {/* Row 1: label + chip / estado */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-primary">Oferta: {ofertaLabel}</span>
+          {oferta.inmobiliaria_nombre && (
+            <span
+              className={cn(
+                "rounded-md px-2 py-0.5 text-xs font-semibold",
+                oferta.inmobiliaria_nombre === 'Interno'
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-primary/10 text-primary"
+              )}
             >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <p className="text-[10px] text-gray-400 -mt-1 leading-snug">
-            Se enviará PDF + link de reservación a este correo.
-          </p>
-          <input
-            autoFocus
-            type="email"
-            value={apartadoEmail}
-            onChange={(e) => setApartadoEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); handleConfirmApartado(e as any); }
-              if (e.key === "Escape") { e.stopPropagation(); setApartadoDialogOpen(false); }
-            }}
-            placeholder="email@cliente.com"
-            disabled={sendingApartado}
-            className="w-full h-9 px-2.5 text-[12px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-colors disabled:opacity-50"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); setApartadoDialogOpen(false); }}
-              disabled={sendingApartado}
-              className="flex-1 h-8 rounded-lg text-[11px] font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-40"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleConfirmApartado}
-              disabled={!apartadoEmail.trim() || sendingApartado}
-              className="flex-1 h-8 rounded-lg text-[11px] font-semibold bg-[#16A45E] text-white disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
-            >
-              {sendingApartado ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
-              {sendingApartado ? "Creando…" : "Enviar link"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] font-bold text-[#0E7A45]">
-            Oferta: {ofertaLabel}
-          </span>
-          <Badge className={cn("text-[10px] shrink-0 border-0", stageInfo.color)}>
-            {stageInfo.label}
-          </Badge>
-        </div>
-
-        <p className="truncate text-[14px] font-bold text-[#171A1D]">
-          {unitLabel}
-        </p>
-
-        <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
-          <User className="h-3 w-3 shrink-0" />
-          <span className="truncate">{mask(oferta.lead_nombre)}</span>
-        </div>
-
-        {oferta.inmobiliaria_nombre && (
-          <div className="flex items-center gap-1.5 text-xs">
-            <Building2 className="h-3 w-3 shrink-0 text-[hsl(var(--agent-text-secondary))]" />
-            <span className={cn("truncate font-medium", oferta.inmobiliaria_nombre === 'Interno' ? 'text-orange-600' : 'text-[hsl(var(--agent-primary))]')}>
               {oferta.inmobiliaria_nombre}
             </span>
-          </div>
-        )}
-
-        {oferta.cuenta_cobranza_id && (
-          <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--agent-text-secondary))]">
-            <FileText className="h-3 w-3 shrink-0" />
-            <span>{formatCuentaCobranzaId(oferta.cuenta_cobranza_id, cuentaTipo as any)}</span>
-          </div>
-        )}
-
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#F2F4F5] pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {oferta.precio != null && oferta.precio > 0 && (
-              <span className="mr-1 text-[14px] font-extrabold tabular-nums text-[#171A1D]">
-                {mask(formatCurrency(oferta.precio))}
-              </span>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
-              title="Ver oferta pública"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ECEEF0] px-3 py-1.5 text-[12px] font-semibold text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Ver
-            </button>
-            <button
-              onClick={handleSendEmail}
-              title={hasUrl ? 'Enviar oferta por correo' : 'Descarga la oferta primero'}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-colors",
-                hasUrl
-                  ? "border-[#ECEEF0] text-[#4B5563] hover:bg-[#F6F7F8]"
-                  : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
-              )}
-            >
-              <Mail className="h-3.5 w-3.5" />
-              Enviar
-            </button>
-            <button
-              onClick={handleOpenApartado}
-              title={hasUrl ? 'Reservar unidad - envía PDF + link de reservación' : 'Descarga la oferta primero'}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-bold transition-colors",
-                hasUrl
-                  ? "border-[#D7EFE1] bg-[#EAF6F0] text-[#0E7A45] hover:bg-[#DDF0E6]"
-                  : "border-[#ECEEF0] text-[#9AA3AD] cursor-not-allowed"
-              )}
-            >
-              <Link2 className="h-3.5 w-3.5" />
-              Reservar
-            </button>
-          </div>
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium tabular-nums text-[#9AA3AD]">
-            <Calendar className="h-3 w-3" />
-            {format(new Date(oferta.fecha_generacion), 'dd MMM yyyy', { locale: es })}
-          </span>
+          )}
         </div>
+        <Badge className={cn("shrink-0 border-0 text-xs", stageInfo.color)}>
+          {stageInfo.label}
+        </Badge>
+      </div>
+
+      {/* Row 2: title + price */}
+      <div className="mt-1.5 flex items-start justify-between gap-3">
+        <p className="truncate text-base font-bold text-foreground">{unitLabel}</p>
+        {oferta.precio != null && oferta.precio > 0 && (
+          <span className="shrink-0 text-base font-bold tabular-nums text-foreground">
+            {mask(formatCurrency(oferta.precio))}
+          </span>
+        )}
+      </div>
+
+      {/* Row 3: subtitle */}
+      {subParts.length > 0 && (
+        <p className="mt-1 truncate text-xs font-medium text-muted-foreground/70">
+          {subParts.join(' · ')}
+        </p>
+      )}
+
+      {/* Row 4: dates */}
+      {genDate && (
+        <p className="mt-1 text-xs font-medium tabular-nums text-muted-foreground/70">
+          Generada: {format(genDate, 'dd MMM yyyy', { locale: es })}
+          {venceDate && `  ·  Vence: ${format(venceDate, 'dd MMM yyyy', { locale: es })}`}
+        </p>
+      )}
+
+      {/* Footer: acciones */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+        <button
+          onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
+        >
+          Oferta digital <ExternalLink className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={handleReenviar}
+          title={hasUrl ? 'Reenviar oferta por correo' : 'Descarga la oferta primero'}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold",
+            hasUrl
+              ? "border-border text-muted-foreground hover:bg-muted"
+              : "border-border text-muted-foreground/70 cursor-not-allowed"
+          )}
+        >
+          <Mail className="h-3.5 w-3.5" /> Reenviar
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, Fragment } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -10,16 +10,20 @@ import {
   Mail, Phone, Save, GitBranch, Zap, TriangleAlert, Plus, Search,
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
-  Calendar, ChevronRight, Check, ChevronDown, Download, Settings2, Upload, Loader2,
-  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
-  Image as ImageIcon, Link as LinkIcon,
+  Calendar, ChevronRight, ChevronLeft, Check, ChevronDown, Download, Settings2, Upload, Loader2,
+  MoreHorizontal, Pencil, Trash2, Video, MapPin, Building2, Store, ExternalLink, Clock, Users,
+  Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid, GripVertical,
+  Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
+import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
+import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
 import { useCrmOrgId } from "@/hooks/useCrmOrgId";
-import { PageHeader, EmptyState, ComingSoon } from "@/components/admin/portal-crm/ui";
+import { PageHeader, EmptyState, ComingSoon, ARow, DField } from "@/components/admin/portal-crm/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,14 +47,50 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { isToday, isPast, isFuture, parseISO, format as fmtDateFns, addDays, addWeeks, addMonths, addYears } from "date-fns";
 import {
   leadStatusLabel, lifecycleLabel, leadScoreColor, relTime, fmtDate,
-  fmtDateTime, fmtMXN, stageColor, DEAL_STAGES, apptStatusLabel,
-  taskStatusLabel, TASK_STATUS, APPT_STATUS, type DealStage,
+  fmtDateTime, fmtMXN, DEAL_STAGES,
+  taskStatusLabel, TASK_STATUS, type DealStage,
 } from "@/lib/crm-lib";
+import {
+  fmtMoneda, stripHtml, dealInitials, etapaColorClasses,
+  advanceByRecurrence, fmtDueDateTime, fmtCitaWhen,
+  TIPO_NEGOCIO_OPTS, PRIORIDAD_META,
+} from "@/lib/crm-format";
+import {
+  META_LEAD_STATUSES, useLeadStates, fetchCrmCategorias,
+  fetchCrmOwners, type CrmOwner,
+} from "@/hooks/useCrmCatalogos";
+import {
+  PERSONA_EMAIL_RE, PERSONA_PHONE_RE, MSG_TELEFONO_INVALIDO,
+  MSG_EMAIL_INVALIDO, mensajeErrorContacto,
+} from "@/lib/crm-validaciones";
+import {
+  CRM_ATTACH_BUCKET, classifyAttachment, humanFileSize,
+  saveNoteAttachments, fetchNoteAttachments, NoteAttachmentsStrip,
+  type AttachKind, type PendingAttachment, type NoteAttachment,
+} from "./crm-adjuntos";
+import { InlineNoteForm, NoteCard, NoteDialog } from "./crm-notas";
+import {
+  TaskDialog, CitaDialog, TaskActivityCard, regenerateRecurringTask,
+  NewGlobalCitaDialog, CitaPreviewSheet, NewGlobalTaskDialog,
+  CITA_TYPE_META, CITA_STATUS_META, CITA_STATUS_ORDER,
+  TASK_TYPE_META, TASK_PRIORITY_META, RECURRENCE_LABEL,
+  type GlobalCita,
+} from "./crm-tareas-citas";
+import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
+import {
+  DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
+  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL,
+} from "./crm-negocios";
+import { CargaMasivaDialog } from "./crm-carga-masiva";
 import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
 } from "@/lib/crm-lead-scoring";
@@ -71,6 +111,7 @@ import { TextStyle as TextStyleExt } from "@tiptap/extension-text-style";
 
 type ColumnId =
   | "name"
+  | "categoria"
   | "email"
   | "phone"
   | "lead_status"
@@ -90,6 +131,7 @@ type ColumnConfig = { id: ColumnId; label: string; visible: boolean };
 
 const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "name", label: "Nombre", visible: true },
+  { id: "categoria", label: "Categoría", visible: true },
   { id: "email", label: "Correo", visible: true },
   { id: "phone", label: "Número teléfono", visible: true },
   { id: "lead_status", label: "Estado lead", visible: true },
@@ -106,24 +148,9 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "meta_field_data", label: "Respuestas del formulario", visible: false },
 ];
 
-const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v3";
+const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
 
-const META_LEAD_STATUSES: { value: string; label: string }[] = [
-  { value: "nuevo", label: "Nuevo" },
-  { value: "en_curso", label: "En curso" },
-  { value: "negocio_abierto", label: "Negocio abierto" },
-  { value: "sin_calificar", label: "Sin calificar" },
-  { value: "intento_contacto", label: "Intento de contacto" },
-  { value: "conectado", label: "Conectado" },
-  { value: "fuera_presupuesto", label: "Fuera de presupuesto" },
-  { value: "compra_futura", label: "Compra futura" },
-  { value: "sin_respuesta_7", label: "Sin respuesta 7+" },
-  { value: "tiempo_entrega", label: "Tiempo de entrega" },
-  { value: "asesor_inmobiliario", label: "Asesor inmobiliario" },
-  { value: "registro_error", label: "Registro por error" },
-  { value: "proveedor", label: "Proveedor" },
-  { value: "fuera_area", label: "Fuera del área" },
-];
+
 
 function loadContactColumns(): ColumnConfig[] {
   if (typeof window === "undefined") return DEFAULT_CONTACT_COLUMNS;
@@ -164,6 +191,9 @@ type ContactRow = {
   meta_platform: string | null;
   meta_created_time: string | null;
   meta_field_data: any[] | null;
+  categoria_ids: number[];
+  otros_count?: number;
+  id_persona?: number | null;
 };
 
 type View = "all" | "mine" | "unassigned" | "no_followup";
@@ -182,22 +212,239 @@ function DateChip({ date }: { date: string | null }) {
   );
 }
 
+// ─── Categorías de contacto (procedencia) ──────────────────────────────────────
+
+
+// Categoría del contacto en la ficha (select único; persiste al instante).
+function ContactCategories({ contactId, disabled = false }: { contactId: number; disabled?: boolean }) {
+  const qc = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const { data: selected = [], refetch } = useQuery({
+    queryKey: ["contact-categorias", contactId],
+    queryFn: async (): Promise<number[]> => {
+      const { data, error } = await (supabase as any)
+        .from("entidades_relacionadas_categorias")
+        .select("id_categoria")
+        .eq("id_entidad_relacionada", contactId)
+        .eq("activo", true);
+      if (error) return [];
+      return (data ?? []).map((r: any) => r.id_categoria as number);
+    },
+  });
+  if (!catalog.length) return null;
+  const current = (selected as number[])[0];
+  const setCategoria = async (idStr: string) => {
+    const id = Number(idStr);
+    setSaving(true);
+    try {
+      const tbl = () => (supabase as any).from("entidades_relacionadas_categorias");
+      const up = await tbl().upsert(
+        { id_entidad_relacionada: contactId, id_categoria: id, activo: true },
+        { onConflict: "id_entidad_relacionada,id_categoria" },
+      );
+      if (up.error) throw up.error;
+      // Select único: desactivar cualquier otra categoría del contacto.
+      const off = await tbl().update({ activo: false })
+        .eq("id_entidad_relacionada", contactId).eq("activo", true).neq("id_categoria", id);
+      if (off.error) throw off.error;
+      await refetch();
+      qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo guardar la categoría");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <CField label="Categoría">
+      <div className="flex items-center gap-2">
+        <Select value={current != null ? String(current) : ""} onValueChange={setCategoria} disabled={disabled}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin categoría" /></SelectTrigger>
+          <SelectContent>{catalog.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}</SelectContent>
+        </Select>
+        {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
+      </div>
+    </CField>
+  );
+}
+
+// Persistencia de filtros de la lista de Contactos, POR USUARIO (mismo patrón que Negocios).
+// Filtros → localStorage (permanecen entre sesiones); buscador → sessionStorage (solo sesión).
+const CONTACTS_FILTERS_KEY = "sozu:contacts:filters:v1";
+const CONTACTS_SEARCH_KEY = "sozu:contacts:search:v1";
+type ContactsFiltersPersist = { stageTab: StageTab; filterDev: string; filterStatus: string; filterLifecycle: string; filterSource: string; filterCategoria: string };
+
+function loadContactsFilters(uid: string): Partial<ContactsFiltersPersist> {
+  if (typeof window === "undefined" || !uid) return {};
+  try {
+    const raw = window.localStorage.getItem(`${CONTACTS_FILTERS_KEY}:${uid}`);
+    return raw ? (JSON.parse(raw) as Partial<ContactsFiltersPersist>) : {};
+  } catch { return {}; }
+}
+function saveContactsFilters(uid: string, v: ContactsFiltersPersist) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.localStorage.setItem(`${CONTACTS_FILTERS_KEY}:${uid}`, JSON.stringify(v)); } catch { /* ignore */ }
+}
+function loadContactsSearch(uid: string): string {
+  if (typeof window === "undefined" || !uid) return "";
+  try { return window.sessionStorage.getItem(`${CONTACTS_SEARCH_KEY}:${uid}`) ?? ""; } catch { return ""; }
+}
+function saveContactsSearch(uid: string, s: string) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.sessionStorage.setItem(`${CONTACTS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
+}
+
+// Fila expandible: muestra los OTROS contactos (entidades) de la misma persona,
+// con contexto (proyecto, propietario, si ya tiene negocio) para entender cuál usar.
+function ContactExpansion({ personaId, principalId, colSpan }: { personaId: number; principalId: number; colSpan: number }) {
+  const navigate = useNavigate();
+  const { data: others = [], isLoading } = useQuery({
+    queryKey: ["contact-others", personaId, principalId],
+    enabled: !!personaId,
+    queryFn: async () => {
+      const { data: es } = await (supabase as any).from("entidades_relacionadas")
+        .select("id, id_tipo_entidad, id_proyecto, fecha_creacion")
+        .eq("id_persona", personaId).in("id_tipo_entidad", [2, 7]).eq("activo", true)
+        .neq("id", principalId).order("fecha_creacion", { ascending: false });
+      const list = es ?? [];
+      if (!list.length) return [];
+      const ids = list.map((e: any) => e.id);
+      const { data: atr } = await (supabase as any).from("crm_leads_atribucion")
+        .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario").in("id_entidad_relacionada", ids).eq("activo", true);
+      const am = new Map((atr ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
+      // Nombres de proyecto
+      const proyIds = Array.from(new Set(list.map((e: any) => e.id_proyecto).filter(Boolean)));
+      let proyMap = new Map<number, string>();
+      if (proyIds.length) {
+        const { data: ps } = await (supabase as any).from("proyectos").select("id, nombre").in("id", proyIds);
+        proyMap = new Map((ps ?? []).map((p: any) => [p.id, p.nombre]));
+      }
+      // Nombres de propietario
+      const ownerIds = Array.from(new Set((atr ?? []).map((a: any) => a.id_propietario).filter(Boolean)));
+      let ownerMap = new Map<string, string>();
+      if (ownerIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
+        ownerMap = new Map((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      // ¿ya tiene negocio?
+      const { data: neg } = await (supabase as any).from("crm_negocios").select("id_entidad_relacionada").in("id_entidad_relacionada", ids);
+      const negCount = new Map<number, number>();
+      (neg ?? []).forEach((n: any) => negCount.set(n.id_entidad_relacionada, (negCount.get(n.id_entidad_relacionada) ?? 0) + 1));
+      return list.map((e: any) => {
+        const a: any = am.get(e.id);
+        return {
+          id: e.id, fecha: e.fecha_creacion,
+          estado: a?.estatus_lead ?? "nuevo",
+          etapa: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
+          proyecto: e.id_proyecto ? (proyMap.get(e.id_proyecto) ?? `Proyecto ${e.id_proyecto}`) : null,
+          owner: a?.id_propietario ? (ownerMap.get(a.id_propietario) ?? null) : null,
+          negocios: negCount.get(e.id) ?? 0,
+        };
+      });
+    },
+  });
+  return (
+    <tr className="bg-muted/40 border-t border-border">
+      <td></td>
+      <td colSpan={colSpan} className="px-3 py-3">
+        <div className="pl-8 space-y-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Otros contactos de esta persona</div>
+            <div className="text-xs text-muted-foreground">Cada renglón es un contacto distinto (una compra o un proyecto). Para asignarle un negocio, entra al de tipo <b>Cliente</b> del proyecto correcto.</div>
+          </div>
+          {isLoading ? (
+            <div className="text-xs text-muted-foreground">Cargando…</div>
+          ) : others.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Sin otros contactos.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {others.map((o: any) => (
+                <div key={o.id} className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-md px-2.5 py-1.5">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${o.etapa === "customer" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                    {o.etapa === "customer" ? "Cliente" : "Lead"}
+                  </span>
+                  <span className="text-sm font-medium text-foreground inline-flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    {o.proyecto ?? "Sin proyecto"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">· {leadStatusLabel[o.estado] ?? o.estado}</span>
+                  {o.owner && <span className="text-xs text-muted-foreground">· {o.owner}</span>}
+                  <span className="text-xs text-muted-foreground tabular-nums">· {fmtDate(o.fecha)}</span>
+                  {o.negocios > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                      <Briefcase className="h-3 w-3" />{o.negocios} negocio{o.negocios === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  <Button size="sm" variant="outline" className="h-7 shrink-0 ml-1"
+                    onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${o.id}`)}>
+                    Abrir contacto
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export function CrmContacts() {
   const orgId = useCrmOrgId();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
+  const { canDelete: realCanDelete } = usePagePermissions("/admin/portal-crm/ventas/contactos");
+  const uid = user?.id ?? "";
+
+  // ¿El rol impersonado es Super Admin? Para que "Ver como" a un super admin muestre todo.
+  const { data: impIsSuper } = useQuery({
+    queryKey: ["crm-imp-role-super", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("roles").select("nombre").eq("id", impersonatedCrmUserRolId).maybeSingle();
+      return data?.nombre === "Super Administrador";
+    },
+  });
+
+  // Permiso de eliminar del ROL impersonado (cuando se usa "Ver como"). permiso_id 4 = eliminar.
+  const { data: impCanDelete } = useQuery({
+    queryKey: ["crm-contactos-imp-candelete", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data: sub } = await (supabase as any).from("submenus")
+        .select("id").eq("vista_front_end", "/admin/portal-crm/ventas/contactos").eq("activo", true).maybeSingle();
+      if (!sub) return false;
+      const { data: sp } = await (supabase as any).from("submenus_permisos")
+        .select("id").eq("submenu_id", sub.id).eq("rol_id", impersonatedCrmUserRolId).eq("permiso_id", 4).eq("activo", true).maybeSingle();
+      return !!sp;
+    },
+  });
+
+  // Bajo "Ver como" todo se evalúa con el rol/usuario impersonado (no con el usuario real).
+  const canDelete = isImpersonating ? (impIsSuper ? true : (impCanDelete ?? false)) : realCanDelete;
+  const isSuperAdmin = isImpersonating ? (impIsSuper ?? false) : (profile?.rol_nombre === "Super Administrador");
+  const effUserId = isImpersonating ? impersonatedCrmUserId : (user?.id ?? null);
 
   const [stageTab, setStageTab] = useState<StageTab>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState<ContactRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState("");
   const [filterDev, setFilterDev] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterLifecycle, setFilterLifecycle] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
+  const [filterCategoria, setFilterCategoria] = useState("all");
   const [page, setPage] = useState(0);
   const pageSize = 25;
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadContactColumns());
   const [editColumnsOpen, setEditColumnsOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
 
   const persistColumns = (next: ColumnConfig[]) => {
     setColumns(next);
@@ -214,6 +461,30 @@ export function CrmContacts() {
   };
   const visibleColumns = columns.filter((c) => c.visible);
 
+  // Recordar filtros por usuario: hidratar una sola vez (cuando ya hay usuario)…
+  const hydratedContacts = useRef(false);
+  useEffect(() => {
+    if (!uid || hydratedContacts.current) return;
+    const f = loadContactsFilters(uid);
+    if (f.stageTab) setStageTab(f.stageTab);
+    if (f.filterDev) setFilterDev(f.filterDev);
+    if (f.filterStatus) setFilterStatus(f.filterStatus);
+    if (f.filterLifecycle) setFilterLifecycle(f.filterLifecycle);
+    if (f.filterSource) setFilterSource(f.filterSource);
+    if (f.filterCategoria) setFilterCategoria(f.filterCategoria);
+    setSearch(loadContactsSearch(uid));
+    hydratedContacts.current = true;
+  }, [uid]);
+  // …y persistir al cambiar (solo tras hidratar, para no pisar lo guardado con los defaults).
+  useEffect(() => {
+    if (!hydratedContacts.current || !uid) return;
+    saveContactsFilters(uid, { stageTab, filterDev, filterStatus, filterLifecycle, filterSource, filterCategoria });
+  }, [uid, stageTab, filterDev, filterStatus, filterLifecycle, filterSource, filterCategoria]);
+  useEffect(() => {
+    if (!hydratedContacts.current || !uid) return;
+    saveContactsSearch(uid, search);
+  }, [uid, search]);
+
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
     queryFn: async () => {
@@ -228,8 +499,14 @@ export function CrmContacts() {
     },
   });
 
+  const { data: categoriasCatalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const catNameMap = useMemo<Record<number, string>>(
+    () => Object.fromEntries((categoriasCatalog as any[]).map((c: any) => [c.id, c.nombre])),
+    [categoriasCatalog],
+  );
+
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, page],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, filterStatus, page, isSuperAdmin, effUserId],
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -237,6 +514,93 @@ export function CrmContacts() {
         ? filterLifecycle === "customer" ? [2] : [7]
         : [2, 7];
       const proyectoId = filterDev !== "all" ? Number(filterDev) : null;
+      const p_owner = stageTab === "mine" ? effUserId : null;
+      const p_unassigned = stageTab === "unassigned";
+
+      // Hidrata una lista de entidades (ers) a filas de contacto (personas + atribución + propietario + categorías).
+      const hydrateRows = async (list: any[]): Promise<ContactRow[]> => {
+        if (!list.length) return [];
+        const { data: personas } = await (supabase as any).from("personas")
+          .select("id, nombre_legal, nombre_comercial, email, telefono")
+          .in("id", list.map((e: any) => e.id_persona)).eq("activo", true);
+        const pMap: Record<number, any> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p]));
+        let atrMap: Record<number, any> = {};
+        const atrRes = await (supabase as any).from("crm_leads_atribucion")
+          .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
+          .in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
+        if (!atrRes.error) atrMap = Object.fromEntries((atrRes.data ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
+        const ownerIds = Array.from(new Set(Object.values(atrMap).map((a: any) => a?.id_propietario).filter(Boolean)));
+        let ownerNameMap: Record<string, string> = {};
+        if (ownerIds.length) {
+          const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
+          ownerNameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+        }
+        const catByEr: Record<number, number[]> = {};
+        const catAllRes = await (supabase as any).from("entidades_relacionadas_categorias")
+          .select("id_entidad_relacionada, id_categoria").in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
+        if (!catAllRes.error) for (const r of (catAllRes.data ?? [])) (catByEr[r.id_entidad_relacionada] ??= []).push(r.id_categoria);
+        return list.filter((e: any) => pMap[e.id_persona]).map((e: any) => {
+          const p = pMap[e.id_persona]; const a = atrMap[e.id] ?? null;
+          return {
+            id: String(e.id),
+            full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
+            email: p.email ?? null, phone: p.telefono ?? null,
+            development_id: e.id_proyecto ? String(e.id_proyecto) : null,
+            lead_status: a?.estatus_lead ?? "nuevo",
+            lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
+            source_platform: a?.meta_platform ?? null, source_name: a?.meta_form_name ?? null,
+            contact_owner: a?.id_propietario ?? null,
+            owner_name: a?.id_propietario ? (ownerNameMap[a.id_propietario] ?? null) : null,
+            last_activity_at: e.fecha_actualizacion ?? null, next_task_at: null, lead_score: 0,
+            created_at: e.fecha_creacion ?? new Date().toISOString(),
+            meta_form_name: a?.meta_form_name ?? null, meta_campaign_id: a?.meta_campaign_id ?? null,
+            meta_ad_id: a?.meta_ad_id ?? null, meta_platform: a?.meta_platform ?? null,
+            meta_created_time: a?.meta_created_time ?? null, meta_field_data: a?.meta_field_data ?? null,
+            categoria_ids: catByEr[e.id] ?? [],
+          };
+        });
+      };
+
+      // ── Camino AGRUPADO (una fila por persona) vía RPC. Si el RPC no existe, cae al fallback por-entidad. ──
+      const rpc = await (supabase as any).rpc("get_crm_contactos_agrupados", {
+        p_tipos: tipoFilter,
+        p_proyecto: proyectoId,
+        p_search: search.trim() || null,
+        p_fuente: (filterSource === "meta" || filterSource === "manual") ? filterSource : null,
+        p_categoria: filterCategoria !== "all" ? Number(filterCategoria) : null,
+        p_estatus: filterStatus !== "all" ? filterStatus : null,
+        p_owner,
+        p_unassigned,
+        p_limit: pageSize,
+        p_offset: page * pageSize,
+      });
+      if (!rpc.error) {
+        const grouped: any[] = rpc.data ?? [];
+        const total = grouped[0]?.total_personas ?? 0;
+        if (!grouped.length) return { rows: [], count: 0, grouped: true };
+        const principalIds = grouped.map((g) => Number(g.id_entidad));
+        const persMap = new Map(grouped.map((g) => [Number(g.id_entidad), Number(g.id_persona)]));
+        // "+N" = TODOS los contactos (tipo 2/7) de la persona (independiente del filtro),
+        // para que el número coincida con lo que se ve al desplegar.
+        const pagePersonaIds = Array.from(new Set(grouped.map((g) => Number(g.id_persona))));
+        const totalPorPersona = new Map<number, number>();
+        {
+          const { data: allEnts } = await (supabase as any).from("entidades_relacionadas")
+            .select("id_persona").in("id_persona", pagePersonaIds).in("id_tipo_entidad", [2, 7]).eq("activo", true);
+          (allEnts ?? []).forEach((e: any) => totalPorPersona.set(e.id_persona, (totalPorPersona.get(e.id_persona) ?? 0) + 1));
+        }
+        const { data: ersData } = await (supabase as any).from("entidades_relacionadas")
+          .select("id, id_persona, id_proyecto, id_tipo_entidad, fecha_creacion, fecha_actualizacion")
+          .in("id", principalIds);
+        const ers = (ersData ?? []).slice().sort((a: any, b: any) => principalIds.indexOf(a.id) - principalIds.indexOf(b.id));
+        const rows = await hydrateRows(ers);
+        rows.forEach((r) => {
+          const pid = persMap.get(Number(r.id)) ?? null;
+          r.id_persona = pid;
+          r.otros_count = pid != null ? Math.max((totalPorPersona.get(pid) ?? 1) - 1, 0) : 0;
+        });
+        return { rows, count: total, grouped: true };
+      }
 
       // Búsqueda por nombre/email/teléfono → resolver ids de persona primero.
       let searchPersonaIds: number[] | null = null;
@@ -263,12 +627,25 @@ export function CrmContacts() {
         }
       }
 
+      // Filtro por categoría (procedencia) vía tabla puente.
+      let catErIds: number[] | null = null;
+      if (filterCategoria !== "all") {
+        const { data: catRows } = await (supabase as any).from("entidades_relacionadas_categorias")
+          .select("id_entidad_relacionada").eq("activo", true).eq("id_categoria", Number(filterCategoria));
+        catErIds = (catRows ?? []).map((r: any) => Number(r.id_entidad_relacionada));
+        if (!catErIds.length) return { rows: [], count: 0 };
+      }
+
+      // Pool de contactos: TODOS ven todos los contactos (la visibilidad ya NO depende
+      // del propietario). "Mis contactos" pasa a ser solo un filtro/vista client-side.
+
       const buildQ = (sel: string, opts?: Record<string, unknown>) => {
         let q = (supabase as any).from("entidades_relacionadas").select(sel, opts ?? {});
         q = q.in("id_tipo_entidad", tipoFilter).eq("activo", true);
         if (proyectoId) q = q.eq("id_proyecto", proyectoId);
         if (searchPersonaIds) q = q.in("id_persona", searchPersonaIds);
         if (sourceErIds) q = q.in("id", sourceErIds);
+        if (catErIds) q = q.in("id", catErIds);
         if (excludeErIds.length) q = q.not("id", "in", `(${excludeErIds.join(",")})`);
         return q;
       };
@@ -284,70 +661,19 @@ export function CrmContacts() {
       const ers: any[] = pageRes.data ?? [];
       if (!ers.length) return { rows: [], count: countRes.count ?? 0 };
 
-      // Datos de contacto desde personas.
-      const { data: personas } = await (supabase as any).from("personas")
-        .select("id, nombre_legal, nombre_comercial, email, telefono")
-        .in("id", ers.map((e: any) => e.id_persona))
-        .eq("activo", true);
-      const pMap: Record<number, any> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p]));
-
-      // Atribución de Meta (opcional): puede no existir la tabla todavía (DDL pendiente).
-      let atrMap: Record<number, any> = {};
-      const atrRes = await (supabase as any).from("crm_leads_atribucion")
-        .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
-        .in("id_entidad_relacionada", ers.map((e: any) => e.id))
-        .eq("activo", true);
-      if (!atrRes.error) {
-        atrMap = Object.fromEntries((atrRes.data ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
-      }
-
-      // Resolver nombres de los propietarios (id_propietario es un auth_user_id / UUID).
-      const ownerIds = Array.from(new Set(Object.values(atrMap).map((a: any) => a?.id_propietario).filter(Boolean)));
-      let ownerNameMap: Record<string, string> = {};
-      if (ownerIds.length) {
-        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds);
-        ownerNameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
-      }
-
-      const rows: ContactRow[] = ers
-        .filter((e: any) => pMap[e.id_persona])
-        .map((e: any) => {
-          const p = pMap[e.id_persona];
-          const a = atrMap[e.id] ?? null;
-          return {
-            id: String(e.id),
-            full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
-            email: p.email ?? null,
-            phone: p.telefono ?? null,
-            development_id: e.id_proyecto ? String(e.id_proyecto) : null,
-            lead_status: a?.estatus_lead ?? "nuevo",
-            lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
-            source_platform: a?.meta_platform ?? null,
-            source_name: a?.meta_form_name ?? null,
-            contact_owner: a?.id_propietario ?? null,
-            owner_name: a?.id_propietario ? (ownerNameMap[a.id_propietario] ?? null) : null,
-            last_activity_at: e.fecha_actualizacion ?? null,
-            next_task_at: null,
-            lead_score: 0,
-            created_at: e.fecha_creacion ?? new Date().toISOString(),
-            meta_form_name: a?.meta_form_name ?? null,
-            meta_campaign_id: a?.meta_campaign_id ?? null,
-            meta_ad_id: a?.meta_ad_id ?? null,
-            meta_platform: a?.meta_platform ?? null,
-            meta_created_time: a?.meta_created_time ?? null,
-            meta_field_data: a?.meta_field_data ?? null,
-          };
-        });
-
-      return { rows, count: countRes.count ?? 0 };
+      const rows = await hydrateRows(ers);
+      return { rows, count: countRes.count ?? 0, grouped: false };
     },
   });
 
+  const effectiveTab: StageTab = stageTab;
   const allRows = contacts?.rows ?? [];
-  const rows = allRows.filter((c) => {
+  // Con el RPC agrupado, los filtros (estado / mis / no asignados) ya vienen aplicados;
+  // solo filtramos client-side en el fallback por-entidad.
+  const rows = (contacts as any)?.grouped ? allRows : allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
-    if (stageTab === "mine" && c.contact_owner !== user?.id) return false;
-    if (stageTab === "unassigned" && c.contact_owner !== null) return false;
+    if (effectiveTab === "mine" && c.contact_owner !== effUserId) return false;
+    if (effectiveTab === "unassigned" && c.contact_owner !== null) return false;
     return true;
   });
   const totalCount = contacts?.count ?? 0;
@@ -355,6 +681,19 @@ export function CrmContacts() {
   const rangeStart = totalCount === 0 ? 0 : page * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize + pageSize, totalCount);
   const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? null;
+
+  const doDelete = async () => {
+    const ids = rowToDelete ? [rowToDelete.id] : Array.from(selectedIds);
+    if (!ids.length) return;
+    setDeleting(true);
+    const { error } = await (supabase as any).from("entidades_relacionadas")
+      .update({ activo: false }).in("id", ids.map(Number));
+    setDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(ids.length > 1 ? `${ids.length} contactos eliminados` : "Contacto eliminado");
+    setSelectedIds(new Set()); setRowToDelete(null); setDeleteOpen(false);
+    qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+  };
 
   const CONTACT_TABS = [
     { id: "all" as StageTab, label: "Todos contactos" },
@@ -373,6 +712,12 @@ export function CrmContacts() {
           </h1>
         </div>
         <div className="flex gap-2">
+          {canDelete && selectedIds.size > 0 && (
+            <Button size="sm" variant="destructive" onClick={() => { setRowToDelete(null); setDeleteOpen(true); }}>
+              <Trash2 className="h-4 w-4 mr-1" />Eliminar ({selectedIds.size})
+            </Button>
+          )}
+          <CargaMasivaDialog onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
           <CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
         </div>
       </div>
@@ -383,7 +728,7 @@ export function CrmContacts() {
           <button
             key={t.id}
             onClick={() => { setStageTab(t.id); setPage(0); }}
-            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${stageTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
+            className={`px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors duration-150 ${effectiveTab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}
           >
             {t.label}
           </button>
@@ -397,7 +742,11 @@ export function CrmContacts() {
         <CFilter value={filterSource} onChange={(v) => { setFilterSource(v); setPage(0); }} placeholder="Fuente"
           options={[{ v: "all", l: "Todas las fuentes" }, { v: "meta", l: "Solo Meta" }, { v: "manual", l: "Manual" }]} />
         <CFilter value={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(0); }} placeholder="Estado del lead"
-          options={[{ v: "all", l: "Todos estados" }, ...META_LEAD_STATUSES.map((s) => ({ v: s.value, l: s.label }))]} />
+          options={[{ v: "all", l: "Todos estados" }, ...leadStates.map((s) => ({ v: s.value, l: s.label }))]} />
+        {(categoriasCatalog as any[]).length > 0 && (
+          <CFilter value={filterCategoria} onChange={(v) => { setFilterCategoria(v); setPage(0); }} placeholder="Categoría"
+            options={[{ v: "all", l: "Todas las categorías" }, ...(categoriasCatalog as any[]).map((c: any) => ({ v: String(c.id), l: c.nombre }))]} />
+        )}
       </div>
 
       {/* Table card */}
@@ -425,7 +774,14 @@ export function CrmContacts() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
                 <tr>
-                  <th className="px-3 py-2.5 text-left w-8"><Checkbox /></th>
+                  <th className="px-3 py-2.5 text-left w-8">
+                    {canDelete && (
+                      <Checkbox
+                        checked={rows.length > 0 && rows.every((r) => selectedIds.has(r.id))}
+                        onCheckedChange={(v) => setSelectedIds(v ? new Set(rows.map((r) => r.id)) : new Set())}
+                      />
+                    )}
+                  </th>
                   {visibleColumns.map((col) => (
                     <th key={col.id} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{col.label}</th>
                   ))}
@@ -434,24 +790,54 @@ export function CrmContacts() {
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={c.id} role="button" tabIndex={0}
+                  <Fragment key={c.id}>
+                  <tr role="button" tabIndex={0}
                     onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${c.id}`)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
                     className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
                   >
-                    <td className="p-3" onClick={(e) => e.stopPropagation()}><Checkbox /></td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      {canDelete && (
+                        <Checkbox
+                          checked={selectedIds.has(c.id)}
+                          onCheckedChange={(v) => setSelectedIds((prev) => { const n = new Set(prev); if (v) n.add(c.id); else n.delete(c.id); return n; })}
+                        />
+                      )}
+                    </td>
                     {visibleColumns.map((col) => {
                       switch (col.id) {
                         case "name":
                           return (
                             <td key={col.id} className="p-3 font-medium whitespace-nowrap"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2.5 max-w-[260px]">
+                              <span className="inline-flex items-center gap-2 max-w-[320px]">
+                                {c.otros_count ? (
+                                  <button type="button" aria-label="Ver otros contactos de esta persona"
+                                    onClick={(e) => { e.stopPropagation(); setExpanded((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; }); }}
+                                    className="shrink-0 text-muted-foreground hover:text-primary">
+                                    {expanded.has(c.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </button>
+                                ) : <span className="w-4 shrink-0" />}
                                 <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
                                 <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
+                                {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
                               </span>
+                            </td>
+                          );
+                        case "categoria":
+                          return (
+                            <td key={col.id} className="p-3">
+                              {c.categoria_ids?.length ? (
+                                <span className="flex flex-wrap gap-1">
+                                  {c.categoria_ids.map((cid) => (
+                                    <span key={cid} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border whitespace-nowrap">
+                                      {catNameMap[cid] ?? "—"}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : <span className="text-muted-foreground">—</span>}
                             </td>
                           );
                         case "email":
@@ -459,7 +845,8 @@ export function CrmContacts() {
                         case "phone":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.phone || "—"}</td>;
                         case "lead_status": {
-                          const metaLabel = META_LEAD_STATUSES.find((s) => s.value === c.lead_status)?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
+                          const st = leadStates.find((s) => s.value === c.lead_status);
+                          const metaLabel = st?.label ?? leadStatusLabel[c.lead_status] ?? c.lead_status;
                           const statusColor: Record<string, string> = {
                             nuevo: "bg-sky-50 text-sky-700 border-sky-200",
                             en_curso: "bg-amber-50 text-amber-700 border-amber-200",
@@ -467,6 +854,8 @@ export function CrmContacts() {
                             conectado: "bg-primary/5 text-primary border-primary/20",
                             sin_calificar: "bg-slate-50 text-slate-500 border-slate-200",
                             intento_contacto: "bg-orange-50 text-orange-700 border-orange-200",
+                            programo_cita: "bg-teal-50 text-teal-700 border-teal-200",
+                            asistio_cita: "bg-green-50 text-green-700 border-green-200",
                             fuera_presupuesto: "bg-red-50 text-red-600 border-red-200",
                             compra_futura: "bg-violet-50 text-violet-700 border-violet-200",
                             sin_respuesta_7: "bg-rose-50 text-rose-600 border-rose-200",
@@ -482,10 +871,15 @@ export function CrmContacts() {
                             unqualified: "bg-slate-50 text-slate-500 border-slate-200",
                             lost: "bg-red-50 text-red-600 border-red-200",
                           };
-                          const cls = statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200";
+                          // Color configurable (hex de crm_estados_lead) vía estilo inline;
+                          // si el estado no trae color, cae al mapa de clases de siempre.
+                          const badgeStyle = st?.color
+                            ? { backgroundColor: `${st.color}1a`, color: st.color, borderColor: `${st.color}55` }
+                            : undefined;
+                          const cls = st?.color ? "" : (statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200");
                           return (
                             <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>{metaLabel}</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`} style={badgeStyle}>{metaLabel}</span>
                             </td>
                           );
                         }
@@ -563,7 +957,14 @@ export function CrmContacts() {
                           return null;
                       }
                     })}
-                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {canDelete && (
+                        <Button size="icon" variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/5 opacity-0 group-hover:opacity-100 transition-all duration-150"
+                          onClick={(e) => { e.stopPropagation(); setRowToDelete(c); setDeleteOpen(true); }} aria-label="Eliminar contacto">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100 transition-all duration-150" asChild>
                         <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} aria-label="Ver detalle">
                           <ChevronRight className="h-4 w-4" />
@@ -571,6 +972,10 @@ export function CrmContacts() {
                       </Button>
                     </td>
                   </tr>
+                  {expanded.has(c.id) && (contacts as any)?.grouped && (
+                    <ContactExpansion personaId={c.id_persona ?? 0} principalId={Number(c.id)} colSpan={visibleColumns.length + 1} />
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -614,6 +1019,24 @@ export function CrmContacts() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deleteOpen} onOpenChange={(v) => { setDeleteOpen(v); if (!v) setRowToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{rowToDelete ? "¿Eliminar este contacto?" : `¿Eliminar ${selectedIds.size} contactos?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se ocultarán del CRM (borrado lógico, reversible en base de datos). No borra la persona subyacente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); doDelete(); }} disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? "Eliminando…" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -633,20 +1056,74 @@ function CFilter({ value, onChange, options, placeholder }: { value: string; onC
 
 function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: string; developments: { id: string; name: string }[]; onCreated: () => void }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo" });
+  const [checking, setChecking] = useState(false);
+  const [duplicates, setDuplicates] = useState<any[]>([]);
+  const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "", contact_owner: "" });
+  const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
+  // Auto-asignar el propietario al usuario actual (editable antes de crear).
+  useEffect(() => {
+    const uid = user?.id;
+    if (uid) setForm((f) => (f.contact_owner ? f : { ...f, contact_owner: uid }));
+  }, [user?.id]);
 
-  const submit = async () => {
+  // Busca personas activas con el mismo correo o los mismos últimos 10 dígitos de teléfono.
+  const findDuplicates = async (email: string, phone: string): Promise<any[]> => {
+    const emailNorm = email.toLowerCase();
+    const digits = phone.replace(/\D/g, "");
+    const tel10 = digits.length >= 10 ? digits.slice(-10) : "";
+    if (!emailNorm && !tel10) return [];
+    const ors: string[] = [];
+    if (emailNorm) ors.push(`email.ilike.${emailNorm}`);
+    if (tel10) ors.push(`telefono.ilike.%${tel10}`);
+    const { data: personas } = await (supabase as any).from("personas")
+      .select("id, nombre_legal, email, telefono").eq("activo", true).or(ors.join(",")).limit(10);
+    if (!personas?.length) return [];
+    const personaIds = personas.map((p: any) => p.id);
+    const { data: ents } = await (supabase as any).from("entidades_relacionadas")
+      .select("id, id_persona, id_tipo_entidad").in("id_persona", personaIds).in("id_tipo_entidad", [2, 7]).eq("activo", true);
+    // compradores = tiene cuenta de cobranza (best-effort; si RLS bloquea, no muestra el badge).
+    const { data: comps } = await (supabase as any).from("compradores").select("id_persona").in("id_persona", personaIds);
+    const compSet = new Set((comps ?? []).map((c: any) => c.id_persona));
+    return personas.map((p: any) => {
+      const es = (ents ?? []).filter((e: any) => e.id_persona === p.id);
+      const clienteEnt = es.find((e: any) => e.id_tipo_entidad === 2);
+      const anyEnt = clienteEnt ?? [...es].sort((a: any, b: any) => b.id - a.id)[0];
+      return {
+        persona_id: p.id, nombre: p.nombre_legal, email: p.email, telefono: p.telefono,
+        es_cliente: !!clienteEnt, tiene_cobranza: compSet.has(p.id), abrir_entidad_id: anyEnt?.id ?? null,
+      };
+    });
+  };
+
+  const submit = async (force = false) => {
     if (!form.full_name) return;
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+    // Validación acorde a los CHECK de la tabla personas (evita error crudo de BD).
+    if (email && !PERSONA_EMAIL_RE.test(email)) { toast.error(MSG_EMAIL_INVALIDO); return; }
+    if (phone && !PERSONA_PHONE_RE.test(phone)) { toast.error(MSG_TELEFONO_INVALIDO); return; }
+    // Prevención de duplicados: avisar si ya existe alguien con ese correo/teléfono.
+    if (!force) {
+      setChecking(true);
+      let dups: any[] = [];
+      try { dups = await findDuplicates(email, phone); } catch { /* best-effort */ }
+      setChecking(false);
+      setDuplicates(dups);
+      if (dups.length) return;
+    }
     setBusy(true);
     try {
       // 1. Persona (datos de contacto)
       const { data: persona, error: pErr } = await (supabase as any).from("personas").insert({
         tipo_persona: "pf",
         nombre_legal: form.full_name,
-        email: form.email || null,
-        telefono: form.phone || null,
+        email: email || null,
+        telefono: phone || null,
       }).select("id").single();
       if (pErr) throw pErr;
       // 2. Entidad relacionada (prospecto tipo 7)
@@ -661,25 +1138,35 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         id_entidad_relacionada: er.id,
         estatus_lead: form.lead_status,
         etapa_ciclo_vida: form.lifecycle_stage,
-        id_propietario: user?.id ?? null,
+        id_propietario: form.contact_owner || user?.id || null,
       });
       if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
+      // 4. Categoría (procedencia) seleccionada (best-effort: si la tabla aún no existe, el contacto igual queda creado)
+      if (form.categoria) {
+        const { error: cErr } = await (supabase as any).from("entidades_relacionadas_categorias")
+          .insert({ id_entidad_relacionada: er.id, id_categoria: Number(form.categoria), activo: true });
+        if (cErr) console.warn("crm_categorias no disponible:", cErr.message);
+      }
       toast.success("Contacto creado");
       setOpen(false);
-      setForm({ ...form, full_name: "", email: "", phone: "" });
+      setDuplicates([]);
+      setForm({ ...form, full_name: "", email: "", phone: "", categoria: "" });
       onCreated();
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo crear el contacto");
+      toast.error(mensajeErrorContacto(e));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setDuplicates([]); }}>
       <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="h-4 w-4 mr-1" />Nuevo contacto</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Crear contacto</DialogTitle></DialogHeader>
+      <DialogContent className="flex flex-col max-h-[85vh] gap-0 p-0">
+        <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b">
+          <DialogTitle>Crear contacto</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
         <div className="grid gap-3">
           <CField label="Nombre completo *"><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></CField>
           <div className="grid grid-cols-2 gap-3">
@@ -692,11 +1179,19 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
               <SelectContent>{developments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
             </Select>
           </CField>
+          {catalog.length > 0 && (
+            <CField label="Categoría">
+              <Select value={form.categoria} onValueChange={(v) => setForm({ ...form, categoria: v })}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
+                <SelectContent>{catalog.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}</SelectContent>
+              </Select>
+            </CField>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <CField label="Estado del lead">
               <Select value={form.lead_status} onValueChange={(v) => setForm({ ...form, lead_status: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </CField>
             <CField label="Lifecycle">
@@ -706,10 +1201,46 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
               </Select>
             </CField>
           </div>
+          <CField label="Propietario del contacto">
+            <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}>
+              <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+              <SelectContent>{(owners as CrmOwner[]).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </CField>
         </div>
-        <DialogFooter>
+        {duplicates.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
+            <div className="flex items-center gap-1.5 text-amber-800 font-medium">
+              <TriangleAlert className="h-4 w-4 shrink-0" /> Ya existe {duplicates.length === 1 ? "un contacto" : `${duplicates.length} contactos`} con este teléfono o correo
+            </div>
+            {duplicates.map((d) => (
+              <div key={d.persona_id} className={`flex items-center justify-between gap-2 rounded p-2 border ${d.es_cliente ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "bg-card border-border"}`}>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{d.nombre}</div>
+                  <div className="text-xs text-muted-foreground truncate">{d.email || "sin correo"} · {d.telefono || "sin teléfono"}</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {d.es_cliente && <Badge variant="secondary" className="text-[10px]">Cliente</Badge>}
+                    {d.tiene_cobranza && <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700">Ya tiene cuenta de cobranza</Badge>}
+                  </div>
+                </div>
+                {d.abrir_entidad_id && (
+                  <Button size="sm" variant="outline" className="shrink-0"
+                    onClick={() => { setOpen(false); setDuplicates([]); navigate(`/admin/portal-crm/ventas/contactos/${d.abrir_entidad_id}`); }}>
+                    Abrir
+                  </Button>
+                )}
+              </div>
+            ))}
+            <p className="text-xs text-amber-700">Si de verdad es otra persona, puedes crearlo de todos modos.</p>
+          </div>
+        )}
+        </div>
+        <DialogFooter className="px-6 py-3 border-t shrink-0 gap-2">
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button onClick={submit} disabled={busy || !form.full_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear contacto</Button>
+          {duplicates.length > 0 && (
+            <Button variant="outline" onClick={() => submit(true)} disabled={busy}>Crear de todos modos</Button>
+          )}
+          <Button onClick={() => submit()} disabled={busy || checking || !form.full_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">{checking ? "Revisando…" : "Crear contacto"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -722,127 +1253,70 @@ function CField({ label, children }: { label: string; children: React.ReactNode 
 
 // ─── Contact detail ───────────────────────────────────────────────────────────
 
+
 // ─── Rich Note Editor ─────────────────────────────────────────────────────────
 
-function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  if (!editor) return null;
 
-  const addImage = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const ext = file.name.split(".").pop();
-      const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from("public").upload(path, file, { contentType: file.type, upsert: false });
-      if (error) { toast.error("Error al subir imagen"); return; }
-      const { data: url } = supabase.storage.from("public").getPublicUrl(data.path);
-      editor.chain().focus().setImage({ src: url.publicUrl }).run();
-    };
-    input.click();
-  };
-
-  const setLink = () => {
-    const url = window.prompt("URL del enlace:");
-    if (!url) return;
-    editor.chain().focus().setLink({ href: url, target: "_blank" }).run();
-  };
-
-  const btnClass = (active?: boolean) =>
-    `h-7 w-7 flex items-center justify-center rounded transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
-
-  return (
-    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/30 flex-wrap">
-      <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={btnClass(editor.isActive("bold"))} title="Negrita">
-        <Bold className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={btnClass(editor.isActive("italic"))} title="Cursiva">
-        <Italic className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={btnClass(editor.isActive("underline"))} title="Subrayado">
-        <UnderlineIcon className="h-3.5 w-3.5" />
-      </button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} className={btnClass(editor.isActive("bulletList"))} title="Lista">
-        <List className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btnClass(editor.isActive("orderedList"))} title="Lista numerada">
-        <ListOrdered className="h-3.5 w-3.5" />
-      </button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <button type="button" onClick={setLink} className={btnClass(editor.isActive("link"))} title="Enlace">
-        <LinkIcon className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" onClick={addImage} className={btnClass()} title="Imagen">
-        <ImageIcon className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; userId?: string; onSaved: () => void }) {
-  const [activityDate, setActivityDate] = useState(() => new Date().toISOString().split("T")[0]);
+// Nombre editable en la ficha: lápiz para editar, auto-guarda al perder foco (blur/Enter).
+function EditableContactName({ personaId, name, onSaved, canEdit = true }: { personaId: number; name: string; onSaved: () => void; canEdit?: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
   const [saving, setSaving] = useState(false);
-  const [isEmpty, setIsEmpty] = useState(true);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      UnderlineExt,
-      ImageExt.configure({ inline: false, allowBase64: false }),
-      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
-      TextStyleExt,
-    ],
-    editorProps: {
-      attributes: { class: "prose prose-sm max-w-none min-h-[80px] px-3 py-2 text-sm focus:outline-none" },
-    },
-    onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
-  });
+  useEffect(() => { setValue(name); }, [name]);
 
   const save = async () => {
-    if (!userId || !editor || editor.isEmpty) return;
+    setEditing(false);
+    const nuevo = value.trim();
+    if (!nuevo) { setValue(name); toast.error("El nombre no puede quedar vacío"); return; }
+    if (nuevo === name) return;
     setSaving(true);
-    const html = editor.getHTML();
-    const { error } = await (supabase as any).from("crm_notas").insert({
-      id_entidad_relacionada: Number(contactId),
-      id_usuario: userId,
-      contenido: html,
-      fecha_actividad: activityDate,
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Nota guardada");
-    editor.commands.clearContent();
-    setIsEmpty(true);
-    onSaved();
+    try {
+      const { error } = await (supabase as any).from("personas")
+        .update({ nombre_legal: nuevo, fecha_actualizacion: new Date().toISOString() })
+        .eq("id", personaId);
+      if (error) throw error;
+      toast.success("Nombre actualizado");
+      onSaved();
+    } catch (e: any) {
+      toast.error(mensajeErrorContacto(e));
+      setValue(name);
+    } finally {
+      setSaving(false);
+    }
   };
 
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+          else if (e.key === "Escape") { setValue(name); setEditing(false); }
+        }}
+        className="h-7 text-sm font-semibold text-center"
+      />
+    );
+  }
+
   return (
-    <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm">
-      <RichNoteToolbar editor={editor} />
-      <EditorContent editor={editor} />
-      <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/20 gap-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CalendarClock className="h-3.5 w-3.5 shrink-0" />
-          <span>Fecha</span>
-          <Input
-            type="date"
-            value={activityDate}
-            onChange={(e) => setActivityDate(e.target.value)}
-            className="h-6 text-xs w-auto px-2 py-0 border border-border rounded shadow-none focus-visible:ring-0"
-          />
-        </div>
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={saving || !editor || isEmpty}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
+    <div className="flex items-center justify-center gap-1.5 group/name">
+      <h2 className="font-semibold text-sm leading-tight">{value}</h2>
+      {canEdit && (saving ? (
+        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Editar nombre"
+          title="Editar nombre"
+          className="shrink-0 text-muted-foreground/50 hover:text-primary transition-colors"
         >
-          {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
-        </Button>
-      </div>
+          <Pencil className="h-3 w-3" />
+        </button>
+      ))}
     </div>
   );
 }
@@ -850,7 +1324,8 @@ function InlineNoteForm({ contactId, userId, onSaved }: { contactId: string; use
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
   const orgId = useCrmOrgId();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
   const qc = useQueryClient();
 
   // Solo en esta vista: acotar el <main> del layout al alto visible exacto para que
@@ -941,14 +1416,7 @@ export function CrmContactDetail() {
     },
   });
 
-  const { data: owners } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      // rol_id 9 = "Agente Interno", rol_id 1 = "Super Administrador" (el 3 es "Agente Inmobiliario", 200+).
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).in("rol_id", [1, 9]);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const { data: notes } = useQuery({
     queryKey: ["contact-notes", contactId],
@@ -968,7 +1436,9 @@ export function CrmContactDetail() {
         const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", authorIds);
         nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
-      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
+      // Adjuntos por nota (best-effort: {} si la tabla aún no existe en el ambiente).
+      const attByNote = await fetchNoteAttachments(rows.map((n: any) => n.id));
+      return rows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false, attachments: attByNote[n.id] ?? [] }));
     },
   });
 
@@ -996,14 +1466,59 @@ export function CrmContactDetail() {
     },
   });
 
-  // Fase 1: citas, negocios, pipeline y eventos de conversión aún no persisten.
-  const appointments: any[] = [];
+  // Citas del contacto (tabla real crm_citas; fail-soft si aún no existe en el ambiente).
+  const { data: citas } = useQuery({
+    queryKey: ["contact-citas", contactId],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_citas")
+        .select("id, titulo, tipo, estatus, fecha_inicio, fecha_fin, ubicacion, enlace_reunion, resultado, descripcion, fecha_recordatorio, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_inicio", { ascending: false });
+      if (res.error) return [];
+      return (res.data ?? []).map((c: any) => ({
+        id: c.id, title: c.titulo, tipo: c.tipo, status: c.estatus,
+        start_at: c.fecha_inicio, end_at: c.fecha_fin,
+        ubicacion: c.ubicacion ?? null, enlace: c.enlace_reunion ?? null,
+        resultado: c.resultado ?? null, descripcion: c.descripcion ?? null,
+        created_at: c.fecha_creacion,
+      }));
+    },
+  });
+
+  // Negocios del contacto (un negocio pertenece a un solo contacto).
+  const { data: contactDeals } = useQuery({
+    queryKey: ["contact-deals", contactId],
+    enabled: !!contactId,
+    queryFn: async () => {
+      const { data: negocios, error } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, prioridad")
+        .eq("id_entidad_relacionada", Number(contactId)).eq("activo", true)
+        .order("fecha_creacion", { ascending: false });
+      if (error || !negocios?.length) return [];
+      const etapaIds = Array.from(new Set(negocios.map((n: any) => n.id_etapa).filter(Boolean)));
+      const pipeIds = Array.from(new Set(negocios.map((n: any) => n.id_pipeline).filter(Boolean)));
+      const [etRes, pRes] = await Promise.all([
+        etapaIds.length ? (supabase as any).from("crm_pipeline_etapas").select("id, nombre").in("id", etapaIds) : Promise.resolve({ data: [] }),
+        pipeIds.length ? (supabase as any).from("crm_pipelines").select("id, nombre").in("id", pipeIds) : Promise.resolve({ data: [] }),
+      ]);
+      const etapaMap = Object.fromEntries((etRes.data ?? []).map((e: any) => [e.id, e.nombre]));
+      const pipeMap = Object.fromEntries((pRes.data ?? []).map((p: any) => [p.id, p.nombre]));
+      return negocios.map((n: any) => ({
+        ...n,
+        etapa_nombre: etapaMap[n.id_etapa] ?? "—",
+        pipeline_nombre: n.id_pipeline ? (pipeMap[n.id_pipeline] ?? null) : null,
+      }));
+    },
+  });
+
+  // Fase 1: pipeline y eventos de conversión aún no persisten.
   const deals: any[] = [];
   const pipelineEvents: any[] = [];
   const conversionEvents: any[] = [];
 
   const invalidateAll = () => {
-    ["contact-sozu", "contact-notes", "contact-tasks"].forEach(
+    ["contact-sozu", "contact-notes", "contact-tasks", "contact-citas", "contact-deals"].forEach(
       (k) => qc.invalidateQueries({ queryKey: [k, contactId] }),
     );
     // También refrescar la lista de contactos para que refleje los cambios al volver.
@@ -1032,6 +1547,16 @@ export function CrmContactDetail() {
     const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id);
     if (error) { toast.error(error.message); return; }
     toast.success("Nota eliminada"); invalidateAll();
+  };
+  const updateCitaStatus = async (id: number, estatus: string) => {
+    const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Cita actualizada"); invalidateAll();
+  };
+  const deleteCita = async (id: number) => {
+    const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Cita eliminada"); invalidateAll();
   };
 
   if (isLoading) return (
@@ -1076,6 +1601,15 @@ export function CrmContactDetail() {
 
   const initials = contact.full_name.split(" ").filter(Boolean).slice(0, 2).map((p: string) => p[0]).join("").toUpperCase() || "?";
 
+  // Pool de contactos: todos ven, pero solo el DUEÑO (o Super Admin, o si no tiene dueño)
+  // puede editar el contacto y registrar actividad.
+  // Con "Ver como" (impersonación) evaluamos el permiso como el usuario impersonado,
+  // para poder demostrar el modo solo-lectura sin cerrar sesión.
+  const effRolId = isImpersonating ? impersonatedCrmUserRolId : profile?.rol_id;
+  const effUserId = isImpersonating ? impersonatedCrmUserId : user?.id;
+  const isCrmAdmin = effRolId === 1;
+  const canEdit = isCrmAdmin || !contact.contact_owner || contact.contact_owner === effUserId;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header bar */}
@@ -1087,11 +1621,21 @@ export function CrmContactDetail() {
           <span className="text-muted-foreground/40 text-sm">/</span>
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{contact.full_name}</span>
         </div>
-        <div className="flex gap-2">
-          <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
-          <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
-        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll} />
+            <TaskDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
+            <CitaDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll} />
+          </div>
+        )}
       </div>
+
+      {!canEdit && (
+        <div className="px-4 lg:px-8 py-1.5 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-1.5 shrink-0">
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+          Solo el dueño puede editar este contacto. Estás viéndolo en modo de solo lectura.
+        </div>
+      )}
 
       {/* 3-column body — llena el alto restante; cada columna scrollea por su cuenta (estilo HubSpot) */}
       <div className="grid grid-cols-12 flex-1 min-h-0 overflow-hidden">
@@ -1103,7 +1647,7 @@ export function CrmContactDetail() {
               {initials}
             </div>
             <div className="text-center">
-              <h2 className="font-semibold text-sm leading-tight">{contact.full_name}</h2>
+              <EditableContactName personaId={contact.id_persona} name={contact.full_name} onSaved={invalidateAll} canEdit={canEdit} />
               {contact.email && (
                 <div className="flex items-center justify-center gap-1 mt-1 text-xs text-primary">
                   <span className="truncate max-w-[130px]">{contact.email}</span>
@@ -1121,8 +1665,9 @@ export function CrmContactDetail() {
             </div>
           </div>
 
-          {/* Quick action icons */}
-          <div className="grid grid-cols-2 gap-1">
+          {/* Quick action icons — solo el dueño (o admin / sin dueño) registra actividad */}
+          {canEdit && (
+          <div className="grid grid-cols-3 gap-1">
             <NoteDialog contactId={contactId!} userId={user?.id} onSaved={invalidateAll}
               trigger={
                 <button className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors w-full">
@@ -1141,7 +1686,17 @@ export function CrmContactDetail() {
                   <span className="text-[9px] text-muted-foreground leading-none">Tarea</span>
                 </button>
               } />
+            <CitaDialog contactId={contactId!} owners={owners ?? []} userId={user?.id} onSaved={invalidateAll}
+              trigger={
+                <button className="flex flex-col items-center gap-1 p-1.5 rounded-md hover:bg-primary/5 transition-colors w-full">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground leading-none">Cita</span>
+                </button>
+              } />
           </div>
+          )}
 
           {/* Accordion: Acerca de este contacto */}
           <Accordion type="single" collapsible defaultValue="info">
@@ -1150,7 +1705,7 @@ export function CrmContactDetail() {
                 Acerca de este contacto
               </AccordionTrigger>
               <AccordionContent className="pt-1 pb-0">
-                <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} />
+                <LeftPanel contact={contact} developments={developments ?? []} owners={owners ?? []} onSaved={invalidateAll} canEdit={canEdit} />
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -1168,15 +1723,19 @@ export function CrmContactDetail() {
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <DescriptionPanel
-                contact={contact} notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
+                canEdit={canEdit}
+                contact={contact} notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
               />
             </TabsContent>
             <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <ActivityPanel
+                canEdit={canEdit}
                 contactId={contactId!} userId={user?.id} owners={owners ?? []} contact={contact}
-                notes={notes ?? []} tasks={tasks ?? []} onSaved={invalidateAll}
+                notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
                 onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
               />
             </TabsContent>
             <TabsContent value="avanzado" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
@@ -1209,14 +1768,7 @@ export function CrmContactDetail() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="deals">
-              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Negocios <span className="text-[10px] text-muted-foreground font-normal px-1.5 py-0.5 rounded bg-muted">Próximamente</span></span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <p className="text-xs text-muted-foreground py-2">La gestión de negocios llegará en una fase posterior.</p>
-              </AccordionContent>
-            </AccordionItem>
+            <DealsCard contactId={contactId!} deals={contactDeals ?? []} onSaved={invalidateAll} />
 
             <AccordionItem value="tickets" className="border-b-0">
               <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
@@ -1233,13 +1785,31 @@ export function CrmContactDetail() {
   );
 }
 
-function LeftPanel({ contact, developments, owners, onSaved }: any) {
+// Fallback si la tabla crm_meta_conversion_stages aún no existe. El mapa real
+// (etapa CRM → event_name de Meta) se administra desde /marketing/meta → Eventos.
+const CAPI_STAGE_FALLBACK: Record<string, string> = { mql: "mql" };
+
+// Lee las etapas ACTIVAS de crm_meta_conversion_stages y arma el mapa etapa→event_name.
+const fetchCapiStageMap = async (): Promise<Record<string, string>> => {
+  const { data, error } = await (supabase as any)
+    .from("crm_meta_conversion_stages")
+    .select("etapa_ciclo_vida, meta_event_name, activo")
+    .eq("activo", true);
+  if (error || !data || !data.length) return CAPI_STAGE_FALLBACK;
+  const map: Record<string, string> = {};
+  for (const r of data) map[r.etapa_ciclo_vida] = r.meta_event_name;
+  return map;
+};
+
+function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: any) {
   const [form, setForm] = useState({
     email: contact.email ?? "", phone: contact.phone ?? "",
     lead_status: contact.lead_status ?? "nuevo", lifecycle_stage: contact.lifecycle_stage ?? "lead",
     development_id: contact.development_id ?? "", contact_owner: contact.contact_owner ?? "",
   });
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
+  const { data: capiStageMap = CAPI_STAGE_FALLBACK } = useQuery({ queryKey: ["crm-capi-stage-map"], queryFn: fetchCapiStageMap });
 
   // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
   const run = async (fn: () => Promise<{ error: any }>) => {
@@ -1251,15 +1821,19 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
       onSaved();
     } catch (e: any) {
       setStatus("error");
-      toast.error(e?.message ?? "No se pudo guardar");
+      toast.error(mensajeErrorContacto(e));
     }
   };
 
   const persistPersona = () => {
     if (!contact.id_persona) return;
+    const email = (form.email || "").trim();
+    const phone = (form.phone || "").trim();
+    if (email && !PERSONA_EMAIL_RE.test(email)) { setStatus("error"); toast.error(MSG_EMAIL_INVALIDO); return; }
+    if (phone && !PERSONA_PHONE_RE.test(phone)) { setStatus("error"); toast.error(MSG_TELEFONO_INVALIDO); return; }
     run(() => (supabase as any).from("personas").update({
-      email: form.email || null,
-      telefono: form.phone || null,
+      email: email || null,
+      telefono: phone || null,
       fecha_actualizacion: new Date().toISOString(),
     }).eq("id", contact.id_persona));
   };
@@ -1271,47 +1845,61 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
     }).eq("id", Number(contact.id)));
 
   const persistAtribucion = (override: { lead_status?: string; lifecycle_stage?: string; contact_owner?: string }) =>
-    run(() => (supabase as any).from("crm_leads_atribucion").upsert({
-      id_entidad_relacionada: Number(contact.id),
-      estatus_lead: override.lead_status ?? form.lead_status,
-      etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
-      id_propietario: (override.contact_owner ?? form.contact_owner) || null,
-    }, { onConflict: "id_entidad_relacionada" }));
+    run(async () => {
+      const resp = await (supabase as any).from("crm_leads_atribucion").upsert({
+        id_entidad_relacionada: Number(contact.id),
+        estatus_lead: override.lead_status ?? form.lead_status,
+        etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
+        id_propietario: (override.contact_owner ?? form.contact_owner) || null,
+      }, { onConflict: "id_entidad_relacionada" });
+      // Señal a Meta (Conversions API for Leads) cuando la etapa entra a una mapeada (ej. MQL).
+      // Fire-and-forget: no bloquea el guardado; la Edge Function omite leads que no vinieron de Meta.
+      const stage = override.lifecycle_stage;
+      if (!resp.error && stage && capiStageMap[stage]) {
+        (supabase as any).functions
+          .invoke("meta-capi-lead-stage", {
+            body: { id_entidad_relacionada: Number(contact.id), event_name: capiStageMap[stage] },
+          })
+          .catch((e: any) => console.warn("meta-capi-lead-stage:", e?.message ?? e));
+      }
+      return resp;
+    });
 
   return (
     <div className="space-y-3 text-sm">
+      {contact.id ? <ContactCategories contactId={Number(contact.id)} disabled={!canEdit} /> : null}
       <CField label="Correo electrónico">
         <Input className="h-8 text-sm" type="email" value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
-          onBlur={persistPersona} placeholder="correo@ejemplo.com" />
+          onBlur={persistPersona} placeholder="correo@ejemplo.com" disabled={!canEdit} />
       </CField>
       <CField label="Número de móvil">
         <Input className="h-8 text-sm" type="tel" value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          onBlur={persistPersona} placeholder="+52 55 0000 0000" />
+          onBlur={persistPersona} placeholder="+52 55 0000 0000" disabled={!canEdit} />
       </CField>
       <CField label="Proyecto">
-        <Select value={form.development_id} onValueChange={(v) => { setForm({ ...form, development_id: v }); persistProyecto(v); }}>
+        <Select value={form.development_id} onValueChange={(v) => { setForm({ ...form, development_id: v }); persistProyecto(v); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin proyecto" /></SelectTrigger>
           <SelectContent>{(developments as any[]).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
       <CField label="Estado del lead">
-        <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }}>
+        <Select value={form.lead_status} onValueChange={(v) => { setForm({ ...form, lead_status: v }); persistAtribucion({ lead_status: v }); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {META_LEAD_STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            {leadStates.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
       </CField>
       <CField label="Etapa del ciclo de vida">
-        <Select value={form.lifecycle_stage} onValueChange={(v) => { setForm({ ...form, lifecycle_stage: v }); persistAtribucion({ lifecycle_stage: v }); }}>
+        <Select value={form.lifecycle_stage} onValueChange={(v) => { setForm({ ...form, lifecycle_stage: v }); persistAtribucion({ lifecycle_stage: v }); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{Object.entries(lifecycleLabel).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
         </Select>
       </CField>
       <CField label="Propietario del contacto">
-        <Select value={form.contact_owner} onValueChange={(v) => { setForm({ ...form, contact_owner: v }); persistAtribucion({ contact_owner: v }); }}>
+        <Select value={form.contact_owner} onValueChange={(v) => { setForm({ ...form, contact_owner: v }); persistAtribucion({ contact_owner: v }); }} disabled={!canEdit}>
           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
           <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
         </Select>
@@ -1325,20 +1913,8 @@ function LeftPanel({ contact, developments, owners, onSaved }: any) {
   );
 }
 
-function DField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-1">
-      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</Label>
-      <div>{children}</div>
-    </div>
-  );
-}
 
-type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean };
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
 
 function HL({ label, value }: { label: string; value: string }) {
   return (
@@ -1361,11 +1937,12 @@ function AssocCard({ title }: { title: string }) {
   );
 }
 
-function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote }: any) {
+function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, canEdit = true }: any) {
   const lastActivity = (() => {
     const dates: string[] = [
       ...(notes ?? []).map((n: any) => n.created_at),
       ...(tasks ?? []).map((t: any) => t.created_at),
+      ...(citas ?? []).map((c: any) => c.created_at),
     ].filter(Boolean);
     if (contact.last_activity_at) dates.push(contact.last_activity_at);
     if (!dates.length) return null;
@@ -1377,6 +1954,9 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
   const upcoming = (tasks ?? [])
     .filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= today)
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  const upcomingCitas = (citas ?? [])
+    .filter((c: any) => (c.status === "programada" || c.status === "reprogramada") && c.start_at && new Date(c.start_at) >= today)
+    .sort((a: any, b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
   return (
     <div className="space-y-4">
@@ -1394,19 +1974,39 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
         <Timeline
-          notes={notes ?? []} tasks={tasks ?? []} appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
-          contact={contact}
-          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
+          notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} deals={[]} pipelineEvents={[]} conversionEvents={[]}
+          contact={contact} canEdit={canEdit}
+          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
+          onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
         />
       </div>
 
-      {/* Próximas actividades (tareas pendientes con fecha futura) */}
+      {/* Próximas actividades (tareas y citas pendientes con fecha futura) */}
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Próximas actividades</h3>
-        {!upcoming.length ? (
+        {!upcoming.length && !upcomingCitas.length ? (
           <p className="text-xs text-muted-foreground">Sin próximas actividades.</p>
         ) : (
           <div className="space-y-2">
+            {upcomingCitas.map((c: any) => {
+              const TipoIcon = CITA_TYPE_META[c.tipo]?.icon ?? CalendarClock;
+              return (
+                <div key={`cita-${c.id}`} className="flex items-center gap-3 group/up">
+                  <div className="h-7 w-7 shrink-0 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-400 flex items-center justify-center">
+                    <TipoIcon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{c.title}</div>
+                    <div className="text-xs text-muted-foreground">{fmtCitaWhen(c.start_at, c.end_at)}</div>
+                  </div>
+                  {canEdit && (
+                  <button onClick={() => onUpdateCita?.(c.id, "realizada")} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 opacity-0 group-hover/up:opacity-100 transition-opacity shrink-0">
+                    <Check className="h-3 w-3" />Realizada
+                  </button>
+                  )}
+                </div>
+              );
+            })}
             {upcoming.map((t: any) => (
               <div key={t.id} className="flex items-center gap-3 group/up">
                 <div className="h-7 w-7 shrink-0 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 flex items-center justify-center">
@@ -1416,9 +2016,11 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
                   <div className="text-sm font-medium truncate">{t.title}</div>
                   <div className="text-xs text-muted-foreground">Pendiente: {fmtDate(t.due_date)}</div>
                 </div>
+                {canEdit && (
                 <button onClick={() => onCompleteTask?.(t.id)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1 opacity-0 group-hover/up:opacity-100 transition-opacity shrink-0">
                   <Check className="h-3 w-3" />Completar
                 </button>
+                )}
               </div>
             ))}
           </div>
@@ -1433,1006 +2035,1201 @@ function DescriptionPanel({ contact, notes, tasks, onSaved, onCompleteTask, onDe
   );
 }
 
-function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, onSaved, onCompleteTask, onDeleteTask, onDeleteNote }: any) {
-  const [filter, setFilter] = useState<"all" | "note" | "task">("all");
+
+
+
+
+
+// ─── Negocios en la ficha del contacto (estilo HubSpot) ───────────────────────
+
+// Formatea un monto con su moneda; cae a fmtMXN si la moneda no es válida.
+
+// Tarjeta lateral "Negocios (N)" con lista de negocios asociados + botón Agregar.
+
+
+
+
+
+// ─── Negocios (vista general, estilo HubSpot) ─────────────────────────────────
+
+
+// Colores de columna del tablero (etapas dinámicas): ganado=verde, perdido=rojo,
+// el resto cicla una paleta por índice.
+
+// Persistencia de filtros de la vista de Negocios, POR USUARIO.
+// Filtros (pipeline/propietario/vista) → localStorage (permanecen entre sesiones:
+// cada usuario conserva su pipeline). Buscador → sessionStorage (sobrevive el
+// back-nav pero arranca vacío en una sesión nueva). Mismo patrón que las columnas
+// de Contactos (loadContactColumns).
+const DEALS_FILTERS_KEY = "sozu:deals:filters:v1";
+const DEALS_SEARCH_KEY = "sozu:deals:search:v1";
+type DealsFiltersPersist = { view: "list" | "board"; pipelineFilter: string; boardPipeline: string; ownerFilter: string };
+
+function loadDealsFilters(uid: string): Partial<DealsFiltersPersist> {
+  if (typeof window === "undefined" || !uid) return {};
+  try {
+    const raw = window.localStorage.getItem(`${DEALS_FILTERS_KEY}:${uid}`);
+    return raw ? (JSON.parse(raw) as Partial<DealsFiltersPersist>) : {};
+  } catch { return {}; }
+}
+function saveDealsFilters(uid: string, v: DealsFiltersPersist) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.localStorage.setItem(`${DEALS_FILTERS_KEY}:${uid}`, JSON.stringify(v)); } catch { /* ignore */ }
+}
+function loadDealsSearch(uid: string): string {
+  if (typeof window === "undefined" || !uid) return "";
+  try { return window.sessionStorage.getItem(`${DEALS_SEARCH_KEY}:${uid}`) ?? ""; } catch { return ""; }
+}
+function saveDealsSearch(uid: string, s: string) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.sessionStorage.setItem(`${DEALS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
+}
+
+export function CrmDeals() {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const uid = user?.id ?? "";
+  const [view, setView] = useState<"list" | "board">("board");
+  const [pipelineFilter, setPipelineFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const TABS: { id: "all" | "note" | "task"; label: string }[] = [
-    { id: "all", label: "Todas las actividades" },
-    { id: "note", label: "Notas" },
-    { id: "task", label: "Tareas" },
-  ];
+  const [boardPipeline, setBoardPipeline] = useState<string>("");
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [collapsedCols, setCollapsedCols] = useState<Set<number>>(new Set());
+  const [manualCols, setManualCols] = useState<Set<number>>(new Set());
+  const [editTarget, setEditTarget] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // Recordar filtros por usuario: hidratar una sola vez (cuando ya hay usuario)…
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (!uid || hydrated.current) return;
+    const f = loadDealsFilters(uid);
+    if (f.view) setView(f.view);
+    if (f.pipelineFilter) setPipelineFilter(f.pipelineFilter);
+    if (f.boardPipeline) setBoardPipeline(f.boardPipeline);
+    if (f.ownerFilter) setOwnerFilter(f.ownerFilter);
+    setSearch(loadDealsSearch(uid));
+    hydrated.current = true;
+  }, [uid]);
+  // …y persistir al cambiar (solo tras hidratar, para no pisar lo guardado con los defaults).
+  useEffect(() => {
+    if (!hydrated.current || !uid) return;
+    saveDealsFilters(uid, { view, pipelineFilter, boardPipeline, ownerFilter });
+  }, [uid, view, pipelineFilter, boardPipeline, ownerFilter]);
+  useEffect(() => {
+    if (!hydrated.current || !uid) return;
+    saveDealsSearch(uid, search);
+  }, [uid, search]);
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["deals-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+
+  // Se traen TODOS los negocios (filtrando por propietario/búsqueda en servidor); el
+  // filtro de pipeline se aplica en cliente para que la Lista y el Tablero compartan datos.
+  const dealsKey = ["deals-list", ownerFilter, search.trim()];
+  const { data, isLoading } = useQuery({
+    queryKey: dealsKey,
+    queryFn: async () => {
+      let q = (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, tipo_negocio, prioridad, fecha_creacion")
+        .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
+      if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
+      if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
+      const { data: negocios, error } = await q;
+      if (error) throw error;
+      const list = negocios ?? [];
+      if (!list.length) return { rows: [], truncated: false };
+
+      const etapaIds = Array.from(new Set(list.map((n: any) => n.id_etapa).filter(Boolean)));
+      const pipeIds = Array.from(new Set(list.map((n: any) => n.id_pipeline).filter(Boolean)));
+      const ownerIds = Array.from(new Set(list.map((n: any) => n.id_usuario_propietario).filter(Boolean)));
+      const erIds = Array.from(new Set(list.map((n: any) => n.id_entidad_relacionada).filter(Boolean)));
+
+      const [etRes, pRes, oRes, erRes] = await Promise.all([
+        etapaIds.length ? (supabase as any).from("crm_pipeline_etapas").select("id, nombre, probabilidad, es_ganado, es_perdido").in("id", etapaIds) : Promise.resolve({ data: [] }),
+        pipeIds.length ? (supabase as any).from("crm_pipelines").select("id, nombre").in("id", pipeIds) : Promise.resolve({ data: [] }),
+        ownerIds.length ? (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ownerIds) : Promise.resolve({ data: [] }),
+        erIds.length ? (supabase as any).from("entidades_relacionadas").select("id, id_persona").in("id", erIds) : Promise.resolve({ data: [] }),
+      ]);
+      const etapaMap = new Map((etRes.data ?? []).map((e: any) => [e.id, e]));
+      const pipeMap = new Map((pRes.data ?? []).map((p: any) => [p.id, p.nombre]));
+      const ownerMap = new Map((oRes.data ?? []).map((o: any) => [o.auth_user_id, o.nombre]));
+
+      const personaIds = Array.from(new Set((erRes.data ?? []).map((e: any) => e.id_persona).filter(Boolean)));
+      let personaMap = new Map<number, string>();
+      if (personaIds.length) {
+        const { data: ps } = await (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", personaIds);
+        personaMap = new Map((ps ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+      }
+      const erMap = new Map((erRes.data ?? []).map((e: any) => [e.id, personaMap.get(e.id_persona) ?? null]));
+
+      const rows = list.map((n: any) => {
+        const et: any = etapaMap.get(n.id_etapa);
+        return {
+          ...n,
+          etapa_nombre: et?.nombre ?? "—",
+          probabilidad: et ? Number(et.probabilidad) : 0,
+          es_ganado: !!et?.es_ganado,
+          es_perdido: !!et?.es_perdido,
+          pipeline_nombre: pipeMap.get(n.id_pipeline) ?? "—",
+          propietario_nombre: n.id_usuario_propietario ? (ownerMap.get(n.id_usuario_propietario) ?? "—") : "—",
+          contacto_nombre: n.id_entidad_relacionada ? (erMap.get(n.id_entidad_relacionada) ?? null) : null,
+        };
+      });
+      return { rows, truncated: list.length === 1000 };
+    },
+  });
+
+  const rows: any[] = data?.rows ?? [];
+
+  // Pipeline efectivo del tablero: el elegido o, por defecto, el primero.
+  const effectiveBoardPipeline = boardPipeline || (pipelines?.[0] ? String(pipelines[0].id) : "");
+
+  const { data: boardEtapas } = useQuery({
+    queryKey: ["deals-board-etapas", effectiveBoardPipeline],
+    enabled: view === "board" && !!effectiveBoardPipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden, probabilidad, es_ganado, es_perdido")
+        .eq("id_pipeline", Number(effectiveBoardPipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as any[];
+    },
+  });
+
+  const listRows = useMemo(
+    () => (pipelineFilter === "all" ? rows : rows.filter((r) => String(r.id_pipeline) === pipelineFilter)),
+    [rows, pipelineFilter],
+  );
+  const boardRows = useMemo(
+    () => rows.filter((r) => String(r.id_pipeline) === effectiveBoardPipeline),
+    [rows, effectiveBoardPipeline],
+  );
+  const activeRows = view === "board" ? boardRows : listRows;
+
+  // Auto-colapsa columnas vacías (salvo alternadas a mano). Si el pipeline no tiene
+  // ningún negocio, deja todo expandido para ver el embudo completo.
+  useEffect(() => {
+    if (view !== "board" || !boardEtapas) return;
+    const anyDeals = boardRows.length > 0;
+    setCollapsedCols((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      boardEtapas.forEach((et: any) => {
+        if (manualCols.has(et.id)) return;
+        const shouldCollapse = anyDeals && !boardRows.some((r) => r.id_etapa === et.id);
+        if (shouldCollapse && !next.has(et.id)) { next.add(et.id); changed = true; }
+        if (!shouldCollapse && next.has(et.id)) { next.delete(et.id); changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [boardEtapas, boardRows, manualCols, view]);
+
+  const toggleCol = (id: number) => {
+    setManualCols((prev) => new Set(prev).add(id));
+    setCollapsedCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const metrics = useMemo(() => {
+    let total = 0, ponderada = 0, abierto = 0, ganado = 0;
+    for (const r of activeRows) {
+      const v = Number(r.valor ?? 0);
+      total += v;
+      ponderada += v * (Number(r.probabilidad ?? 0) / 100);
+      if (!r.es_ganado && !r.es_perdido) abierto += v;
+      if (r.es_ganado) ganado += v;
+    }
+    return { total, ponderada, abierto, ganado };
+  }, [activeRows]);
+
+  const activeDeal = rows.find((r) => r.id === activeId) ?? null;
+
+  const handleDragEnd = async (e: DragEndEvent) => {
+    setActiveId(null);
+    const dealId = Number(e.active.id);
+    const targetEtapa = e.over ? Number(e.over.id) : null;
+    if (!targetEtapa) return;
+    const deal = rows.find((r) => r.id === dealId);
+    if (!deal || deal.id_etapa === targetEtapa) return;
+    const targetEt: any = (boardEtapas ?? []).find((et: any) => et.id === targetEtapa);
+
+    // Optimista: mueve la tarjeta ya en la UI.
+    qc.setQueryData(dealsKey, (old: any) => old ? {
+      ...old,
+      rows: old.rows.map((r: any) => r.id === dealId ? {
+        ...r, id_etapa: targetEtapa,
+        etapa_nombre: targetEt?.nombre ?? r.etapa_nombre,
+        probabilidad: targetEt ? Number(targetEt.probabilidad) : r.probabilidad,
+        es_ganado: !!targetEt?.es_ganado, es_perdido: !!targetEt?.es_perdido,
+      } : r),
+    } : old);
+
+    const { error } = await (supabase as any).from("crm_negocios").update({ id_etapa: targetEtapa }).eq("id", dealId);
+    if (error) { toast.error(error.message); qc.invalidateQueries({ queryKey: ["deals-list"] }); return; }
+    toast.success(`Movido a "${targetEt?.nombre ?? "etapa"}"`);
+    qc.invalidateQueries({ queryKey: ["deals-list"] });
+    if (deal.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+  };
+
+  const openDeal = (id: number) => navigate(`/admin/portal-crm/ventas/negocios/${id}`);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio eliminado");
+    const er = deleteTarget.id_entidad_relacionada;
+    setDeleteTarget(null);
+    qc.invalidateQueries({ queryKey: ["deals-list"] });
+    if (er) qc.invalidateQueries({ queryKey: ["contact-deals", String(er)] });
+  };
+
+  const viewToggle = (
+    <div className="inline-flex rounded-md border border-border overflow-hidden">
+      <button onClick={() => setView("list")} title="Vista de lista"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === "list" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+        <List className="h-4 w-4" />Lista
+      </button>
+      <button onClick={() => setView("board")} title="Vista de tablero"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-border transition-colors ${view === "board" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+        <LayoutGrid className="h-4 w-4" />Tablero
+      </button>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {/* Sub-tabs por tipo de actividad */}
-      <div className="border-b border-border flex gap-1">
-        {TABS.map((t) => (
-          <button key={t.id} onClick={() => setFilter(t.id)}
-            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${filter === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={
+        <div className="flex items-center gap-2">
+          {viewToggle}
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Plus className="h-4 w-4 mr-1" />Crear negocio
+          </Button>
+        </div>
+      } />
+
+      {/* Métricas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <DealMetric label="Cantidad total" value={fmtMXN(metrics.total)} />
+        <DealMetric label="Cantidad ponderada" value={fmtMXN(metrics.ponderada)} />
+        <DealMetric label="Negocio abierto" value={fmtMXN(metrics.abierto)} />
+        <DealMetric label="Cerrado ganado" value={fmtMXN(metrics.ganado)} />
+      </div>
+
+      {/* Barra: buscador · pipeline · propietario */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar negocio" className="pl-8 h-9" />
+        </div>
+        {view === "list" ? (
+          <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los pipelines" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los pipelines</SelectItem>
+              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select value={effectiveBoardPipeline} onValueChange={setBoardPipeline}>
+            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Selecciona un pipeline" /></SelectTrigger>
+            <SelectContent>
+              {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Todos los propietarios" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los propietarios</SelectItem>
+            {(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Contenido */}
+      {isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : view === "board" ? (
+        !effectiveBoardPipeline ? (
+          <EmptyState title="Sin pipelines" description="Crea un pipeline en Configuración para ver el tablero." />
+        ) : (
+          <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(Number(e.active.id))} onDragEnd={handleDragEnd}>
+            <div className="flex gap-2 overflow-x-auto pb-4 items-start">
+              {(boardEtapas ?? []).map((et: any, i: number) => (
+                <BoardColumn key={et.id} etapa={et}
+                  deals={boardRows.filter((r) => r.id_etapa === et.id)}
+                  colorClass={etapaColorClasses(et, i)}
+                  collapsed={collapsedCols.has(et.id)}
+                  onToggle={() => toggleCol(et.id)}
+                  onOpen={openDeal} onEdit={setEditTarget} onDelete={setDeleteTarget} />
+              ))}
+              {(boardEtapas ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground py-8">Este pipeline no tiene etapas. Agrégalas en Configuración → Pipelines.</p>
+              )}
+            </div>
+            <DragOverlay>{activeDeal && <DealBoardCard deal={activeDeal} dragging />}</DragOverlay>
+          </DndContext>
+        )
+      ) : listRows.length === 0 ? (
+        <EmptyState title="Sin negocios" description="No hay negocios que coincidan con los filtros." />
+      ) : (
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre del negocio</TableHead>
+                <TableHead>Pipeline</TableHead>
+                <TableHead>Etapa</TableHead>
+                <TableHead>Contacto</TableHead>
+                <TableHead>Fecha de cierre</TableHead>
+                <TableHead>Propietario</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {listRows.map((r: any) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-medium">
+                    <Link to={`/admin/portal-crm/ventas/negocios/${r.id}`} className="hover:underline hover:text-primary">{r.nombre}</Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{r.pipeline_nombre}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-[11px]">{r.etapa_nombre}</Badge></TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {r.contacto_nombre ? (
+                      <Link to={`/admin/portal-crm/ventas/contactos/${r.id_entidad_relacionada}`} className="hover:underline hover:text-primary">
+                        {r.contacto_nombre}
+                      </Link>
+                    ) : "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground tabular-nums">{r.fecha_cierre_estimada ? fmtDate(r.fecha_cierre_estimada) : "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{r.propietario_nombre}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{r.valor != null ? fmtMoneda(Number(r.valor), r.moneda) : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <DealActionsMenu deal={r} onOpen={openDeal} onEdit={setEditTarget} onDelete={setDeleteTarget} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      {view === "list" && data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
+
+      {/* Crear negocio (desde el módulo, contacto opcional) */}
+      <NewDealDialog open={createOpen} onOpenChange={setCreateOpen} onSaved={() => qc.invalidateQueries({ queryKey: ["deals-list"] })} />
+
+      {/* Editar negocio */}
+      <EditDealDialog deal={editTarget} pipelines={pipelines ?? []} owners={owners ?? []}
+        onOpenChange={(v) => { if (!v) setEditTarget(null); }}
+        onSaved={() => { qc.invalidateQueries({ queryKey: ["deals-list"] }); if (editTarget?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(editTarget.id_entidad_relacionada)] }); setEditTarget(null); }} />
+
+      {/* Eliminar negocio */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este negocio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará <span className="font-medium text-foreground">{deleteTarget?.nombre}</span>. Podrás recuperarlo desde la base de datos si es necesario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmDelete(); }} disabled={deleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              {deleting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Eliminando…</> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+
+
+
+
+
+// ─── CrmDealDetail — vista de un negocio ──────────────────────────────────────
+
+export function CrmDealDetail() {
+  const { dealId } = useParams();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [form, setForm] = useState<any | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const canDelete = useCrmCanDelete("/admin/portal-crm/ventas/negocios");
+  const [deleting, setDeleting] = useState(false);
+  const [centerTab, setCenterTab] = useState("descripcion");
+  const [actSearch, setActSearch] = useState("");
+  const [allExpanded, setAllExpanded] = useState(false);
+  const [expandNonce, setExpandNonce] = useState(0);
+  const loadedRef = useRef<string | undefined>(undefined);
+  const skipAutoSave = useRef(true);
+
+  // Acota el <main> al alto visible para que cada columna scrollee sola (estilo HubSpot).
+  useEffect(() => {
+    const el = document.querySelector("main") as HTMLElement | null;
+    const bodyPrev = document.body.style.overflow;
+    const htmlPrev = document.documentElement.style.overflow;
+    const prev = el ? { height: el.style.height, minHeight: el.style.minHeight, padding: el.style.padding, overflow: el.style.overflow } : null;
+    const apply = () => {
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
+      if (el) {
+        window.scrollTo(0, 0);
+        const top = el.getBoundingClientRect().top;
+        el.style.height = `${window.innerHeight - top}px`;
+        el.style.minHeight = "0";
+        el.style.padding = "0";
+        el.style.overflow = "hidden";
+      }
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("resize", apply);
+      document.documentElement.style.overflow = htmlPrev;
+      document.body.style.overflow = bodyPrev;
+      if (el && prev) { el.style.height = prev.height; el.style.minHeight = prev.minHeight; el.style.padding = prev.padding; el.style.overflow = prev.overflow; }
+    };
+  }, []);
+
+  const { data: deal, isLoading } = useQuery({
+    queryKey: ["deal-detail", dealId],
+    enabled: !!dealId,
+    queryFn: async () => {
+      const { data: n } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, tipo_negocio, prioridad, fecha_creacion")
+        .eq("id", Number(dealId)).eq("activo", true).maybeSingle();
+      if (!n) return null;
+      const [pRes, eRes, oRes] = await Promise.all([
+        n.id_pipeline ? (supabase as any).from("crm_pipelines").select("nombre").eq("id", n.id_pipeline).maybeSingle() : Promise.resolve({ data: null }),
+        n.id_etapa ? (supabase as any).from("crm_pipeline_etapas").select("nombre").eq("id", n.id_etapa).maybeSingle() : Promise.resolve({ data: null }),
+        n.id_usuario_propietario ? (supabase as any).from("usuarios").select("nombre").eq("auth_user_id", n.id_usuario_propietario).maybeSingle() : Promise.resolve({ data: null }),
+      ]);
+      let contacto: any = null;
+      if (n.id_entidad_relacionada) {
+        const { data: er } = await (supabase as any).from("entidades_relacionadas").select("id, id_persona").eq("id", n.id_entidad_relacionada).maybeSingle();
+        if (er?.id_persona) {
+          const { data: p } = await (supabase as any).from("personas").select("nombre_legal, nombre_comercial, email, telefono").eq("id", er.id_persona).maybeSingle();
+          contacto = { id: n.id_entidad_relacionada, nombre: (p?.nombre_legal || p?.nombre_comercial || "Sin nombre").trim(), email: p?.email ?? null, telefono: p?.telefono ?? null };
+        }
+      }
+      return { ...n, pipeline_nombre: pRes.data?.nombre ?? "—", etapa_nombre: eRes.data?.nombre ?? "—", propietario_nombre: oRes.data?.nombre ?? "—", contacto };
+    },
+  });
+
+  const { data: pipelines } = useQuery({
+    queryKey: ["deals-pipelines"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+  const { data: etapas } = useQuery({
+    queryKey: ["deal-detail-etapas", form?.id_pipeline],
+    enabled: !!form?.id_pipeline,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("crm_pipeline_etapas")
+        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  // Hidrata el formulario una sola vez por negocio (no en cada refetch, para no
+  // pisar lo que el usuario está escribiendo mientras se autoguarda).
+  useEffect(() => {
+    if (deal && loadedRef.current !== dealId) {
+      loadedRef.current = dealId;
+      skipAutoSave.current = true;
+      setForm({
+        nombre: deal.nombre ?? "",
+        id_pipeline: deal.id_pipeline ? String(deal.id_pipeline) : "",
+        id_etapa: deal.id_etapa ? String(deal.id_etapa) : "",
+        valor: deal.valor != null ? String(deal.valor) : "",
+        moneda: deal.moneda ?? "MXN",
+        fecha_cierre: deal.fecha_cierre_estimada ?? "",
+        id_propietario: deal.id_usuario_propietario ?? "",
+        tipo_negocio: deal.tipo_negocio ?? "",
+        prioridad: deal.prioridad ?? "",
+      });
+    }
+  }, [deal, dealId]);
+
+  // Autoguardado con debounce: cada cambio en el panel se persiste solo.
+  useEffect(() => {
+    if (!form) return;
+    if (skipAutoSave.current) { skipAutoSave.current = false; return; }
+    if (!form.nombre.trim()) return;
+    setSaveState("saving");
+    const t = setTimeout(async () => {
+      const patch = {
+        nombre: form.nombre.trim(),
+        id_pipeline: form.id_pipeline ? Number(form.id_pipeline) : null,
+        id_etapa: form.id_etapa ? Number(form.id_etapa) : null,
+        valor: form.valor ? Number(form.valor) : null,
+        moneda: form.moneda,
+        fecha_cierre_estimada: form.fecha_cierre || null,
+        id_usuario_propietario: form.id_propietario || null,
+        tipo_negocio: form.tipo_negocio || null,
+        prioridad: form.prioridad || null,
+      };
+      const { error } = await (supabase as any).from("crm_negocios").update(patch).eq("id", Number(dealId));
+      if (error) { toast.error(error.message); setSaveState("idle"); return; }
+      setSaveState("saved");
+      // Actualiza el encabezado/resumen local sin refetch (evita pisar el formulario).
+      qc.setQueryData(["deal-detail", dealId], (old: any) => old ? {
+        ...old, ...patch,
+        pipeline_nombre: (pipelines ?? []).find((p) => String(p.id) === form.id_pipeline)?.nombre ?? old.pipeline_nombre,
+        etapa_nombre: (etapas ?? []).find((e: any) => String(e.id) === form.id_etapa)?.nombre ?? "—",
+        propietario_nombre: (owners ?? []).find((o: any) => o.id === form.id_propietario)?.full_name
+          ?? (owners ?? []).find((o: any) => o.id === form.id_propietario)?.email ?? old.propietario_nombre,
+      } : old);
+      qc.invalidateQueries({ queryKey: ["deals-list"] });
+      if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
+
+  const doDelete = async () => {
+    setDeleting(true);
+    const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", Number(dealId));
+    setDeleting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Negocio eliminado");
+    qc.invalidateQueries({ queryKey: ["deals-list"] });
+    if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+    navigate("/admin/portal-crm/ventas/negocios");
+  };
+
+  // Actividad del negocio = notas/tareas de su contacto asociado (reutiliza el Timeline).
+  const erId: number | null = deal?.id_entidad_relacionada ?? null;
+  const { data: activity } = useQuery({
+    queryKey: ["deal-activity", erId],
+    enabled: !!erId,
+    queryFn: async () => {
+      const [notasRes, tareasRes, citasRes] = await Promise.all([
+        (supabase as any).from("crm_notas").select("id, contenido, fecha_creacion, id_usuario, anclado").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("anclado", { ascending: false }).order("fecha_creacion", { ascending: false }),
+        (supabase as any).from("crm_tareas").select("id, titulo, tipo, estatus, prioridad, descripcion, fecha_vencimiento, fecha_recordatorio, recurrencia, id_usuario_asignado, fecha_creacion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_creacion", { ascending: false }),
+        (supabase as any).from("crm_citas").select("id, titulo, tipo, estatus, fecha_inicio, fecha_fin, ubicacion, enlace_reunion, resultado, descripcion, fecha_creacion, id_usuario_asignado").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_inicio", { ascending: false }),
+      ]);
+      const notasRows = notasRes.data ?? [];
+      const tareasRows = tareasRes.data ?? [];
+      const citasRows = citasRes.error ? [] : (citasRes.data ?? []); // fail-soft si crm_citas no existe aún
+      // Resuelve nombres de usuario (autor de nota / asignado de tarea) en un solo lookup.
+      const uids = Array.from(new Set([
+        ...notasRows.map((n: any) => n.id_usuario),
+        ...tareasRows.map((t: any) => t.id_usuario_asignado),
+      ].filter(Boolean)));
+      let nameMap: Record<string, string> = {};
+      if (uids.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", uids);
+        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      const notes = notasRows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
+      const tasks = tareasRows.map((t: any) => ({
+        id: t.id, title: t.titulo, tipo: t.tipo, status: t.estatus, priority: t.prioridad,
+        descripcion: t.descripcion, due_date: t.fecha_vencimiento, reminder: t.fecha_recordatorio,
+        recurrencia: t.recurrencia, assignee: t.id_usuario_asignado ? (nameMap[t.id_usuario_asignado] ?? null) : null,
+        created_at: t.fecha_creacion,
+      }));
+      const citas = citasRows.map((c: any) => ({
+        id: c.id, title: c.titulo, tipo: c.tipo, status: c.estatus,
+        start_at: c.fecha_inicio, end_at: c.fecha_fin,
+        ubicacion: c.ubicacion ?? null, enlace: c.enlace_reunion ?? null,
+        resultado: c.resultado ?? null, descripcion: c.descripcion ?? null,
+        created_at: c.fecha_creacion,
+      }));
+      return { notes, tasks, citas };
+    },
+  });
+  const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
+  const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea completada"); invalidateActivity(); };
+  const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea eliminada"); invalidateActivity(); };
+  const deleteNote = async (id: number) => { const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Nota eliminada"); invalidateActivity(); };
+  const updateCitaStatus = async (id: number, estatus: string) => { const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita actualizada"); invalidateActivity(); };
+  const deleteCita = async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita eliminada"); invalidateActivity(); };
+
+  if (isLoading || !form) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid md:grid-cols-3 gap-4"><Skeleton className="h-96 md:col-span-2" /><Skeleton className="h-64" /></div>
+      </div>
+    );
+  }
+  if (!deal) {
+    return (
+      <div className="space-y-3">
+        <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/negocios"><ArrowLeft className="h-4 w-4 mr-1" />Negocios</Link></Button>
+        <p className="text-sm text-muted-foreground">Este negocio no existe o fue eliminado.</p>
+      </div>
+    );
+  }
+
+  const valorFmt = deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—";
+  const tipoLabel = deal.tipo_negocio === "cliente_nuevo" ? "Cliente nuevo" : deal.tipo_negocio === "cliente_existente" ? "Cliente existente" : "—";
+  const quickFacts: [string, string][] = [
+    ["Pipeline", deal.pipeline_nombre],
+    ["Etapa", deal.etapa_nombre],
+    ["Fecha de cierre", deal.fecha_cierre_estimada ? fmtDate(deal.fecha_cierre_estimada) : "—"],
+    ["Propietario", deal.propietario_nombre],
+  ];
+  const actNotes = activity?.notes ?? [];
+  const actTasks = activity?.tasks ?? [];
+  const actCitas = activity?.citas ?? [];
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const upcomingTasks = actTasks.filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= todayStart)
+    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  const pinnedNotes = actNotes.filter((n: any) => n.anclado);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm shrink-0">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary hover:bg-primary/5 -ml-2 transition-colors" asChild>
+            <Link to="/admin/portal-crm/ventas/negocios"><ArrowLeft className="h-4 w-4 mr-1.5" />Negocios</Link>
+          </Button>
+          <span className="text-muted-foreground/40 text-sm">/</span>
+          <span className="text-sm font-medium text-foreground truncate max-w-[220px]">{deal.nombre}</span>
+        </div>
+        {canDelete && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5"><MoreHorizontal className="h-4 w-4" />Acciones</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => setConfirmDeleteOpen(true)} className="text-destructive focus:text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar negocio</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+
+      {/* 3-column body — estilo HubSpot; cada columna scrollea por su cuenta */}
+      <div className="grid grid-cols-12 flex-1 min-h-0 overflow-hidden">
+        {/* Left: resumen + "Acerca de este negocio" (editable) */}
+        <aside className="col-span-3 border-r border-border p-5 space-y-5 bg-white h-full min-h-0 overflow-y-auto">
+          <div className="flex flex-col items-center gap-2 pt-2 text-center">
+            <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-primary ring-4 ring-primary/5 shadow-sm">
+              <Briefcase className="h-6 w-6" />
+            </div>
+            <h2 className="font-semibold text-sm leading-tight">{deal.nombre}</h2>
+            <p className="text-lg font-semibold tabular-nums">{valorFmt}</p>
+            {deal.prioridad && PRIORIDAD_META[deal.prioridad] && (
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[deal.prioridad]}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} />{PRIORIDAD_META[deal.prioridad].label}
+              </span>
+            )}
+          </div>
+
+          {/* Datos rápidos */}
+          <div className="space-y-2">
+            {quickFacts.map(([l, v]) => (
+              <div key={l} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground shrink-0">{l}</span>
+                <span className="font-medium text-right truncate">{v}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Acerca de este negocio (editable) */}
+          <Accordion type="single" collapsible defaultValue="about">
+            <AccordionItem value="about" className="border-0">
+              <AccordionTrigger className="text-xs font-semibold uppercase tracking-widest text-slate-500 hover:no-underline py-2 hover:text-primary transition-colors">
+                Acerca de este negocio
+              </AccordionTrigger>
+              <AccordionContent className="pt-1 pb-0">
+                <div className="grid gap-3">
+                  <DField label="Nombre *"><Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /></DField>
+                  <DField label="Pipeline">
+                    <Select value={form.id_pipeline} onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>{(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <DField label="Etapa">
+                    <Select value={form.id_etapa} onValueChange={(v) => setForm({ ...form, id_etapa: v })} disabled={!form.id_pipeline}>
+                      <SelectTrigger><SelectValue placeholder={form.id_pipeline ? "Selecciona una etapa" : "Elige pipeline"} /></SelectTrigger>
+                      <SelectContent>{(etapas ?? []).map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <div className="grid grid-cols-2 gap-2">
+                    <DField label="Valor"><Input type="number" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></DField>
+                    <DField label="Moneda">
+                      <Select value={form.moneda} onValueChange={(v) => setForm({ ...form, moneda: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="MXN">MXN</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent>
+                      </Select>
+                    </DField>
+                  </div>
+                  <DField label="Fecha de cierre"><Input type="date" value={form.fecha_cierre} onChange={(e) => setForm({ ...form, fecha_cierre: e.target.value })} /></DField>
+                  <DField label="Propietario">
+                    <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>{(owners ?? []).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <DField label="Tipo de negocio">
+                    <Select value={form.tipo_negocio} onValueChange={(v) => setForm({ ...form, tipo_negocio: v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>{TIPO_NEGOCIO_OPTS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </DField>
+                  <DField label="Prioridad">
+                    <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(PRIORIDAD_META).map(([value, meta]) => (
+                          <SelectItem key={value} value={value}>
+                            <span className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </DField>
+                  <div className="flex items-center justify-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                    {saveState === "saving" ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Guardando…</>
+                    ) : saveState === "saved" ? (
+                      <><Check className="h-3 w-3 text-emerald-600" />Cambios guardados</>
+                    ) : (
+                      <span>Los cambios se guardan automáticamente</span>
+                    )}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
+
+        {/* Center: pestañas */}
+        <section className="col-span-6 border-r border-border h-full min-h-0 overflow-hidden">
+          <Tabs value={centerTab} onValueChange={setCenterTab} className="flex flex-col h-full min-h-0">
+            <div className="border-b border-border shrink-0">
+              <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
+                <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
+                <TabsTrigger value="actividades" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Actividades</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
+              {/* Aspectos destacados de los datos (real) */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Aspectos destacados de los datos</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <HL label="Fecha de creación" value={deal.fecha_creacion ? fmtDateTime(deal.fecha_creacion) : "—"} />
+                  <HL label="Etapa del negocio" value={`${deal.etapa_nombre} (${deal.pipeline_nombre})`} />
+                  <HL label="Valor" value={valorFmt} />
+                  <HL label="Fecha de cierre" value={deal.fecha_cierre_estimada ? fmtDate(deal.fecha_cierre_estimada) : "—"} />
+                  <HL label="Tipo de negocio" value={tipoLabel} />
+                  <HL label="Propietario" value={deal.propietario_nombre} />
+                </div>
+              </div>
+
+              {/* Contactos asociados */}
+              <DealContactsSection contacto={deal.contacto} />
+
+              {/* Actividades recientes (colapsables, estilo HubSpot) */}
+              <div className="bg-card border border-border rounded-lg p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h3 className="text-sm font-semibold">Actividades recientes</h3>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button onClick={() => setCenterTab("actividades")} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                      <Plus className="h-3.5 w-3.5" />Añadir actividad
+                    </button>
+                    <button onClick={() => { setAllExpanded((v) => !v); setExpandNonce((n) => n + 1); }} className="text-xs text-primary hover:underline">
+                      {allExpanded ? "Contraer todo" : "Expandir todo"}
+                    </button>
+                  </div>
+                </div>
+                <div className="relative mb-3">
+                  <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={actSearch} onChange={(e) => setActSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
+                </div>
+                {!erId ? (
+                  <p className="text-xs text-muted-foreground text-center py-6">Sin contacto asociado.</p>
+                ) : (
+                  <DealActivityFeed
+                    notes={actNotes} tasks={actTasks} search={actSearch}
+                    defaultExpanded={allExpanded} expandNonce={expandNonce}
+                    contactName={deal.contacto?.nombre ?? ""}
+                    onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote} onEdited={invalidateActivity}
+                  />
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="actividades" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
+              {!erId ? (
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <p className="text-xs text-muted-foreground">Asocia un contacto a este negocio para registrar notas y tareas.</p>
+                </div>
+              ) : (
+                <ActivityPanel
+                  contactId={String(erId)} userId={user?.id} owners={owners ?? []}
+                  contact={{ full_name: deal.contacto?.nombre }}
+                  notes={actNotes} tasks={actTasks} citas={actCitas} includeSystem={false}
+                  onSaved={invalidateActivity}
+                  onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                  onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
+        </section>
+
+        {/* Right: entidades relacionadas */}
+        <aside className="col-span-3 p-4 bg-slate-50/40 h-full min-h-0 overflow-y-auto">
+          <Accordion type="multiple" defaultValue={["contactos", "empresas", "cotizaciones"]}>
+            <AccordionItem value="contactos">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Contactos <span className="text-xs text-muted-foreground font-normal">{deal.contacto ? 1 : 0}</span></span>
+              </AccordionTrigger>
+              <AccordionContent>
+                {!deal.contacto ? (
+                  <p className="text-xs text-muted-foreground py-2">Sin contacto asociado</p>
+                ) : (
+                  <div className="rounded-md border border-border p-3 bg-card space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">{dealInitials(deal.contacto.nombre)}</span>
+                      <Link to={`/admin/portal-crm/ventas/contactos/${deal.contacto.id}`} className="text-sm font-medium hover:underline hover:text-primary truncate">{deal.contacto.nombre}</Link>
+                    </div>
+                    {deal.contacto.email && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{deal.contacto.email}</span></div>}
+                    {deal.contacto.telefono && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{deal.contacto.telefono}</span></div>}
+                    <Button variant="outline" size="sm" className="w-full h-7 text-xs" asChild><Link to={`/admin/portal-crm/ventas/contactos/${deal.contacto.id}`}>Ver ficha</Link></Button>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="empresas">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Empresas <span className="text-xs text-muted-foreground font-normal">0</span></span>
+              </AccordionTrigger>
+              <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin empresas asociadas</p></AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="cotizaciones" className="border-b-0">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+                <span className="flex items-center gap-2">Cotizaciones <span className="text-xs text-muted-foreground font-normal">0</span></span>
+              </AccordionTrigger>
+              <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin cotizaciones asociadas</p></AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
+      </div>
+
+      {/* Confirmar eliminación */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este negocio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará <span className="font-medium text-foreground">{deal.nombre}</span> y volverás a la lista de negocios. Podrás recuperarlo desde la base de datos si es necesario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); doDelete(); }} disabled={deleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              {deleting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Eliminando…</> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+
+// Feed de actividades recientes: intercala notas y tareas, agrupa por mes y las
+// pinta colapsables (la nota reusa NoteCard; la tarea usa TaskActivityCard).
+
+// Tarjeta colapsable de una tarea (equivalente a NoteCard). Expandida muestra
+// vencimiento, recordatorio, etapa, tipo, prioridad y asignado (estilo HubSpot).
+
+// ─── CrmCitas (globales) ──────────────────────────────────────────────────────
+// Todas las citas/reuniones de todos los contactos. Lee/escribe la tabla real
+// `crm_citas` (español), resuelve nombre de contacto y asignado por waterfall,
+// y ofrece una "Vista previa" en panel lateral (estilo HubSpot). Se conserva el
+// nombre de export `CrmAppointments` porque App.tsx ya lo rutea en /ventas/citas.
+// (El esquema ficticio `crm_appointments`/`contacts`/`organization_id` se descartó.)
+
+
+export function CrmAppointments() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [tab, setTab] = useState<"upcoming" | "today" | "past" | "all">("upcoming");
+  const [search, setSearch] = useState("");
+  const [fType, setFType] = useState("all");
+  const [fStatus, setFStatus] = useState("all");
+  const [fAssignee, setFAssignee] = useState("all");
+  const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState<GlobalCita | null>(null);
+
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
+
+  const { data: citas = [], isLoading } = useQuery<GlobalCita[]>({
+    queryKey: ["crm-citas-global"],
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_citas")
+        .select("id, titulo, tipo, estatus, fecha_inicio, fecha_fin, ubicacion, enlace_reunion, resultado, descripcion, id_entidad_relacionada, id_usuario_asignado")
+        .eq("activo", true)
+        .order("fecha_inicio", { ascending: false, nullsFirst: false })
+        .limit(1000);
+      if (res.error) return []; // crm_citas aún no desplegada en este ambiente
+      const rows: any[] = res.data ?? [];
+      if (!rows.length) return [];
+
+      // Nombre de contacto: entidades_relacionadas → personas.
+      const entIds = Array.from(new Set(rows.map((r) => r.id_entidad_relacionada).filter(Boolean)));
+      const contactMap: Record<number, string> = {};
+      if (entIds.length) {
+        const { data: ents } = await (supabase as any).from("entidades_relacionadas").select("id, id_persona").in("id", entIds);
+        const personaByEnt: Record<number, number> = Object.fromEntries((ents ?? []).map((e: any) => [e.id, e.id_persona]));
+        const personaIds = Array.from(new Set(Object.values(personaByEnt).filter(Boolean)));
+        if (personaIds.length) {
+          const { data: personas } = await (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", personaIds);
+          const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+          for (const [entId, pId] of Object.entries(personaByEnt)) contactMap[Number(entId)] = pName[pId as number] ?? "Sin nombre";
+        }
+      }
+      // Nombre del usuario asignado.
+      const userIds = Array.from(new Set(rows.map((r) => r.id_usuario_asignado).filter(Boolean)));
+      let userMap: Record<string, string> = {};
+      if (userIds.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", userIds);
+        userMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      return rows.map((r) => ({
+        id: r.id, titulo: r.titulo, tipo: r.tipo, estatus: r.estatus,
+        fecha_inicio: r.fecha_inicio, fecha_fin: r.fecha_fin,
+        ubicacion: r.ubicacion ?? null, enlace_reunion: r.enlace_reunion ?? null,
+        resultado: r.resultado ?? null, descripcion: r.descripcion ?? null,
+        id_entidad_relacionada: r.id_entidad_relacionada, id_usuario_asignado: r.id_usuario_asignado,
+        contact_name: contactMap[r.id_entidad_relacionada] ?? null,
+        assigned_name: r.id_usuario_asignado ? (userMap[r.id_usuario_asignado] ?? null) : null,
+      }));
+    },
+  });
+
+  // Conteos por pestaña (por fecha_inicio).
+  const counts = useMemo(() => {
+    const c = { all: citas.length, today: 0, upcoming: 0, past: 0 };
+    for (const cita of citas) {
+      if (!cita.fecha_inicio) continue;
+      const d = parseISO(cita.fecha_inicio);
+      if (isNaN(d.getTime())) continue;
+      if (isToday(d)) c.today++;
+      else if (isFuture(d)) c.upcoming++;
+      else if (isPast(d)) c.past++;
+    }
+    return c;
+  }, [citas]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return citas
+      .filter((c) => {
+        if (tab !== "all") {
+          if (!c.fecha_inicio) return false;
+          const d = parseISO(c.fecha_inicio);
+          if (isNaN(d.getTime())) return false;
+          if (tab === "today" && !isToday(d)) return false;
+          if (tab === "upcoming" && !isFuture(d)) return false;
+          if (tab === "past" && !(isPast(d) && !isToday(d))) return false;
+        }
+        if (fType !== "all" && c.tipo !== fType) return false;
+        if (fStatus !== "all" && c.estatus !== fStatus) return false;
+        if (fAssignee !== "all") {
+          if (fAssignee === "none" && c.id_usuario_asignado) return false;
+          if (fAssignee !== "none" && c.id_usuario_asignado !== fAssignee) return false;
+        }
+        if (q && !(c.titulo?.toLowerCase().includes(q) || c.contact_name?.toLowerCase().includes(q))) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const da = a.fecha_inicio ?? "9999";
+        const db = b.fecha_inicio ?? "9999";
+        return tab === "past" ? db.localeCompare(da) : da.localeCompare(db);
+      });
+  }, [citas, tab, search, fType, fStatus, fAssignee]);
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, estatus }: { id: number; estatus: string }) => {
+      const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, v) => {
+      qc.refetchQueries({ queryKey: ["crm-citas-global"] });
+      setPreview((p) => (p && p.id === v.id ? { ...p, estatus: v.estatus } : p));
+      toast.success("Cita actualizada");
+    },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
+  });
+  const removeCita = useMutation({
+    mutationFn: async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) throw error; },
+    onSuccess: () => { qc.refetchQueries({ queryKey: ["crm-citas-global"] }); setPreview(null); toast.success("Cita eliminada"); },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
+  });
+
+  const CITA_TABS = [
+    { id: "upcoming" as const, label: "Próximas", count: counts.upcoming },
+    { id: "today" as const, label: "Hoy", count: counts.today },
+    { id: "past" as const, label: "Pasadas", count: counts.past },
+    { id: "all" as const, label: "Todas", count: counts.all },
+  ];
+  const hasFilters = search || fType !== "all" || fStatus !== "all" || fAssignee !== "all";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Citas</h1>
+          <p className="text-sm text-muted-foreground">{citas.length} cita{citas.length === 1 ? "" : "s"} · {counts.upcoming} próxima{counts.upcoming === 1 ? "" : "s"}</p>
+        </div>
+        <NewGlobalCitaDialog open={open} onOpenChange={setOpen} owners={owners} defaultAssignee={user?.id ?? ""} onCreated={() => qc.refetchQueries({ queryKey: ["crm-citas-global"] })} />
+      </div>
+
+      {/* Tabs con conteos */}
+      <div className="border-b border-border flex gap-1 overflow-x-auto">
+        {CITA_TABS.map((t) => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors duration-150 whitespace-nowrap flex items-center gap-2 ${tab === t.id ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`}>
             {t.label}
+            <span className={`text-[11px] rounded-full px-1.5 min-w-[20px] text-center ${tab === t.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{t.count}</span>
           </button>
         ))}
       </div>
 
-      {/* Compositor contextual: nota solo en "Notas", crear tarea solo en "Tareas".
-          "Todas las actividades" es solo el recap (sin compositor). */}
-      {filter === "note" && (
-        <InlineNoteForm contactId={contactId} userId={userId} onSaved={onSaved} />
-      )}
-      {filter === "task" && (
-        <div className="border border-border rounded-lg p-3 bg-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarea</span>
-            <TaskDialog contactId={contactId} owners={owners} userId={userId} onSaved={onSaved}
-              trigger={
-                <button className="flex items-center gap-1 text-xs text-primary hover:text-primary font-medium transition-colors">
-                  <Plus className="h-3.5 w-3.5" />Crear tarea
-                </button>
-              } />
-          </div>
+      {/* Barra de filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por título o contacto…" className="pl-8" />
         </div>
-      )}
-
-      {/* Buscar actividades */}
-      <div className="relative">
-        <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar actividades" className="pl-8 h-8 text-sm" />
-      </div>
-
-      <Timeline
-        notes={filter === "task" ? [] : notes}
-        tasks={filter === "note" ? [] : tasks}
-        appointments={[]} deals={[]} pipelineEvents={[]} conversionEvents={[]}
-        contact={contact} search={search} includeSystem={filter === "all"}
-        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote} onEdited={onSaved}
-      />
-    </div>
-  );
-}
-
-function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; noteId: number; initialHtml: string; onSaved: () => void }) {
-  const [saving, setSaving] = useState(false);
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      UnderlineExt,
-      ImageExt.configure({ inline: false, allowBase64: false }),
-      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
-      TextStyleExt,
-    ],
-    editorProps: { attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" } },
-    content: initialHtml || "",
-  });
-
-  useEffect(() => {
-    if (open && editor) editor.commands.setContent(initialHtml || "");
-  }, [open, editor, initialHtml]);
-
-  const save = async () => {
-    if (!editor) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_notas").update({ contenido: editor.getHTML() }).eq("id", noteId);
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Nota actualizada");
-    onOpenChange(false);
-    onSaved();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Editar nota</DialogTitle></DialogHeader>
-        <div className="border border-border rounded-lg overflow-hidden">
-          <RichNoteToolbar editor={editor} />
-          <EditorContent editor={editor} />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={save} disabled={saving} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function NoteCard({ note, contactName, onEdited, onDelete }: { note: any; contactName: string; onEdited: () => void; onDelete: (id: number) => void }) {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(true);
-  const [pinned, setPinned] = useState<boolean>(!!note.anclado);
-  const [showComments, setShowComments] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [propsOpen, setPropsOpen] = useState(false);
-
-  // Comentarios (persisten en crm_notas_comentarios; tabla puede no existir aún → fallback vacío).
-  const { data: comments = [] } = useQuery({
-    queryKey: ["nota-comentarios", note.id],
-    enabled: showComments,
-    queryFn: async () => {
-      const res = await (supabase as any).from("crm_notas_comentarios")
-        .select("id, contenido, fecha_creacion, id_usuario")
-        .eq("id_nota", note.id).eq("activo", true)
-        .order("fecha_creacion", { ascending: true });
-      if (res.error) return [];
-      const rows = res.data ?? [];
-      const ids = Array.from(new Set(rows.map((r: any) => r.id_usuario).filter(Boolean)));
-      let nameMap: Record<string, string> = {};
-      if (ids.length) {
-        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ids);
-        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
-      }
-      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null }));
-    },
-  });
-
-  const copyLink = () => {
-    try { navigator.clipboard.writeText(window.location.href); toast.success("Enlace copiado"); }
-    catch { toast.error("No se pudo copiar el enlace"); }
-  };
-
-  const togglePin = async () => {
-    const next = !pinned;
-    setPinned(next);
-    const { error } = await (supabase as any).from("crm_notas").update({ anclado: next }).eq("id", note.id);
-    if (error) { setPinned(!next); toast.error(error.message); return; }
-    toast.success(next ? "Nota anclada" : "Nota desanclada");
-    onEdited();
-  };
-
-  const addComment = async () => {
-    const text = draft.trim();
-    if (!text) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_notas_comentarios").insert({ id_nota: note.id, id_usuario: user?.id ?? null, contenido: text });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    setDraft("");
-    qc.invalidateQueries({ queryKey: ["nota-comentarios", note.id] });
-  };
-
-  return (
-    <div className={`border rounded-lg bg-card shadow-sm ${pinned ? "border-primary/40 ring-1 ring-primary/20" : "border-border"}`}>
-      <div className="flex items-start gap-2 p-3">
-        <button onClick={() => setExpanded((e) => !e)} className="mt-0.5 text-muted-foreground hover:text-foreground shrink-0" aria-label={expanded ? "Colapsar" : "Expandir"}>
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm">
-              <span className="font-semibold">Nota</span>
-              {note.author ? <span className="text-muted-foreground"> de {note.author}</span> : null}
-              {pinned && <span className="ml-2 text-[10px] font-medium text-primary align-middle">📌 Anclada</span>}
-            </span>
-            <div className="flex items-center gap-3 shrink-0">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">Acciones <ChevronDown className="h-3 w-3" /></button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={togglePin}>{pinned ? "Desanclar" : "Anclar"}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.message("El historial estará disponible en una fase posterior")}>Historial</DropdownMenuItem>
-                  <DropdownMenuItem onClick={copyLink}>Copiar enlace</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setPropsOpen(true)}>Ver todas las propiedades</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onDelete(note.id)} className="text-destructive focus:text-destructive">Eliminar</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <span className="text-xs text-muted-foreground/70 tabular-nums">{fmtDateTime(note.created_at)}</span>
-            </div>
-          </div>
-
-          {expanded && (
-            <>
-              <div
-                className="mt-1.5 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
-                dangerouslySetInnerHTML={{ __html: note.content }}
-              />
-              {/* Footer */}
-              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border">
-                <button onClick={() => setShowComments((s) => !s)} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  {showComments ? "Ocultar comentarios" : "Agregar comentario"}{comments.length ? ` (${comments.length})` : ""}
-                </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="text-xs text-primary hover:underline inline-flex items-center gap-1">1 asociación <ChevronDown className="h-3 w-3" /></button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem disabled>{contactName}</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              {showComments && (
-                <div className="mt-2 space-y-2">
-                  {comments.map((c: any) => (
-                    <div key={c.id} className="text-sm bg-muted/40 rounded-md p-2">
-                      <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <span className="text-xs font-medium text-foreground">{c.author ?? "Usuario"}</span>
-                        <span className="text-[10px] text-muted-foreground tabular-nums">{relTime(c.ts)}</span>
-                      </div>
-                      <div className="text-foreground">{c.text}</div>
-                    </div>
-                  ))}
-                  <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Deja un comentario…" className="text-sm min-h-[60px]" />
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={addComment} disabled={saving || !draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">{saving ? "Guardando…" : "Comentar"}</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setDraft(""); setShowComments(false); }}>Cancelar</Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Ver todas las propiedades */}
-      <Dialog open={propsOpen} onOpenChange={setPropsOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Propiedades de la nota</DialogTitle></DialogHeader>
-          <div className="space-y-1 text-sm">
-            <ARow label="ID" v={String(note.id)} mono />
-            <ARow label="Autor" v={note.author ?? "—"} />
-            <ARow label="Fecha de creación" v={fmtDateTime(note.created_at)} />
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Editar nota */}
-      <NoteEditDialog open={editOpen} onOpenChange={setEditOpen} noteId={note.id} initialHtml={note.content} onSaved={onEdited} />
-    </div>
-  );
-}
-
-function Timeline({ notes, tasks, appointments, deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onEdited }: any) {
-  const synthetic: TLItem = {
-    id: "contact-created",
-    ts: contact.created_at,
-    kind: "Sistema",
-    title: "Contacto registrado en SOZU",
-    icon: UserPlus,
-    tone: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
-  };
-
-  let items: TLItem[] = [
-    ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
-    ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
-    ...appointments.map((a: any) => ({ id: `a-${a.id}`, ts: a.scheduled_at, kind: `Cita · ${apptStatusLabel[a.status] ?? a.status}`, title: a.appointment_type, subtitle: fmtDateTime(a.scheduled_at), icon: CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
-    ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
-    ...pipelineEvents.map((p: any) => ({ id: `p-${p.id}`, ts: p.changed_at, kind: "Pipeline", title: `${p.old_stage ?? "—"} → ${p.new_stage}`, icon: GitBranch, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" })),
-    ...conversionEvents.map((c: any) => ({ id: `c-${c.id}`, ts: c.event_time, kind: "Evento", title: c.event_name, subtitle: `Meta: ${c.meta_status} · Google: ${c.google_status}`, icon: Zap, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-400" })),
-    ...(includeSystem ? [synthetic] : []),
-  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-
-  const q = (search ?? "").trim().toLowerCase();
-  if (q) {
-    items = items.filter((it) =>
-      (it.title ?? "").toLowerCase().includes(q) ||
-      stripHtml(it.html ?? "").toLowerCase().includes(q) ||
-      (it.kind ?? "").toLowerCase().includes(q));
-  }
-
-  const hasRealActivity = items.some((it) => it.id !== "contact-created");
-
-  if (!items.length) {
-    return (
-      <div className="text-center py-8 border border-dashed border-primary/20 rounded-xl bg-primary/5">
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-          <MessageSquare className="h-5 w-5 text-primary" />
-        </div>
-        <p className="text-sm font-medium text-primary/80">{q ? "Sin resultados" : "Sin actividad registrada aún"}</p>
-        <p className="text-xs text-primary/60 mt-1">{q ? "Ajusta la búsqueda" : "Agrega una nota para comenzar el historial"}</p>
-      </div>
-    );
-  }
-
-  // Agrupar por mes, respetando el orden descendente.
-  const groups: { key: string; items: TLItem[] }[] = [];
-  for (const it of items) {
-    const d = new Date(it.ts);
-    const key = isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-    let g = groups.find((x) => x.key === key);
-    if (!g) { g = { key, items: [] }; groups.push(g); }
-    g.items.push(it);
-  }
-
-  return (
-    <div className="space-y-5">
-      {groups.map((g) => (
-        <div key={g.key}>
-          <p className="text-xs font-semibold text-muted-foreground mb-2 capitalize">{g.key}</p>
-          <div className="space-y-0">
-            {g.items.map((it, i) => {
-          if (it.type === "note") {
-            return (
-              <div key={it.id} className="pb-4 last:pb-0">
-                <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} />
-              </div>
-            );
-          }
-          const Icon = it.icon;
-          return (
-            <div key={it.id} className="flex gap-3 relative pb-5 last:pb-0 group/item">
-              {i < g.items.length - 1 && (
-                <div className="absolute left-3.5 top-7 bottom-0 w-px bg-border/60" />
-              )}
-              <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center z-10 ring-2 ring-background shadow-sm ${it.tone ?? "bg-muted"}`}>
-                <Icon className="h-3.5 w-3.5" />
-              </div>
-              <div className="flex-1 min-w-0 pt-0.5 rounded-lg p-2 -ml-0.5 group-hover/item:bg-slate-50/80 transition-colors duration-100">
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{it.kind}</span>
-                  <span className="text-xs text-muted-foreground/70 shrink-0 tabular-nums">{relTime(it.ts)}</span>
-                </div>
-                {it.html ? (
-                  <div
-                    className="mt-1 prose prose-sm max-w-none text-foreground prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0 prose-strong:font-semibold prose-a:text-primary prose-img:rounded-md prose-img:my-2"
-                    dangerouslySetInnerHTML={{ __html: it.html }}
-                  />
-                ) : (
-                  <>
-                    <div className="text-sm mt-0.5 font-medium text-foreground">{it.title}</div>
-                    {it.subtitle && <div className="text-xs text-muted-foreground mt-0.5">{it.subtitle}</div>}
-                  </>
-                )}
-                {it.type === "task" && (
-                  <div className="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                    {it.status !== "completada" && (
-                      <button onClick={() => onCompleteTask?.(it.rawId)} className="text-[11px] text-emerald-600 hover:underline inline-flex items-center gap-1">
-                        <Check className="h-3 w-3" />Completar
-                      </button>
-                    )}
-                    <button onClick={() => onDeleteTask?.(it.rawId)} className="text-[11px] text-destructive hover:underline inline-flex items-center gap-1">
-                      <X className="h-3 w-3" />Eliminar
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-            })}
-          </div>
-        </div>
-      ))}
-      {!hasRealActivity && (
-        <div className="text-center py-6 border border-dashed border-primary/20 rounded-xl bg-primary/5">
-          <p className="text-sm font-medium text-primary/80">Sin actividad registrada aún</p>
-          <p className="text-xs text-primary/60 mt-1">Agrega una nota o tarea para comenzar el historial</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boolean }) {
-  return (
-    <div className="flex justify-between gap-2 py-1 border-b last:border-0">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className={`text-xs truncate max-w-[180px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
-    </div>
-  );
-}
-
-function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId: string; userId?: string; onSaved: () => void; trigger?: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [isEmpty, setIsEmpty] = useState(true);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      UnderlineExt,
-      ImageExt.configure({ inline: false, allowBase64: false }),
-      LinkExt.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
-      TextStyleExt,
-    ],
-    editorProps: {
-      attributes: { class: "prose prose-sm max-w-none min-h-[120px] px-3 py-2 text-sm focus:outline-none" },
-    },
-    onUpdate: ({ editor }) => setIsEmpty(editor.isEmpty),
-  });
-
-  const save = async () => {
-    if (!userId || !editor || editor.isEmpty) return;
-    setSaving(true);
-    const html = editor.getHTML();
-    const { error } = await (supabase as any).from("crm_notas").insert({
-      id_entidad_relacionada: Number(contactId),
-      id_usuario: userId,
-      contenido: html,
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Nota guardada");
-    setOpen(false);
-    editor.commands.clearContent();
-    setIsEmpty(true);
-    onSaved();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors">
-            <StickyNote className="h-4 w-4 mr-1.5" />Nota
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Nueva nota</DialogTitle></DialogHeader>
-        <div className="border border-border rounded-lg overflow-hidden">
-          <RichNoteToolbar editor={editor} />
-          <EditorContent editor={editor} />
-        </div>
-        <DialogFooter>
-          <Button onClick={save} disabled={saving || !editor || isEmpty} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Guardar nota"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<TaskFormState>(emptyTaskForm(userId ?? ""));
-  const save = async () => {
-    if (!form.titulo.trim()) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, Number(contactId)));
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Tarea creada"); setOpen(false); setForm(emptyTaskForm(userId ?? "")); onSaved();
-  };
-  return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyTaskForm(userId ?? "")); }}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><ClipboardList className="h-4 w-4 mr-1.5" />Tarea</Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <TaskFormFields form={form} setForm={setForm} owners={owners as any[]} />
-        </div>
-        <DialogFooter><Button onClick={save} disabled={saving || !form.titulo.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear tarea</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AppointmentDialog({ contactId, orgId, developmentId, owners, onSaved }: any) {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ appointment_type: "call", scheduled_at: "", assigned_to: user?.id ?? "" });
-  const save = async () => {
-    if (!orgId || !form.scheduled_at) return;
-    const { error } = await (supabase as any).from("appointments").insert({
-      organization_id: orgId, contact_id: contactId, development_id: developmentId,
-      appointment_type: form.appointment_type, scheduled_at: new Date(form.scheduled_at).toISOString(),
-      assigned_to: form.assigned_to || null, status: "scheduled",
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Cita creada"); setOpen(false); onSaved();
-  };
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline" className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/30 transition-colors"><CalendarClock className="h-4 w-4 mr-1.5" />Cita</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <DField label="Tipo">
-            <Select value={form.appointment_type} onValueChange={(v) => setForm({ ...form, appointment_type: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="call">Llamada</SelectItem>
-                <SelectItem value="video">Videollamada</SelectItem>
-                <SelectItem value="showroom">Showroom</SelectItem>
-                <SelectItem value="site_visit">Visita en obra</SelectItem>
-              </SelectContent>
-            </Select>
-          </DField>
-          <DField label="Fecha y hora"><Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} /></DField>
-          <DField label="Asesor">
-            <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-              <SelectContent>{(owners as any[]).map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-            </Select>
-          </DField>
-        </div>
-        <DialogFooter><Button onClick={save} disabled={!form.scheduled_at} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DealDialog({ contactId, orgId, developmentId, onSaved }: any) {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ deal_name: "", value: "", deal_stage: "new" });
-  const save = async () => {
-    if (!orgId || !form.deal_name) return;
-    const { error } = await (supabase as any).from("deals").insert({
-      organization_id: orgId, contact_id: contactId, development_id: developmentId,
-      deal_name: form.deal_name, value: form.value ? Number(form.value) : null,
-      deal_stage: form.deal_stage, pipeline: "sales", currency: "MXN",
-      deal_owner: user?.id ?? null,
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Deal creado"); setOpen(false); onSaved();
-  };
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"><Briefcase className="h-4 w-4 mr-1.5" />Deal</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo deal</DialogTitle></DialogHeader>
-        <div className="grid gap-3">
-          <DField label="Nombre *"><Input value={form.deal_name} onChange={(e) => setForm({ ...form, deal_name: e.target.value })} /></DField>
-          <div className="grid grid-cols-2 gap-3">
-            <DField label="Valor (MXN)"><Input type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></DField>
-            <DField label="Etapa">
-              <Select value={form.deal_stage} onValueChange={(v) => setForm({ ...form, deal_stage: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{DEAL_STAGES.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </DField>
-          </div>
-        </div>
-        <DialogFooter><Button onClick={save} disabled={!form.deal_name} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear deal</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Deals Kanban ─────────────────────────────────────────────────────────────
-
-type KanbanDeal = {
-  id: string; deal_name: string; deal_stage: DealStage;
-  value: number | null; currency: string;
-  contact_id: string | null; development_id: string | null;
-  contact?: { id: string; full_name: string } | null;
-  development?: { id: string; name: string } | null;
-};
-
-export function CrmDeals() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-  const [devFilter, setDevFilter] = useState("all");
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-  const { data: developments } = useQuery({
-    queryKey: ["proyectos-list"],
-    queryFn: async () => {
-      // Solo proyectos SOZU: proyectos con relación de entidad SOZU (id_tipo_entidad=5) y publicados.
-      const { data: rels } = await (supabase as any).from("entidades_relacionadas")
-        .select("id_proyecto").eq("id_tipo_entidad", 5).eq("activo", true).not("id_proyecto", "is", null);
-      const ids = Array.from(new Set((rels ?? []).map((r: any) => r.id_proyecto)));
-      if (!ids.length) return [];
-      const { data } = await (supabase as any).from("proyectos")
-        .select("id,nombre").in("id", ids).eq("activo", true).eq("publicar", true).order("nombre");
-      return (data ?? []).map((p: any) => ({ id: String(p.id), name: p.nombre }));
-    },
-  });
-
-  const { data: deals, isLoading } = useQuery({
-    queryKey: ["deals-kanban", orgId, devFilter], enabled: !!orgId,
-    queryFn: async () => {
-      let q = (supabase as any).from("deals")
-        .select("id, deal_name, deal_stage, value, currency, contact_id, development_id, contact:contacts(id, full_name), development:developments(id, name)")
-        .eq("organization_id", orgId!).order("created_at", { ascending: false }).limit(500);
-      if (devFilter !== "all") q = q.eq("development_id", devFilter);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data as any[]) as KanbanDeal[];
-    },
-  });
-
-  const byStage = useMemo(() => {
-    const map: Record<string, KanbanDeal[]> = {};
-    DEAL_STAGES.forEach((s) => (map[s.id] = []));
-    (deals ?? []).forEach((d) => { (map[d.deal_stage] ??= []).push(d); });
-    return map;
-  }, [deals]);
-
-  const stageTotals = useMemo(() => {
-    const t: Record<string, number> = {};
-    DEAL_STAGES.forEach((s) => { t[s.id] = (byStage[s.id] ?? []).reduce((sum, d) => sum + Number(d.value ?? 0), 0); });
-    return t;
-  }, [byStage]);
-
-  const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
-  const handleDragEnd = async (e: DragEndEvent) => {
-    setActiveId(null);
-    const dealId = String(e.active.id);
-    const targetStage = e.over?.id ? String(e.over.id) : null;
-    if (!targetStage) return;
-    const deal = deals?.find((d) => d.id === dealId);
-    if (!deal || deal.deal_stage === targetStage) return;
-
-    qc.setQueryData<KanbanDeal[]>(["deals-kanban", orgId, devFilter],
-      (old) => (old ?? []).map((d) => d.id === dealId ? { ...d, deal_stage: targetStage as DealStage } : d),
-    );
-
-    const patch: any = { deal_stage: targetStage };
-    if (targetStage === "won") patch.won_at = new Date().toISOString();
-    if (targetStage === "lost") patch.lost_at = new Date().toISOString();
-    if (targetStage === "reservation") patch.reservation_date = new Date().toISOString().slice(0, 10);
-    if (targetStage === "contract") patch.contract_date = new Date().toISOString().slice(0, 10);
-    if (targetStage === "down_payment") patch.down_payment_date = new Date().toISOString().slice(0, 10);
-
-    const { error } = await (supabase as any).from("deals").update(patch).eq("id", dealId);
-    if (error) { toast.error(error.message); qc.invalidateQueries({ queryKey: ["deals-kanban"] }); return; }
-    toast.success(`Movido a ${DEAL_STAGES.find((s) => s.id === targetStage)?.label}`);
-    qc.invalidateQueries({ queryKey: ["deals-kanban"] });
-    qc.invalidateQueries({ queryKey: ["contact-pipeline", deal.contact_id] });
-    qc.invalidateQueries({ queryKey: ["contact-conv", deal.contact_id] });
-  };
-
-  const activeDeal = deals?.find((d) => d.id === activeId);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Pipeline Kanban"
-        description="Arrastra deals entre etapas · cada cambio dispara pipeline_event + conversion_event"
-        actions={
-          <Select value={devFilter} onValueChange={setDevFilter}>
-            <SelectTrigger className="w-[220px]"><SelectValue placeholder="Todos los desarrollos" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los desarrollos</SelectItem>
-              {(developments ?? []).map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        }
-      />
-      {isLoading ? (
-        <div className="grid grid-cols-3 gap-3"><Skeleton className="h-64" /><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
-      ) : (
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4">
-            {DEAL_STAGES.map((s) => (
-              <KanbanColumn key={s.id} id={s.id} label={s.label} deals={byStage[s.id] ?? []} total={stageTotals[s.id] ?? 0} />
-            ))}
-          </div>
-          <DragOverlay>{activeDeal && <DealCard deal={activeDeal} dragging />}</DragOverlay>
-        </DndContext>
-      )}
-    </div>
-  );
-}
-
-function KanbanColumn({ id, label, deals, total }: { id: string; label: string; deals: KanbanDeal[]; total: number }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return (
-    <div ref={setNodeRef} className={`w-72 shrink-0 rounded-md border bg-muted/30 p-2 ${isOver ? "ring-2 ring-primary" : ""}`}>
-      <div className="flex items-center justify-between px-1 pb-2">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium px-2 py-0.5 rounded ${stageColor(id)}`}>{label}</span>
-          <span className="text-xs text-muted-foreground">{deals.length}</span>
-        </div>
-        <span className="text-[10px] text-muted-foreground">{fmtMXN(total)}</span>
-      </div>
-      <div className="space-y-2 min-h-[80px]">
-        {deals.map((d) => <DealCard key={d.id} deal={d} />)}
-        {!deals.length && <div className="text-[11px] text-muted-foreground p-3 text-center">Sin deals</div>}
-      </div>
-    </div>
-  );
-}
-
-function DealCard({ deal, dragging }: { deal: KanbanDeal; dragging?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
-  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
-  return (
-    <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
-      className={`p-2.5 cursor-grab active:cursor-grabbing ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}
-    >
-      <div className="text-sm font-medium truncate">{deal.deal_name}</div>
-      <div className="text-xs text-muted-foreground truncate mt-0.5">
-        {deal.contact ? (
-          <Link to={`/admin/portal-crm/ventas/contactos/${deal.contact.id}`} className="hover:underline" onPointerDown={(e) => e.stopPropagation()}>
-            {deal.contact.full_name}
-          </Link>
-        ) : "Sin contacto"}
-      </div>
-      <div className="flex items-center justify-between mt-1.5">
-        <Badge variant="outline" className="text-[10px] truncate max-w-[120px]">{deal.development?.name ?? "—"}</Badge>
-        <span className="text-xs font-medium">{deal.value ? fmtMXN(Number(deal.value)) : "—"}</span>
-      </div>
-    </Card>
-  );
-}
-
-// ─── CrmAppointments ──────────────────────────────────────────────────────────
-
-export function CrmAppointments() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-  const [tab, setTab] = useState<"upcoming" | "today" | "past" | "all">("upcoming");
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ contact_id: "", scheduled_at: "", title: "", notes: "" });
-
-  const { data: appts = [], isLoading } = useQuery({
-    queryKey: ["crm-appts", orgId, tab],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const now = new Date().toISOString();
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-      let q = (supabase as any).from("crm_appointments").select("id,title,scheduled_at,status,notes,contacts(full_name)").eq("organization_id", orgId).order("scheduled_at", { ascending: tab !== "past" });
-      if (tab === "upcoming") q = q.gt("scheduled_at", now);
-      if (tab === "today") q = q.gte("scheduled_at", today.toISOString()).lte("scheduled_at", todayEnd.toISOString());
-      if (tab === "past") q = q.lt("scheduled_at", now);
-      const { data } = await q.limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      await (supabase as any).from("crm_appointments").update({ status }).eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-appts", orgId] }),
-  });
-
-  const create = useMutation({
-    mutationFn: async () => {
-      if (!orgId) return;
-      await (supabase as any).from("crm_appointments").insert({ organization_id: orgId, ...form });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-appts", orgId] }); setOpen(false); setForm({ contact_id: "", scheduled_at: "", title: "", notes: "" }); toast.success("Cita creada"); },
-  });
-
-  const TABS = [
-    { id: "upcoming", label: "Próximas" },
-    { id: "today", label: "Hoy" },
-    { id: "past", label: "Pasadas" },
-    { id: "all", label: "Todas" },
-  ] as const;
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Citas" subtitle="Gestión de citas con prospectos">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva cita</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Nueva cita</DialogTitle></DialogHeader>
-            <div className="space-y-3 py-2">
-              <div><Label>ID Contacto</Label><Input value={form.contact_id} onChange={e => setForm(f => ({ ...f, contact_id: e.target.value }))} placeholder="UUID del contacto" /></div>
-              <div><Label>Título</Label><Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Visita al desarrollo" /></div>
-              <div><Label>Fecha y hora</Label><Input type="datetime-local" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} /></div>
-              <div><Label>Notas</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground">Crear cita</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </PageHeader>
-
-      <Tabs value={tab} onValueChange={v => setTab(v as typeof tab)}>
-        <TabsList>{TABS.map(t => <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>)}</TabsList>
-        {TABS.map(t => (
-          <TabsContent key={t.id} value={t.id}>
-            {isLoading ? <Skeleton className="h-40 w-full mt-2" /> : appts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sin citas</p>
-            ) : (
-              <div className="rounded-md border overflow-auto mt-2">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Contacto</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Estatus</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {appts.map((a: any) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{a.title ?? "—"}</TableCell>
-                        <TableCell>{a.contacts?.full_name ?? "—"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{fmtDateTime(a.scheduled_at)}</TableCell>
-                        <TableCell>
-                          <Select value={a.status ?? "scheduled"} onValueChange={s => updateStatus.mutate({ id: a.id, status: s })}>
-                            <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
-                            <SelectContent>{APPT_STATUS.map(s => <SelectItem key={s} value={s}>{apptStatusLabel[s] ?? s}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
-  );
-}
-
-// ─── CrmTasks (globales) ────────────────────────────────────────────────────
-// Todas las tareas de todos los contactos. Lee/escribe el esquema real
-// `crm_tareas` (español); resuelve nombre de contacto y de usuario asignado
-// por waterfall. No usa `crm_tasks`/`contacts` (esquema ficticio inexistente).
-
-const TASK_TYPE_META: Record<string, { label: string; icon: typeof ClipboardList }> = {
-  seguimiento: { label: "Seguimiento", icon: ClipboardList },
-  llamada: { label: "Llamada", icon: Phone },
-  email: { label: "Email", icon: Mail },
-  whatsapp: { label: "WhatsApp", icon: MessageSquare },
-  visita: { label: "Visita", icon: Calendar },
-};
-const TASK_PRIORITY_META: Record<string, { label: string; cls: string; order: number }> = {
-  urgente: { label: "Urgente", cls: "bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400", order: 0 },
-  alta: { label: "Alta", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400", order: 1 },
-  normal: { label: "Normal", cls: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400", order: 2 },
-  baja: { label: "Baja", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", order: 3 },
-};
-
-// Presets de recordatorio (minutos antes del vencimiento). El valor absoluto
-// (fecha_recordatorio) lo dispara el cron `crm-recordatorios-tareas`.
-const TASK_REMINDER_OPTIONS: { id: string; label: string; minutes: number | null }[] = [
-  { id: "none", label: "Sin recordatorio", minutes: null },
-  { id: "at", label: "A la hora del vencimiento", minutes: 0 },
-  { id: "15m", label: "15 minutos antes", minutes: 15 },
-  { id: "1h", label: "1 hora antes", minutes: 60 },
-  { id: "1d", label: "1 día antes", minutes: 1440 },
-];
-const TASK_RECURRENCE_OPTIONS: { id: string; label: string }[] = [
-  { id: "none", label: "No se repite" },
-  { id: "diaria", label: "Diaria" },
-  { id: "semanal", label: "Semanal" },
-  { id: "quincenal", label: "Quincenal" },
-  { id: "mensual", label: "Mensual" },
-  { id: "anual", label: "Anual" },
-];
-const RECURRENCE_LABEL: Record<string, string> = Object.fromEntries(TASK_RECURRENCE_OPTIONS.map((o) => [o.id, o.label]));
-
-// Estado local unificado del formulario de tarea (global y por contacto).
-type TaskFormState = {
-  titulo: string; tipo: string; prioridad: string;
-  fecha: string; hora: string; recordatorio: string; recurrencia: string;
-  descripcion: string; assigned_to: string;
-};
-const emptyTaskForm = (assignee = ""): TaskFormState => ({
-  titulo: "", tipo: "seguimiento", prioridad: "normal",
-  fecha: "", hora: "08:00", recordatorio: "none", recurrencia: "none",
-  descripcion: "", assigned_to: assignee,
-});
-
-// Construye el payload de INSERT a crm_tareas desde el estado del formulario.
-function buildTaskInsert(form: TaskFormState, contactId: number) {
-  const dueIso = form.fecha ? new Date(`${form.fecha}T${form.hora || "08:00"}:00`).toISOString() : null;
-  let recIso: string | null = null;
-  if (dueIso && form.recordatorio !== "none") {
-    const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === form.recordatorio)?.minutes;
-    if (mins != null) recIso = new Date(new Date(dueIso).getTime() - mins * 60000).toISOString();
-  }
-  return {
-    id_entidad_relacionada: contactId,
-    titulo: form.titulo.trim(),
-    tipo: form.tipo,
-    prioridad: form.prioridad,
-    descripcion: form.descripcion.trim() || null,
-    fecha_vencimiento: dueIso,
-    fecha_recordatorio: recIso,
-    recurrencia: form.recurrencia === "none" ? null : form.recurrencia,
-    id_usuario_asignado: form.assigned_to || null,
-    estatus: "pendiente",
-  };
-}
-
-function advanceByRecurrence(d: Date, rec: string): Date {
-  switch (rec) {
-    case "diaria": return addDays(d, 1);
-    case "semanal": return addWeeks(d, 1);
-    case "quincenal": return addWeeks(d, 2);
-    case "mensual": return addMonths(d, 1);
-    case "anual": return addYears(d, 1);
-    default: return d;
-  }
-}
-
-// Al completar una tarea recurrente, genera la siguiente ocurrencia (mismo offset de
-// recordatorio respecto al vencimiento). Se llama tras marcarla completada.
-async function regenerateRecurringTask(t: {
-  recurrencia?: string | null; fecha_vencimiento?: string | null; fecha_recordatorio?: string | null;
-  id_entidad_relacionada: number; id_usuario_asignado?: string | null;
-  titulo: string; tipo: string; prioridad: string; descripcion?: string | null;
-}) {
-  if (!t.recurrencia || !t.fecha_vencimiento) return;
-  const nextDue = advanceByRecurrence(parseISO(t.fecha_vencimiento), t.recurrencia);
-  let nextRec: string | null = null;
-  if (t.fecha_recordatorio) {
-    const offsetMs = parseISO(t.fecha_vencimiento).getTime() - parseISO(t.fecha_recordatorio).getTime();
-    nextRec = new Date(nextDue.getTime() - offsetMs).toISOString();
-  }
-  await (supabase as any).from("crm_tareas").insert({
-    id_entidad_relacionada: t.id_entidad_relacionada,
-    id_usuario_asignado: t.id_usuario_asignado ?? null,
-    titulo: t.titulo, tipo: t.tipo, prioridad: t.prioridad,
-    descripcion: t.descripcion ?? null,
-    fecha_vencimiento: nextDue.toISOString(),
-    fecha_recordatorio: nextRec,
-    recurrencia: t.recurrencia,
-    estatus: "pendiente",
-  });
-}
-
-// Formato de vencimiento con hora cuando no es medianoche.
-function fmtDueDateTime(iso: string): string {
-  const d = parseISO(iso);
-  const base = isToday(d) ? "Hoy" : fmtDateFns(d, "dd MMM yyyy");
-  return d.getHours() === 0 && d.getMinutes() === 0 ? base : `${base} · ${fmtDateFns(d, "HH:mm")}`;
-}
-
-// Campos compartidos del formulario de tarea (título, tipo, prioridad, vencimiento+hora,
-// recordatorio, recurrencia, asignado, notas). El contacto lo maneja cada diálogo.
-function TaskFormFields({ form, setForm, owners }: {
-  form: TaskFormState;
-  setForm: (f: TaskFormState) => void;
-  owners: { id: string; full_name: string; email: string }[];
-}) {
-  return (
-    <>
-      <div><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Llamar al prospecto" /></div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Tipo</Label>
-          <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div><Label>Prioridad</Label>
-          <Select value={form.prioridad} onValueChange={(v) => setForm({ ...form, prioridad: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Fecha de vencimiento</Label><Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} /></div>
-        <div><Label>Hora</Label><Input type="time" value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} disabled={!form.fecha} /></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Recordatorio</Label>
-          <Select value={form.recordatorio} onValueChange={(v) => setForm({ ...form, recordatorio: v })} disabled={!form.fecha}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TASK_REMINDER_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div><Label>Repetir</Label>
-          <Select value={form.recurrencia} onValueChange={(v) => setForm({ ...form, recurrencia: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TASK_RECURRENCE_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div><Label>Asignar a</Label>
-        <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-          <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+        <Select value={fAssignee} onValueChange={setFAssignee}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Asignado a" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los usuarios</SelectItem>
+            <SelectItem value="none">Sin asignar</SelectItem>
+            {owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+          </SelectContent>
         </Select>
+        <Select value={fType} onValueChange={setFType}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los tipos</SelectItem>
+            {Object.entries(CITA_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={fStatus} onValueChange={setFStatus}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Estatus" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todo estatus</SelectItem>
+            {CITA_STATUS_ORDER.map((k) => <SelectItem key={k} value={k}>{CITA_STATUS_META[k].label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFType("all"); setFStatus("all"); setFAssignee("all"); }}>
+            <X className="h-4 w-4 mr-1" />Limpiar
+          </Button>
+        )}
       </div>
-      <div><Label>Notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Detalles de la tarea…" rows={3} /></div>
-    </>
+
+      {/* Tabla */}
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-x-auto">
+        {isLoading ? (
+          <div className="p-6 space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="p-3 text-left font-medium">Título</th>
+                <th className="p-3 text-left font-medium">Cuándo</th>
+                <th className="p-3 text-left font-medium">Estatus</th>
+                <th className="p-3 text-left font-medium">Contacto asociado</th>
+                <th className="p-3 text-left font-medium">Asignado a</th>
+                <th className="p-3 w-32"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">
+                  {hasFilters || tab !== "all" ? "Sin citas para este filtro." : "Aún no hay citas. Crea la primera con “Nueva cita”."}
+                </td></tr>
+              )}
+              {filtered.map((c) => {
+                const typeMeta = CITA_TYPE_META[c.tipo] ?? { label: c.tipo, icon: CalendarClock };
+                const statusMeta = CITA_STATUS_META[c.estatus];
+                const TypeIcon = typeMeta.icon;
+                return (
+                  <tr key={c.id} className="border-t border-border hover:bg-muted/30 group align-top cursor-pointer" onClick={() => setPreview(c)}>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-medium">{c.titulo}</span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground ml-6">{typeMeta.label}</span>
+                    </td>
+                    <td className="p-3 whitespace-nowrap text-muted-foreground">
+                      <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{fmtCitaWhen(c.fecha_inicio, c.fecha_fin)}</span>
+                    </td>
+                    <td className="p-3">
+                      {statusMeta ? <Badge variant="outline" className={statusMeta.cls}>{statusMeta.label}</Badge> : <span className="text-muted-foreground">{c.estatus}</span>}
+                    </td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      {c.contact_name ? <Link to={`/admin/portal-crm/ventas/contactos/${c.id_entidad_relacionada}`} className="text-info hover:underline">{c.contact_name}</Link> : "—"}
+                    </td>
+                    <td className="p-3 text-muted-foreground">{c.assigned_name ?? <span className="italic text-muted-foreground/60">Sin asignar</span>}</td>
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-primary" onClick={() => setPreview(c)}>
+                          <ChevronRight className="h-3.5 w-3.5" />Vista previa
+                        </Button>
+                        <button type="button" title="Eliminar cita" onClick={() => removeCita.mutate(c.id)} className="text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <CitaPreviewSheet
+        cita={preview}
+        onOpenChange={(v) => { if (!v) setPreview(null); }}
+        onUpdateStatus={(estatus) => preview && updateStatus.mutate({ id: preview.id, estatus })}
+        onDelete={() => preview && removeCita.mutate(preview.id)}
+      />
+    </div>
   );
 }
+
 
 type GlobalTask = {
   id: number;
@@ -2461,13 +3258,7 @@ export function CrmTasks() {
   const [fAssignee, setFAssignee] = useState("all");
   const [open, setOpen] = useState(false);
 
-  const { data: owners = [] } = useQuery({
-    queryKey: ["agentes-list"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("usuarios").select("auth_user_id,nombre,email").eq("activo", true).in("rol_id", [1, 9]);
-      return (data ?? []).map((u: any) => ({ id: u.auth_user_id, full_name: u.nombre, email: u.email })) as { id: string; full_name: string; email: string }[];
-    },
-  });
+  const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   const { data: tasks = [], isLoading } = useQuery<GlobalTask[]>({
     queryKey: ["crm-tasks-global"],
@@ -2761,760 +3552,3 @@ export function CrmTasks() {
   );
 }
 
-// Diálogo "Nueva tarea" global: selector de contacto con búsqueda + campos reales.
-function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssignee, onCreated }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  owners: { id: string; full_name: string; email: string }[];
-  defaultAssignee: string;
-  onCreated: () => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [contact, setContact] = useState<{ id: number; name: string } | null>(null);
-  const [contactSearch, setContactSearch] = useState("");
-  const [form, setForm] = useState<TaskFormState>(emptyTaskForm(defaultAssignee));
-
-  const { data: contactResults = [], isFetching } = useQuery({
-    queryKey: ["crm-task-contact-search", contactSearch],
-    enabled: open && contactSearch.trim().length >= 2,
-    queryFn: async () => {
-      const term = contactSearch.trim();
-      const { data: personas } = await (supabase as any).from("personas")
-        .select("id, nombre_legal, nombre_comercial")
-        .or(`nombre_legal.ilike.%${term}%,nombre_comercial.ilike.%${term}%`)
-        .eq("activo", true).limit(20);
-      const pIds = (personas ?? []).map((p: any) => p.id);
-      if (!pIds.length) return [];
-      const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-        .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
-      const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
-      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
-    },
-  });
-
-  const reset = () => { setForm(emptyTaskForm(defaultAssignee)); setContact(null); setContactSearch(""); };
-
-  const save = async () => {
-    if (!form.titulo.trim() || !contact) return;
-    setSaving(true);
-    const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, contact.id));
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Tarea creada");
-    reset();
-    onOpenChange(false);
-    onCreated();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-1" />Nueva tarea</Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-1">
-          <div>
-            <Label>Contacto asociado</Label>
-            {contact ? (
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span className="font-medium">{contact.name}</span>
-                <button type="button" onClick={() => setContact(null)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
-              </div>
-            ) : (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Escribe al menos 2 letras…" className="pl-8" />
-                {contactSearch.trim().length >= 2 && (
-                  <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-border bg-popover shadow-sm">
-                    {isFetching ? (
-                      <div className="p-3 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Buscando…</div>
-                    ) : contactResults.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">Sin resultados.</div>
-                    ) : contactResults.map((c) => (
-                      <button key={c.id} type="button" onClick={() => { setContact(c); setContactSearch(""); }} className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors">{c.name}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <TaskFormFields form={form} setForm={setForm} owners={owners} />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={save} disabled={saving || !form.titulo.trim() || !contact} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando…</> : "Crear tarea"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── CrmSequences ─────────────────────────────────────────────────────────────
-
-export function CrmSequences() {
-  const [activeSeq, setActiveSeq] = useState(SEQUENCES[0].id);
-  const seq = SEQUENCES.find(s => s.id === activeSeq) ?? SEQUENCES[0];
-
-  const CHANNEL_ICON: Record<string, React.ReactNode> = {
-    call: <Phone className="w-3.5 h-3.5 text-blue-500" />,
-    whatsapp_mock: <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />,
-    email_mock: <Mail className="w-3.5 h-3.5 text-violet-500" />,
-    task: <ClipboardList className="w-3.5 h-3.5 text-amber-500" />,
-  };
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Secuencias" subtitle="Cadencias de seguimiento por stage del lead" />
-      <div className="flex gap-4">
-        <div className="w-52 shrink-0 space-y-1">
-          {SEQUENCES.map(s => (
-            <button key={s.id} onClick={() => setActiveSeq(s.id)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeSeq === s.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-              <div className="font-medium truncate">{s.name}</div>
-              <div className="text-[11px] opacity-70 truncate">{s.stage}</div>
-            </button>
-          ))}
-        </div>
-        <Card className="flex-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{seq.name}</CardTitle>
-            <p className="text-xs text-muted-foreground">{seq.objective}</p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {seq.steps.map((step, i) => (
-                <div key={i} className="flex gap-3 items-start p-3 rounded-lg bg-muted/40 border">
-                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-background border text-[11px] font-semibold shrink-0">{i + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {CHANNEL_ICON[step.channel]}
-                      <span className="text-xs font-medium capitalize">{step.channel.replace("_mock","").replace("_"," ")}</span>
-                      <span className="ml-auto text-[11px] text-muted-foreground">{step.timing}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{step.copy}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1 italic">Objetivo: {step.objective}</p>
-                  </div>
-                  <button onClick={() => { navigator.clipboard.writeText(step.copy); toast.success("Copiado"); }}
-                    className="shrink-0 p-1 hover:bg-background rounded transition-colors">
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmRouting ───────────────────────────────────────────────────────────────
-
-export function CrmRouting() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: unassigned = [], isLoading } = useQuery({
-    queryKey: ["crm-unassigned", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,source_name,created_at").eq("organization_id", orgId)
-        .is("contact_owner", null).order("created_at", { ascending: true }).limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const MOCK_ADVISORS: AdvisorLoad[] = [
-    { user_id: "a1", name: "Ana García", active_leads: 12, pending_tasks: 3, lead_to_appt_rate: 0.32, appt_to_reservation_rate: 0.21 },
-    { user_id: "a2", name: "Carlos López", active_leads: 8, pending_tasks: 1, lead_to_appt_rate: 0.41, appt_to_reservation_rate: 0.18 },
-    { user_id: "a3", name: "María Torres", active_leads: 19, pending_tasks: 7, lead_to_appt_rate: 0.28, appt_to_reservation_rate: 0.25 },
-  ];
-
-  const assign = useMutation({
-    mutationFn: async ({ contactId, advisorId }: { contactId: string; advisorId: string }) => {
-      await (supabase as any).from("crm_contacts").update({ contact_owner: advisorId }).eq("id", contactId);
-      await (supabase as any).from("lead_assignment_history").insert({ contact_id: contactId, assigned_to: advisorId, organization_id: orgId, reason: "manual_routing" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-unassigned", orgId] }); toast.success("Lead asignado"); },
-  });
-
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Routing" subtitle="Asignación de leads no asignados a asesores" />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {MOCK_ADVISORS.map(a => (
-          <Card key={a.user_id} className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold">{a.name[0]}</div>
-              <div><p className="text-sm font-medium">{a.name}</p></div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>Leads activos</span><span className="text-right font-medium text-foreground">{a.active_leads}</span>
-              <span>Lead→Cita</span><span className="text-right font-medium text-foreground">{fmtPct(a.lead_to_appt_rate)}</span>
-              <span>Cita→Apart.</span><span className="text-right font-medium text-foreground">{fmtPct(a.appt_to_reservation_rate)}</span>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Estatus</TableHead>
-            <TableHead>Fuente</TableHead>
-            <TableHead>Creado</TableHead>
-            <TableHead>Recomendado</TableHead>
-            <TableHead>Asignar a</TableHead>
-            <TableHead></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
-            ) : unassigned.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin leads sin asignar</TableCell></TableRow>
-            ) : unassigned.map((c: any) => {
-              const rec = recommendOwner(c, MOCK_ADVISORS);
-              const selectedAdvisor = overrides[c.id] ?? rec?.recommended_owner_id ?? "";
-              return (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.full_name}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{leadStatusLabel[c.lead_status] ?? c.lead_status}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{c.source_name ?? "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{relTime(c.created_at)}</TableCell>
-                  <TableCell className="text-xs">{rec ? <span title={rec.reason}>{rec.recommended_owner_name}</span> : "—"}</TableCell>
-                  <TableCell>
-                    <Select value={selectedAdvisor} onValueChange={v => setOverrides(prev => ({ ...prev, [c.id]: v }))}>
-                      <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Elegir" /></SelectTrigger>
-                      <SelectContent>{MOCK_ADVISORS.map(a => <SelectItem key={a.user_id} value={a.user_id}>{a.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => selectedAdvisor && assign.mutate({ contactId: c.id, advisorId: selectedAdvisor })}
-                      disabled={!selectedAdvisor || assign.isPending}>
-                      <UserPlus className="w-3.5 h-3.5 mr-1" />Asignar
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmAutomationRules ───────────────────────────────────────────────────────
-
-export function CrmAutomationRules() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: dbRules = [], isLoading } = useQuery({
-    queryKey: ["crm-automation-rules", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_automation_rules")
-        .select("*").eq("organization_id", orgId).order("created_at");
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const seedDefaults = useMutation({
-    mutationFn: async () => {
-      if (!orgId) return;
-      const rows = DEFAULT_AUTOMATION_RULES.map(r => ({ ...r, organization_id: orgId, is_active: true }));
-      await (supabase as any).from("crm_automation_rules").upsert(rows, { onConflict: "organization_id,name" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-automation-rules", orgId] }); toast.success("Reglas base sembradas"); },
-  });
-
-  const toggleActive = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      await (supabase as any).from("crm_automation_rules").update({ is_active }).eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-automation-rules", orgId] }),
-  });
-
-  const PRIORITY_TONE: Record<string, string> = {
-    urgent: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    normal: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-
-  const displayRules = dbRules.length ? dbRules : DEFAULT_AUTOMATION_RULES.map((r, i) => ({ ...r, id: `mock-${i}`, is_active: true, isMock: true }));
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Reglas de automatización" subtitle="Triggers automáticos para acciones del CRM">
-        <Button size="sm" variant="outline" onClick={() => seedDefaults.mutate()} disabled={seedDefaults.isPending}>
-          <Zap className="w-4 h-4 mr-1" />{seedDefaults.isPending ? "Sembrando…" : "Sembrar defaults"}
-        </Button>
-      </PageHeader>
-
-      {dbRules.length === 0 && (
-        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground flex items-center gap-2">
-          <TriangleAlert className="w-4 h-4 shrink-0" />
-          Mostrando reglas de ejemplo. Presiona "Sembrar defaults" para guardarlas en BD.
-        </div>
-      )}
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Nombre</TableHead>
-            <TableHead>Trigger</TableHead>
-            <TableHead>Acción</TableHead>
-            <TableHead>Prioridad</TableHead>
-            <TableHead>Activa</TableHead>
-            <TableHead></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : displayRules.map((rule: any) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium text-sm">{rule.name}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{rule.trigger_type?.replace(/_/g," ")}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{rule.action_type?.replace(/_/g," ")}</TableCell>
-                <TableCell><Badge className={`text-xs ${PRIORITY_TONE[rule.priority ?? "normal"]}`}>{rule.priority ?? "normal"}</Badge></TableCell>
-                <TableCell>
-                  <button onClick={() => !rule.isMock && toggleActive.mutate({ id: rule.id, is_active: !rule.is_active })}
-                    className={`w-9 h-5 rounded-full transition-colors ${rule.is_active ? "bg-emerald-500" : "bg-muted"}`} title={rule.isMock ? "Sembrar para activar" : ""}>
-                    <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ${rule.is_active ? "translate-x-4" : "translate-x-0"}`} />
-                  </button>
-                </TableCell>
-                <TableCell>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toast.info(`Simulando: ${rule.name}`)}>
-                    <PlayCircle className="w-3.5 h-3.5 mr-1" />Simular
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmEscalations ───────────────────────────────────────────────────────────
-
-export function CrmEscalations() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-
-  const { data: escalations = [], isLoading } = useQuery({
-    queryKey: ["crm-escalations", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_escalations")
-        .select("id,title,severity,status,created_at,resolved_at,contacts(full_name)").eq("organization_id", orgId)
-        .order("created_at", { ascending: false }).limit(50);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const patch: any = { status };
-      if (status === "resolved") patch.resolved_at = new Date().toISOString();
-      await (supabase as any).from("crm_escalations").update(patch).eq("id", id);
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-escalations", orgId] }); toast.success("Escalación actualizada"); },
-  });
-
-  const SEVERITY_TONE: Record<string, string> = {
-    critical: "bg-red-500/15 text-red-700 dark:text-red-400",
-    high: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    warning: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    info: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-  const STATUS_TONE: Record<string, string> = {
-    open: "bg-red-500/15 text-red-700 dark:text-red-400",
-    acknowledged: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    resolved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-    dismissed: "bg-muted text-muted-foreground",
-  };
-
-  const MOCK_ESC = [
-    { id: "m1", title: "Lead hot sin contacto >4h", severity: "critical", status: "open", created_at: new Date(Date.now()-5*3600000).toISOString(), contacts: { full_name: "Jorge M." } },
-    { id: "m2", title: "Asesor con +10 tareas vencidas", severity: "warning", status: "acknowledged", created_at: new Date(Date.now()-2*3600000).toISOString(), contacts: null },
-    { id: "m3", title: "Deal sin next-task >48h", severity: "high", status: "open", created_at: new Date(Date.now()-26*3600000).toISOString(), contacts: { full_name: "Ana Ruiz" } },
-  ];
-
-  const display = escalations.length ? escalations : MOCK_ESC;
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Escalaciones" subtitle="SLA incumplidos y alertas del equipo" />
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Escalación</TableHead>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Severidad</TableHead>
-            <TableHead>Estatus</TableHead>
-            <TableHead>Creada</TableHead>
-            <TableHead>Acciones</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : display.map((e: any) => (
-              <TableRow key={e.id}>
-                <TableCell className="font-medium text-sm max-w-[200px] truncate">{e.title}</TableCell>
-                <TableCell className="text-sm">{e.contacts?.full_name ?? "—"}</TableCell>
-                <TableCell><Badge className={`text-xs ${SEVERITY_TONE[e.severity ?? "info"]}`}><ShieldAlert className="w-3 h-3 mr-1" />{e.severity}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${STATUS_TONE[e.status ?? "open"]}`}>{e.status}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground">{relTime(e.created_at)}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    {e.status === "open" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatus.mutate({ id: e.id, status: "acknowledged" })}>
-                        <Bell className="w-3 h-3 mr-1" />Ack
-                      </Button>
-                    )}
-                    {e.status !== "resolved" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatus.mutate({ id: e.id, status: "resolved" })}>
-                        <CheckCircle2 className="w-3 h-3 mr-1" />Resolver
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => updateStatus.mutate({ id: e.id, status: "dismissed" })}>
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// ─── CrmLeadIntelligence ──────────────────────────────────────────────────────
-
-export function CrmLeadIntelligence() {
-  const orgId = useCrmOrgId();
-  const [activeTab, setActiveTab] = useState<"hot" | "at_risk" | "tracking" | "sales_ready">("hot");
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-lead-intel-global", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,lifecycle_stage,last_contacted_at,last_activity_at,created_at,buying_intent,budget_range,development_id,contact_owner")
-        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(200);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const scored = useMemo(() => contacts.map((c: any) => ({ c, intel: computeLeadIntelligence({ contact: c }) })), [contacts]);
-
-  const hot = scored.filter(({ intel }) => intel.label === "Hot" || intel.label === "High intent");
-  const atRisk = scored.filter(({ intel }) => intel.label === "At risk");
-  const tracking = scored.filter(({ intel }) => intel.label === "Tracking issue");
-  const salesReady = scored.filter(({ intel }) => intel.label === "Sales ready");
-
-  const KPIs = [
-    { label: "Hot / High intent", value: hot.length, tone: "text-red-600 dark:text-red-400" },
-    { label: "En riesgo", value: atRisk.length, tone: "text-rose-600 dark:text-rose-400" },
-    { label: "Tracking issue", value: tracking.length, tone: "text-violet-600 dark:text-violet-400" },
-    { label: "Sales ready", value: salesReady.length, tone: "text-emerald-600 dark:text-emerald-400" },
-    { label: "Total analizados", value: scored.length, tone: "text-foreground" },
-    { label: "Score promedio", value: fmtNum(scored.reduce((s, x) => s + x.intel.final_score, 0) / Math.max(1, scored.length)), tone: "text-foreground" },
-  ];
-
-  const BUCKETS: Record<typeof activeTab, typeof scored> = { hot, at_risk: atRisk, tracking, sales_ready: salesReady };
-  const bucket = BUCKETS[activeTab];
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Lead Intelligence Global" subtitle="Scoring automatizado de toda la base" />
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {KPIs.map(k => (
-          <Card key={k.label} className="p-3">
-            <p className="text-xs text-muted-foreground">{k.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${k.tone}`}>{isLoading ? "…" : k.value}</p>
-          </Card>
-        ))}
-      </div>
-
-      <Tabs value={activeTab} onValueChange={v => setActiveTab(v as typeof activeTab)}>
-        <TabsList>
-          <TabsTrigger value="hot">Hot <span className="ml-1 text-[10px]">({hot.length})</span></TabsTrigger>
-          <TabsTrigger value="at_risk">En riesgo <span className="ml-1 text-[10px]">({atRisk.length})</span></TabsTrigger>
-          <TabsTrigger value="tracking">Tracking issue <span className="ml-1 text-[10px]">({tracking.length})</span></TabsTrigger>
-          <TabsTrigger value="sales_ready">Sales ready <span className="ml-1 text-[10px]">({salesReady.length})</span></TabsTrigger>
-        </TabsList>
-        {(["hot","at_risk","tracking","sales_ready"] as const).map(t => (
-          <TabsContent key={t} value={t}>
-            {isLoading ? <Skeleton className="h-40 w-full mt-2" /> : bucket.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Sin leads en esta categoría</p>
-            ) : (
-              <div className="rounded-md border overflow-auto mt-2">
-                <Table>
-                  <TableHeader><TableRow>
-                    <TableHead>Contacto</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Fit</TableHead>
-                    <TableHead>Engagement</TableHead>
-                    <TableHead>Recomendación</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {bucket.slice(0, 30).map(({ c, intel }) => (
-                      <TableRow key={c.id}>
-                        <TableCell>
-                          <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
-                        </TableCell>
-                        <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold">{intel.final_score}</span>
-                            <Progress value={intel.final_score} className="w-16 h-1.5" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{intel.fit.score} · {intel.fit.label}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{intel.engagement.score} · {intel.engagement.label}</TableCell>
-                        <TableCell className="text-xs max-w-[200px] truncate text-muted-foreground">{intel.recommendation}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
-  );
-}
-
-// ─── CrmAgentPerformance ──────────────────────────────────────────────────────
-
-export function CrmAgentPerformance() {
-  const orgId = useCrmOrgId();
-  const [range, setRange] = useState<DateRange>("30d");
-
-  const since = useMemo(() => rangeToSince(range), [range]);
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-agent-perf-contacts", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,contact_owner,lead_status,lifecycle_stage,created_at,last_contacted_at,crm_deals(deal_stage,value)")
-        .eq("organization_id", orgId).gte("created_at", since).limit(500);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const { data: tasks = [] } = useQuery({
-    queryKey: ["crm-agent-perf-tasks", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_tasks")
-        .select("assigned_to,status,due_date").eq("organization_id", orgId).gte("created_at", since).limit(2000);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const perf = useMemo(() => aggregateAgentPerf(contacts, [], [], tasks, []), [contacts, tasks]);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Desempeño de asesores"
-        description="Métricas de conversión por asesor"
-        actions={
-          <Select value={range} onValueChange={v => setRange(v as DateRange)}>
-            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{(Object.entries(RANGE_LABEL) as [DateRange,string][]).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-          </Select>
-        }
-      />
-
-      {isLoading ? <Skeleton className="h-40 w-full" /> : perf.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-10">Sin datos para el período</p>
-      ) : (
-        <div className="rounded-md border overflow-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>Asesor</TableHead>
-              <TableHead className="text-right">Leads</TableHead>
-              <TableHead className="text-right">Contactados</TableHead>
-              <TableHead className="text-right">Citas</TableHead>
-              <TableHead className="text-right">Reservas</TableHead>
-              <TableHead className="text-right">Lead→Cita</TableHead>
-              <TableHead className="text-right">Cita→Reserva</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">Vencidas</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {perf.map(a => (
-                <TableRow key={a.user_id}>
-                  <TableCell className="font-medium text-sm">{a.name ?? "Sin asesor"}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_assigned)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_contacted)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.appointments_scheduled)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.reservations)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.lead_to_appt_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.appt_to_reservation_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.revenue)}</TableCell>
-                  <TableCell className="text-right text-sm">
-                    <span className={a.overdue_tasks > 3 ? "text-red-500 font-medium" : ""}>{fmtNum(a.overdue_tasks)}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── CrmSalesOperations ───────────────────────────────────────────────────────
-
-export function CrmSalesOperations() {
-  const orgId = useCrmOrgId();
-  const qc = useQueryClient();
-  const [msgOpen, setMsgOpen] = useState(false);
-  const [msgContact, setMsgContact] = useState<any>(null);
-
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-sales-ops-queue", orgId],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,full_name,lead_status,lifecycle_stage,last_contacted_at,last_activity_at,created_at,buying_intent,development_id,contact_owner,crm_tasks(status,due_date)")
-        .eq("organization_id", orgId).neq("lead_status", "lost").order("last_activity_at", { ascending: true }).limit(60);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const queue = useMemo(() => {
-    return contacts.map((c: any) => {
-      const intel = computeLeadIntelligence({ contact: c, tasks: c.crm_tasks ?? [] });
-      const sla = calculateSlaStatus(c, { intelLabel: intel.label });
-      const priority = getFollowUpPriority(sla, intel.label);
-      return { c, intel, sla, priority };
-    }).sort((a, b) => {
-      const order = { P0: 0, P1: 1, P2: 2, P3: 3 };
-      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-    });
-  }, [contacts]);
-
-  const PRIORITY_TONE: Record<string, string> = {
-    P0: "bg-red-500/15 text-red-700 dark:text-red-400 font-bold",
-    P1: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-    P2: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    P3: "bg-muted text-muted-foreground",
-  };
-
-  const createTask = useMutation({
-    mutationFn: async (contactId: string) => {
-      if (!orgId) return;
-      await (supabase as any).from("crm_tasks").insert({ organization_id: orgId, contact_id: contactId, title: "Seguimiento urgente (sales ops)", priority: "high", status: "pending" });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-sales-ops-queue", orgId] }); toast.success("Tarea creada"); },
-  });
-
-  const selectedMsg = useMemo(() => {
-    if (!msgContact) return null;
-    const intel = computeLeadIntelligence({ contact: msgContact });
-    return generateMessage(intel.label === "Hot" || intel.label === "High intent" ? "whatsapp_hot_lead" : "whatsapp_new_lead", {
-      contact_name: msgContact.full_name,
-      advisor_name: "tu asesor",
-    });
-  }, [msgContact]);
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="Sales Operations" subtitle="Cola de seguimiento por prioridad SLA" />
-
-      <div className="rounded-md border overflow-auto">
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>Contacto</TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>SLA</TableHead>
-            <TableHead>Prioridad</TableHead>
-            <TableHead>Regla SLA</TableHead>
-            <TableHead>Recomendación</TableHead>
-            <TableHead>Acciones</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)
-            ) : queue.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Sin leads en cola</TableCell></TableRow>
-            ) : queue.map(({ c, intel, sla, priority }) => (
-              <TableRow key={c.id}>
-                <TableCell>
-                  <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} className="font-medium text-sm hover:underline">{c.full_name}</Link>
-                </TableCell>
-                <TableCell><Badge className={`text-xs ${LEAD_LABEL_TONE[intel.label] ?? ""}`}>{intel.label}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${SLA_TONE[sla.status]}`}>{sla.status.replace(/_/g," ")}</Badge></TableCell>
-                <TableCell><Badge className={`text-xs ${PRIORITY_TONE[priority]}`}>{priority}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">{sla.reason}</TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{sla.recommendation}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => createTask.mutate(c.id)}>
-                      <ClipboardList className="w-3 h-3 mr-1" />Tarea
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setMsgContact(c); setMsgOpen(true); }}>
-                      <MessageSquare className="w-3 h-3 mr-1" />Msg
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog open={msgOpen} onOpenChange={setMsgOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Mensaje generado — {msgContact?.full_name}</DialogTitle></DialogHeader>
-          {selectedMsg && (
-            <div className="space-y-3 py-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MessageSquare className="w-4 h-4" />{selectedMsg.channel.replace("_mock","")}
-              </div>
-              <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">{selectedMsg.body}</div>
-              <p className="text-xs text-amber-600 dark:text-amber-400">{selectedMsg.disclaimer}</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { navigator.clipboard.writeText(selectedMsg?.body ?? ""); toast.success("Copiado"); }}>
-              <Copy className="w-4 h-4 mr-1" />Copiar
-            </Button>
-            <Button onClick={() => setMsgOpen(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}

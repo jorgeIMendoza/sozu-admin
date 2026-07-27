@@ -410,4 +410,10 @@ export interface CuentaDetalleCtx {
   // Eliminar pago (cascada). canDeletePago gatea el botón; openEliminarPago abre la confirmación.
   canDeletePago: boolean;
   openEliminarPago: (idPago: number) => void;
+  // Financiamiento (fuente: cuentas_cobranza.tipo_financiamiento).
+  tipoFinanciamiento: string | null;
+  // Empresa vendedora / dueña del proyecto (dueño de la propiedad).
+  empresaVendedora: string | null;
+  compradorPersonaIds: number[];
+  setReiniciarFinDialog: (v: boolean) => void;
 }

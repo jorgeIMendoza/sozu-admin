@@ -1,4 +1,3 @@
-import sozuLogo from "@/assets/sozu-logo.png";
 import AmenitiesGridSection from "@/components/offer/AmenitiesGridSection";
 import PaymentPlansComparatorSection from "@/components/offer/PaymentPlansComparatorSection";
 import Tour360Section from "@/components/offer/Tour360Section";
@@ -6,6 +5,7 @@ import AgentCard from "@/components/offer/AgentCard";
 import CustomerAccountView from "@/components/offer/CustomerAccountView";
 import DevelopmentLogo from "@/components/offer/DevelopmentLogo";
 import FormalReservationGateModal from "@/components/offer/FormalReservationGateModal";
+import OfferFooter from "@/components/offer/OfferFooter";
 import OfferAmenities from "@/components/offer/OfferAmenities";
 import OfferConstructionProgress from "@/components/offer/OfferConstructionProgress";
 import OfferFloorPlanLarge from "@/components/offer/OfferFloorPlanLarge";
@@ -25,6 +25,7 @@ import {
   useOfferStore,
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
+import { useCanSeeSalesFlow } from "@/lib/access/salesFlowWhitelist";
 import { AlertCircle, Building2, Calendar, ChevronRight, ExternalLink, Facebook, Globe, Home, Instagram, Landmark, Loader2, MapPin, ScanEye, Sparkles, UserRound, Youtube } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -110,6 +111,8 @@ const OfferPage = () => {
   const navigate = useNavigate();
   const [gateModalOpen, setGateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("unidad");
+  // Gate estático: solo los aprobadores del flujo de venta ven el botón de pago.
+  const canSeeSalesFlow = useCanSeeSalesFlow();
 
   const preReservation = useOfferStore((s) =>
     s.preReservations.find(
@@ -183,19 +186,46 @@ const OfferPage = () => {
   const isExpired = offer.status === "expired" || daysToExpiry < 0;
   const isReserved = offer.status === "pre_reserved" || offer.status === "converted_to_account";
   const ctaDisabled = isExpired || isReserved;
-  // Apartado deshabilitado hasta integrar Stripe: se oculta el botón "Apartar".
-  // Cambiar a true cuando el flujo de pago/hold esté en producción.
-  const APARTADO_HABILITADO = false;
+  // El flujo de pago (sin Stripe, por SPEI) está en fase de aprobación interna:
+  // solo los usuarios en la whitelist ven el botón "Continuar con el pago".
+  const APARTADO_HABILITADO = canSeeSalesFlow;
 
   // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
   // precio, metraje y $/m² reconcilien exacto entre sí.
-  const formattedPrice = new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 2,
-  }).format(offer.property.listPrice);
+  const fmtMXN = (v: number, dec = 2) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: dec }).format(v);
 
-  const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Apartar esta unidad";
+  const formattedPrice = fmtMXN(offer.property.listPrice);
+
+  // Precio grande = precio del esquema seleccionado (con descuento/aumento) si hay uno;
+  // si no, precio_lista + valor de bodegas incluidas. Las bodegas incluidas suman al total
+  // pero se listan aparte en tamaño chico.
+  const listPrice = offer.property.listPrice;
+  const bodegasIncluidas = (offer.bodegas ?? []).filter((b) => b.incluido);
+  const bodegaIncluidaTotal = bodegasIncluidas.reduce((s, b) => s + (b.costo ?? 0), 0);
+  const bodegaM2Total = bodegasIncluidas.reduce((s, b) => s + (b.m2 ?? 0), 0);
+  const bodegaPrecioM2 = bodegaM2Total > 0 ? bodegaIncluidaTotal / bodegaM2Total : 0;
+  const basePrice = listPrice + bodegaIncluidaTotal;
+  const selectedPlan = offer.selectedPlanId
+    ? offer.paymentPlans?.find((p) => p.id === offer.selectedPlanId)
+    : undefined;
+  const heroPrice = selectedPlan ? selectedPlan.finalPrice : basePrice;
+  // % de descuento (negativo) o aumento (positivo) del plan vs. la base (lista + bodega).
+  const heroPct = selectedPlan && basePrice > 0 ? (selectedPlan.finalPrice / basePrice - 1) * 100 : 0;
+  const heroPctLabel =
+    selectedPlan && Math.abs(heroPct) >= 0.01
+      ? `${Math.abs(heroPct).toLocaleString("es-MX", { maximumFractionDigits: 2 })}% ${heroPct < 0 ? "descuento" : "aumento"}`
+      : null;
+  const heroPriceLabel = selectedPlan
+    ? `${selectedPlan.name}${heroPctLabel ? ` · ${heroPctLabel}` : ""}`
+    : "Precio total";
+  // Total sin descuento = base (lista + bodega); se muestra cuando el plan aplica ajuste.
+  const showSinDescuento = !!selectedPlan && Math.abs(heroPrice - basePrice) >= 0.01;
+  const heroTotalCaption = showSinDescuento
+    ? (heroPct < 0 ? "Total con descuento" : "Total con aumento")
+    : "Total";
+
+  const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Continuar con el pago";
 
   const hasPaymentPlans = !!(offer.paymentPlans && offer.paymentPlans.length > 0);
 
@@ -228,17 +258,48 @@ const OfferPage = () => {
                   <MapPin className="w-3 h-3 shrink-0 opacity-60" />
                   {offer.location.address}
                 </p>
-                <p className="text-2xl font-bold tabular-nums text-foreground leading-none tracking-tight">
-                  {formattedPrice}
+                <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60 tabular-nums">
+                  Precio de lista {formattedPrice}
+                  {!!offer.property.pricePerM2 && offer.property.area && (
+                    <span className="text-success"> · {fmtMXN(offer.property.pricePerM2)}/m²</span>
+                  )}
                 </p>
-                {!!offer.property.pricePerM2 && offer.property.area && (
-                  <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
-                    {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
+                {bodegaIncluidaTotal > 0 && (
+                  <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60 tabular-nums">
+                    Bodega {fmtMXN(bodegaIncluidaTotal)}
+                    {bodegaPrecioM2 > 0 && (
+                      <span className="text-success"> · {fmtMXN(bodegaPrecioM2)}/m²</span>
+                    )}
                   </p>
                 )}
+                {showSinDescuento && (
+                  <p className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/50 tabular-nums mt-1">
+                    Total sin descuento <span className="line-through">{fmtMXN(basePrice)}</span>
+                  </p>
+                )}
+                <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50 mt-1">
+                  {heroPriceLabel}
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground leading-none tracking-tight">
+                  {fmtMXN(heroPrice)} <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/55">{heroTotalCaption}</span>
+                </p>
               </div>
 
             </header>
+
+            {/* Unidad ya vendida/apartada: tiene cuenta de cobranza activa, ya no se comercializa. */}
+            {!isExpired && isReserved && (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2 flex items-start gap-2 mb-4">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-700 leading-snug">
+                  <span className="font-semibold">Esta unidad ya tiene dueño.</span>{" "}
+                  <span className="text-muted-foreground">
+                    Se generó su cuenta de cobranza, así que ya no está disponible para venta.
+                    Si buscas otra unidad, contacta a tu asesor.
+                  </span>
+                </p>
+              </div>
+            )}
 
             {/* Expired banner - slim, solo mobile (en desktop lo comunica el card derecho) */}
             {isExpired && (
@@ -279,6 +340,10 @@ const OfferPage = () => {
                   images={offer.gallery}
                   captions={offer.galleryCaptions}
                   videoUrl={offer.videoUrl}
+                  floorPlanUrl={offer.planoUbicacionUrl}
+                  floorPlanRegiones={offer.planoUbicacionRegiones}
+                  floorPlanUnit={offer.unitDepto}
+                  floorPlanFullNumber={offer.property.unitNumber}
                 />
 
                 {/* Detalles */}
@@ -486,17 +551,62 @@ const OfferPage = () => {
 
                 {/* Precio - centrado */}
                 <div className="py-4 border-b border-border/60 text-center">
+                  {/* Desglose chico: precio de lista, $/m² y bodega incluida */}
+                  <div className="mb-2.5 space-y-0.5">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60">
+                        Precio de lista
+                      </span>
+                      <span className="text-xs font-semibold tabular-nums text-foreground">
+                        {formattedPrice}
+                      </span>
+                    </div>
+                    {!!offer.property.pricePerM2 && offer.property.area && (
+                      <p className="text-[10px] font-medium text-success tabular-nums">
+                        {fmtMXN(offer.property.pricePerM2)} /m²
+                      </p>
+                    )}
+                    {bodegaIncluidaTotal > 0 && (
+                      <>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground/60">
+                            Bodega
+                          </span>
+                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                            {fmtMXN(bodegaIncluidaTotal)}
+                          </span>
+                        </div>
+                        {bodegaPrecioM2 > 0 && (
+                          <p className="text-[10px] font-medium text-success tabular-nums">
+                            {fmtMXN(bodegaPrecioM2)} /m²
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Total sin descuento (base = lista + bodega), antes del total ajustado */}
+                  {showSinDescuento && (
+                    <div className="mb-2">
+                      <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-muted-foreground/50">
+                        Total sin descuento
+                      </p>
+                      <p className="text-base font-semibold tabular-nums text-muted-foreground line-through">
+                        {fmtMXN(basePrice)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Precio grande: total del esquema seleccionado (o precio_lista + bodega) */}
                   <p className="text-[9px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mb-1.5">
-                    Precio de lista
+                    {heroPriceLabel}
                   </p>
                   <p className="text-[1.75rem] font-bold tabular-nums text-foreground leading-none tracking-tight">
-                    {formattedPrice}
+                    {fmtMXN(heroPrice)}
                   </p>
-                  {!!offer.property.pricePerM2 && offer.property.area && (
-                    <p className="text-[11px] font-semibold text-success mt-1.5 tabular-nums">
-                      {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(offer.property.pricePerM2)} /m²
-                    </p>
-                  )}
+                  <p className="text-[10px] uppercase tracking-[0.24em] font-bold text-muted-foreground/55 mt-1">
+                    {heroTotalCaption}
+                  </p>
                 </div>
 
                 {/* Datos clave - Entrega | Expedición (fechas completas, centradas) */}
@@ -573,102 +683,24 @@ const OfferPage = () => {
       </div>{/* /max-w-7xl */}
 
       {/* ── FOOTER UNIFICADO - sello empresarial (fondo oscuro, siempre visible) ── */}
-      <footer className="mt-8 bg-zinc-900 text-zinc-400 mb-20 lg:mb-0">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-          {/* Presentado por */}
-          <div className="flex flex-col items-center text-center">
-            <p className="text-[8px] uppercase tracking-[0.32em] font-semibold text-zinc-500 mb-4">
-              Una oferta presentada por
-            </p>
-            <div className="flex items-center justify-center gap-6 md:gap-10">
-              {offer.development?.developerName && (
-                <>
-                  {/* Desarrolladora (constructora del proyecto) - clic → sitio oficial */}
-                  <a
-                    href={offer.development.developerWebsite ?? undefined}
-                    target={offer.development.developerWebsite ? "_blank" : undefined}
-                    rel="noopener noreferrer"
-                    className={`flex flex-col items-center gap-2 ${offer.development.developerWebsite ? "hover:opacity-80 transition-opacity" : "pointer-events-none"}`}
-                  >
-                    <div className="h-6 md:h-7 flex items-center justify-center">
-                      {offer.development.developerLogoUrl ? (
-                        <img
-                          src={offer.development.developerLogoUrl}
-                          alt={offer.development.developerName}
-                          className="h-full w-auto object-contain brightness-0 invert"
-                        />
-                      ) : (
-                        <span className="text-base md:text-lg font-bold text-white tracking-tight">
-                          {offer.development.developerName}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
-                      Desarrolla · {offer.development.developerName}
-                    </span>
-                  </a>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-px h-4 bg-zinc-700" />
-                    <span className="text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em]">con</span>
-                    <div className="w-px h-4 bg-zinc-700" />
-                  </div>
-                </>
-              )}
-              {/* Comercializador SOZU - clic → sozu.com */}
-              <a
-                href="https://www.sozu.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity"
-              >
-                <div className="h-6 md:h-7 flex items-center justify-center">
-                  <img src={sozuLogo} alt="SOZU" className="h-5 md:h-6 w-auto object-contain brightness-0 invert" />
-                </div>
-                <span className="text-[9px] font-medium text-zinc-400 uppercase tracking-wide">
-                  Comercializa · SOZU
-                </span>
-              </a>
-            </div>
-          </div>
+      <OfferFooter offer={offer} className={`mt-8 ${!reservationId && APARTADO_HABILITADO ? "mb-20 lg:mb-0" : ""}`} />
 
-          {/* Línea legal */}
-          <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col md:flex-row md:items-center md:justify-between gap-1 text-center md:text-left">
-            <p className="text-[9px] text-zinc-500 leading-relaxed">
-              SOZU © 2026 · Comercializador autorizado{offer.development ? ` de ${offer.development.legalName ?? offer.property.projectName}` : ""}. Oferta personal e intransferible.
-            </p>
-            <p className="text-[9px] text-zinc-500 leading-relaxed">
-              Oferta informativa · No constituye contrato de compraventa · Sujeta a disponibilidad · Precios en MXN
-            </p>
-          </div>
-        </div>
-      </footer>
-
-      {/* Mobile sticky CTA - oculto sin reservationId y con apartado deshabilitado (Stripe pendiente) */}
-      {!reservationId && (isExpired || APARTADO_HABILITADO) && (
+      {/* Mobile sticky CTA - solo con apartado habilitado (el aviso de vencida ya sale arriba) */}
+      {!reservationId && APARTADO_HABILITADO && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
-            {isExpired ? (
-              <div className="flex items-center gap-2.5 py-0.5">
-                <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
-                  <p className="text-[10px] text-muted-foreground">Contacta a tu asesor para una nueva oferta</p>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={ctaDisabled ? undefined : handleCtaClick}
-                disabled={ctaDisabled}
-                className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  ctaDisabled
-                    ? "bg-muted text-muted-foreground cursor-not-allowed"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
-              >
-                {ctaLabel}
-                {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
-              </button>
-            )}
+            <button
+              onClick={ctaDisabled ? undefined : handleCtaClick}
+              disabled={ctaDisabled}
+              className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                ctaDisabled
+                  ? "bg-muted text-muted-foreground cursor-not-allowed"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }`}
+            >
+              {ctaLabel}
+              {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       )}

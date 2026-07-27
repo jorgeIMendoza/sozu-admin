@@ -199,7 +199,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
           <div className="text-center p-8">
             <FileText className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
             <p className="text-sm text-muted-foreground">Convenio de Aceptación de Entrega</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">{investment.property.projectName} — Unidad {investment.property.unitNumber}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">{investment.property.projectName} - Unidad {investment.property.unitNumber}</p>
           </div>
         </div>
       </div>
@@ -624,7 +624,7 @@ const EntregaSheet = ({ stage, investment, open, onClose }: EntregaSheetProps) =
                   <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
                   <span className="text-sm font-medium text-foreground">
                     {data.scheduledAppointment.date}
-                    {data.scheduledAppointment.time ? ` — ${data.scheduledAppointment.time} hrs` : ""}
+                    {data.scheduledAppointment.time ? ` - ${data.scheduledAppointment.time} hrs` : ""}
                   </span>
                 </div>
                 {data.scheduledAppointment.location && (

@@ -23,7 +23,10 @@ export function EmbajadorImpersonationSelector() {
   const canImpersonate = profile?.puede_impersonar === true;
   if (!canImpersonate) return null;
 
-  const embajadores = ambassadors.filter(e => e.status !== "inactivo");
+  const embajadores = ambassadors
+    .filter(e => e.status !== "inactivo")
+    .slice()
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, "es"));
 
   return (
     <div className="flex items-center gap-2">
@@ -52,7 +55,8 @@ export function EmbajadorImpersonationSelector() {
                 {embajadores.map((emb) => (
                   <CommandItem
                     key={emb.id}
-                    value={`${emb.fullName} ${emb.code}`}
+                    // El buscador filtra por `value`: nombre, código y correo.
+                    value={`${emb.fullName} ${emb.code} ${emb.email ?? ''}`}
                     onSelect={() => {
                       setImpersonatedEmbajador(emb.id, emb.fullName, emb.code);
                       setOpen(false);
@@ -64,9 +68,11 @@ export function EmbajadorImpersonationSelector() {
                         impersonatedEmbajadorId === emb.id ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <div className="flex flex-col flex-1">
-                      <span className="text-sm">{emb.fullName}</span>
-                      <span className="text-xs text-muted-foreground">{emb.code}</span>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm">{emb.fullName}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {[emb.code, emb.email].filter(Boolean).join(' · ')}
+                      </span>
                     </div>
                     {emb.status === "pendiente" && (
                       <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">

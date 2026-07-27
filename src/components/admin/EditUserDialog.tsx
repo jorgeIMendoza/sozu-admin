@@ -45,6 +45,13 @@ interface EditUserDialogProps {
   userName: string;
   userRoleId?: number;
   userPersonaId?: number;
+  /**
+   * Modo "solo teléfono": se usa para el propio usuario logueado (incluido el
+   * superusuario, que no puede editarse ni borrarse). Nombre, email, rol,
+   * inmobiliaria y banco quedan bloqueados; únicamente el teléfono es editable,
+   * porque sin él los avisos por WhatsApp no pueden alcanzarlo.
+   */
+  onlyPhone?: boolean;
 }
 
 type InmobiliariaOption = {
@@ -56,6 +63,7 @@ const ROLE_AGENTE_INMOBILIARIO = 3;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_INMOBILIARIA = 4;
 const ROLE_NOTARIO = 6;
+const ROLE_EMBAJADOR = 25;
 
 // Roles del Portal Bancos que requieren banco vinculado (detección por nombre
 // porque sus ids pueden diferir entre ambientes)
@@ -68,6 +76,7 @@ export function EditUserDialog({
   userName,
   userRoleId,
   userPersonaId,
+  onlyPhone = false,
 }: EditUserDialogProps) {
   const [nombre, setNombre] = useState(userName);
   const [email, setEmail] = useState(userEmail);
@@ -87,8 +96,12 @@ export function EditUserDialog({
   const isAgentRole = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_AGENTE_INTERNO;
   const isInmobiliariaRole = userRoleId === ROLE_INMOBILIARIA;
   const isNotarioRole = userRoleId === ROLE_NOTARIO;
-  const needsInmobiliaria = isAgentRole || isInmobiliariaRole;
-  const showEmailConfirmation = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_INMOBILIARIA;
+  const needsInmobiliaria = !onlyPhone && (isAgentRole || isInmobiliariaRole);
+  const showEmailConfirmation = !onlyPhone && (
+    userRoleId === ROLE_AGENTE_INMOBILIARIO
+    || userRoleId === ROLE_INMOBILIARIA
+    || userRoleId === ROLE_EMBAJADOR
+  );
 
   // Notaría vinculada (usuarios.id_notario) — su email se sincroniza al cambiar el del usuario
   const { data: notarioVinculado } = useQuery({
@@ -123,7 +136,7 @@ export function EditUserDialog({
     enabled: open,
   });
 
-  const isBancoRole = BANCO_ROLE_NAMES.includes(bancoInfo?.rol_nombre ?? '');
+  const isBancoRole = !onlyPhone && BANCO_ROLE_NAMES.includes(bancoInfo?.rol_nombre ?? '');
 
   // Fetch bancos options (solo para roles Supervisor/Operador Banco)
   const { data: bancosOptions = [] } = useQuery({
@@ -667,11 +680,13 @@ export function EditUserDialog({
       return;
     }
 
-    // Inmobiliaria change support for agents and Inmobiliaria role
+    // Inmobiliaria change support for agents and Inmobiliaria role.
+    // En modo solo-teléfono se reenvían email/nombre originales para que la
+    // mutación no toque auth.users ni el nombre.
     updateUserMutation.mutate({
       oldEmail: userEmail,
-      newEmail: email.trim(),
-      newNombre: nombre.trim(),
+      newEmail: onlyPhone ? userEmail : email.trim(),
+      newNombre: onlyPhone ? userName : nombre.trim(),
       newInmobiliariaId: needsInmobiliaria && selectedInmobiliariaId ? parseInt(selectedInmobiliariaId) : undefined,
       newBancoId: isBancoRole && selectedBancoId ? parseInt(selectedBancoId) : undefined,
       personaId: userPersonaId,
@@ -683,7 +698,9 @@ export function EditUserDialog({
   const inmobiliariaChanged = needsInmobiliaria && selectedInmobiliariaId !== originalInmobiliariaId;
   const bancoChanged = isBancoRole && selectedBancoId !== originalBancoId;
   const phoneChanged = telefono !== originalTelefono || clavePaisTelefono !== originalClavePais;
-  const hasChanges = nombre !== userName || email !== userEmail || inmobiliariaChanged || bancoChanged || phoneChanged;
+  const hasChanges = onlyPhone
+    ? phoneChanged
+    : nombre !== userName || email !== userEmail || inmobiliariaChanged || bancoChanged || phoneChanged;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -694,7 +711,9 @@ export function EditUserDialog({
             Editar Usuario
           </DialogTitle>
           <DialogDescription>
-            Actualiza el nombre y email del usuario.
+            {onlyPhone
+              ? "Solo puedes actualizar tu teléfono. Nombre, email y rol de tu propia cuenta no son editables desde aquí."
+              : "Actualiza el nombre y email del usuario."}
           </DialogDescription>
         </DialogHeader>
 
@@ -743,6 +762,8 @@ export function EditUserDialog({
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Nombre completo"
+              disabled={onlyPhone}
+              className={onlyPhone ? "bg-muted" : undefined}
             />
           </div>
 
@@ -754,6 +775,8 @@ export function EditUserDialog({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="usuario@email.com"
+              disabled={onlyPhone}
+              className={onlyPhone ? "bg-muted" : undefined}
             />
             {email !== userEmail && showEmailConfirmation && (
               <p className="text-xs text-orange-600 dark:text-orange-400">
@@ -794,6 +817,9 @@ export function EditUserDialog({
                 className="flex-1"
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Necesario para recibir avisos por WhatsApp. Sin teléfono, los avisos llegan solo por email.
+            </p>
           </div>
 
           {/* Inmobiliaria selector - for agent and Inmobiliaria roles */}

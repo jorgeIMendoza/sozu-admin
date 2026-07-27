@@ -13,7 +13,7 @@ interface PermissionRouteProps {
 }
 
 export function PermissionRoute({ children }: PermissionRouteProps) {
-  const { isPathAllowed, isLoading, isSuperAdmin, allowedPaths } = useAllowedMenus();
+  const { isPathAllowed, isPathDisabled, isLoading, isSuperAdmin, allowedPaths } = useAllowedMenus();
   const { menuItems, isLoading: isMenuLoading } = useDynamicMenus();
   const { profile } = useAuth();
   const hasEmbajadorRole = useHasEmbajadorRole();
@@ -26,8 +26,35 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
-  // Allow agent portal routes for ALL roles
-  if (location.pathname.startsWith('/admin/agent')) {
+  // ---------------------------------------------------------------------------
+  // GATE DE SEGURIDAD GLOBAL — debe evaluarse ANTES de cualquier atajo por
+  // portal. Los atajos de abajo (/admin/agent, portal-cliente,
+  // portal-estructura-comisiones, portal-productos, portal-embajador, y los
+  // shortcuts por rol_id 1/2) hacían `return children` sin pasar por aquí, así
+  // que un submenú apagado en "Administrar Menús" desaparecía del sidebar pero
+  // seguía siendo accesible escribiendo la URL directa. Aplica a TODOS los
+  // portales y a TODOS los roles, incluido Super Admin.
+  // ---------------------------------------------------------------------------
+  if (isLoading || isMenuLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Verificando permisos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPathDisabled(location.pathname)) {
+    return <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Allow agent portal routes for ALL roles.
+  // OJO: debe llevar la barra final. Sin ella, '/admin/agentes' (catálogo admin
+  // de Agentes) hacía match con startsWith('/admin/agent') y quedaba abierto a
+  // cualquier usuario autenticado sin permiso en BD.
+  if (location.pathname === '/admin/agent' || location.pathname.startsWith('/admin/agent/')) {
     return <>{children}</>;
   }
 
@@ -93,18 +120,7 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <Navigate to="/admin/portal-cliente/inicio" replace />;
   }
 
-  if (isLoading || isMenuLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Verificando permisos...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Super Admin has access to everything
+  // Super Admin has access to everything (salvo vistas apagadas, ya filtradas arriba)
   if (isSuperAdmin) {
     return <>{children}</>;
   }
@@ -205,6 +221,21 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       }
     }
     return tieneAccesoCrm
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // Portal Socio Bancario: mismo patrón coarse — basta tener permiso sobre
+  // cualquier submenu del portal para habilitar todas sus rutas.
+  if (location.pathname.startsWith('/admin/portal-socio-bancario')) {
+    let tieneAccesoSocioBancario = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-socio-bancario')) {
+        tieneAccesoSocioBancario = true;
+        break;
+      }
+    }
+    return tieneAccesoSocioBancario
       ? <>{children}</>
       : <Navigate to="/admin/access-denied" replace />;
   }

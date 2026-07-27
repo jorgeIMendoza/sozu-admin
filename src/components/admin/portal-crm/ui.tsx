@@ -3,25 +3,33 @@ import { Sparkles, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 export function PageHeader({
   title,
   description,
+  subtitle,
   actions,
+  children,
 }: {
   title: string;
   description?: string;
+  subtitle?: string;
   actions?: ReactNode;
+  children?: ReactNode;
 }) {
+  // `subtitle` es alias de `description`; `children` se muestra junto a `actions`
+  // en el área superior derecha (badges, selects, botones del encabezado).
+  const sub = description ?? subtitle;
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div className="min-w-0">
         <h1 className="text-xl font-semibold leading-tight tracking-tight">{title}</h1>
-        {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+        {sub && (
+          <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {(actions || children) && <div className="flex flex-wrap items-center gap-2">{actions}{children}</div>}
     </div>
   );
 }
@@ -108,6 +116,26 @@ export function ComingSoon({ title, items }: { title: string; items: string[] })
         ))}
       </ul>
     </Card>
+  );
+}
+
+// Fila etiqueta/valor compacta (para paneles de detalle y tarjetas).
+export function ARow({ label, v, mono }: { label: string; v?: string | null; mono?: boolean }) {
+  return (
+    <div className="flex justify-between gap-2 py-1 border-b last:border-0">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className={`text-xs truncate max-w-[180px] ${mono ? "font-mono" : ""}`}>{v ?? "—"}</span>
+    </div>
+  );
+}
+
+// Campo etiqueta/valor en columna (label arriba, contenido abajo) para formularios/detalle.
+export function DField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-1">
+      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</Label>
+      <div>{children}</div>
+    </div>
   );
 }
 

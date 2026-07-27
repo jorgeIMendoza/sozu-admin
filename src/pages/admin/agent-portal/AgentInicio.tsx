@@ -1,28 +1,27 @@
-import { useState, useEffect } from "react";
-import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
-import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
-import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
-import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  CalendarPlus, UserPlus, AlertCircle, Loader2,
-  ChevronRight, Calendar, Clock, MapPin, X, Ban, CalendarClock, EyeOff
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
 import { AgendarCitaShowroomDialog } from "@/components/admin/AgendarCitaShowroomDialog";
+import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
+import { Button } from "@/components/ui/button";
+import { ActionCard } from "@/components/ui/action-card";
+import { StatCard } from "@/components/ui/stat-card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { ModalForm } from "@/components/ui/modal-form";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
+import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
+import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Calendar, CalendarPlus, Clock, EyeOff, Loader2, MapPin, UserPlus, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const AgentInicio = () => {
@@ -183,25 +182,6 @@ const AgentInicio = () => {
   });
 
   // Fetch attention items (ofertas that need action)
-  const { data: attentionItems = [], isLoading: attentionLoading } = useQuery({
-    queryKey: ['agent-attention', agentEmail],
-    queryFn: async () => {
-      if (!agentEmail) return [];
-
-      const { data } = await (supabase as any)
-        .from('ofertas')
-        .select('id, id_estatus_aprobacion, fecha_generacion, id_propiedad, id_persona_lead')
-        .eq('email_creador', agentEmail)
-        .eq('activo', true)
-        .in('id_estatus_aprobacion', [3, 4, 5])
-        .order('fecha_generacion', { ascending: false })
-        .limit(5);
-
-      return data || [];
-    },
-    enabled: !!agentEmail,
-  });
-
   // Fetch citas agendadas
   const { data: citas = [], isLoading: citasLoading } = useQuery({
     queryKey: ['agent-citas', personaId],
@@ -246,8 +226,8 @@ const AgentInicio = () => {
   // Color del ícono por estatus: asistió=verde marca, no asistió=gris, pendiente=naranja tenue
   const citaIconClasses = (cita: any) => {
     if (cita.estatus === 'asistio') return 'bg-primary/10 text-primary';
-    if (cita.estatus === 'no_asistio') return 'bg-[#F3F4F6] text-[#9AA3AD]';
-    return 'bg-[#FEF3C7] text-[#B5601C]';
+    if (cita.estatus === 'no_asistio') return 'bg-gray-100 text-gray-400';
+    return 'bg-amber-100 text-amber-700';
   };
 
   const getCitaStatusBadge = (cita: any) => {
@@ -302,109 +282,56 @@ const AgentInicio = () => {
     },
   });
 
-  const getStatusLabel = (statusId: number) => {
-    switch (statusId) {
-      case 3: return "Oferta aprobada";
-      case 4: return "Pendiente de firma";
-      case 5: return "Pendiente de enganche";
-      default: return "Requiere atención";
-    }
-  };
-
   return (
-    <div className="pb-24">
+    <div >
       <AgentPortalHeader>
-        <div className="mx-auto w-full max-w-[1160px]">
-          <h1 className="text-[20px] font-bold tracking-[-0.3px] text-[#1A1D21] lg:text-[22px]">{fullName}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px]">
-            <span className="font-semibold text-[hsl(var(--agent-primary))]">{rolLabel}</span>
-            <span className="text-[#D6DADE]">·</span>
-            <span className="text-[#8A929B]">{mask(String(metrics?.ventasActivas ?? 0))} propiedades activas</span>
-            {lastAccessLabel && <><span className="text-[#D6DADE]">·</span><span className="text-[#8A929B]">Último acceso: {lastAccessLabel}</span></>}
+        <div className="mx-auto w-full max-w-[1040px]">
+          <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl">{fullName}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs">
+            <span className="font-semibold text-primary">{rolLabel}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="text-muted-foreground">{mask(String(metrics?.ventasActivas ?? 0))} propiedades activas</span>
+            {lastAccessLabel && <><span className="text-muted-foreground/40">·</span><span className="text-muted-foreground">Último acceso: {lastAccessLabel}</span></>}
           </div>
-          {attentionItems.length > 0 && (
-            <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#B5601C]">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {attentionItems.length} {attentionItems.length === 1 ? 'acción pendiente' : 'acciones pendientes'}
-            </p>
-          )}
         </div>
       </AgentPortalHeader>
 
-      <div className="mx-auto max-w-[1160px] pt-4 pb-4 lg:pt-6 space-y-4 lg:space-y-5">
+      <div className="mx-auto max-w-[1040px] py-4 space-y-4">
 
       {/* Onboarding Progress Banner - only for Agente Inmobiliario */}
       {isAgentRole && percentage < 100 && (
-        <div className="w-full rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-4 space-y-2.5">
+        <Card className="w-full space-y-3 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-[hsl(var(--agent-text))]">
+            <span className="text-sm font-semibold text-foreground">
               Activa tu perfil profesional
             </span>
-            <span className="text-sm font-bold text-[hsl(var(--agent-amber))]">{percentage}%</span>
+            <span className="text-sm font-bold text-amber-600">{percentage}%</span>
           </div>
-          <p className="text-xs text-[hsl(var(--agent-text-secondary))]">
+          <p className="text-xs text-muted-foreground">
             {!hasTrainingComplete
               ? 'Completa tu capacitación para generar ofertas.'
               : !hasBasicIdentityComplete
               ? 'Completa tu identidad para incluir datos bancarios en ofertas.'
               : 'Completa tu perfil para recibir comisiones.'}
           </p>
-          <div className="h-2 bg-amber-100 rounded-md overflow-hidden">
-            <div 
-              className="h-full bg-[hsl(var(--agent-amber))] rounded-md transition-all duration-700"
-              style={{ width: `${percentage}%` }}
-            />
-          </div>
-          <button
+          <Progress value={percentage} className="h-2 bg-amber-100 [&>*]:bg-amber-500" />
+          <Button
+            variant="link"
+            className="h-auto gap-1 p-0 text-sm font-semibold"
             onClick={() => {
               track({ page: 'agent_inicio', elementId: 'btn_completar_perfil', elementLabel: 'Completar ahora' });
               navigate('/admin/agent/perfil');
             }}
-            className="text-sm font-semibold text-[hsl(var(--agent-primary))] flex items-center gap-1 active:opacity-70"
           >
             Completar ahora <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Attention Items */}
-      {attentionItems.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-[hsl(var(--agent-text))] px-1 flex items-center gap-1.5">
-            <AlertCircle className="h-4 w-4 text-[hsl(var(--agent-amber))]" />
-            Requieren tu atención
-          </h2>
-          <div className="space-y-2">
-            {attentionItems.map((item: any) => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  track({ page: 'agent_inicio', elementId: 'btn_atencion_item', elementLabel: 'Item atención', metadata: { oferta_id: item.id } });
-                }}
-                className="rounded-md bg-white border border-[#ECEEF0] shadow-[0_1px_3px_rgba(20,30,25,0.04)] p-3 flex items-center gap-3"
-              >
-                <div className="h-9 w-9 rounded-md bg-amber-50 flex items-center justify-center shrink-0">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[hsl(var(--agent-text))] truncate">
-                    {(item.personas as any)?.nombre_legal || "Cliente"}
-                  </p>
-                  <p className="text-xs text-[hsl(var(--agent-text-secondary))] truncate">
-                    {getStatusLabel(item.id_estatus_aprobacion)} · {(item.propiedades as any)?.proyectos?.nombre}
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-[hsl(var(--agent-muted))] shrink-0" />
-              </div>
-            ))}
-          </div>
-        </div>
+          </Button>
+        </Card>
       )}
 
       {/* Quick Actions - solo si tiene permiso de crear */}
       {inicioPerms.canCreate && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <QuickAction
+          <ActionCard
             dataCta="agentes.inicio.nuevo-prospecto"
             icon={UserPlus}
             title="Nuevo prospecto"
@@ -414,7 +341,7 @@ const AgentInicio = () => {
               setAddProspectoOpen(true);
             }}
           />
-          <QuickAction
+          <ActionCard
             dataCta="agentes.inicio.agendar-cita"
             icon={CalendarPlus}
             title="Agendar cita"
@@ -430,49 +357,47 @@ const AgentInicio = () => {
       {/* Metrics */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8A929B]">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Tus números
           </h2>
           {presentationMode && (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[#EBC089] bg-[#FBE3CE] px-2.5 py-1 text-[10.5px] font-bold text-[#B5601C]">
+            <Badge variant="outline" className="gap-1.5 border-amber-300 bg-amber-100 text-amber-700">
               <EyeOff className="h-3 w-3" />
               Ocultos · desactiva Modo presentación
-            </span>
+            </Badge>
           )}
         </div>
         {isLoading ? (
           <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-[#9AA3AD]" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MetricCard
+            <StatCard
               label="Comisión pagada"
-              labelClass="text-[#0E7A45]"
-              valueClass="text-[#0E7A45]"
+              tone="success"
               value={mask(formatCurrency(metrics?.comisionPagada || 0))}
               sublabel="cobrado"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
-            <MetricCard
+            <StatCard
               label="Comisión pendiente"
-              labelClass="text-[#B5601C]"
+              tone="warning"
               value={mask(formatCurrency(metrics?.comisionPendiente || 0))}
               sublabel="por cobrar"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
-            <MetricCard
+            <StatCard
               label="Ventas activas"
-              labelClass="text-[#16A45E]"
-              valueClass="text-[#16A45E]"
-              variant="count"
+              tone="success"
+              size="count"
               value={mask(String(metrics?.ventasActivas || 0))}
               sublabel="en proceso"
               onClick={() => navigate('/admin/agent/comisiones')}
             />
-            <MetricCard
+            <StatCard
               label="Ventas cerradas"
-              variant="count"
+              size="count"
               value={mask(String(metrics?.ventasCerradas || 0))}
               sublabel="completadas"
               onClick={() => navigate('/admin/agent/comisiones')}
@@ -484,42 +409,44 @@ const AgentInicio = () => {
       {/* Citas agendadas */}
       {citasToShow.length > 0 && (
         <div className="space-y-2.5">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8A929B]">Citas</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Citas</h2>
           <div className="space-y-2">
             {citasToShow.map((cita: any) => {
               const time = formatTime(cita);
               const badge = getCitaStatusBadge(cita);
               return (
-                <div
+                <Card
                   key={cita.id}
                   onClick={() => setSelectedCita(cita)}
-                  className="group flex items-center gap-3 rounded-md border border-[#E7E9EC] bg-white p-3 cursor-pointer transition-colors hover:border-[#CBD2D9]"
+                  className="flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-accent sm:gap-4"
                 >
-                  <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", citaIconClasses(cita))}>
-                    <Calendar className="h-4 w-4" />
+                  <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", citaIconClasses(cita))}>
+                    <Calendar className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="truncate text-sm font-semibold text-[#1A1D21]">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                         {cita.configuracion_citas_usuarios?.nombre || [cita.tipos_cita?.nombre, cita.proyectos?.nombre].filter(Boolean).join(' ') || 'Cita'}
                       </p>
-                      <span className="shrink-0 whitespace-nowrap rounded-md bg-[hsl(var(--agent-primary))]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[hsl(var(--agent-primary))]">
-                        {cita.tipos_cita?.nombre || 'Cita'}
+                      <span className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${badge.className}`}>
+                        {badge.label}
                       </span>
                     </div>
-                    {cita.personas?.nombre_legal && (
-                      <p className="truncate text-xs font-medium text-[#4B5563]">{cita.personas.nombre_legal}</p>
-                    )}
-                    <div className="mt-0.5 flex items-center gap-1 text-xs text-[#8A929B]">
-                      <Clock className="h-3 w-3" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/10">
+                        {cita.tipos_cita?.nombre || 'Cita'}
+                      </Badge>
+                      {cita.personas?.nombre_legal && (
+                        <span className="truncate text-sm text-muted-foreground">{cita.personas.nombre_legal}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
                       {new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}{time ? ` · ${time}` : ''}
                       {cita.ubicacion && <span className="truncate">· {cita.ubicacion}</span>}
                     </div>
                   </div>
-                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -545,202 +472,95 @@ const AgentInicio = () => {
       )}
 
       {/* Cita Detail Modal */}
-      <Dialog open={!!selectedCita} onOpenChange={(open) => { if (!open) { setSelectedCita(null); setCancelConfirmOpen(false); } }}>
-        <DialogContent className="sm:max-w-md bg-white text-gray-900">
-          <DialogHeader>
-            <DialogTitle className="text-lg">
-              {selectedCita?.configuracion_citas_usuarios?.nombre || [selectedCita?.tipos_cita?.nombre, selectedCita?.proyectos?.nombre].filter(Boolean).join(' · ') || 'Cita'}
-            </DialogTitle>
-            <DialogDescription className="sr-only">Detalle de la cita</DialogDescription>
-          </DialogHeader>
-          {selectedCita && (() => {
-            const time = formatTime(selectedCita);
-            const badge = getCitaStatusBadge(selectedCita);
-            const isPast = selectedCita.fecha < today;
-            const isCancelled = selectedCita.estatus === 'cancelada' || selectedCita.estatus === 'no_asistio';
-            const canModify = !isPast && !isCancelled;
-
-            return (
+      <ModalForm
+        open={!!selectedCita}
+        onOpenChange={(open) => { if (!open) { setSelectedCita(null); setCancelConfirmOpen(false); } }}
+        title={selectedCita?.configuracion_citas_usuarios?.nombre || [selectedCita?.tipos_cita?.nombre, selectedCita?.proyectos?.nombre].filter(Boolean).join(' · ') || 'Cita'}
+        subtitle="Detalle de la cita"
+        className="sm:max-w-md"
+        footer={selectedCita && !(selectedCita.fecha < today) && !(selectedCita.estatus === 'cancelada' || selectedCita.estatus === 'no_asistio') ? (
+          cancelConfirmOpen ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setCancelConfirmOpen(false)}>No, volver</Button>
+              <Button variant="destructive" size="sm" onClick={() => cancelCitaMutation.mutate(selectedCita.id)} disabled={cancelCitaMutation.isPending}> {cancelCitaMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                Sí, cancelar
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="cancel" onClick={() => setCancelConfirmOpen(true)}> Cancelar cita
+              </Button>
+              <Button
+                variant="primary-outline"
+                onClick={() => {
+                  const isTraining = selectedCita.id_tipo_cita === 1;
+                  if (isTraining) {
+                    setSelectedCita(null);
+                    setTrainingDialogOpen(true);
+                  } else {
+                    setRescheduleData({
+                      prospectoId: String(selectedCita.id_persona_prospecto),
+                      proyectoId: selectedCita.id_proyecto,
+                      prospectoName: selectedCita.personas?.nombre_legal || '',
+                      proyectoName: selectedCita.proyectos?.nombre || '',
+                    });
+                    setSelectedCita(null);
+                    setAgendarCitaOpen(true);
+                  }
+                }}
+              > Reagendar
+              </Button>
+            </>
+          )
+        ) : undefined}
+      >
+        {selectedCita && (() => {
+          const time = formatTime(selectedCita);
+          const rows = [
+            selectedCita.personas?.nombre_legal && { icon: UserPlus, label: "Prospecto", value: selectedCita.personas.nombre_legal },
+            { icon: Calendar, label: "Fecha", value: new Date(selectedCita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) },
+            time && { icon: Clock, label: "Horario", value: time },
+            selectedCita.ubicacion && { icon: MapPin, label: "Ubicación", value: selectedCita.ubicacion },
+          ].filter(Boolean) as { icon: typeof Calendar; label: string; value: string }[];
+          return (
+            <>
+              {/* Detalles — lista aireada, sin divisores */}
               <div className="space-y-4">
-                {/* Status */}
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${badge.className}`}>
-                    {badge.label}
-                  </span>
-                  {selectedCita.estatus_cita?.nombre && (
-                    <span className="text-xs text-gray-500">{selectedCita.estatus_cita.nombre}</span>
-                  )}
-                </div>
-
-                {/* Details */}
-                <div className="space-y-3 bg-gray-50 rounded-md p-3">
-                  {selectedCita.personas?.nombre_legal && (
-                    <div className="flex items-start gap-2.5">
-                      <UserPlus className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-xs text-gray-500">Prospecto</p>
-                        <p className="text-sm font-medium">{selectedCita.personas.nombre_legal}</p>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-start gap-2.5">
-                    <Calendar className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-gray-500">Fecha</p>
-                      <p className="text-sm font-medium">
-                        {new Date(selectedCita.fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                      </p>
+                {rows.map((row) => (
+                  <div key={row.label} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <row.icon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{row.label}</p>
+                      <p className="mt-0.5 text-sm font-medium text-foreground">{row.value}</p>
                     </div>
                   </div>
-                  {time && (
-                    <div className="flex items-start gap-2.5">
-                      <Clock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-xs text-gray-500">Horario</p>
-                        <p className="text-sm font-medium">{time}</p>
-                      </div>
-                    </div>
-                  )}
-                  {selectedCita.ubicacion && (
-                    <div className="flex items-start gap-2.5">
-                      <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-xs text-gray-500">Ubicación</p>
-                        <p className="text-sm font-medium">{selectedCita.ubicacion}</p>
-                      </div>
-                    </div>
-                  )}
-                  {selectedCita.notas && (
-                    <div className="pt-2 border-t border-gray-200">
-                      <p className="text-xs text-gray-500 mb-1">Notas</p>
-                      <p className="text-sm text-gray-700">{selectedCita.notas}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions */}
-                {canModify && (
-                  cancelConfirmOpen ? (
-                    <div className="space-y-2 bg-red-50 rounded-md p-3">
-                      <p className="text-sm font-medium text-red-800">¿Estás seguro de cancelar esta cita?</p>
-                      <p className="text-xs text-red-600">Esta acción no se puede deshacer.</p>
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => cancelCitaMutation.mutate(selectedCita.id)}
-                          disabled={cancelCitaMutation.isPending}
-                        >
-                          {cancelCitaMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Ban className="h-3 w-3 mr-1" />}
-                          Sí, cancelar
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCancelConfirmOpen(false)}
-                        >
-                          No, volver
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        className="flex-1 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                        onClick={() => setCancelConfirmOpen(true)}
-                      >
-                        <Ban className="h-4 w-4 mr-1.5" />
-                        Cancelar cita
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="flex-1"
-                        onClick={() => {
-                          const isTraining = selectedCita.id_tipo_cita === 1;
-                          if (isTraining) {
-                            setSelectedCita(null);
-                            setTrainingDialogOpen(true);
-                          } else {
-                            setRescheduleData({
-                              prospectoId: String(selectedCita.id_persona_prospecto),
-                              proyectoId: selectedCita.id_proyecto,
-                              prospectoName: selectedCita.personas?.nombre_legal || '',
-                              proyectoName: selectedCita.proyectos?.nombre || '',
-                            });
-                            setSelectedCita(null);
-                            setAgendarCitaOpen(true);
-                          }
-                        }}
-                      >
-                        <CalendarClock className="h-4 w-4 mr-1.5" />
-                        Reagendar
-                      </Button>
-                    </div>
-                  )
-                )}
+                ))}
               </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+
+              {selectedCita.notas && (
+                <div className="rounded-md bg-muted/50 p-3">
+                  <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Notas</p>
+                  <p className="text-sm text-foreground">{selectedCita.notas}</p>
+                </div>
+              )}
+
+              {/* Confirmación de cancelación */}
+              {cancelConfirmOpen && (
+                <div className="space-y-1 rounded-md bg-red-50 p-3">
+                  <p className="text-sm font-medium text-red-800">¿Estás seguro de cancelar esta cita?</p>
+                  <p className="text-xs text-red-600">Esta acción no se puede deshacer.</p>
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </ModalForm>
 
       </div>
     </div>
   );
 };
-
-function QuickAction({ icon: Icon, title, subtitle, onClick, dataCta }: {
-  icon: LucideIcon;
-  title: string;
-  subtitle: string;
-  onClick: () => void;
-  dataCta: string;
-}) {
-  return (
-    <button
-      data-cta={dataCta}
-      onClick={onClick}
-      className="group flex items-center gap-3 rounded-md border border-[#E7E9EC] bg-white p-3.5 text-left transition-colors duration-150 hover:border-[#CBD2D9] hover:bg-[#FAFBFC]"
-    >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-        <Icon className="h-[18px] w-[18px]" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14px] font-semibold text-[#1A1D21]">{title}</span>
-        <span className="block text-[11.5px] text-[#8A929B]">{subtitle}</span>
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-[#C4CBD3] transition-colors duration-150 group-hover:text-[#8A929B]" />
-    </button>
-  );
-}
-
-function MetricCard({ label, value, sublabel, variant = 'money', labelClass, valueClass, onClick }: {
-  label: string;
-  value: string;
-  sublabel?: string;
-  variant?: 'money' | 'count';
-  labelClass?: string;
-  valueClass?: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="group rounded-md border border-[#E7E9EC] bg-white p-4 text-left transition-shadow duration-150 hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
-    >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <span className={cn("text-[10px] font-semibold uppercase tracking-[0.08em]", labelClass || "text-[#8A929B]")}>{label}</span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#C7CDD4] transition-colors group-hover:text-[#16A45E]" strokeWidth={1.75} />
-      </div>
-      <p className={cn(
-        "font-bold leading-none tabular-nums",
-        variant === 'count' ? "text-[28px]" : "text-[19px] whitespace-nowrap tracking-[-0.3px]",
-        valueClass || "text-[#1A1D21]"
-      )}>{value}</p>
-      {sublabel && <p className="mt-1.5 text-[11px] leading-snug text-[#9AA3AD]">{sublabel}</p>}
-    </button>
-  );
-}
 
 export default AgentInicio;

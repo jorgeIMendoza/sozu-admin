@@ -41,7 +41,7 @@ export function getSmartAlerts(portfolio: InvestmentProperty[]): SmartAlert[] {
         id: `pay-${inv.property.id}`,
         type: "warning",
         icon: "⚠️",
-        message: `${inv.property.projectName} ${inv.property.unitNumber} — Pago final pendiente`,
+        message: `${inv.property.projectName} ${inv.property.unitNumber} - Pago final pendiente`,
         propertyId: inv.property.id,
         priority: 1,
       });
@@ -50,7 +50,7 @@ export function getSmartAlerts(portfolio: InvestmentProperty[]): SmartAlert[] {
         id: `esc-${inv.property.id}`,
         type: "info",
         icon: "📅",
-        message: `${inv.property.projectName} ${inv.property.unitNumber} — Escrituración próxima`,
+        message: `${inv.property.projectName} ${inv.property.unitNumber} - Escrituración próxima`,
         propertyId: inv.property.id,
         priority: 2,
       });
@@ -59,7 +59,7 @@ export function getSmartAlerts(portfolio: InvestmentProperty[]): SmartAlert[] {
         id: `pre-${inv.property.id}`,
         type: "info",
         icon: "📋",
-        message: `${inv.property.projectName} ${inv.property.unitNumber} — ${activeStage.contextMessage}`,
+        message: `${inv.property.projectName} ${inv.property.unitNumber} - ${activeStage.contextMessage}`,
         propertyId: inv.property.id,
         priority: 3,
       });
@@ -69,7 +69,7 @@ export function getSmartAlerts(portfolio: InvestmentProperty[]): SmartAlert[] {
           id: `maint-${inv.property.id}`,
           type: "info",
           icon: "🏠",
-          message: `${inv.property.projectName} ${inv.property.unitNumber} — Mantenimiento pendiente`,
+          message: `${inv.property.projectName} ${inv.property.unitNumber} - Mantenimiento pendiente`,
           propertyId: inv.property.id,
           priority: 4,
         });
@@ -79,7 +79,7 @@ export function getSmartAlerts(portfolio: InvestmentProperty[]): SmartAlert[] {
         id: `ent-${inv.property.id}`,
         type: "info",
         icon: "🏠",
-        message: `${inv.property.projectName} ${inv.property.unitNumber} — ${activeStage.contextMessage || "Entrega próxima"}`,
+        message: `${inv.property.projectName} ${inv.property.unitNumber} - ${activeStage.contextMessage || "Entrega próxima"}`,
         propertyId: inv.property.id,
         priority: 2,
       });

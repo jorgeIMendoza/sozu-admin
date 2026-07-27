@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import {
   Home,
   ShoppingBag,
@@ -10,6 +12,7 @@ import {
   CreditCard,
   BarChart2,
   Package,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +25,7 @@ export interface PortalNavItem {
 
 const ROUTE_ICON: Record<string, LucideIcon> = {
   "/admin/portal-cliente/inicio":          Home,
+  "/admin/portal-cliente/propiedades":     Building2,
   "/admin/portal-cliente/en-adquisicion":  ShoppingBag,
   "/admin/portal-cliente/patrimonio":      Wallet,
   "/admin/portal-cliente/documentos":      FileText,
@@ -34,7 +38,8 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
 };
 
 export function usePortalNavItems() {
-  return useQuery<PortalNavItem[]>({
+  const { isPathDisabled } = useAllowedMenus();
+  const query = useQuery<PortalNavItem[]>({
     queryKey: ["portal-nav-submenus"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -54,6 +59,15 @@ export function usePortalNavItems() {
     },
     staleTime: 5 * 60_000,
   });
+
+  // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
+  // La query ya filtra `submenus.activo=true`; esto cubre el menú padre inactivo.
+  const data = useMemo(
+    () => query.data?.filter((item) => !isPathDisabled(item.route)),
+    [query.data, isPathDisabled],
+  );
+
+  return { ...query, data };
 }
 
 export function isNavItemActive(route: string, pathname: string): boolean {

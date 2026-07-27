@@ -133,6 +133,14 @@ export class OfertaPdfNativeService {
       compress: true,
     });
 
+    // Valor de bodegas incluidas (es_incluido): suma a la BASE del precio final,
+    // no al precio de lista mostrado. costo = precio/m² del producto × m2 (calculado
+    // en htmlToPdfService.fetchBodegas).
+    const bodegasIncluidasTotal = (data.bodegas ?? []).reduce(
+      (sum: number, b: any) => sum + (b.es_incluido ? Number(b.costo ?? 0) : 0),
+      0,
+    );
+
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 12;
@@ -212,7 +220,10 @@ export class OfertaPdfNativeService {
 
     // Calculate payment amounts for a scheme
     const calculatePaymentAmounts = (scheme: PaymentScheme, mesesEfectivos: number = 0) => {
-      const result = calcDynamicScheme(scheme, data.propertyDetails.precio_lista, mesesEfectivos);
+      // Base = precio_lista_depa + bodegas incluidas; el descuento del esquema
+      // se aplica sobre esta base dentro de calcDynamicScheme.
+      const basePrice = Number(data.propertyDetails.precio_lista ?? 0) + bodegasIncluidasTotal;
+      const result = calcDynamicScheme(scheme, basePrice, mesesEfectivos);
       return {
         enganche: result.enganche,
         mensualidad: result.mensualidad,
@@ -411,10 +422,14 @@ export class OfertaPdfNativeService {
     pdf.text("Datos de la Propiedad:", margin, y);
     y += 7;
 
-    // Property info column
-    const propColWidth = contentWidth * 0.35;
-    const iconColWidth = contentWidth * 0.2;
-    const imageColWidth = contentWidth * 0.45;
+    // Property info column. La imagen del modelo va PEGADA a la derecha y más
+    // angosta; los iconos ocupan el espacio entre la columna de datos y la imagen
+    // (antes la imagen se encimaba con el texto de la columna derecha de iconos).
+    const propColWidth = contentWidth * 0.34;
+    const imageColWidth = contentWidth * 0.30;
+    const imageX = margin + contentWidth - imageColWidth; // flush right
+    const iconX = margin + propColWidth + 5;
+    const iconAreaWidth = imageX - 5 - iconX; // ancho disponible para 2 columnas de iconos
 
     const propStartY = y;
     pdf.setFontSize(9);
@@ -483,15 +498,15 @@ export class OfertaPdfNativeService {
     propertyItems.forEach((item) => {
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(grayColor);
-      pdf.text(item.label, margin, y);
+      pdf.text(String(item.label ?? ""), margin, y);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(primaryColor);
-      pdf.text(item.value, margin + 35, y);
+      // Coerción a string: jsPDF lanza "Invalid arguments" si el valor es null/number.
+      pdf.text(String(item.value ?? ""), margin + 35, y);
       y += 5;
     });
 
-    // Icons column
-    const iconX = margin + propColWidth + 5;
+    // Icons column (iconX / iconAreaWidth definidos arriba)
     let iconY = propStartY;
     const iconSize = 5;
     const iconSpacing = 12;
@@ -542,12 +557,12 @@ export class OfertaPdfNativeService {
       iconItems.push({ icon: "estacionamiento", value: estTexto });
     }
     if (data.bodegas.length > 0) {
-      iconItems.push({
-        icon: "bodega",
-        value: `${data.bodegas.length} ${
-          data.bodegas.length === 1 ? "Bodega" : "Bodegas"
-        }`,
-      });
+      // Texto corto en el icono (el detalle con precio va en una nota full-width abajo).
+      const bodegaValue =
+        data.bodegas.length === 1
+          ? `${data.bodegas[0].nombre ?? "Bodega"}`
+          : `${data.bodegas.length} Bodegas`;
+      iconItems.push({ icon: "bodega", value: bodegaValue });
     }
     if (data.propertyDetails.tieneBalcon) {
       iconItems.push({ icon: "balcon", value: "Balcón" });
@@ -558,7 +573,7 @@ export class OfertaPdfNativeService {
     iconItems.forEach((item, idx) => {
       const col = idx < iconsPerCol ? 0 : 1;
       const row = idx < iconsPerCol ? idx : idx - iconsPerCol;
-      const x = iconX + col * (iconColWidth / 2);
+      const x = iconX + col * (iconAreaWidth / 2);
       const yPos = propStartY + row * iconSpacing;
 
       const iconBase64 = this.iconCache.get(item.icon);
@@ -575,18 +590,16 @@ export class OfertaPdfNativeService {
       pdf.text(item.value, x + iconSize + 2, yPos + 1);
     });
 
-    // Model image column
+    // Model image column (pegada a la derecha; imageX/imageColWidth definidos arriba)
+    const imageHeight = 35;
     if (modelImageBase64) {
-      const imageX = margin + propColWidth + iconColWidth + 5;
-      const imageWidth = imageColWidth - 10;
-      const imageHeight = 35;
       try {
         pdf.addImage(
           modelImageBase64,
           "JPEG",
           imageX,
           propStartY,
-          imageWidth,
+          imageColWidth,
           imageHeight
         );
       } catch (e) {
@@ -595,6 +608,54 @@ export class OfertaPdfNativeService {
     }
 
     y = Math.max(y, propStartY + 40);
+
+    // Detalle de bodegas incluidas: área, precio/m², precio de la bodega y precio TOTAL
+    // (precio_lista + valor de bodegas incluidas — la base de los esquemas de pago).
+    const bodegasIncluidasNota = (data.bodegas ?? []).filter((b: any) => b.es_incluido);
+    if (bodegasIncluidasNota.length > 0) {
+      const bodegasTotal = bodegasIncluidasNota.reduce(
+        (s: number, b: any) => s + Number(b.costo ?? 0),
+        0,
+      );
+      const precioTotal = Number(data.propertyDetails.precio_lista ?? 0) + bodegasTotal;
+      const col2X = margin + contentWidth / 2;
+
+      for (const b of bodegasIncluidasNota) {
+        const m2Num = Number(b.m2 ?? 0);
+        const costo = Number(b.costo ?? 0);
+        const precioM2 = m2Num > 0 ? costo / m2Num : 0;
+
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(primaryColor);
+        pdf.text(`Bodega ${b.nombre ?? ""} incluida`, margin, y);
+        y += 5;
+
+        const field = (label: string, value: string, x: number) => {
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(grayColor);
+          pdf.text(label, x, y);
+          pdf.setFont("helvetica", "bold");
+          pdf.setTextColor(primaryColor);
+          pdf.text(value, x + 32, y);
+        };
+
+        field("Área bodega:", m2Num > 0 ? `${m2Num.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²` : "N/A", margin);
+        field("Precio m² bodega:", formatCurrency(precioM2), col2X);
+        y += 5;
+        field("Precio bodega:", formatCurrency(costo), margin);
+        y += 6;
+      }
+
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(grayColor);
+      pdf.text("Precio TOTAL:", margin, y);
+      pdf.setTextColor(primaryColor);
+      pdf.text(formatCurrency(precioTotal), margin + 32, y);
+      y += 4;
+    }
+
     drawLine(y);
     y += 6;
 
@@ -673,8 +734,8 @@ export class OfertaPdfNativeService {
           pdf.setFontSize(10);
           pdf.setFont("helvetica", "bold");
           pdf.setTextColor(primaryColor);
-          pdf.text(scheme.nombre, schemeX + schemePadding, lineY);
-          
+          pdf.text(String(scheme.nombre ?? ""), schemeX + schemePadding, lineY);
+
           // Draw approval status badge next to scheme name
           if (isSelected && data.offerData.id_esquema_pago_seleccionado && data.id_estatus_aprobacion && data.estatus_aprobacion_nombre) {
             const statusColors: Record<number, { bg: [number, number, number]; text: [number, number, number] }> = {
@@ -684,9 +745,9 @@ export class OfertaPdfNativeService {
               4: { bg: [204, 229, 255], text: [0, 64, 133] },
             };
             const colors = statusColors[data.id_estatus_aprobacion] || statusColors[1];
-            const nameWidth = pdf.getTextWidth(scheme.nombre);
+            const nameWidth = pdf.getTextWidth(String(scheme.nombre ?? ""));
             const badgeX = schemeX + schemePadding + nameWidth + 2;
-            const badgeText = data.estatus_aprobacion_nombre;
+            const badgeText = String(data.estatus_aprobacion_nombre ?? "");
             pdf.setFontSize(6);
             pdf.setFont("helvetica", "normal");
             const badgeTextWidth = pdf.getTextWidth(badgeText);
@@ -789,7 +850,7 @@ export class OfertaPdfNativeService {
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
           pdf.text(
-            `${escalonadoDisplay.totalMeses} mensualidades:`,
+            "Mensualidades hasta la escritura:",
             schemeX + schemePadding,
             lineY
           );
@@ -801,21 +862,6 @@ export class OfertaPdfNativeService {
             lineY,
             { align: "right" }
           );
-          lineY += 3;
-
-          // Date sub-line
-          if (escalonadoDisplay.fechaFinalText) {
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(6);
-            pdf.setTextColor(grayColor);
-            pdf.text(
-              escalonadoDisplay.fechaFinalText,
-              schemeX + schemeWidth - schemePadding,
-              lineY,
-              { align: "right" }
-            );
-            pdf.setFontSize(8);
-          }
           lineY += 4;
 
           // Delivery row
@@ -839,7 +885,7 @@ export class OfertaPdfNativeService {
             pdf.setFont("helvetica", "normal");
             pdf.setTextColor(grayColor);
             pdf.text(
-              `${amounts.meses} mensualidades (${amounts.porcentajeMensualidades.toFixed(1)}%):`,
+              "Mensualidades hasta la escritura:",
               schemeX + schemePadding,
               lineY
             );

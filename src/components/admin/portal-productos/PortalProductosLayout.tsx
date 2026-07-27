@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useProductosReales } from "@/hooks/usePortalProductos/useProductosReales";
 import { usePortalProductosStore } from "@/lib/portal-productos/store";
@@ -10,13 +10,14 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import {
   PortalProductosImpersonationProvider,
   usePortalProductosImpersonation,
 } from "@/contexts/PortalProductosImpersonationContext";
 import { PortalProductosImpersonationSelector } from "./PortalProductosImpersonationSelector";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 
 interface NavLeaf { label: string; path: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavLeaf[] }
@@ -58,7 +59,20 @@ const PortalProductosLayoutInner = () => {
   const { impersonatedUser, isImpersonating } = usePortalProductosImpersonation();
   const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
+  const { isPathDisabled } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Ocultar items cuyo submenú está apagado en BD (activo=false o menú padre inactivo).
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => !isPathDisabled(item.path)),
+        }))
+        .filter((group) => group.items.length > 0),
+    [isPathDisabled]
+  );
 
   // Carga de datos REALES de productos → store (reemplaza el mock).
   const { data: productosReales } = useProductosReales();
@@ -92,7 +106,7 @@ const PortalProductosLayoutInner = () => {
       </div>
 
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {navGroups.map(group => (
+        {visibleNavGroups.map(group => (
           <div key={group.label}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
               {group.label}

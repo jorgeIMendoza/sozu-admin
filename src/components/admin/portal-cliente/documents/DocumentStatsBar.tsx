@@ -8,13 +8,14 @@ interface StatsBarProps {
     recibido: number;
     validado: number;
     rechazado: number;
+    vencido: number;
     firmado: number;
   };
   activeStatus: DocumentStatus | null;
   onSelectStatus: (status: DocumentStatus | null) => void;
 }
 
-const ORDER: DocumentStatus[] = ["pendiente", "rechazado", "recibido", "validado", "firmado"];
+const ORDER: DocumentStatus[] = ["pendiente", "rechazado", "vencido", "recibido", "validado", "firmado"];
 
 const dotColor: Record<string, string> = {
   warning: "bg-amber-400",

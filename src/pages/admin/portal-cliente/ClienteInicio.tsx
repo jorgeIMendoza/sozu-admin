@@ -82,7 +82,7 @@ const ClienteInicio = () => {
   return (
     <div className="px-4 pt-3 md:px-0 md:pt-6">
 
-      {/* 1. Saludo — siempre visible */}
+      {/* 1. Saludo - siempre visible */}
       {greeting}
 
       {/* 2. Resumen financiero */}
@@ -98,7 +98,7 @@ const ClienteInicio = () => {
         />
       </div>
 
-      {/* 3. Accesos rápidos — mobile: inline aquí; desktop: sidebar derecho */}
+      {/* 3. Accesos rápidos - mobile: inline aquí; desktop: sidebar derecho */}
       <div className="md:hidden">
         <QuickActionsGrid onAction={handleQuickAction} />
       </div>
@@ -112,7 +112,7 @@ const ClienteInicio = () => {
           {/* 4. Tu actividad */}
           <ActivitySection portfolio={safePortfolio} onPayNow={handleSelectProperty} />
 
-          {/* 5. Pendientes por propiedad — mobile: aquí; desktop: sidebar */}
+          {/* 5. Pendientes por propiedad - mobile: aquí; desktop: sidebar */}
           <div className="md:hidden">
             <PendingsByProperty portfolio={safePortfolio} onSelect={handleSelectProperty} />
           </div>
@@ -147,7 +147,7 @@ const ClienteInicio = () => {
           </section>
         </div>
 
-        {/* Sidebar derecho — solo desktop */}
+        {/* Sidebar derecho - solo desktop */}
         <aside className="hidden md:block md:sticky md:top-28 md:self-start space-y-2">
           <QuickActionsGrid onAction={handleQuickAction} />
           <PendingsByProperty portfolio={safePortfolio} onSelect={handleSelectProperty} />

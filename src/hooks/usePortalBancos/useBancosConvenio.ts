@@ -17,6 +17,10 @@ export interface BancoConvenio {
   id_banco: number;
   nombre: string;
   color_marca: string | null;
+  // URLs (Supabase Storage) del branding del banco. `icono_url` = marca cuadrada
+  // para listas compactas; `logo_url` = logo ancho/wordmark. null = usar color.
+  logo_url: string | null;
+  icono_url: string | null;
   producto_nombre: string | null;
   tasa_desde: number | null;
   // Rangos que alimenta el banco para la estimación (null = no mostrar estimación)
@@ -37,7 +41,7 @@ export interface BancoCatalogo {
 const CONVENIO_KEY = ["bancos-convenio"] as const;
 
 const FK = "bancos!bancos_convenio_id_banco_fkey(nombre)";
-const SEL_FULL = `id, id_banco, color_marca, producto_nombre, tasa_desde, tasa_min, tasa_max, cat_min, cat_max, orden, activo, ${FK}`;
+const SEL_FULL = `id, id_banco, color_marca, logo_url, icono_url, producto_nombre, tasa_desde, tasa_min, tasa_max, cat_min, cat_max, orden, activo, ${FK}`;
 const SEL_BASE = `id, id_banco, color_marca, producto_nombre, tasa_desde, orden, activo, ${FK}`;
 
 async function fetchBancosConvenio(): Promise<BancoConvenio[]> {
@@ -60,6 +64,8 @@ async function fetchBancosConvenio(): Promise<BancoConvenio[]> {
     id_banco: r.id_banco,
     nombre: r.bancos?.nombre ?? `Banco ${r.id_banco}`,
     color_marca: r.color_marca ?? null,
+    logo_url: r.logo_url ?? null,
+    icono_url: r.icono_url ?? null,
     producto_nombre: r.producto_nombre ?? null,
     tasa_desde: num(r.tasa_desde),
     tasa_min: num(r.tasa_min),

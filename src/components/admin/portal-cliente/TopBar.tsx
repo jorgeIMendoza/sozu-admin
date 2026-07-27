@@ -47,10 +47,10 @@ const TopBar = ({ userName, userRole, userPhone }: TopBarProps) => {
       {/* Search */}
       <PortalSearchInput className="w-full max-w-[260px] min-w-0" />
 
-      {/* Impersonation toolbar — self-guards for superadmin */}
+      {/* Impersonation toolbar - self-guards for superadmin */}
       <ClienteImpersonationSelector />
 
-      {/* Bell + Avatar — pushed to right */}
+      {/* Bell + Avatar - pushed to right */}
       <div className="flex items-center gap-2 ml-auto">
         <NotificationPopover trigger={bellTrigger} />
 
@@ -71,7 +71,7 @@ const TopBar = ({ userName, userRole, userPhone }: TopBarProps) => {
                 </div>
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-[13px] font-semibold text-foreground truncate">{userName}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{userRole || "—"}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{userRole || "-"}</p>
                   {userPhone && (
                     <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                       <Phone className="size-3 shrink-0" />

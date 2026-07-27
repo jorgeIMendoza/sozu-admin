@@ -67,7 +67,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
 import { APP_VERSION } from "@/lib/config";
-import { SozuLogo } from "@/components/ui/SozuLogo";
+import { SozuLogo } from "@/components/ui/sozu-logo";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
@@ -142,6 +142,7 @@ const PATH_ICONS: Record<string, LucideIcon> = {
   "/admin/portal-crm/configuracion/usuarios":                 UserCog,
   "/admin/portal-crm/configuracion/desarrollos":              Building2,
   "/admin/portal-crm/configuracion/pipelines":                Briefcase,
+  "/admin/portal-crm/configuracion/estados-lead":             Target,
   "/admin/portal-crm/configuracion/roles":                    KeyRound,
   "/admin/portal-crm/configuracion/etapas-pipeline":          ListTree,
   "/admin/portal-crm/configuracion/campos-personalizados":    SlidersHorizontal,

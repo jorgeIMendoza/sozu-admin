@@ -19,6 +19,9 @@ export default function Configuracion() {
   return (
     <div>
       <PageHeader title="Configuración" subtitle="Parámetros del condominio" />
+      {/* Solo "Datos generales" está conectado a datos reales (useCondominioConfig).
+          Las secciones hardcodeadas (Conciliación, Notificaciones, Roles) se
+          eliminaron por no estar conectadas al sistema. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="text-sm font-semibold mb-3">Datos generales</h2>
@@ -30,31 +33,6 @@ export default function Configuracion() {
               value={isLoading ? "…" : config?.monto_mensual_cuota_extraordinaria ? formatMXN(config.monto_mensual_cuota_extraordinaria) : "—"}
             />
           </div>
-        </section>
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold mb-3">Conciliación bancaria</h2>
-          <div className="space-y-3 text-sm">
-            <Field label="Banco" value="STP" />
-            <Field label="Tolerancia monto" value="±$0.01 MXN" />
-            <Field label="Conciliación automática" value="Activa" />
-          </div>
-        </section>
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold mb-3">Notificaciones</h2>
-          <div className="space-y-3 text-sm">
-            <Field label="Email" value="admin@sozu.com" />
-            <Field label="WhatsApp residentes" value="Activo" />
-            <Field label="Recordatorios" value="3, 7 y 15 días antes" />
-          </div>
-        </section>
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold mb-3">Roles y permisos</h2>
-          <ul className="text-sm space-y-2">
-            <li className="flex justify-between"><span>Super Admin</span><span className="text-muted-foreground">Acceso total</span></li>
-            <li className="flex justify-between"><span>Administrador</span><span className="text-muted-foreground">Lectura/Escritura</span></li>
-            <li className="flex justify-between"><span>Cobranza</span><span className="text-muted-foreground">Pagos y cartera</span></li>
-            <li className="flex justify-between"><span>Lectura</span><span className="text-muted-foreground">Solo dashboards</span></li>
-          </ul>
         </section>
       </div>
     </div>

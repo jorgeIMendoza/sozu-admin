@@ -7,6 +7,7 @@ export type DocumentStatus =
   | "recibido"
   | "validado"
   | "rechazado"
+  | "vencido"
   | "firmado";
 
 export type DocumentType =
@@ -318,6 +319,7 @@ export function getDocumentStats(docs: DocumentRecord[]) {
     recibido: docs.filter((d) => d.status === "recibido").length,
     validado: docs.filter((d) => d.status === "validado").length,
     rechazado: docs.filter((d) => d.status === "rechazado").length,
+    vencido: docs.filter((d) => d.status === "vencido").length,
     firmado: docs.filter((d) => d.status === "firmado").length,
   };
 }
@@ -336,6 +338,8 @@ export function getStatusInfo(status: DocumentStatus): {
       return { label: "Validado", tone: "success", className: "bg-success/10 text-success" };
     case "rechazado":
       return { label: "Rechazado", tone: "destructive", className: "bg-destructive/10 text-destructive" };
+    case "vencido":
+      return { label: "Vencido", tone: "warning", className: "bg-warning/10 text-warning" };
     case "firmado":
       return { label: "Firmado", tone: "success", className: "bg-success/15 text-success" };
   }

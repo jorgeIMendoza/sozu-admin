@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, FileImage, MapPin, Download } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, FileImage, MapPin } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ModalFormHeader, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 
@@ -132,7 +135,7 @@ const FloorPlanCanvas = ({
 
   return (
     <div ref={containerRef} className="w-full">
-      <canvas ref={canvasRef} className="w-full rounded-lg" />
+      <canvas ref={canvasRef} className="mx-auto block max-h-full max-w-full rounded-lg" />
     </div>
   );
 };
@@ -498,57 +501,25 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-muted/30 py-3 text-sm font-medium text-foreground hover:bg-muted/60 transition-colors"
-      >
-        <FileImage className="h-4 w-4 text-muted-foreground" />
-        Planos
-      </button>
+      <ActionButton icon={FileImage} className="w-full" onClick={() => setOpen(true)}>
+        Ver planos
+      </ActionButton>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle className="text-base">
-                  Planos - {planData.edificio} / {planData.modelo} / Unidad {planData.rawPropertyNumber}
-                </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Nivel {planData.numeroPiso} - Depto. {planData.numeroDepa}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadPdf}
-                disabled={generatingPdf}
-                className="gap-1.5 shrink-0"
-              >
-                {generatingPdf ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-                {generatingPdf ? "Generando..." : "Descargar PDF"}
-              </Button>
-            </div>
-          </DialogHeader>
+        <DialogContent className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <ModalFormHeader title={`Planos - ${planData.modelo}`} />
 
-          <Tabs defaultValue="ubicacion" className="w-full">
-            <TabsList className="w-full">
-              <TabsTrigger value="ubicacion" className="flex-1 text-xs data-[state=active]:bg-emerald-500 data-[state=active]:text-white">
-                <MapPin className="h-3.5 w-3.5 mr-1.5" />
+          <Tabs defaultValue="ubicacion" className="flex min-h-0 flex-1 flex-col">
+            <TabsList className="mx-6 mt-4 w-auto shrink-0">
+              <TabsTrigger value="ubicacion" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 Ubicación
               </TabsTrigger>
-              <TabsTrigger value="arquitectonico" className="flex-1 text-xs">
-                <FileImage className="h-3.5 w-3.5 mr-1.5" />
+              <TabsTrigger value="arquitectonico" className="flex-1 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 Arquitectónico
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="ubicacion" className="mt-3">
+            <TabsContent value="ubicacion" className="min-h-0 flex-1 overflow-auto p-6">
               {planData.planoUbicacionUrl ? (
                 <div className="flex flex-col items-center">
                   <FloorPlanCanvas
@@ -557,34 +528,42 @@ export function PropertyFloorPlanButton({ propertyId }: PropertyFloorPlanButtonP
                     highlightUnit={planData.numeroDepa}
                     fullPropertyNumber={planData.rawPropertyNumber}
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Nivel {planData.numeroPiso} - Depto. <span className="font-semibold text-foreground">{planData.numeroDepa}</span>
                   </p>
                 </div>
               ) : (
-                <div className="text-center py-10 text-muted-foreground text-sm">
-                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  <MapPin className="mx-auto mb-2 h-8 w-8 opacity-30" />
                   No hay plano de ubicación configurado para este nivel
                 </div>
               )}
             </TabsContent>
 
-            <TabsContent value="arquitectonico" className="mt-3">
+            <TabsContent value="arquitectonico" className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">
               {planData.planoArqUrl ? (
                 <img
                   src={planData.planoArqUrl}
                   alt="Plano arquitectónico"
-                  className="w-full rounded-lg"
+                  className="mx-auto max-h-full w-auto max-w-full rounded-lg object-contain"
                   crossOrigin="anonymous"
                 />
               ) : (
-                <div className="text-center py-10 text-muted-foreground text-sm">
-                  <FileImage className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  <FileImage className="mx-auto mb-2 h-8 w-8 opacity-30" />
                   No hay plano arquitectónico configurado para esta unidad
                 </div>
               )}
             </TabsContent>
           </Tabs>
+
+          <div className={cn(MODAL_FOOTER_CLS, "shrink-0")}>
+            <Button variant="cancel" onClick={() => setOpen(false)}>Cerrar</Button>
+            <Button variant="primary-outline" onClick={handleDownloadPdf} disabled={generatingPdf}>
+              {generatingPdf && <Loader2 className="h-4 w-4 animate-spin" />}
+              {generatingPdf ? "Generando..." : "Descargar PDF"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>

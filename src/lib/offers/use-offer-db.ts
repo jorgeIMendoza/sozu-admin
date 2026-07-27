@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type { OfertaComercial, PaymentPlan } from "./offer-data";
 import type { Agent } from "./agent-data";
 import { calcDynamicScheme, calcEscalonadoScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
+import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@/utils/avanceObra";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
-import { isValidRFC } from "@/utils/fiscalDataValidation";
+import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
+import { getBodegasIncluidasCosto } from "./included-bodegas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,26 +48,12 @@ function toEmbedUrl(url: string): string {
   return url;
 }
 
-function calcProgressFromDates(inicio: string | null, entrega: string | null): number {
-  if (!inicio || !entrega) return 0;
-  const start = new Date(inicio).getTime();
-  const end   = new Date(entrega).getTime();
-  const now   = Date.now();
-  if (end <= start) return 0;
-  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
-}
-
-const DEFAULT_MILESTONES = [
-  { phase: "Cimentación",   pct: 5,   done: false },
-  { phase: "Estructura",    pct: 28,  done: false },
-  { phase: "Albañilería",   pct: 55,  done: false },
-  { phase: "Instalaciones", pct: 75,  done: false },
-  { phase: "Acabados",      pct: 90,  done: false },
-  { phase: "Entrega",       pct: 100, done: false },
-];
-
-function applyProgressToMilestones(milestones: typeof DEFAULT_MILESTONES, pct: number) {
-  return milestones.map((m) => ({ ...m, done: pct >= m.pct }));
+function applyProgressToMilestones(
+  milestones: { phase: string; pct: number; done: boolean }[],
+  pct: number,
+) {
+  // done = etapa superada (pct < avance); la etapa == avance es la ACTUAL.
+  return milestones.map((m) => ({ ...m, done: pct > m.pct }));
 }
 
 function fmtDate(ts: string): string {
@@ -229,6 +217,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     { data: vista },
     { data: esquemas },
     { data: categoriasMultimedia },
+    { data: estatusCatalogRows },
   ] = await Promise.all([
     supabase
       .from("proyectos")
@@ -268,6 +257,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     supabase
       .from("categorias_multimedia_proyecto")
       .select("id, nombre")
+      .eq("activo", true),
+    // Catálogo de etapas de obra — fuente única del % de avance
+    (supabase as any)
+      .from("estatus_proyecto")
+      .select("*")
       .eq("activo", true),
   ]);
 
@@ -320,7 +314,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     (oferta as any).id_persona_lead
       ? supabase
           .from("personas")
-          .select("email, rfc")
+          .select("email, rfc, curp, nombre_legal, telefono, clave_pais_telefono")
           .eq("id", (oferta as any).id_persona_lead)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -428,12 +422,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     ? fotoRows.filter((f: any) => f.id_categoria === generalId)
     : fotoRows.filter((f: any) => avancesId == null || f.id_categoria !== avancesId);
 
-  const globalProgress = calcProgressFromDates(
-    (proyecto as any).fecha_lanzamiento,
-    (proyecto as any).fecha_entrega_proyecto ?? (proyecto as any).fecha_entrega,
-  );
-
-  const milestones = applyProgressToMilestones(DEFAULT_MILESTONES, globalProgress);
+  // Avance de obra — fuente única: etapa (id_estatus_proyecto) del proyecto.
+  const estatusCatalog = mapEstatusCatalog((estatusCatalogRows ?? []) as any[]);
+  const globalProgress = progressFromEstatus(estatusCatalog, (proyecto as any).id_estatus_proyecto);
+  const milestones = applyProgressToMilestones(milestonesFromEstatus(estatusCatalog), globalProgress);
 
   const constructionPhotos = avanceFotos.slice(0, 6).map((f: any) => ({
     src: toOptimizedUrl(f.url, 800, 75),
@@ -443,27 +435,27 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const lastUpdatedRaw = latestVideo?.fecha_creacion ?? (proyecto as any).fecha_actualizacion;
   const lastUpdated = lastUpdatedRaw ? fmtDate(lastUpdatedRaw) : undefined;
 
-  // 7. Galería principal — portada primero, luego modelo, luego proyecto
-  const portadaRaw: string | undefined =
-    (propiedad as any).url_imagen_portada || (modelo as any)?.url_imagen_portada || undefined;
+  // 7. Galería principal — orden fijo:
+  //    1) portada del proyecto  2) plano(s) del proyecto (arquitectónico + ubicación)
+  //    3) imágenes del modelo de la oferta  4) multimedia "General" al final (si hay).
+  const portadaProyecto: string | undefined = (proyecto as any).url_imagen_portada || undefined;
+  const modeloPortada: string | undefined = (modelo as any)?.url_imagen_portada || undefined;
 
-  const proyectoGalleryUrls: string[] = galleryFotos
-    .map((m: any) => toOptimizedUrl(m.url, 1200, 80))
-    .filter(Boolean);
-  if (proyectoGalleryUrls.length === 0 && (proyecto as any).url_imagen_portada) {
-    proyectoGalleryUrls.push(toOptimizedUrl((proyecto as any).url_imagen_portada, 1200, 80));
-  }
+  const generalGalleryUrls: string[] = galleryFotos
+    .map((m: any) => m.url as string | null | undefined)
+    .filter((u): u is string => Boolean(u))
+    .map((u) => toOptimizedUrl(u, 1200, 80));
 
-  // Model property images excluding portada to avoid duplicate
-  const modeloGalleryImages: string[] = modeloMediaRows
-    .filter((m) => m.ver_como_imagen_de_propiedad && m.url && m.url !== portadaRaw)
-    .map((m) => toOptimizedUrl(m.url, 1200, 80));
-
+  // Dedup preservando orden: portada → planos → modelo → general.
+  const seenGallery = new Set<string>();
   const galleryUrls: string[] = [
-    ...(portadaRaw ? [toOptimizedUrl(portadaRaw, 1200, 80)] : []),
-    ...modeloGalleryImages,
-    ...proyectoGalleryUrls,
-  ].filter(Boolean);
+    ...(portadaProyecto ? [toOptimizedUrl(portadaProyecto, 1200, 80)] : []),
+    ...(floorPlanUrl ? [floorPlanUrl] : []),
+    ...(planoUbicacionUrl ? [planoUbicacionUrl] : []),
+    ...(modeloPortada ? [toOptimizedUrl(modeloPortada, 1200, 80)] : []),
+    ...modeloPropertyImages,
+    ...generalGalleryUrls,
+  ].filter((u): u is string => Boolean(u) && !seenGallery.has(u) && (seenGallery.add(u), true));
 
   // 8. Amenidades
   const amenidadesNames: string[] = (amenidadesProyecto ?? [])
@@ -493,6 +485,12 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   const listPrice    = Number(propiedad.precio_lista ?? 0);
   const selectedId   = oferta.id_esquema_pago_seleccionado;
 
+  // Bodegas incluidas (es_incluido): su valor suma a la BASE del precio final,
+  // no al precio de lista mostrado. base = precio_lista_depa + Σ (precio/m² × m²).
+  // El descuento del esquema se aplica sobre esta base (ver calcPaymentPlans).
+  const { total: bodegasIncluidasTotal } = await getBodegasIncluidasCosto(propiedadId);
+  const calcBasePrice = listPrice + bodegasIncluidasTotal;
+
   // Si el esquema seleccionado fue VERSIONADO (desactivado al editarlo), no aparece en la
   // lista activa del proyecto. Lo traemos aparte para que la oferta del cliente siga
   // mostrando su plan CONGELADO (los porcentajes con los que lo aceptó).
@@ -510,11 +508,17 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // plan queda congelado: se muestra SOLO el seleccionado (no el selector completo).
   const { data: cuentasOferta } = await (supabase as any)
     .from("cuentas_cobranza")
-    .select("id")
+    .select("id, clabe_stp")
     .eq("id_oferta", numId)
     .eq("activo", true)
+    .order("id", { ascending: true })
     .limit(1);
-  const ofertaTieneCuenta = Array.isArray(cuentasOferta) && cuentasOferta.length > 0;
+  const cuentaOferta = Array.isArray(cuentasOferta) ? cuentasOferta[0] ?? null : null;
+  const ofertaTieneCuenta = !!cuentaOferta;
+  // CLABE dedicada de la cuenta de cobranza: se crea con la cuenta, después del
+  // primer pago. Manda sobre la temporal de la propiedad.
+  const clabeCuentaCobranza: string | undefined =
+    (cuentaOferta as any)?.clabe_stp || undefined;
 
   const allEsqs      = esquemasAug.filter((e: any) => !e.es_manual);
   const selectedIsManual = selectedId
@@ -548,7 +552,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     ?? (proyecto as any).fecha_entrega
     ?? null;
 
-  const paymentPlans = calcPaymentPlans(filteredEsqs, listPrice, oferta.fecha_generacion, entregaFecha);
+  const paymentPlans = calcPaymentPlans(filteredEsqs, calcBasePrice, oferta.fecha_generacion, entregaFecha);
 
   // 9b. If manual scheme selected, override with actual acuerdos when plan was modified
   if (selectedIsManual && selectedId && paymentPlans.length > 0) {
@@ -713,9 +717,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // oferta de producto del MISMO lead que la oferta de la unidad (misma propiedad),
   // que es la que corresponde a este comprador. Fuente: id_esquema_pago_seleccionado +
   // clabe_stp_tmp_producto (ver NewProductOfferDialog).
-  // Gate CLABE: solo se muestra si el lead tiene RFC válido (oferta formalizada con
-  // datos fiscales del cliente). Mismo criterio que el PDF (offerPdfStorageService).
-  const leadRfcValido = isValidRFC((leadPersona as any)?.rfc);
+  // Gate CLABE: se muestra si el lead está identificado con RFC **o** CURP
+  // válidos (la CURP llega con los datos del INE que captura el asesor). El PDF
+  // usa solo RFC (offerPdfStorageService), aquí basta cualquiera de los dos.
+  const leadRfcValido =
+    isValidRFC((leadPersona as any)?.rfc) || isValidCURP((leadPersona as any)?.curp);
   const leadIdOferta = (oferta as any).id_persona_lead ?? null;
   const bodegaPagoByProducto = new Map<
     number,
@@ -760,15 +766,30 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     }
   }
 
-  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => ({
-    id: b.id,
-    nombre: b.nombre ?? "",
-    ubicacion: b.ubicacion ?? undefined,
-    m2: b.m2 != null ? Number(b.m2) : undefined,
-    incluido: !!b.es_incluido,
-    idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
-    pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
-  }));
+  // Precio/m² de cada bodega (productos_servicios.precio_lista) → costo = precio/m² × m².
+  const bodegaPrecioByProducto = new Map<number, number>();
+  if (bodegaProductoIds.length > 0) {
+    const { data: prods } = await (supabase as any)
+      .from("productos_servicios")
+      .select("id, precio_lista")
+      .in("id", bodegaProductoIds);
+    for (const pr of (prods as any[]) ?? []) bodegaPrecioByProducto.set(pr.id, Number(pr.precio_lista ?? 0));
+  }
+
+  const bodegas = ((bodegasRows as any[]) ?? []).map((b) => {
+    const m2 = b.m2 != null ? Number(b.m2) : undefined;
+    const precioM2 = b.id_producto != null ? bodegaPrecioByProducto.get(Number(b.id_producto)) ?? 0 : 0;
+    return {
+      id: b.id,
+      nombre: b.nombre ?? "",
+      ubicacion: b.ubicacion ?? undefined,
+      m2,
+      incluido: !!b.es_incluido,
+      idProducto: b.id_producto != null ? Number(b.id_producto) : undefined,
+      costo: precioM2 * (m2 ?? 0),
+      pago: b.id_producto != null ? bodegaPagoByProducto.get(Number(b.id_producto)) : undefined,
+    };
+  });
   const estacionamientos = ((estacionamientosRows as any[]) ?? []).map((e) => ({
     id: e.id,
     nombre: e.nombre ?? "",
@@ -777,14 +798,24 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     incluido: !!e.es_incluido,
     tipo: e.id_tipo != null ? tipoEstacMap.get(e.id_tipo) : undefined,
   }));
-  // Solo exponer la CLABE de la unidad si el lead tiene RFC válido (ver leadRfcValido).
-  const clabeStp = leadRfcValido ? (propiedad as any).clabe_stp_tmp_apartado || undefined : undefined;
+  // CLABE a mostrar, en orden de prioridad:
+  //  1. `cuentas_cobranza.clabe_stp` — dedicada de esta cuenta; existe una vez que
+  //     el primer pago generó la cuenta. Ya está formalizada, no lleva gate.
+  //  2. `propiedades.clabe_stp_tmp_apartado` — temporal/universal de la unidad,
+  //     solo para el primer pago (apartado). Requiere que el lead esté
+  //     identificado con RFC o CURP (ver leadRfcValido) y que la oferta tenga
+  //     esquema de pago seleccionado (sin esquema no aplica pago).
+  const clabeTemporalPropiedad = (leadRfcValido && selectedId != null)
+    ? (propiedad as any).clabe_stp_tmp_apartado || undefined
+    : undefined;
+  const clabeStp = clabeCuentaCobranza ?? clabeTemporalPropiedad;
 
   // ── Desarrolladora que lleva el proyecto: entidad relacionada tipo 4
   // (Dueño Vendedor — es donde vive el dato real, ej. Tallwood en Daiku).
   // 2 pasos (sin embed PostgREST) para no depender del schema-cache en dev.
   let developerName: string | undefined;
   let developerLogoUrl: string | undefined;
+  let developerWebsite: string | undefined;
   const { data: devRel } = await supabase
     .from("entidades_relacionadas")
     .select("id_persona")
@@ -796,12 +827,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   if ((devRel as any)?.id_persona) {
     const { data: devPer } = await supabase
       .from("personas")
-      .select("nombre_comercial, nombre_legal, url_logo")
+      .select("nombre_comercial, nombre_legal, url_logo, url_sitio_web")
       .eq("id", (devRel as any).id_persona)
       .maybeSingle();
     if (devPer) {
       developerName = ((devPer as any).nombre_comercial ?? (devPer as any).nombre_legal) || undefined;
       developerLogoUrl = (devPer as any).url_logo ? toOptimizedUrl((devPer as any).url_logo, 240, 85) : undefined;
+      developerWebsite = (devPer as any).url_sitio_web || undefined;
     }
   }
 
@@ -859,12 +891,21 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       nearby:  [],
     },
     paymentPlans,
+    selectedPlanId: selectedId != null ? String(selectedId) : undefined,
     prospectEmail: (leadPersona as any)?.email ?? undefined,
+    prospectName: (leadPersona as any)?.nombre_legal ?? undefined,
+    prospectPhone: ((leadPersona as any)?.telefono ?? "").replace(/\D/g, "") || undefined,
+    prospectDialCode: (leadPersona as any)?.telefono
+      ? `+${toDialCode((leadPersona as any)?.clave_pais_telefono)}`
+      : undefined,
     generatedAt: oferta.fecha_generacion ?? new Date().toISOString(),
     generatedBy: oferta.email_creador ?? "SOZU",
     agentId,
     validUntil: validUntilDate.toISOString(),
-    status: "active",
+    // Con cuenta de cobranza activa la unidad ya tiene dueño: la oferta deja de
+    // ser vendible y la UI muestra la leyenda correspondiente.
+    status: ofertaTieneCuenta ? "converted_to_account" : "active",
+    hasCuentaCobranza: ofertaTieneCuenta,
     // development: siempre presente si hay proyecto — fallbacks para campos opcionales
     development: {
       website:        (proyectoMkt as any)?.url_sitio_web ?? undefined,
@@ -874,8 +915,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       legalName:      (proyecto as any).nombre,
       developerName,
       developerLogoUrl,
-      // Sin columna de web para la desarrolladora en BD → fallback al sitio del proyecto.
-      developerWebsite: (proyectoMkt as any)?.url_sitio_web ?? undefined,
+      // Si la desarrolladora no tiene web, el footer usa SOZU como fallback del link.
+      developerWebsite,
       socials: ((proyectoMkt as any)?.instagram_handle ||
                 (proyectoMkt as any)?.facebook_handle  ||
                 (proyectoMkt as any)?.youtube_handle)

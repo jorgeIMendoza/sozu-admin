@@ -58,7 +58,7 @@ function buildMovements(inv: InvestmentProperty, plan: PropertyPaymentPlan | und
       // Referencia real: la clave de rastreo del pago (o "Varios" si son múltiples). Nunca fabricar.
       const referenceSTP = apps.length > 1
         ? "Varios"
-        : single?.trackingKey ?? (status === "pagado" ? "—" : "Pendiente");
+        : single?.trackingKey ?? (status === "pagado" ? "-" : "Pendiente");
       return {
         date: inst.dueDate,
         concept: inst.concepto,
@@ -78,7 +78,7 @@ function buildMovements(inv: InvestmentProperty, plan: PropertyPaymentPlan | und
   return inv.payments.map((p, i) => ({
     date: p.date,
     concept: p.concept,
-    referenceSTP: p.trackingKey ?? "—",
+    referenceSTP: p.trackingKey ?? "-",
     amount: p.amount,
     applied: p.status === "pagado" ? p.amount : 0,
     status: p.status,

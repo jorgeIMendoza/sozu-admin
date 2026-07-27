@@ -11,7 +11,7 @@ const BottomNav = () => {
   const { data: items = [] } = usePortalNavItems();
   const totalUnread = useUnreadCount();
 
-  // Max 5 items on mobile — slice if DB has more
+  // Max 5 items on mobile - slice if DB has more
   const visibleItems = items.slice(0, 5);
 
   return (

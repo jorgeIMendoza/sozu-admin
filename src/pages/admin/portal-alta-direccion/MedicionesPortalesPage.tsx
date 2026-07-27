@@ -29,7 +29,9 @@ import { PageHeader } from "@/components/admin/portal-alta-direccion/ui";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
-/** Catálogo de portales — alineado con el CHECK constraint de `portal_sesiones`. */
+/** Catálogo de portales — alineado con el CHECK constraint de `portal_sesiones`
+ *  y con el union `PortalName` de `PortalTrackingContext`. Debe listar TODOS
+ *  los portales instrumentados con `<PortalTrackingProvider portal="…">`. */
 const PORTAL_LABEL: Record<string, string> = {
   admin: "Administración",
   clientes: "Clientes",
@@ -43,6 +45,9 @@ const PORTAL_LABEL: Record<string, string> = {
   notaria: "Notaría",
   crm: "CRM",
   condominio: "Condominio",
+  bancos: "Bancos",
+  "legal-flow": "Legal Flow",
+  "socio-bancario": "Socio Bancario",
 };
 
 /** Tipos de dispositivo (clasificados desde user_agent en el RPC dispositivos_uso_por_portal). */
@@ -323,7 +328,7 @@ export default function MedicionesPortalesPage() {
           tone="blue"
           label={`Usuarios únicos · ${RANGO_LABEL[rango].toLowerCase()}`}
           value={historicoQ.isLoading ? "—" : String(totalUsuariosUnicosPeriodo)}
-          sub="Acumulados en los 12 portales"
+          sub={`Acumulados en los ${Object.keys(PORTAL_LABEL).length} portales`}
         />
         <KpiTile
           icon={BarChart3}

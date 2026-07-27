@@ -61,28 +61,39 @@ function getPreferredEnv(name: string, runtimeValue: unknown): unknown {
   return runtimeValue;
 }
 
+/**
+ * Fallbacks a infraestructura self-hosted dev SOLO se aplican en desarrollo.
+ * En producción (import.meta.env.PROD) devolvemos undefined para que require*()
+ * lance error si falta la env var, en vez de caer silenciosamente al dev.
+ * Esto evita que un build de prod mal configurado suba documentos/data al
+ * Supabase self-hosted de dev en lugar del cloud.
+ */
+function devOnlyFallback(fallback: string): string | undefined {
+  return import.meta.env.PROD ? undefined : fallback;
+}
+
 // Supabase Configuration (required)
 export const SUPABASE_PROJECT_ID = requireEnv(
   'VITE_SUPABASE_PROJECT_ID',
   getPreferredEnv('VITE_SUPABASE_PROJECT_ID', import.meta.env.VITE_SUPABASE_PROJECT_ID),
-  'supabase-dev'
+  devOnlyFallback('supabase-dev')
 );
 export const SUPABASE_URL = requireUrl(
   'VITE_SUPABASE_URL',
   getPreferredEnv('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL),
-  'https://supabase-dev.sozu.com'
+  devOnlyFallback('https://supabase-dev.sozu.com')
 );
 export const SUPABASE_PUBLISHABLE_KEY = requireJwt(
   'VITE_SUPABASE_PUBLISHABLE_KEY',
   getPreferredEnv('VITE_SUPABASE_PUBLISHABLE_KEY', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY),
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2BBNWN8Bu4GE'
+  devOnlyFallback('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2BBNWN8Bu4GE')
 );
 
 // N8N Webhook Configuration (required)
 export const N8N_WEBHOOK_BASE_URL = requireUrl(
   'VITE_N8N_WEBHOOK_BASE_URL',
   getPreferredEnv('VITE_N8N_WEBHOOK_BASE_URL', import.meta.env.VITE_N8N_WEBHOOK_BASE_URL),
-  'https://n8n-dev.sozu.com/webhook'
+  devOnlyFallback('https://n8n-dev.sozu.com/webhook')
 );
 
 // Environment Configuration (optional, defaults to 'preview')

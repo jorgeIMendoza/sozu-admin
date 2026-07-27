@@ -6,15 +6,12 @@ import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponible
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, ChevronDown, X, Layers, Car, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Package, User } from "lucide-react";
-import bodegaIcon from "@/assets/icons/bodega.png";
+import { ModalFilters, FilterSelect, FilterField } from "@/components/ui/modal-filters";
+import { ModalViewerDetail } from "@/components/ui/modal-viewer-detail";
+import { Building2, Loader2, ArrowLeft, BedDouble, Bath, ShowerHead, Maximize2, FileText, ChevronLeft, ChevronRight, X, Layers, Car, Search, Package, Warehouse, SlidersHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 import useEmblaCarousel from "embla-carousel-react";
 import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,7 +21,7 @@ import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
-import { optimizedImage } from "@/utils/optimizedImage";
+import { OptImg } from "@/components/ui/opt-img";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
@@ -49,12 +46,10 @@ const AgentUnidadesProyecto = () => {
   const canGenerateOffer = agentPerms['/admin/agent/inventario']?.canGenerateOffer;
   const canGenerateDigitalOffer = agentPerms['/admin/agent/inventario']?.canGenerateDigitalOffer;
   const { profile } = useAuth();
-  const { impersonatedAgentPersonaId, impersonatedAgentName, isImpersonating } = useAgentImpersonation();
+  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { percentage, isLoading: isLoadingOnboarding, hasTrainingComplete, hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
-  const nombreCompleto = isImpersonating ? (impersonatedAgentName || "Agente") : (profile?.nombre || "Agente");
-  const initials = nombreCompleto.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("");
 
   // Permissions, logging, tracking
   const { permissions } = useAgentPortalPermissions();
@@ -72,7 +67,6 @@ const AgentUnidadesProyecto = () => {
   const [page, setPage] = useState(0);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [selectedSchemeId, setSelectedSchemeId] = useState<number | null>(null);
-  const [schemesOpen, setSchemesOpen] = useState(false);
 
   // Filters
   const [filterProjectNames, setFilterProjectNames] = useState<string[]>(() => storedFilters.filterProjectNames ?? []);
@@ -81,7 +75,7 @@ const AgentUnidadesProyecto = () => {
   const [filterBodega, setFilterBodega] = useState<TriState>(() => storedFilters.filterBodega ?? "todos");
   const [filterEstacionamiento, setFilterEstacionamiento] = useState<TriState>(() => storedFilters.filterEstacionamiento ?? "todos");
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(openFiltersParam === 'true');
-  const [sortOrder, setSortOrder] = useState<SortOrder>(() => storedFilters.sortOrder ?? "none");
+  const [sortOrder] = useState<SortOrder>(() => storedFilters.sortOrder ?? "none");
   const [priceRange, setPriceRange] = useState<[number, number] | null>(() => storedFilters.priceRange ?? null);
   const [priceRangeLocal, setPriceRangeLocal] = useState<[number, number] | null>(null);
   const priceCommitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -236,13 +230,6 @@ const AgentUnidadesProyecto = () => {
     setPage(0);
   };
 
-  const cycleSortOrder = () => {
-    const next = sortOrder === "none" ? "asc" : sortOrder === "asc" ? "desc" : "none";
-    setSortOrder(next);
-    setPage(0);
-    track({ page: 'agent_unidades', elementId: 'btn_ordenar_precio', elementLabel: 'Ordenar precio', metadata: { orden: next } });
-  };
-
   const formatPrice = (price: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 0 }).format(price);
 
@@ -362,9 +349,8 @@ const AgentUnidadesProyecto = () => {
     const payload = { filterProjectNames, filterModelNames, filterLevels, filterBodega, filterEstacionamiento, sortOrder, recamarasFilter, priceRange, searchQuery };
     try { sessionStorage.setItem(FILTERS_KEY, JSON.stringify(payload)); } catch { /* ignore */ }
   }, [filterProjectNames, filterModelNames, filterLevels, filterBodega, filterEstacionamiento, sortOrder, recamarasFilter, priceRange, searchQuery]);
-  useEffect(() => { setSelectedSchemeId(null); setSchemesOpen(false); }, [selectedProperty?.id]);
+  useEffect(() => { setSelectedSchemeId(null); }, [selectedProperty?.id]);
 
-  const SortIcon = sortOrder === "asc" ? ArrowUp : sortOrder === "desc" ? ArrowDown : ArrowUpDown;
 
   const filteredPageProperties = useMemo(() => {
     if (!isSearchActive) {
@@ -376,9 +362,6 @@ const AgentUnidadesProyecto = () => {
     );
   }, [isSearchActive, normalizedSearchQuery, pageProperties]);
 
-  const toggleChip = <T,>(arr: T[], val: T): T[] =>
-    arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val];
-
   const recamarasOptions = availableRecamaras.length > 0
     ? [...new Set([...availableRecamaras.map(n => n <= 3 ? String(n) : '4+')])]
     : ['1', '2', '3', '4+'];
@@ -389,103 +372,80 @@ const AgentUnidadesProyecto = () => {
     { value: "no", label: "No" },
   ];
 
-  const chipClass = (active: boolean) =>
-    `px-3.5 py-2 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
-      active
-        ? "bg-[hsl(var(--agent-primary,147_33%_29%))] text-white border-[hsl(var(--agent-primary,147_33%_29%))]"
-        : "bg-white border-gray-200 text-foreground hover:bg-gray-50"
-    }`;
 
   const activeFilterCount = (filterProjectNames.length > 0 ? 1 : 0) + (filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter.length > 0 ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== "todos" ? 1 : 0) + (filterEstacionamiento !== "todos" ? 1 : 0) + (priceRange ? 1 : 0);
 
   const filterContent = (
-    <div className="space-y-6">
+    <>
       {availableProjectNames.length > 0 && (
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Desarrollo</Label>
-          <div className="flex flex-wrap gap-2">
-            {availableProjectNames.map((name) => (
-              <button key={name} onClick={() => setFilterProjectNames(prev => toggleChip(prev, name))} className={chipClass(filterProjectNames.includes(name))}>
-                {name}{projectCounts[name] != null ? ` (${projectCounts[name]})` : ''}
-              </button>
-            ))}
-          </div>
-        </div>
+        <FilterSelect
+          label="Desarrollo"
+          value={filterProjectNames[0] || "all"}
+          onChange={(v) => setFilterProjectNames(v === "all" ? [] : [v])}
+          options={[{ value: "all", label: "Todos" }, ...availableProjectNames.map((n) => ({ value: n, label: projectCounts[n] != null ? `${n} (${projectCounts[n]})` : n }))]}
+        />
       )}
       {availableModelNames.length > 0 && (
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Modelo</Label>
-          <div className="flex flex-wrap gap-2">
-            {availableModelNames.map((m) => (
-              <button key={m} onClick={() => setFilterModelNames(prev => toggleChip(prev, m))} className={chipClass(filterModelNames.includes(m))}>
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
+        <FilterSelect
+          label="Modelo"
+          value={filterModelNames[0] || "all"}
+          onChange={(v) => setFilterModelNames(v === "all" ? [] : [v])}
+          options={[{ value: "all", label: "Todos" }, ...availableModelNames.map((m) => ({ value: m, label: m }))]}
+        />
       )}
       {availableLevelOptions.length > 0 && (
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nivel</Label>
-          <div className="flex flex-wrap gap-2">
-            {availableLevelOptions.map((l) => (
-              <button key={l} onClick={() => setFilterLevels(prev => toggleChip(prev, l))} className={chipClass(filterLevels.includes(l))}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
+        <FilterSelect
+          label="Nivel"
+          value={filterLevels[0] || "all"}
+          onChange={(v) => setFilterLevels(v === "all" ? [] : [v])}
+          options={[{ value: "all", label: "Todos los niveles" }, ...availableLevelOptions.map((l) => ({ value: l, label: `Nivel ${l}` }))]}
+        />
       )}
-      <div className="space-y-2">
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recámaras</Label>
-        <div className="flex flex-wrap gap-2">
-          {recamarasOptions.map((opt) => (
-            <button key={opt} onClick={() => setRecamarasFilter(prev => toggleChip(prev, opt))} className={chipClass(recamarasFilter.includes(opt))}>
-              {opt}
-            </button>
-          ))}
-        </div>
+      <FilterSelect
+        label="Recámaras"
+        value={recamarasFilter[0] || "all"}
+        onChange={(v) => setRecamarasFilter(v === "all" ? [] : [v])}
+        options={[{ value: "all", label: "Todas" }, ...recamarasOptions.map((o) => ({ value: o, label: `${o} recámara${o === "1" ? "" : "s"}` }))]}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <FilterSelect
+          label="Bodega"
+          value={filterBodega}
+          onChange={(v) => setFilterBodega(v as TriState)}
+          options={triStateOptions}
+        />
+        <FilterSelect
+          label="Estacionamiento"
+          value={filterEstacionamiento}
+          onChange={(v) => setFilterEstacionamiento(v as TriState)}
+          options={triStateOptions}
+        />
       </div>
-      <div className="space-y-3">
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rango de precio</Label>
+
+      {/* Rango de precio (al final) */}
+      <FilterField
+        label="Rango de precio"
+        action={priceRange && (
+          <button onClick={() => setPriceRange(null)} className="text-sm font-medium text-primary">Restablecer</button>
+        )}
+      >
         <Slider
           min={priceBounds.min}
           max={priceBounds.max}
           step={10000}
           value={priceRangeLocal || priceRange || [priceBounds.min, priceBounds.max]}
           onValueChange={(val) => setPriceRangeLocal(val as [number, number])}
-          onValueCommit={(val) => {
-            setPriceRangeLocal(null);
-            setPriceRange(val as [number, number]);
-          }}
-          className="w-full"
+          onValueCommit={(val) => { setPriceRangeLocal(null); setPriceRange(val as [number, number]); }}
+          className="w-full py-1 [&>span]:h-5 [&_[role=slider]]:h-5 [&_[role=slider]]:w-5"
         />
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{formatPrice((priceRangeLocal || priceRange)?.[0] ?? priceBounds.min)}</span>
-          <span>{formatPrice((priceRangeLocal || priceRange)?.[1] ?? priceBounds.max)}</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold tabular-nums text-foreground">{formatPrice((priceRangeLocal || priceRange)?.[0] ?? priceBounds.min)}</span>
+          <span className="text-xs text-muted-foreground">a</span>
+          <span className="rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold tabular-nums text-foreground">{formatPrice((priceRangeLocal || priceRange)?.[1] ?? priceBounds.max)}</span>
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Con bodega</Label>
-        <div className="flex gap-2">
-          {triStateOptions.map((opt) => (
-            <button key={opt.value} onClick={() => setFilterBodega(opt.value)} className={chipClass(filterBodega === opt.value)}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Con estacionamiento</Label>
-        <div className="flex gap-2">
-          {triStateOptions.map((opt) => (
-            <button key={opt.value} onClick={() => setFilterEstacionamiento(opt.value)} className={chipClass(filterEstacionamiento === opt.value)}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+      </FilterField>
+    </>
   );
 
   const handleOpenFilters = () => {
@@ -503,13 +463,13 @@ const AgentUnidadesProyecto = () => {
   };
 
   return (
-    <div className="pb-24 light" style={{ colorScheme: "light" }}>
+    <div className="light" style={{ colorScheme: "light" }}>
       {/* No verificado badge - fixed */}
       {isAgentRole && !isLoadingOnboarding && percentage < 100 && (
         <div className="fixed top-3 right-4 z-50">
           <Badge
             variant="outline"
-            className="border-destructive/30 text-destructive gap-1 bg-white shadow-sm"
+            className="border-destructive/30 text-destructive gap-1 bg-card shadow-sm"
           >
             <span className="h-2 w-2 rounded-full bg-destructive inline-block" />
             No verificado
@@ -518,123 +478,63 @@ const AgentUnidadesProyecto = () => {
       )}
 
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[hsl(var(--agent-bg))] px-4 pt-4 pb-3 space-y-3">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/admin/agent/inventario")} className="h-9 w-9 rounded-full bg-white border border-gray-200 flex items-center justify-center">
+      <div className="sticky top-0 z-10 bg-background pt-4 pb-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/admin/agent/inventario")} className="h-10 w-10 shrink-0 rounded-md bg-card border border-gray-200 flex items-center justify-center transition-colors hover:bg-gray-50" title="Regresar">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <div className="h-9 w-9 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))] flex items-center justify-center shrink-0">
-            {initials ? (
-              <span className="text-sm font-bold text-white leading-none">{initials}</span>
-            ) : (
-              <User className="h-4 w-4 text-white" />
-            )}
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-10 w-full rounded-md border border-gray-200 bg-card pl-9 pr-3 text-sm font-medium text-foreground placeholder:text-muted-foreground/70 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+              placeholder="Buscar unidad…"
+            />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[hsl(var(--agent-text,0_0%_10%))]">{nombreCompleto}</p>
-            <p className="text-xs text-[hsl(var(--agent-primary,147_33%_29%))]">{totalCount} unidades disponibles</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
           <button
             onClick={handleOpenFilters}
-            className="flex items-center gap-2 px-4 h-10 rounded-md border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-[hsl(222.2_84%_4.9%)] shadow-sm text-sm font-medium"
-            style={{ colorScheme: "light" }}
+            className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-card px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-gray-50"
           >
             <SlidersHorizontal className="h-4 w-4" />
-            Filtros
+            <span className="hidden sm:inline">Filtros</span>
             {activeFilterCount > 0 && (
-              <span className="ml-0.5 h-5 min-w-[20px] px-1 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))] text-white text-[10px] font-bold flex items-center justify-center">
+              <span className="ml-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-xs font-bold text-primary-foreground">
                 {activeFilterCount}
               </span>
             )}
           </button>
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(215.4_16.3%_46.9%)]" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 pl-9 pr-3 rounded-md border border-[hsl(214.3_31.8%_91.4%)] bg-[hsl(0_0%_100%)] text-sm font-medium text-[hsl(222.2_84%_4.9%)] placeholder:text-[hsl(215.4_16.3%_46.9%)] placeholder:opacity-100 caret-[hsl(222.2_84%_4.9%)] shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              placeholder="Buscar..."
-              style={{ WebkitTextFillColor: "hsl(222.2 84% 4.9%)", colorScheme: "light" }}
-            />
-          </div>
           <button
-            onClick={cycleSortOrder}
-            className={`h-10 w-10 rounded-md flex items-center justify-center border transition-colors ${
-              sortOrder !== "none"
-                ? "bg-[hsl(var(--agent-primary,147_33%_29%))] text-white border-[hsl(var(--agent-primary,147_33%_29%))]"
-                : "bg-white border-gray-200 text-muted-foreground"
-            }`}
-            title={sortOrder === "none" ? "Ordenar por precio" : sortOrder === "asc" ? "Precio: menor a mayor" : "Precio: mayor a menor"}
+            onClick={clearAllFilters}
+            disabled={!hasActiveFilters}
+            title="Limpiar filtros"
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors",
+              hasActiveFilters
+                ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                : "border-gray-200 bg-card text-gray-300 cursor-not-allowed"
+            )}
           >
-            <SortIcon className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
-        {hasActiveFilters && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {filterProjectNames.map(name => (
-              <Badge key={`p-${name}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterProjectNames(prev => prev.filter(n => n !== name))}>
-                {name} <X className="h-2.5 w-2.5" />
-              </Badge>
-            ))}
-            {filterModelNames.map(name => (
-              <Badge key={`m-${name}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterModelNames(prev => prev.filter(n => n !== name))}>
-                {name} <X className="h-2.5 w-2.5" />
-              </Badge>
-            ))}
-            {recamarasFilter.map(opt => (
-              <Badge key={`r-${opt}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setRecamarasFilter(prev => prev.filter(v => v !== opt))}>
-                {opt} rec. <X className="h-2.5 w-2.5" />
-              </Badge>
-            ))}
-            {filterLevels.map(name => (
-              <Badge key={`l-${name}`} variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterLevels(prev => prev.filter(n => n !== name))}>
-                Nivel {name} <X className="h-2.5 w-2.5" />
-              </Badge>
-            ))}
-            {filterBodega !== "todos" && (
-              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterBodega("todos")}>
-                {filterBodega === "si" ? "Con bodega" : "Sin bodega"} <X className="h-2.5 w-2.5" />
-              </Badge>
-            )}
-            {filterEstacionamiento !== "todos" && (
-              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterEstacionamiento("todos")}>
-                {filterEstacionamiento === "si" ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
-              </Badge>
-            )}
-            {priceRange && (
-              <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setPriceRange(null)}>
-                Precio <X className="h-2.5 w-2.5" />
-              </Badge>
-            )}
-            <button className="text-[10px] text-destructive font-medium px-1" onClick={clearAllFilters}>Limpiar</button>
-          </div>
-        )}
       </div>
 
-      {/* Filters Drawer */}
-      <Drawer open={filtersDrawerOpen} onOpenChange={setFiltersDrawerOpen}>
-        <DrawerContent className="light max-h-[85vh]">
-          <DrawerHeader className="pb-2">
-            <DrawerTitle className="flex items-center justify-between">
-              <span>Filtrar unidades</span>
-              {hasActiveFilters && (
-                <Button variant="ghost" size="sm" className="text-xs text-destructive h-7" onClick={clearAllFilters}>Limpiar todo</Button>
-              )}
-            </DrawerTitle>
-          </DrawerHeader>
-          <div className="overflow-y-auto px-4 pb-6 max-h-[65vh]">{filterContent}</div>
-          <div className="px-4 py-3 border-t">
-            <Button className="w-full rounded-md gap-2 bg-[hsl(var(--agent-primary,147_33%_29%))] hover:brightness-110 text-white" onClick={() => setFiltersDrawerOpen(false)}>
-              <Search className="h-4 w-4" /> Ver {totalCount} unidades
-            </Button>
-          </div>
-        </DrawerContent>
-      </Drawer>
+      {/* Filtros - panel lateral estándar (ui/modal-filters) */}
+      <ModalFilters
+        open={filtersDrawerOpen}
+        onOpenChange={setFiltersDrawerOpen}
+        subtitle="Filtra las unidades disponibles. Los cambios se aplican al instante."
+        onClear={clearAllFilters}
+        clearDisabled={!hasActiveFilters}
+        onApply={() => setFiltersDrawerOpen(false)}
+        className="light"
+      >
+        {filterContent}
+      </ModalFilters>
 
       {/* Properties Grid */}
-      <div className="px-4 mt-2">
+      <div className="mt-2">
         {isLoading || !paramsResolved ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -654,14 +554,14 @@ const AgentUnidadesProyecto = () => {
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-4 pt-4 pb-2">
                 <Button variant="outline" size="sm" disabled={page === 0} onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                  <ChevronLeft className="h-4 w-4" /> Anterior
                 </Button>
                 <span className="text-sm text-muted-foreground">
                   {page + 1} / {totalPages}
                   {isFetching && !isLoading && <Loader2 className="inline h-3 w-3 animate-spin ml-1.5" />}
                 </span>
                 <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-                  Siguiente <ChevronRight className="h-4 w-4 ml-1" />
+                  Siguiente <ChevronRight className="h-4 w-4" /> 
                 </Button>
               </div>
             )}
@@ -669,82 +569,89 @@ const AgentUnidadesProyecto = () => {
         )}
       </div>
 
-      {/* Property Detail Dialog */}
-      <Dialog open={!!selectedProperty} onOpenChange={(open) => !open && setSelectedProperty(null)}>
-        <DialogContent className="light max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
-            <DialogTitle>Departamento {selectedProperty?.numero || selectedProperty?.id} de {selectedProperty?.proyecto_nombre}</DialogTitle>
-          </DialogHeader>
-          {selectedProperty && (
+      {/* Detalle de unidad - estándar visor + detalle (ui/modal-viewer-detail) */}
+      {selectedProperty && (
+        <ModalViewerDetail
+          open={!!selectedProperty}
+          onOpenChange={(open) => !open && setSelectedProperty(null)}
+          title={`Departamento ${selectedProperty.numero || selectedProperty.id}`}
+          subtitle={selectedProperty.proyecto_nombre}
+          className="light"
+          resourceClassName="aspect-[4/3] md:aspect-auto"
+          resource={
+            selectedProperty.model_images?.length > 0 ? (
+              <DetailCarousel images={selectedProperty.model_images} />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <Package className="h-10 w-10 text-muted-foreground/30" />
+              </div>
+            )
+          }
+          footer={
             <>
-              <div className="flex-1 overflow-y-auto px-6 space-y-4 pb-4">
-                {selectedProperty.model_images?.length > 0 && (
-                  <DetailCarousel images={selectedProperty.model_images} />
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
-                    <Building2 className="h-3 w-3 text-muted-foreground" /> {selectedProperty.proyecto_nombre}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">{selectedProperty.edificio_nombre}</span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">{selectedProperty.modelo_nombre}</span>
-                  {selectedProperty.piso && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
-                      <Layers className="h-3 w-3 text-muted-foreground" /> Nivel {selectedProperty.piso}
-                    </span>
-                  )}
-                  {selectedProperty.m2_total > 0 && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
-                      <Maximize2 className="h-3 w-3 text-muted-foreground" /> {selectedProperty.m2_total.toFixed(2)} m²
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  {selectedProperty.recamaras > 0 && (
-                    <span className="flex items-center gap-1"><BedDouble className="h-4 w-4" /> {selectedProperty.recamaras} recámara{selectedProperty.recamaras > 1 ? "s" : ""}</span>
-                  )}
-                  {selectedProperty.banos > 0 && (
-                    <span className="flex items-center gap-1"><Bath className="h-4 w-4" /> {selectedProperty.banos} baño{selectedProperty.banos > 1 ? "s" : ""}</span>
-                  )}
-                  {selectedProperty.medio_bano > 0 && (
-                    <span className="flex items-center gap-1"><ShowerHead className="h-4 w-4" /> {selectedProperty.medio_bano} medio baño</span>
-                  )}
-                </div>
-                {(selectedProperty.bodegas_count > 0 || selectedProperty.estacionamientos_count > 0) && (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedProperty.bodegas_count > 0 && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
-                        <img src={bodegaIcon} alt="bodega" className="h-3 w-3 opacity-60" /> {selectedProperty.bodegas_count} bodega{selectedProperty.bodegas_count > 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {selectedProperty.estacionamientos_count > 0 && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/60 text-xs font-medium text-foreground">
-                        <Car className="h-3 w-3 text-muted-foreground" /> {selectedProperty.estacionamientos_count} estac.
-                        {selectedProperty.estacionamientos_tipos?.length > 0 && (
-                          <span className="ml-1 text-muted-foreground">({[...new Set(selectedProperty.estacionamientos_tipos as string[])].join(", ")})</span>
-                        )}
-                      </span>
-                    )}
+              <Button variant="cancel" onClick={() => setSelectedProperty(null)}>Cerrar</Button>
+              {canGenerateOffer && (
+                isAgentRole && !hasTrainingComplete ? (
+                  <Button variant="primary-outline" disabled>
+                     Completa tu capacitación
+                  </Button>
+                ) : (
+                  <div onClick={(e) => { e.stopPropagation(); handleConfigureOffer(); }}>
+                    <NewOfferDialog
+                      propertyId={selectedProperty.id}
+                      propertyNumber={selectedProperty.numero || `${selectedProperty.id}`}
+                      hideManualMode={true}
+                      hidePdfOptions={true}
+                      preSelectedSchemeId={selectedSchemeId}
+                      hideBankingInPdf={isAgentRole && !hasBasicIdentityComplete}
+                      forceLight={true}
+                      enableDigitalOffer={canGenerateDigitalOffer}
+                      customTrigger={
+                        <Button variant="primary-outline">
+                          Configurar Oferta
+                          {selectedSchemeId && (
+                            <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span> )}
+                        </Button>
+                      }
+                    />
                   </div>
-                )}
+                )
+              )}
+            </>
+          }
+        >
+                {/* Contexto */}
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedProperty.edificio_nombre && <span className="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{selectedProperty.edificio_nombre}</span>}
+                  {selectedProperty.modelo_nombre && <span className="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">{selectedProperty.modelo_nombre}</span>}
+                  {selectedProperty.piso && <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground"><Layers className="h-3 w-3 text-primary" /> Nivel {selectedProperty.piso}</span>}
+                </div>
+
+                {/* Specs */}
+                <div className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-md border border-border bg-card p-3.5 text-sm font-medium text-muted-foreground">
+                  {selectedProperty.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-primary" /> {selectedProperty.m2_total.toFixed(2)} m²</span>}
+                  {selectedProperty.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-primary" /> {selectedProperty.recamaras} rec.</span>}
+                  {selectedProperty.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-primary" /> {selectedProperty.banos} baño{selectedProperty.banos > 1 ? "s" : ""}</span>}
+                  {selectedProperty.medio_bano > 0 && <span className="flex items-center gap-1.5"><ShowerHead className="h-4 w-4 text-primary" /> {selectedProperty.medio_bano} ½ baño</span>}
+                  {selectedProperty.bodegas_count > 0 && <span className="flex items-center gap-1.5"><Warehouse className="h-4 w-4 text-primary" /> {selectedProperty.bodegas_count} bodega{selectedProperty.bodegas_count > 1 ? "s" : ""}</span>}
+                  {selectedProperty.estacionamientos_count > 0 && <span className="flex items-center gap-1.5"><Car className="h-4 w-4 text-primary" /> {selectedProperty.estacionamientos_count} estac.{selectedProperty.estacionamientos_tipos?.length > 0 && <span className="text-muted-foreground/70"> ({[...new Set(selectedProperty.estacionamientos_tipos as string[])].join(", ")})</span>}</span>}
+                </div>
+
                 <PropertyFloorPlanButton propertyId={selectedProperty.id} />
                 {selectedProperty.precio_lista > 0 && (
-                  <div className="relative overflow-hidden rounded-md p-5 text-center bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/15">
-                    <div className="absolute inset-x-0 top-0 h-1 bg-[hsl(var(--agent-primary,147_33%_29%))]/40" />
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--agent-primary,147_33%_29%))]/80">Precio de Lista</p>
-                    <p className="mt-1 text-2xl font-bold text-[hsl(var(--agent-primary,147_33%_29%))]">{formatPrice(selectedProperty.precio_lista)}</p>
+                  <div className="rounded-md border border-primary/20 bg-primary/[0.06] px-5 py-4 text-center">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/80">Precio de Lista</p>
+                    <p className="mt-1 text-2xl font-bold text-primary">{formatPrice(selectedProperty.precio_lista)}</p>
                   </div>
                 )}
                 {dialogSchemes.length > 0 && (
-                  <Collapsible open={schemesOpen} onOpenChange={setSchemesOpen}>
-                    <CollapsibleTrigger className="flex items-center justify-between w-full py-2 group">
-                      <p className="text-sm font-semibold text-[hsl(var(--agent-text,0_0%_10%))] flex items-center gap-2">
-                        <span className="h-4 w-1 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))]" />
-                        Esquemas de Pago
-                        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[hsl(var(--agent-primary,147_33%_29%))]/10 text-[11px] font-semibold text-[hsl(var(--agent-primary,147_33%_29%))]">{dialogSchemes.length}</span>
-                      </p>
-                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${schemesOpen ? "rotate-180" : ""}`} />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="space-y-2.5 pt-1.5">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground flex items-center gap-2 py-2">
+                      <span className="h-4 w-1 rounded-full bg-primary" />
+                      Esquemas de Pago
+                      <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary/10 text-xs font-semibold text-primary">{dialogSchemes.length}</span>
+                    </p>
+                    <div className="space-y-2.5 pt-1.5">
                       {dialogSchemes.map((scheme: any) => {
                         const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad)
                           && scheme.tramos_mensualidad.some((t: any) => (t.monto_mensualidad ?? 0) > 0);
@@ -760,42 +667,42 @@ const AgentUnidadesProyecto = () => {
                             onClick={() => setSelectedSchemeId(prev => prev === scheme.id ? null : scheme.id)}
                             className={`relative w-full text-left rounded-md border p-4 space-y-3 transition-all duration-200 ${
                               isSelected
-                                ? "border-[hsl(var(--agent-primary,147_33%_29%))] bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.05] ring-2 ring-[hsl(var(--agent-primary,147_33%_29%))]/20 shadow-sm"
-                                : "border-border/60 bg-card hover:border-[hsl(var(--agent-primary,147_33%_29%))]/40 hover:shadow-sm"
+                                ? "border-primary bg-primary/[0.05] ring-2 ring-primary/20 shadow-sm"
+                                : "border-border/60 bg-card hover:border-primary/40 hover:shadow-sm"
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${isSelected ? "bg-[hsl(var(--agent-primary,147_33%_29%))]" : "bg-muted-foreground/25"}`} />
-                                <p className="font-semibold text-sm text-[hsl(var(--agent-text,0_0%_10%))] truncate">{scheme.nombre}</p>
+                                <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${isSelected ? "bg-primary" : "bg-muted-foreground/25"}`} />
+                                <p className="font-semibold text-sm text-foreground truncate">{scheme.nombre}</p>
                               </div>
                               {scheme.porcentaje_descuento_aumento !== 0 && scheme.porcentaje_descuento_aumento != null && (
                                 <Badge variant="outline" className={scheme.porcentaje_descuento_aumento < 0
-                                  ? "shrink-0 border-[hsl(var(--agent-primary,147_33%_29%))]/30 bg-[hsl(var(--agent-primary,147_33%_29%))]/10 text-[hsl(var(--agent-primary,147_33%_29%))] text-[11px] font-semibold"
-                                  : "shrink-0 border-destructive/30 bg-destructive/10 text-destructive text-[11px] font-semibold"}>
+                                  ? "shrink-0 border-primary/30 bg-primary/10 text-primary text-xs font-semibold"
+                                  : "shrink-0 border-destructive/30 bg-destructive/10 text-destructive text-xs font-semibold"}>
                                   {scheme.porcentaje_descuento_aumento > 0 ? "+" : ""}{scheme.porcentaje_descuento_aumento}%
                                 </Badge>
                               )}
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {scheme.porcentaje_enganche > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{scheme.porcentaje_enganche}%</span> Enganche
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{scheme.porcentaje_enganche}%</span> Enganche
                                 </span>
                               )}
                               {amounts.porcentajeMensualidades > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{amounts.porcentajeMensualidades.toFixed(1)}%</span> Mensualidades
                                 </span>
                               )}
                               {amounts.porcentajeEntrega > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                                  <span className="font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                  <span className="font-semibold text-foreground">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
                                 </span>
                               )}
                               {amounts.numMensualidades > 0 && (
-                                <span className="inline-flex items-baseline gap-1 rounded-md bg-[hsl(var(--agent-primary,147_33%_29%))]/10 px-2 py-1 text-[11px] text-[hsl(var(--agent-primary,147_33%_29%))]/80">
-                                  <span className="font-semibold text-[hsl(var(--agent-primary,147_33%_29%))]">{amounts.numMensualidades}</span> meses
+                                <span className="inline-flex items-baseline gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs text-primary/80">
+                                  <span className="font-semibold text-primary">{amounts.numMensualidades}</span> meses
                                 </span>
                               )}
                             </div>
@@ -803,14 +710,14 @@ const AgentUnidadesProyecto = () => {
                               <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3 border-t border-border/50">
                                 {amounts.enganche > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Enganche</p>
-                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{formatPrice(amounts.enganche)}</p>
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Enganche</p>
+                                    <p className="text-xs font-semibold text-foreground">{formatPrice(amounts.enganche)}</p>
                                   </div>
                                 )}
                                 {amounts.mensualidadesTotal > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Mensualidad</p>
-                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Mensualidad</p>
+                                    <p className="text-xs font-semibold text-foreground">
                                       {formatPrice(amounts.mensualidad)}
                                       {amounts.numMensualidades > 0 && <span className="font-normal text-muted-foreground"> × {amounts.numMensualidades}</span>}
                                     </p>
@@ -818,66 +725,30 @@ const AgentUnidadesProyecto = () => {
                                 )}
                                 {amounts.entrega > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Entrega</p>
-                                    <p className="text-xs font-semibold text-[hsl(var(--agent-text,0_0%_10%))]">{formatPrice(amounts.entrega)}</p>
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Entrega</p>
+                                    <p className="text-xs font-semibold text-foreground">{formatPrice(amounts.entrega)}</p>
                                   </div>
                                 )}
                                 <div className="space-y-0.5">
-                                  <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--agent-primary,147_33%_29%))]/70">Precio final</p>
-                                  <p className="text-xs font-bold text-[hsl(var(--agent-primary,147_33%_29%))]">{formatPrice(amounts.precioAjustado)}</p>
+                                  <p className="text-xs uppercase tracking-wide text-primary/70">Precio final</p>
+                                  <p className="text-xs font-bold text-primary">{formatPrice(amounts.precioAjustado)}</p>
                                 </div>
                               </div>
                             )}
                           </button>
                         );
                       })}
-                    </CollapsibleContent>
-                  </Collapsible>
+                    </div>
+                  </div>
                 )}
                 {selectedSchemeId && (
-                  <div className="bg-[hsl(var(--agent-primary,147_33%_29%))]/[0.07] border border-[hsl(var(--agent-primary,147_33%_29%))]/20 rounded-md px-3 py-2.5 text-xs text-[hsl(var(--agent-primary,147_33%_29%))] font-medium flex items-center gap-2">
+                  <div className="bg-primary/[0.07] border border-primary/20 rounded-md px-3 py-2.5 text-xs text-primary font-medium flex items-center gap-2">
                     <FileText className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">Plan seleccionado: <span className="font-semibold">{dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre || ""}</span></span>
                   </div>
                 )}
-              </div>
-              <div className="shrink-0 px-6 py-4 border-t bg-background">
-                {canGenerateOffer && (
-                  isAgentRole && !hasTrainingComplete ? (
-                    <Button className="w-full gap-2 rounded-md" size="lg" disabled>
-                      <FileText className="h-5 w-5" /> Completa tu capacitación para generar ofertas
-                    </Button>
-                  ) : (
-                  <div onClick={(e) => { e.stopPropagation(); handleConfigureOffer(); }}>
-                    <NewOfferDialog
-                      propertyId={selectedProperty.id}
-                      propertyNumber={selectedProperty.numero || `${selectedProperty.id}`}
-                      hideManualMode={true}
-                      hidePdfOptions={true}
-                      preSelectedSchemeId={selectedSchemeId}
-                      hideBankingInPdf={isAgentRole && !hasBasicIdentityComplete}
-                      forceLight={true}
-                      enableDigitalOffer={canGenerateDigitalOffer}
-                      customTrigger={
-                        <button className="group relative w-full inline-flex items-center justify-center gap-3 px-8 py-4 rounded-md bg-[hsl(var(--agent-primary,147_33%_29%))] text-white font-semibold text-sm shadow-lg shadow-[hsl(var(--agent-primary,147_33%_29%))]/20 hover:brightness-110 active:scale-[0.98] transition-all">
-                          <FileText className="h-5 w-5" />
-                          <span>
-                            Configurar Oferta
-                            {selectedSchemeId && (
-                              <span className="ml-1 text-xs opacity-80">({dialogSchemes.find((s: any) => s.id === selectedSchemeId)?.nombre})</span>
-                            )}
-                          </span>
-                        </button>
-                      }
-                    />
-                  </div>
-                  )
-                )}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+        </ModalViewerDetail>
+      )}
     </div>
   );
 };
@@ -888,42 +759,35 @@ const UnitCard = React.memo(({ prop, formatPrice, onClick }: {
   formatPrice: (price: number) => string;
   onClick: () => void;
 }) => (
-  <Card
-    className="overflow-hidden cursor-pointer hover:shadow-md active:scale-[0.98] transition-all border border-border/60 rounded-md bg-card"
+  <div
     onClick={onClick}
+    className="cursor-pointer overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_3px_rgba(20,30,25,0.04)] transition-colors hover:border-border"
   >
-    <div className="relative h-36">
+    <div className="relative aspect-video overflow-hidden bg-gray-100">
       <UnitCardImage images={prop.model_images || []} />
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 pb-2.5 pt-6 pointer-events-none">
-        <h4 className="font-bold text-white text-sm truncate drop-shadow-md">Depto. {prop.numero || prop.id}</h4>
-        {prop.precio_lista > 0 && (
-          <p className="text-white/90 text-xs font-semibold drop-shadow-md">{formatPrice(prop.precio_lista)}</p>
-        )}
+      <span className="absolute right-2.5 top-2.5 rounded-md bg-card px-2.5 py-1 text-xs font-bold text-foreground shadow-sm">
+        Depto. {prop.numero || prop.id}
+      </span>
+    </div>
+    <div className="p-4 space-y-2.5">
+      <div className="min-w-0">
+        <p className="truncate text-base font-bold text-foreground">{prop.modelo_nombre || `Depto. ${prop.numero || prop.id}`}</p>
+        <p className="truncate text-xs font-medium text-muted-foreground/70">
+          {prop.proyecto_nombre}{prop.piso ? ` · Nivel ${prop.piso}` : ""}
+        </p>
+      </div>
+      {prop.precio_lista > 0 && (
+        <p className="text-base font-bold tabular-nums text-primary">{formatPrice(prop.precio_lista)}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-sm font-medium text-muted-foreground">
+        {prop.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-primary" /> {prop.m2_total.toFixed(1)} m²</span>}
+        {prop.recamaras > 0 && <span className="flex items-center gap-1.5"><BedDouble className="h-4 w-4 text-primary" /> {prop.recamaras}</span>}
+        {prop.banos > 0 && <span className="flex items-center gap-1.5"><Bath className="h-4 w-4 text-primary" /> {prop.banos}</span>}
+        {prop.bodegas_count > 0 && <span className="flex items-center gap-1.5"><Warehouse className="h-4 w-4 text-primary" /> {prop.bodegas_count}</span>}
+        {prop.estacionamientos_count > 0 && <span className="flex items-center gap-1.5"><Car className="h-4 w-4 text-primary" /> {prop.estacionamientos_count}</span>}
       </div>
     </div>
-    <CardContent className="p-3 space-y-1.5">
-      <p className="text-[11px] text-muted-foreground">{prop.proyecto_nombre} • {prop.modelo_nombre}</p>
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        {prop.m2_total > 0 && (
-          <span className="flex items-center gap-1"><Maximize2 className="h-3 w-3" /> {prop.m2_total.toFixed(1)} m²</span>
-        )}
-        {prop.recamaras > 0 && (
-          <span className="flex items-center gap-1"><BedDouble className="h-4 w-4" /> {prop.recamaras}</span>
-        )}
-        {prop.banos > 0 && (
-          <span className="flex items-center gap-1"><Bath className="h-4 w-4" /> {prop.banos}</span>
-        )}
-        {prop.bodegas_count > 0 && (
-          <span className="flex items-center gap-1">
-            <img src={bodegaIcon} alt="" className="h-3 w-3 opacity-60" /> {prop.bodegas_count}
-          </span>
-        )}
-        {prop.estacionamientos_count > 0 && (
-          <span className="flex items-center gap-1"><Car className="h-3 w-3" /> {prop.estacionamientos_count}</span>
-        )}
-      </div>
-    </CardContent>
-  </Card>
+  </div>
 ));
 UnitCard.displayName = "UnitCard";
 
@@ -936,7 +800,7 @@ const UnitCardImage = ({ images }: { images: any[] }) => {
       </div>
     );
   }
-  return <img src={optimizedImage(images[0].url, { width: 480, resize: "cover" })} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />;
+  return <OptImg src={images[0].url} w={640} h={360} resize="cover" alt="" className="h-full w-full object-cover" />;
 };
 
 // Detail carousel
@@ -961,27 +825,27 @@ const DetailCarousel = ({ images }: { images: any[] }) => {
   if (images.length === 0) return null;
 
   return (
-    <div className="relative rounded-md overflow-hidden">
-      <div ref={emblaRef} className="overflow-hidden">
-        <div className="flex">
+    <div className="relative h-full w-full">
+      <div ref={emblaRef} className="h-full overflow-hidden">
+        <div className="flex h-full">
           {images.map((img: any, i: number) => (
-            <div key={img.id || i} className="min-w-0 flex-[0_0_100%]">
-              <img src={optimizedImage(img.url, { width: 720, resize: "cover" })} alt="" className="w-full h-56 object-cover" loading="lazy" decoding="async" />
+            <div key={img.id || i} className="min-w-0 flex-[0_0_100%] h-full">
+              <OptImg src={img.url} w={900} alt="" className="w-full h-full object-contain" />
             </div>
           ))}
         </div>
       </div>
       {images.length > 1 && (
         <>
-          <button onClick={scrollPrev} className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/40 text-white flex items-center justify-center">
-            <ChevronLeft className="h-4 w-4" />
+          <button onClick={scrollPrev} className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/45 text-white flex items-center justify-center hover:bg-black/60">
+            <ChevronLeft className="h-5 w-5" />
           </button>
-          <button onClick={scrollNext} className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/40 text-white flex items-center justify-center">
-            <ChevronRight className="h-4 w-4" />
+          <button onClick={scrollNext} className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/45 text-white flex items-center justify-center hover:bg-black/60">
+            <ChevronRight className="h-5 w-5" />
           </button>
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
             {images.map((_: any, i: number) => (
-              <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === currentIndex ? "bg-white" : "bg-white/50"}`} />
+              <span key={i} className={`h-1.5 rounded-full transition-all ${i === currentIndex ? "w-5 bg-card" : "w-1.5 bg-card/50"}`} />
             ))}
           </div>
         </>

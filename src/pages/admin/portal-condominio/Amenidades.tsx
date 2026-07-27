@@ -1,24 +1,53 @@
 import { useState } from "react";
-import { PageHeader, EstadoVista } from "./_helpers";
-import { useCondominio } from "@/contexts/CondominioContext";
-import { useCondominioDataset } from "@/hooks/condominio/useCondominioData";
+import { PageHeader } from "./_helpers";
 import { cn } from "@/lib/utils";
-import { AmenidadesReservas } from "@/features/amenidades/AmenidadesReservas";
+import { useAmenidadesStore } from "@/features/amenidades/store";
+import { limitePago, restanteMs } from "@/features/amenidades/logic";
+import { AmenidadesReservas, type TabInterna } from "@/features/amenidades/AmenidadesReservas";
+import { Catalogo } from "@/features/amenidades/Catalogo";
+import { AmenidadEditor } from "@/features/amenidades/AmenidadEditor";
+import type { Amenidad } from "@/features/amenidades/types";
 
-type Tab = "reservables" | "edificio";
+type TabPagina = "catalogo" | TabInterna;
 
 export default function Amenidades() {
-  const [tab, setTab] = useState<Tab>("reservables");
+  const [tab, setTab] = useState<TabPagina>("catalogo");
+  const [espacioCal, setEspacioCal] = useState<string | undefined>(undefined);
+
+  // Editor de ficha (alta / edición)
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editando, setEditando] = useState<Amenidad | null>(null);
+
+  // Contadores para las etiquetas de pestaña (motor de reservas).
+  const reservas = useAmenidadesStore((s) => s.reservas);
+  const abonos = useAmenidadesStore((s) => s.abonosExcepcion);
+  const config = useAmenidadesStore((s) => s.config);
+  const ahora = useAmenidadesStore((s) => s.ahora);
+  const porValidar = reservas.filter((r) => r.estado === "apartado").length;
+  const porPagarVencer = reservas.filter((r) => {
+    if (r.estado !== "por_pagar") return false;
+    const rem = restanteMs(limitePago(r, config.pagoHoras), ahora);
+    return rem != null && rem <= 12 * 3600_000;
+  }).length;
+  const totalExcepciones = porPagarVencer + abonos.length;
+
+  const abrirNueva = () => { setEditando(null); setEditorOpen(true); };
+  const abrirEditar = (a: Amenidad) => { setEditando(a); setEditorOpen(true); };
+  const verCalendario = (espacioId: string) => { setEspacioCal(espacioId); setTab("calendario"); };
+
+  const tabs: { k: TabPagina; label: string; badge?: number }[] = [
+    { k: "catalogo", label: "Catálogo" },
+    { k: "calendario", label: "Calendario" },
+    { k: "validar", label: "Solicitudes por validar", badge: porValidar || undefined },
+    { k: "excepciones", label: "Excepciones", badge: totalExcepciones || undefined },
+  ];
 
   return (
     <div>
-      <PageHeader title="Amenidades" subtitle="Reservas de espacios · Margot" />
+      <PageHeader title="Amenidades" subtitle="Catálogo, reservas y disponibilidad · Margot" />
 
-      <div className="inline-flex rounded-lg border border-border p-0.5 text-sm mb-4">
-        {([
-          { k: "reservables", label: "Espacios reservables" },
-          { k: "edificio", label: "Amenidades del edificio" },
-        ] as const).map((t) => (
+      <div className="inline-flex flex-wrap rounded-lg border border-border p-0.5 text-sm mb-4">
+        {tabs.map((t) => (
           <button
             key={t.k}
             onClick={() => setTab(t.k)}
@@ -28,45 +57,18 @@ export default function Amenidades() {
             )}
           >
             {t.label}
+            {t.badge ? <span className="ml-1.5 tabular-nums">({t.badge})</span> : null}
           </button>
         ))}
       </div>
 
-      {tab === "reservables" ? <AmenidadesReservas /> : <CatalogoEdificio />}
+      {tab === "catalogo" ? (
+        <Catalogo onNueva={abrirNueva} onEditar={abrirEditar} onVerCalendario={verCalendario} />
+      ) : (
+        <AmenidadesReservas tab={tab} onTab={(t) => setTab(t)} espacioInicial={espacioCal} />
+      )}
+
+      <AmenidadEditor open={editorOpen} amenidad={editando} onClose={() => setEditorOpen(false)} />
     </div>
-  );
-}
-
-// Catálogo estático de amenidades del edificio (preservado tal cual).
-function CatalogoEdificio() {
-  const { proyectoId } = useCondominio();
-  const { data, isLoading, error } = useCondominioDataset(proyectoId);
-  const amenidades = data?.amenidades ?? [];
-
-  if (isLoading || error) return <EstadoVista isLoading={isLoading} error={error} />;
-  if (amenidades.length === 0) {
-    return <div className="py-16 text-center text-muted-foreground">Este condominio no tiene amenidades registradas.</div>;
-  }
-
-  return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        {amenidades.map((a) => (
-          <div key={a.id} className="rounded-xl border border-border bg-card overflow-hidden">
-            {a.url && (
-              <div className="h-32 bg-muted flex items-center justify-center">
-                <img src={a.url} alt={a.nombre} className="h-full w-full object-cover" loading="lazy" />
-              </div>
-            )}
-            <div className="p-4">
-              <h3 className="font-semibold">{a.nombre}</h3>
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Amenidades promocionales del edificio (catálogo). No son espacios reservables.
-      </p>
-    </>
   );
 }

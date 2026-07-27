@@ -184,8 +184,10 @@ export const useTitularidadStore = create<TitularidadState>()(
       };
     },
     {
+      // version bump: descarta el estado persistido con solicitudes semilla
+      // (datos hardcodeados eliminados) y rehidrata desde el estado vacío.
       name: "sozu-titularidad-demo",
-      version: 1,
+      version: 2,
     },
   ),
 );
