@@ -139,6 +139,26 @@ export interface BuildZipResult {
   invalidUrlsCount: number;
 }
 
+// ─── Expediente Desarrollo (documentos a nivel proyecto) ───────────────────────
+
+export interface DesarrolloDocItem {
+  id: number;
+  url: string;
+  fechaCreacion: string | null;
+}
+
+export interface DesarrolloTipoGroup {
+  tipoLabel: string;
+  docs: DesarrolloDocItem[];
+}
+
+export interface ExpedienteDesarrolloZipInput {
+  proyecto: string;
+  grupos: DesarrolloTipoGroup[];
+  usuarioEmail: string | null;
+  fechaGeneracion: string;
+}
+
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
 function sanitize(str: string): string {
@@ -293,6 +313,85 @@ export async function buildExpedienteZip(
   await triggerDownload(zip, zipName);
 
   return { success: true, includedCount: total - failedFiles.length, skippedCount, failedFiles, duplicatesSkipped: 0, invalidUrlsCount: 0 };
+}
+
+// ─── buildExpedienteDesarrolloZip ──────────────────────────────────────────────
+
+function buildResumenDesarrollo(
+  input: ExpedienteDesarrolloZipInput,
+  failedUrls: string[],
+): string {
+  const S = '=================================================';
+  const D = '-------------------------------------------------';
+  const lines: string[] = [
+    S,
+    'EXPEDIENTE DE DESARROLLO — PORTAL NOTARÍA SOZU',
+    S,
+    `Proyecto  : ${input.proyecto}`,
+    `Generado  : ${input.fechaGeneracion}`,
+    `Usuario   : ${input.usuarioEmail ?? '—'}`,
+    '',
+    D,
+    'DOCUMENTOS INCLUIDOS',
+    D,
+  ];
+
+  let total = 0;
+  for (const g of input.grupos) {
+    lines.push(`[${g.tipoLabel}] — ${g.docs.length} documento${g.docs.length !== 1 ? 's' : ''}`);
+    total += g.docs.length;
+  }
+
+  if (failedUrls.length > 0) {
+    lines.push('', D, 'ERRORES DE DESCARGA', D);
+    failedUrls.forEach(u => lines.push(`  - ${u}`));
+  }
+
+  lines.push('', D, 'RESUMEN', D);
+  lines.push(`Tipos de documento   : ${input.grupos.length}`);
+  lines.push(`Documentos incluidos : ${total - failedUrls.length}`);
+  if (failedUrls.length > 0) lines.push(`Documentos fallidos  : ${failedUrls.length}`);
+  lines.push(S);
+  return lines.join('\n');
+}
+
+export async function buildExpedienteDesarrolloZip(
+  input: ExpedienteDesarrolloZipInput,
+  onProgress?: (current: number, total: number) => void,
+): Promise<BuildZipResult> {
+  const total = input.grupos.reduce((s, g) => s + g.docs.length, 0);
+  const failedFiles: string[] = [];
+  let current = 0;
+
+  const zip = new JSZip();
+
+  for (const grupo of input.grupos) {
+    if (grupo.docs.length === 0) continue;
+    const folder = zip.folder(sanitize(grupo.tipoLabel))!;
+    let consecutivo = 1;
+    for (const doc of grupo.docs) {
+      current++;
+      onProgress?.(current, total);
+      const result = await fetchBlob(doc.url);
+      if (!result) { failedFiles.push(`${grupo.tipoLabel} (doc ${doc.id})`); continue; }
+      const fechaStr = doc.fechaCreacion
+        ? new Date(doc.fechaCreacion).toISOString().slice(0, 10).replace(/-/g, '')
+        : 'SINFECHA';
+      folder.file(`${String(consecutivo).padStart(2, '0')}_${fechaStr}.${result.ext}`, result.blob);
+      consecutivo++;
+    }
+  }
+
+  zip.file('RESUMEN_EXPEDIENTE_DESARROLLO.txt', buildResumenDesarrollo(input, failedFiles));
+
+  if (total === 0) {
+    return { success: false, includedCount: 0, skippedCount: 0, failedFiles, duplicatesSkipped: 0, invalidUrlsCount: 0 };
+  }
+
+  const zipName = `EXPEDIENTE_DESARROLLO_${sanitize(input.proyecto)}.zip`;
+  await triggerDownload(zip, zipName);
+
+  return { success: true, includedCount: total - failedFiles.length, skippedCount: 0, failedFiles, duplicatesSkipped: 0, invalidUrlsCount: 0 };
 }
 
 // ─── Resumen pagos ─────────────────────────────────────────────────────────────

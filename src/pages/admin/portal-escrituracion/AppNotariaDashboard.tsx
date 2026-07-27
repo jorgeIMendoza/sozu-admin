@@ -8,13 +8,14 @@ import { PersonForm } from '@/components/admin/PersonForm';
 import { NotariaExpedienteModal } from '@/components/admin/portal-notaria/NotariaExpedienteModal';
 import { NotariaPagosModal } from '@/components/admin/portal-notaria/NotariaPagosModal';
 import { NotariaCuentaDetalleSheet } from '@/components/admin/portal-notaria/NotariaCuentaDetalleSheet';
+import { ExpedienteDesarrolloDialog } from '@/components/admin/portal-notaria/ExpedienteDesarrolloDialog';
 import { toast } from 'sonner';
 import {
   Search, Download, RefreshCw, X, CheckCircle2, Clock,
   FileText, Stamp, CalendarDays, Loader2, Receipt, Upload,
   ChevronRight, MoreHorizontal, Send, MessageSquare,
   Landmark, ExternalLink, ArrowRight, LogIn, AlertTriangle,
-  Check, ChevronsUpDown,
+  Check, ChevronsUpDown, Building2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -282,6 +283,7 @@ export function AppNotariaDashboard() {
   const [adminNotarioId,  setAdminNotarioId]  = useState<number | null>(null);
   const [notarioPickerOpen, setNotarioPickerOpen] = useState(false);
   const [showRegInfo,     setShowRegInfo]     = useState(false);
+  const [expedienteDesarrolloOpen, setExpedienteDesarrolloOpen] = useState(false);
 
   // ── Projects ───────────────────────────────────────────────────────────────
   const { data: proyectos = [] } = useQuery({
@@ -305,6 +307,9 @@ export function AppNotariaDashboard() {
       return data ?? [];
     },
   });
+
+  const proyectoSeleccionadoId = proyectoId ? Number(proyectoId) : null;
+  const proyectoSeleccionadoNombre = proyectos.find((p: any) => p.id === proyectoSeleccionadoId)?.nombre ?? '';
 
   // ── Notarías para el selector de impersonación (admins) ───────────────────
   // Solo notarías socias de SOZU (notarios.trabaja_con_sozu=true), NO las que
@@ -1072,6 +1077,17 @@ export function AppNotariaDashboard() {
           </SelectContent>
         </Select>
 
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          disabled={!proyectoId}
+          title={!proyectoId ? 'Selecciona un proyecto para ver su Expediente Desarrollo' : undefined}
+          onClick={() => setExpedienteDesarrolloOpen(true)}
+        >
+          <Building2 className="h-3.5 w-3.5" /> Expediente Desarrollo
+        </Button>
+
         {(hasFilters || kpiFilter) && (
           <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground h-8 px-2 rounded-md hover:bg-muted transition-colors">
             <X className="h-3.5 w-3.5" /> Limpiar filtros
@@ -1603,6 +1619,15 @@ export function AppNotariaDashboard() {
         proyecto={expedienteModal?.proyecto ?? ''}
         unidad={expedienteModal?.unidad ?? ''}
         cuentaCode={expedienteModal?.cuentaCode ?? ''}
+        usuarioEmail={profile?.email ?? null}
+      />
+
+      {/* ── Modal Expediente Desarrollo ─────────────────────────────────────── */}
+      <ExpedienteDesarrolloDialog
+        open={expedienteDesarrolloOpen}
+        onOpenChange={setExpedienteDesarrolloOpen}
+        proyectoId={proyectoSeleccionadoId}
+        proyectoNombre={proyectoSeleccionadoNombre}
         usuarioEmail={profile?.email ?? null}
       />
 
