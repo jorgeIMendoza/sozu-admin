@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { RESERVATION_TOKEN_PARAM, parseReservationToken } from "@/lib/offers/reservation-token";
 import sozuLogo from "@/assets/sozu-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
@@ -9,6 +10,7 @@ import { useAgentById, type Agent } from "@/lib/offers/agent-data";
 import { getPortalLoginUrl } from "@/lib/portalUrls";
 import PublicShell from "@/components/offer/PublicShell";
 import OfferFooter from "@/components/offer/OfferFooter";
+import ApartadoPagadoDialog from "@/components/offer/ApartadoPagadoDialog";
 import {
   AlertCircle,
   ArrowRight,
@@ -29,8 +31,9 @@ const APARTADO_AMOUNT_MXN = 20000;
 const BENEFICIARIO = "SOZU COMERCIALIZADORA SA DE CV";
 const BANCO = "STP (646)";
 // Botón demo para recorrer el flujo internamente sin transferencia real.
-// SWAP POINT: en producción el pago lo confirma el webhook STP, no un botón.
-const SHOW_DEMO_PAY_BUTTON = true;
+// SOLO en desarrollo: en un build de producción no existe, para que nadie pueda
+// marcar un apartado como pagado sin la transferencia SPEI.
+const SHOW_DEMO_PAY_BUTTON = import.meta.env.DEV;
 // Validación del pago: reintenta cada minuto, hasta 5 veces, luego "contacta asesor".
 const MAX_ATTEMPTS = 5;
 const CHECK_INTERVAL_MS = 60_000;
@@ -39,6 +42,27 @@ const CHECK_INTERVAL_MS = 60_000;
 const CLIENT_PORTAL_LOGIN_URL = getPortalLoginUrl("clientes");
 
 type PayFlow = "waiting" | "checking" | "paid" | "exhausted";
+
+/** Respuesta del RPC `get_apartado_status` (spec en Ejecuciones_manuales/ofertas-digitales/04). */
+type ApartadoStatus = {
+  pagado: boolean;
+  estatus_id?: number | null;
+  id_propiedad?: number | null;
+  id_cuenta_cobranza?: number | null;
+  /** CLABE dedicada de la cuenta de cobranza creada con el apartado. */
+  clabe_stp?: string | null;
+  /** Correo del cliente enmascarado por el RPC (j***@gmail.com). */
+  email_enmascarado?: string | null;
+  /** true → ya tenía usuario en la plataforma. */
+  tiene_acceso?: boolean | null;
+};
+
+/** Mismo enmascarado que devuelve el RPC, para el fallback local (demo). */
+const enmascararEmail = (email?: string | null) => {
+  if (!email || !email.includes("@")) return null;
+  const [usuario, dominio] = email.split("@");
+  return `${usuario.slice(0, 1)}***@${dominio}`;
+};
 
 // Botón de copiar reutilizable (CLABE / monto / concepto).
 const CopyButton = ({ copied, onClick, compact }: { copied: boolean; onClick: () => void; compact?: boolean }) =>
@@ -120,6 +144,7 @@ const SpeiPayPanel = ({
   concepto,
   agent,
   clientEmail,
+  reservationToken,
   onPaid,
 }: {
   formalReservationId: string;
@@ -128,6 +153,8 @@ const SpeiPayPanel = ({
   concepto: string;
   agent?: Agent;
   clientEmail?: string;
+  /** Token del link personal del cliente: credencial de las RPC públicas. */
+  reservationToken?: string | null;
   onPaid?: () => void;
 }) => {
   const recordPayment = useFormalReservationStore((s) => s.recordPayment);
@@ -135,6 +162,8 @@ const SpeiPayPanel = ({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [flow, setFlow] = useState<PayFlow>("waiting");
   const [attempts, setAttempts] = useState(0);
+  const [paidStatus, setPaidStatus] = useState<ApartadoStatus | null>(null);
+  const [paidDialogOpen, setPaidDialogOpen] = useState(false);
 
   const clabeFormatted = clabe ? clabe.match(/.{1,4}/g)?.join(" ") ?? clabe : "";
 
@@ -160,28 +189,44 @@ const SpeiPayPanel = ({
 
   // Consulta a BD (RPC SECURITY DEFINER) si el apartado ya se reflejó pagado.
   // El pago es vía SPEI (externo): se valida contra el estado real en plataforma.
-  const checkPaidInDB = useCallback(async (): Promise<boolean> => {
+  // Cadena real: STP → backend → RPC insertar_pago_stp → n8n crea cuenta de cobranza
+  // + pagos → triggers suben la propiedad a estatus 4. Aquí solo se lee ese estado.
+  const consultarApartado = useCallback(async (): Promise<ApartadoStatus | null> => {
     const numericId = Number(offerId);
-    if (!numericId || Number.isNaN(numericId)) return false;
+    if (!numericId || Number.isNaN(numericId)) return null;
     try {
       const { data, error } = await (supabase as any).rpc("get_apartado_status", {
         p_oferta_id: numericId,
+        // Sin token la RPC responde vacío (fallo cerrado): el estado del pago solo
+        // se consulta desde el link personal del cliente.
+        p_token: reservationToken ?? null,
       });
-      if (error) return false; // RPC ausente / error → aún no pagado
+      if (error) return null;
       const row = Array.isArray(data) ? data[0] : data;
-      return !!row?.pagado;
+      return (row as ApartadoStatus) ?? null;
     } catch {
-      return false;
+      return null;
     }
-  }, [offerId]);
+  }, [offerId, reservationToken]);
+
+  /** Estado del apartado solo si ya está pagado; si no, null. */
+  const checkPaidInDB = useCallback(async (): Promise<ApartadoStatus | null> => {
+    const estado = await consultarApartado();
+    return estado?.pagado ? estado : null;
+  }, [consultarApartado]);
 
   // Al confirmarse el pago: marca en store, dispara creación de cuenta cliente
-  // (correo con credenciales) y pasa a estado pagado.
-  const settlePaid = useCallback(() => {
-    markPaidLocally();
-    onPaid?.();
-    setFlow("paid");
-  }, [markPaidLocally, onPaid]);
+  // (solo si aún no tiene acceso) y abre la modal de confirmación.
+  const settlePaid = useCallback(
+    (status?: ApartadoStatus | null) => {
+      markPaidLocally();
+      setPaidStatus(status ?? null);
+      if (!status?.tiene_acceso) onPaid?.();
+      setFlow("paid");
+      setPaidDialogOpen(true);
+    },
+    [markPaidLocally, onPaid]
+  );
 
   // Un intento de verificación: si está pagado → éxito; si no, suma intento y,
   // al llegar a MAX_ATTEMPTS, muestra "contacta a tu asesor".
@@ -189,7 +234,7 @@ const SpeiPayPanel = ({
     setFlow("checking");
     const paid = await checkPaidInDB();
     if (paid) {
-      settlePaid();
+      settlePaid(paid);
       return;
     }
     setAttempts((prev) => {
@@ -206,8 +251,31 @@ const SpeiPayPanel = ({
     return () => clearTimeout(t);
   }, [flow, attempts, runCheck]);
 
-  // Fuerza el éxito sin transferencia real (solo pruebas internas).
-  const handleDemoPay = () => settlePaid();
+  // Chequeo silencioso al entrar: si el cliente vuelve al link después de pagar,
+  // ve la confirmación de inmediato y no espera el primer minuto. No gasta intentos.
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      const paid = await checkPaidInDB();
+      if (!cancelado && paid) settlePaid(paid);
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fuerza el éxito sin transferencia real (solo pruebas internas). Aun así se
+  // consulta el estado real: si el RPC ya responde, la modal usa sus datos.
+  const handleDemoPay = async () => {
+    // Se toma el estado real (aunque aún no esté pagado) para que la modal use el
+    // `tiene_acceso` verdadero y no invente que se creó una cuenta.
+    const estado = await consultarApartado();
+    settlePaid({
+      ...(estado ?? {}),
+      pagado: true,
+      email_enmascarado: estado?.email_enmascarado ?? enmascararEmail(clientEmail),
+      tiene_acceso: !!estado?.tiene_acceso,
+    });
+  };
 
   // Redirect cross-subdominio al portal del cliente (no react-router).
   const goToClientPortal = () => { window.location.assign(CLIENT_PORTAL_LOGIN_URL); };
@@ -310,10 +378,38 @@ const SpeiPayPanel = ({
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-card/70 border border-border/60">
             <Mail className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Enviamos a <span className="font-semibold text-foreground">{clientEmail ?? "tu correo"}</span> tus
-              datos de acceso (correo y contraseña) para entrar a tu portal de cliente.
+              {paidStatus?.tiene_acceso ? (
+                <>
+                  Ya tienes una cuenta con{" "}
+                  <span className="font-semibold text-foreground">
+                    {paidStatus?.email_enmascarado ?? enmascararEmail(clientEmail) ?? "tu correo"}
+                  </span>
+                  . Inicia sesión para revisar tu apartado.
+                </>
+              ) : (
+                <>
+                  Enviamos a{" "}
+                  <span className="font-semibold text-foreground">
+                    {paidStatus?.email_enmascarado ?? enmascararEmail(clientEmail) ?? "tu correo"}
+                  </span>{" "}
+                  tus datos de acceso para entrar a tu portal de cliente.
+                </>
+              )}
             </p>
           </div>
+          {paidStatus?.clabe_stp && (
+            <div className="p-3 rounded-xl bg-card/70 border border-border/60 space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                CLABE de tu cuenta
+              </p>
+              <p className="font-mono text-[13px] font-semibold text-foreground break-all">
+                {paidStatus.clabe_stp.match(/.{1,4}/g)?.join(" ") ?? paidStatus.clabe_stp}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Úsala para tus pagos siguientes. La CLABE del apartado ya no aplica.
+              </p>
+            </div>
+          )}
           <button
             type="button"
             onClick={goToClientPortal}
@@ -321,6 +417,13 @@ const SpeiPayPanel = ({
           >
             Finalizar e ir a mi portal
             <ArrowRight className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaidDialogOpen(true)}
+            className="w-full h-9 rounded-xl border border-border bg-card text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+          >
+            Ver instrucciones de acceso
           </button>
         </div>
       ) : flow === "exhausted" ? (
@@ -399,12 +502,26 @@ const SpeiPayPanel = ({
           <span className="text-[8px] uppercase tracking-wider bg-muted rounded px-1 py-0.5">Demo</span>
         </button>
       )}
+
+      {/* Confirmación del apartado + cómo entrar a la plataforma */}
+      <ApartadoPagadoDialog
+        open={paidDialogOpen}
+        onOpenChange={setPaidDialogOpen}
+        email={paidStatus?.email_enmascarado ?? enmascararEmail(clientEmail)}
+        tieneAcceso={!!paidStatus?.tiene_acceso}
+        concepto={concepto}
+        loginUrl={CLIENT_PORTAL_LOGIN_URL}
+      />
     </div>
   );
 };
 
 const ReservarPage = () => {
   const { formalReservationId } = useParams<{ formalReservationId: string }>();
+  const [searchParams] = useSearchParams();
+  // Viaja desde el link de la oferta (/oferta/O-XXXXXX/<token>) por las pantallas
+  // del flujo. Es la credencial de las RPC públicas de pago.
+  const reservationToken = parseReservationToken(searchParams.get(RESERVATION_TOKEN_PARAM));
 
   const formalReservation = useFormalReservationStore((s) =>
     s.reservations.find((r) => r.id === formalReservationId)
@@ -424,7 +541,7 @@ const ReservarPage = () => {
     if (!agentOfferId) return;
     (async () => {
       const { data: oferta } = await supabase
-        .from("ofertas").select("email_creador").eq("id", agentOfferId).single();
+        .from("ofertas").select("email_creador").eq("id", Number(agentOfferId)).single();
       if (!oferta?.email_creador) return;
       const { data: usuario } = await supabase
         .from("usuarios").select("id_persona").eq("email", oferta.email_creador).single();
@@ -535,6 +652,7 @@ const ReservarPage = () => {
                   concepto={concepto}
                   agent={agent}
                   clientEmail={clientEmail}
+                  reservationToken={reservationToken}
                   onPaid={createClientAccount}
                 />
               </>

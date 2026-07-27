@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  LINK_NO_VIGENTE,
+  cargarReservacionPublica,
+  parseReservationToken,
+} from "@/lib/offers/reservation-token";
 import { AlertCircle, CheckCircle2, Clock, Loader2, Mail } from "lucide-react";
 
 type Reservacion = {
@@ -13,30 +18,25 @@ type Reservacion = {
 
 export default function HoldApartadoPage() {
   const { apartadoId } = useParams<{ apartadoId: string }>();
+  const token = parseReservationToken(apartadoId);
 
   const [reservacion, setReservacion] = useState<Reservacion | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPage, setLoadingPage] = useState(true);
 
   useEffect(() => {
-    if (!apartadoId) { setLoadError("Link inválido."); setLoadingPage(false); return; }
-    const numericId = parseInt(apartadoId.replace(/^[A-Z]+-/, ""), 10);
-    if (!numericId) { setLoadError("Link inválido."); setLoadingPage(false); return; }
+    if (!token) { setLoadError(LINK_NO_VIGENTE); setLoadingPage(false); return; }
 
     (async () => {
-      const { data, error } = await (supabase as any)
-        .from("reservaciones")
-        .select("id, email, nombre, estatus, activo")
-        .eq("id", numericId)
-        .maybeSingle();
+      const row = await cargarReservacionPublica(supabase, token);
 
-      if (error || !data) { setLoadError("Este link no existe o ya no es válido."); setLoadingPage(false); return; }
-      if (!data.activo) { setLoadError("Este link ha sido desactivado."); setLoadingPage(false); return; }
+      if (!row) { setLoadError(LINK_NO_VIGENTE); setLoadingPage(false); return; }
+      if (!row.activo) { setLoadError("Este link ha sido desactivado."); setLoadingPage(false); return; }
 
-      setReservacion(data);
+      setReservacion(row);
       setLoadingPage(false);
     })();
-  }, [apartadoId]);
+  }, [token]);
 
   if (loadingPage) {
     return (
