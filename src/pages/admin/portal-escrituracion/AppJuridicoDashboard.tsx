@@ -93,7 +93,7 @@ interface AbogadoItem {
 }
 
 type ActionType =
-  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo'
+  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo' | 'documento'
   | 'notificacion' | 'regularizacion' | 'proc_demanda' | 'admision'
   | 'emplazamiento' | 'contestacion' | 'audiencia_proc' | 'sentencia' | 'acuerdo_proc';
 
@@ -110,6 +110,36 @@ const STATUS_META: Record<LegalCaseStatus, { label: string; cls: string }> = {
 };
 
 const TIPO_ACUERDO_OPTIONS = ['CONVENIO', 'SENTENCIA', 'DESISTIMIENTO', 'OTRO'] as const;
+
+// Coincide exactamente con app_juridico_documentos_tipo_documento_check (BD).
+// Se usa como selector de "etapa/tipo" al subir un documento — no requiere DDL nueva.
+const TIPO_DOCUMENTO_OPTIONS: { value: string; label: string }[] = [
+  { value: 'DEMANDA',            label: 'Demanda' },
+  { value: 'NOTIFICACION',       label: 'Notificación' },
+  { value: 'CONTESTACION',       label: 'Contestación' },
+  { value: 'AUDIENCIA',          label: 'Audiencia' },
+  { value: 'ACUERDO',            label: 'Acuerdo' },
+  { value: 'CONVENIO',           label: 'Convenio' },
+  { value: 'SENTENCIA',          label: 'Sentencia' },
+  { value: 'PAGO_PENALIZACION',  label: 'Pago de penalización' },
+  { value: 'EVIDENCIA',          label: 'Evidencia' },
+  { value: 'OTRO',               label: 'Otro' },
+];
+const TIPO_DOCUMENTO_LABEL: Record<string, string> =
+  Object.fromEntries(TIPO_DOCUMENTO_OPTIONS.map(o => [o.value, o.label]));
+
+interface DocumentoRow {
+  id: number;
+  id_demanda: number;
+  tipo_documento: string;
+  nombre_archivo: string;
+  url_archivo: string;
+  descripcion: string | null;
+  subido_por: string;
+  fecha_creacion: string;
+  mime_type: string | null;
+  tamano_bytes: number | null;
+}
 
 const TIPO_NOTIFICACION_OPTIONS  = ['NOTARIO', 'CORREO_ELECTRONICO', 'OTRO']                                         as const;
 const ESTATUS_REG_OPTIONS        = ['EN_ESPERA', 'REGULARIZADO', 'NO_REGULARIZADO', 'VENCIDO']                       as const;
@@ -156,6 +186,26 @@ const UI_TO_DB_STATUS: Record<string, string> = {
   CERRADA:            'CERRADO',
   RIESGO_ALTO:        'EN_PROCESO',
 };
+
+// Dirección inversa (BD → UI) — mismo mapeo que DemandasDashboard.tsx LEGACY_STATUS.
+// UI_TO_DB_STATUS no es invertible 1:1 (varios UI mapean al mismo valor de BD), así
+// que esto es una elección de mapeo "más representativo", no una inversa exacta.
+// Sin este mapeo, cualquier caso con estatus_demanda='NOTIFICADO'|'EN_PROCESO'|
+// 'LITIGIO'|'RESUELTO'|'CERRADO' se mostraba siempre como 'EN_REVISION' (bug).
+const LEGACY_STATUS: Record<string, LegalCaseStatus> = {
+  SIN_DEMANDA: 'EN_REVISION',
+  NOTIFICADO:  'EN_REVISION',
+  EN_PROCESO:  'DEMANDA_PRESENTADA',
+  LITIGIO:     'DEMANDA_PRESENTADA',
+  RESUELTO:    'RESUELTA',
+  CERRADO:     'CERRADA',
+};
+
+function parseLawsuitStatus(raw: string | null | undefined): LegalCaseStatus {
+  if (!raw) return 'EN_REVISION';
+  if (raw in STATUS_META) return raw as LegalCaseStatus;
+  return LEGACY_STATUS[raw] ?? 'EN_REVISION';
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -270,6 +320,7 @@ function AppJuridicoDashboardInner() {
   const [actionInput, setActionInput] = useState('');
   const [actionInput2, setActionInput2] = useState('');
   const [actionInput3, setActionInput3] = useState('');
+  const [actionFile, setActionFile] = useState<File | null>(null);
   const actionRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
   const openAction = (type: ActionType, row: LegalRow, defaultVal = '') => {
@@ -277,8 +328,9 @@ function AppJuridicoDashboardInner() {
     setActionInput(defaultVal);
     setActionInput2('');
     setActionInput3('');
+    setActionFile(null);
   };
-  const closeAction = () => { setAction(null); setActionInput(''); };
+  const closeAction = () => { setAction(null); setActionInput(''); setActionFile(null); };
 
   // ── Proceso de demanda form state ──────────────────────────────────────────
   const [procesoForm, setProcesoForm] = useState({
@@ -601,16 +653,18 @@ function AppJuridicoDashboardInner() {
     },
   });
 
-  // ── Documentos count (graceful fallback) ───────────────────────────────────
+  // ── Documentos del caso (app_juridico_documentos — tabla confirmada en BD) ──
   const { data: docsData = [] } = useQuery({
     queryKey: ['app-juridico-docs', demandaIds],
     enabled: demandaIds.length > 0,
     queryFn: async () => {
       try {
         const { data } = await (supabase as any)
-          .from('app_juridico_documentos').select('id_demanda')
-          .in('id_demanda', demandaIds).eq('activo', true);
-        return (data ?? []) as any[];
+          .from('app_juridico_documentos')
+          .select('id, id_demanda, tipo_documento, nombre_archivo, url_archivo, descripcion, subido_por, fecha_creacion, mime_type, tamano_bytes')
+          .in('id_demanda', demandaIds).eq('activo', true)
+          .order('fecha_creacion', { ascending: false });
+        return (data ?? []) as DocumentoRow[];
       } catch { return []; }
     },
   });
@@ -634,6 +688,15 @@ function AppJuridicoDashboardInner() {
   const docsCountMap = useMemo(() => {
     const map: Record<number, number> = {};
     for (const d of docsData) map[d.id_demanda] = (map[d.id_demanda] || 0) + 1;
+    return map;
+  }, [docsData]);
+
+  const docsMap = useMemo(() => {
+    const map: Record<number, DocumentoRow[]> = {};
+    for (const d of docsData) {
+      if (!map[d.id_demanda]) map[d.id_demanda] = [];
+      map[d.id_demanda].push(d);
+    }
     return map;
   }, [docsData]);
 
@@ -692,9 +755,7 @@ function AppJuridicoDashboardInner() {
       const pendingAmount  = Math.max(0, finalSalePrice - paidAmount);
       const penaltyPct     = Number(d.porcentaje_penalizacion || 0);
 
-      const rawStatus     = (d.estatus_demanda || 'EN_REVISION') as string;
-      const lawsuitStatus: LegalCaseStatus = (Object.keys(STATUS_META) as LegalCaseStatus[]).includes(rawStatus as LegalCaseStatus)
-        ? rawStatus as LegalCaseStatus : 'EN_REVISION';
+      const lawsuitStatus: LegalCaseStatus = parseLawsuitStatus(d.estatus_demanda);
 
       return {
         demandaId:        d.id,
@@ -819,6 +880,7 @@ function AppJuridicoDashboardInner() {
   const selectedTimeline   = selectedRow ? (timelineMap[selectedRow.demandaId] ?? []) : [];
   const selectedAudiencias = selectedRow ? (audienciasMap[selectedRow.demandaId] ?? []) : [];
   const selectedAcuerdos   = selectedRow ? (acuerdosMap[selectedRow.demandaId] ?? []) : [];
+  const selectedDocs       = selectedRow ? (docsMap[selectedRow.demandaId] ?? []) : [];
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -890,6 +952,51 @@ function AppJuridicoDashboardInner() {
     },
     onError: (err: any) => toast.error('Error al actualizar penalización', { description: err.message }),
   });
+
+  const { mutateAsync: uploadDocumento, isPending: uploadingDocumento } = useMutation({
+    mutationFn: async ({
+      demandaId, idAsunto, file, tipoDocumento, descripcion,
+    }: { demandaId: number; idAsunto: string | null; file: File; tipoDocumento: string; descripcion: string }) => {
+      const path = `demanda-${demandaId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('documentos-juridicos')
+        .upload(path, file);
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { error } = await (supabase as any)
+        .from('app_juridico_documentos').insert({
+          id_demanda:     demandaId,
+          id_asunto:      idAsunto ? Number(idAsunto) : null,
+          tipo_documento: tipoDocumento,
+          nombre_archivo: file.name,
+          url_archivo:    path,
+          descripcion:    descripcion || null,
+          subido_por:     profile?.email ?? 'sistema',
+          mime_type:      file.type || null,
+          tamano_bytes:   file.size,
+        });
+      if (error) throw new Error(error.message);
+      await insertTimeline(demandaId, 'DOCUMENTO_SUBIDO', `Documento "${file.name}" subido (${TIPO_DOCUMENTO_LABEL[tipoDocumento] ?? tipoDocumento})`);
+    },
+    onSuccess: () => {
+      toast.success('Documento subido correctamente');
+      qc.invalidateQueries({ queryKey: ['app-juridico-docs'] });
+      qc.invalidateQueries({ queryKey: ['app-juridico-timeline'] });
+      closeAction();
+    },
+    onError: (err: any) => toast.error('Error al subir documento', { description: err.message }),
+  });
+
+  const handleVerDocumento = async (doc: DocumentoRow) => {
+    const { data, error } = await supabase.storage
+      .from('documentos-juridicos')
+      .createSignedUrl(doc.url_archivo, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error('No se pudo generar el enlace del documento', { description: error?.message });
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const { mutateAsync: addAudiencia, isPending: addingAudiencia } = useMutation({
     mutationFn: async ({ demandaId, fecha, descripcion }: { demandaId: number; fecha: string; descripcion: string }) => {
@@ -1499,7 +1606,7 @@ function AppJuridicoDashboardInner() {
                         { label: 'Actualizar % penalidad', icon: FileText,    action: () => handleAction('penalty', selectedRow) },
                         { label: 'Registrar audiencia',  icon: CalendarDays,  action: () => handleAction('audiencia', selectedRow) },
                         { label: 'Registrar acuerdo',    icon: HeartHandshake,action: () => handleAction('acuerdo', selectedRow) },
-                        { label: 'Subir documento',      icon: Upload,        action: () => toast.info('Requiere DDL app_juridico_documentos + Storage configurado', { duration: 4000 }) },
+                        { label: 'Subir documento',      icon: Upload,        action: () => openAction('documento', selectedRow) },
                         { label: 'Descargar expediente', icon: Download,      action: () => navigate(`/admin/portal-escrituracion/expedientes?cuenta=${selectedRow.accountId}`) },
                         {
                           label: 'Marcar como resuelto',
@@ -1528,17 +1635,36 @@ function AppJuridicoDashboardInner() {
               {detailTab === 'documentos' && (
                 <section className="space-y-3">
                   <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Documentos del caso</h3>
-                  {selectedRow.docsCount === 0 ? (
+                  {selectedDocs.length === 0 ? (
                     <div className="text-center py-8">
                       <FileText className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
                       <p className="text-xs text-muted-foreground">Sin documentos cargados</p>
-                      {!hasAppJuridico && <p className="text-[11px] text-muted-foreground/60 mt-1">Ejecuta AJ-4 para habilitar subida de documentos</p>}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">{selectedRow.docsCount} documentos</p>
+                    <div className="space-y-2">
+                      {selectedDocs.map(doc => (
+                        <button
+                          key={doc.id}
+                          onClick={() => handleVerDocumento(doc)}
+                          className="w-full flex items-start gap-2 p-2.5 rounded-lg border border-border hover:bg-muted/30 transition-colors text-left"
+                        >
+                          <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-medium truncate">{doc.nombre_archivo}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium shrink-0">
+                                {TIPO_DOCUMENTO_LABEL[doc.tipo_documento] ?? doc.tipo_documento}
+                              </span>
+                            </div>
+                            {doc.descripcion && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{doc.descripcion}</p>}
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">{doc.subido_por} · {fmtDate(doc.fecha_creacion)}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   )}
                   <button
-                    onClick={() => toast.info('Requiere DDL app_juridico_documentos + Storage configurado', { duration: 4000 })}
+                    onClick={() => openAction('documento', selectedRow)}
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-primary/40 text-sm text-primary hover:bg-primary/5 transition-colors">
                     <Upload className="h-4 w-4" /> Subir documento
                   </button>
@@ -1806,7 +1932,7 @@ function AppJuridicoDashboardInner() {
                       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Acciones proceso</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {[
-                          { label: 'Subir documento',        icon: Upload,      action: () => toast.info('Ejecuta DDL AJ-P2 para habilitar documentos del proceso', { duration: 4000 }) },
+                          { label: 'Subir documento',        icon: Upload,      action: () => openAction('documento', selectedRow) },
                           { label: 'Obs. jurídicas',         icon: ScrollText,  action: () => { openAction('notificacion', selectedRow); } },
                         ].map(({ label, icon: Icon, action }) => (
                           <button key={label} onClick={action}
@@ -1969,6 +2095,49 @@ function AppJuridicoDashboardInner() {
                   <Button className="flex-1" disabled={!actionInput || !actionInput2.trim() || !actionInput3 || addingAcuerdo}
                     onClick={() => addAcuerdo({ demandaId: action.row.demandaId, tipo: actionInput, descripcion: actionInput2.trim(), fecha: actionInput3 })}>
                     {addingAcuerdo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Documento */}
+            {action.type === 'documento' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Subir documento</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Etapa / tipo de documento *</label>
+                    <Select value={actionInput} onValueChange={setActionInput}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar etapa..." /></SelectTrigger>
+                      <SelectContent>
+                        {TIPO_DOCUMENTO_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Archivo *</label>
+                    <input type="file" onChange={e => setActionFile(e.target.files?.[0] ?? null)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring file:mr-3 file:py-1 file:px-2 file:rounded-md file:border-0 file:bg-muted file:text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Descripción</label>
+                    <textarea value={actionInput2} onChange={e => setActionInput2(e.target.value)} rows={2}
+                      placeholder="Nota opcional sobre el documento..."
+                      className="w-full text-sm border border-border rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1" disabled={!actionInput || !actionFile || uploadingDocumento}
+                    onClick={() => actionFile && uploadDocumento({
+                      demandaId: action.row.demandaId,
+                      idAsunto: action.row.fase2?.idAsunto ?? null,
+                      file: actionFile,
+                      tipoDocumento: actionInput,
+                      descripcion: actionInput2.trim(),
+                    })}>
+                    {uploadingDocumento ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Subir'}
                   </Button>
                 </div>
               </>
