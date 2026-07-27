@@ -75,7 +75,7 @@ export function LegalFlowLayout() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathDisabled } = useAllowedMenus();
 
   // Ocultar items cuyo submenú está apagado en BD (activo=false o menú padre inactivo).
   const visibleNavGroups = useMemo(
@@ -83,10 +83,10 @@ export function LegalFlowLayout() {
       navGroups
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => !disabledPaths.has(item.path)),
+          items: group.items.filter((item) => !isPathDisabled(item.path)),
         }))
         .filter((group) => group.items.length > 0),
-    [disabledPaths]
+    [isPathDisabled]
   );
 
   const unreadCount = mockNotifications.filter((n) => !n.read).length;

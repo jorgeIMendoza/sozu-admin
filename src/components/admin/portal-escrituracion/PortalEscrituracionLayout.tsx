@@ -57,11 +57,11 @@ export const PortalEscrituracionLayout = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathDisabled } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Ocultar vistas apagadas en BD (submenu activo=false o menú padre inactivo)
-  const visibleNavItems = navItems.filter((i) => !disabledPaths.has(i.path));
+  const visibleNavItems = navItems.filter((i) => !isPathDisabled(i.path));
 
   const handleNavigate = (path: string) => {
     navigate(path);

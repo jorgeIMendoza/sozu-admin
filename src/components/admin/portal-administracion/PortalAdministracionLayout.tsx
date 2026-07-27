@@ -88,7 +88,7 @@ export const PortalAdministracionLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isSuperAdmin = profile?.rol_nombre === "Super Administrador";
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathDisabled } = useAllowedMenus();
 
   // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
   const visibleNavGroups = useMemo(
@@ -96,10 +96,10 @@ export const PortalAdministracionLayout = () => {
       navGroups
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => !disabledPaths.has(item.path)),
+          items: group.items.filter((item) => !isPathDisabled(item.path)),
         }))
         .filter((group) => group.items.length > 0),
-    [disabledPaths]
+    [isPathDisabled]
   );
 
   const handleNavigate = (path: string) => {

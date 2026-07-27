@@ -18,9 +18,12 @@ export function useEstructuraComisionesSubmenus() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("submenus")
-        .select("id, nombre, vista_front_end, orden")
+        // `menus!inner(activo)`: si se apaga el menú padre, se apagan sus vistas
+        // aunque el submenú siga activo=true.
+        .select("id, nombre, vista_front_end, orden, menus!inner(activo)")
         .eq("menu_id", EC_MENU_ID)
         .eq("activo", true)
+        .eq("menus.activo", true)
         .order("orden");
       if (error) throw error;
       return (data ?? []) as EstructuraComisionesSubmenu[];
