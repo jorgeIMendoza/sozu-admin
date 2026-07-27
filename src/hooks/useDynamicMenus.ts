@@ -61,6 +61,7 @@ import {
    '/admin/administradoras': Wrench,
    '/admin/notarias': ScrollText,
    '/admin/bancos': Landmark,
+   '/admin/socios-bancarios': Landmark,
    '/admin/prospectos': UserSearch,
    '/admin/compradores': Wallet,
    '/admin/vendedores': BadgeDollarSign,
