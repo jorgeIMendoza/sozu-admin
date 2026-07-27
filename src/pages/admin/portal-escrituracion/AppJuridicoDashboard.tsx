@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, Component } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,7 +6,7 @@ import { toast } from 'sonner';
 import {
   Search, Download, RefreshCw, X, CheckCircle2, Clock,
   FileText, CalendarDays, Loader2, Upload, Scale,
-  ChevronRight, MoreHorizontal, Send, MessageSquare,
+  MoreHorizontal, Send, MessageSquare,
   AlertTriangle, HeartHandshake, ArrowRight, Plus, AlertCircle,
   Bell, Shield, Gavel, Building2, FileBadge, ScrollText,
 } from 'lucide-react';
@@ -43,6 +42,7 @@ interface LegalRow {
   accountId:        number;
   accountCode:      string;
   idPropiedad:      number | null;
+  personaId:        number | null;
   proyectoId:       number | null;
   proyectoNombre:   string;
   unitCode:         string;
@@ -93,7 +93,7 @@ interface AbogadoItem {
 }
 
 type ActionType =
-  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo' | 'documento'
+  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo' | 'documento' | 'expediente'
   | 'notificacion' | 'regularizacion' | 'proc_demanda' | 'admision'
   | 'emplazamiento' | 'contestacion' | 'audiencia_proc' | 'sentencia' | 'acuerdo_proc';
 
@@ -127,6 +127,15 @@ const TIPO_DOCUMENTO_OPTIONS: { value: string; label: string }[] = [
 ];
 const TIPO_DOCUMENTO_LABEL: Record<string, string> =
   Object.fromEntries(TIPO_DOCUMENTO_OPTIONS.map(o => [o.value, o.label]));
+
+interface ExpedienteDocItem {
+  key: string;
+  label: string;
+  url: string | null;
+  /** true = app_juridico_documentos (bucket privado, requiere signed URL) */
+  isPrivate: boolean;
+  fecha: string | null;
+}
 
 interface DocumentoRow {
   id: number;
@@ -291,7 +300,6 @@ function AppJuridicoDashboardInner() {
   console.debug('[AppJuridico] component mounted/rendered');
 
   const { profile, isLoading: authLoading } = useAuth();
-  const navigate    = useNavigate();
   const qc          = useQueryClient();
 
   const isAdmin = (profile?.rol_id ?? 99) <= 2;
@@ -669,6 +677,70 @@ function AppJuridicoDashboardInner() {
     },
   });
 
+  // ── "Descargar expediente" — documentos del comprador/caso, sin salir del portal ──
+  // Contrato: tabla documentos por id_cuenta_cobranza (mismo criterio que useNotariaCuentaDetalle.ts).
+  // INE/CURP/CSF/domicilio: tabla documentos por id_persona, mismos IDs de tipos_documento
+  // que EscrituracionExpedientes.tsx OBLIGATORIO_GRUPOS (evita divergencia de criterio).
+  // Notificación: app_juridico_documentos (bucket privado, específico del caso jurídico).
+  const expedienteRow = action?.type === 'expediente' ? action.row : null;
+  const { data: expedienteDocs = [], isLoading: loadingExpedienteDocs } = useQuery({
+    queryKey: ['app-juridico-expediente-docs', expedienteRow?.accountId, expedienteRow?.personaId, expedienteRow?.demandaId],
+    enabled: !!expedienteRow,
+    queryFn: async (): Promise<ExpedienteDocItem[]> => {
+      const row = expedienteRow!;
+      const [contratoRes, kycRes, notifRes] = await Promise.all([
+        (supabase as any).from('documentos')
+          .select('url, fecha_creacion')
+          .eq('id_cuenta_cobranza', row.accountId).eq('id_tipo_documento', 18)
+          .eq('activo', true).eq('es_draft', false)
+          .order('fecha_creacion', { ascending: false }).limit(1),
+        row.personaId
+          ? (supabase as any).from('documentos')
+              .select('id_tipo_documento, url, fecha_creacion')
+              .eq('id_persona', row.personaId).in('id_tipo_documento', [2, 59, 5, 6, 8])
+              .eq('activo', true).eq('es_draft', false)
+              .order('fecha_creacion', { ascending: false })
+          : Promise.resolve({ data: [] as any[] }),
+        (supabase as any).from('app_juridico_documentos')
+          .select('url_archivo, fecha_creacion')
+          .eq('id_demanda', row.demandaId).eq('tipo_documento', 'NOTIFICACION').eq('activo', true)
+          .order('fecha_creacion', { ascending: false }).limit(1),
+      ]);
+
+      const contrato     = (contratoRes.data ?? [])[0];
+      const notificacion = (notifRes.data ?? [])[0];
+      const kycLatest = (ids: number[]) =>
+        (kycRes.data ?? []).find((d: any) => ids.includes(d.id_tipo_documento));
+      const ine       = kycLatest([2, 59]);
+      const curp      = kycLatest([5]);
+      const csf       = kycLatest([6]);
+      const domicilio = kycLatest([8]);
+
+      return [
+        { key: 'contrato',     label: 'Contrato totalmente firmado',              url: contrato?.url ?? null,           isPrivate: false, fecha: contrato?.fecha_creacion ?? null },
+        { key: 'notificacion', label: 'Notificación',                              url: notificacion?.url_archivo ?? null, isPrivate: true,  fecha: notificacion?.fecha_creacion ?? null },
+        { key: 'ine',          label: 'INE',                                       url: ine?.url ?? null,                isPrivate: false, fecha: ine?.fecha_creacion ?? null },
+        { key: 'curp',         label: 'CURP',                                      url: curp?.url ?? null,               isPrivate: false, fecha: curp?.fecha_creacion ?? null },
+        { key: 'csf',          label: 'Constancia de situación fiscal (CSF)',      url: csf?.url ?? null,                isPrivate: false, fecha: csf?.fecha_creacion ?? null },
+        { key: 'domicilio',    label: 'Comprobante de domicilio',                  url: domicilio?.url ?? null,          isPrivate: false, fecha: domicilio?.fecha_creacion ?? null },
+      ];
+    },
+  });
+
+  const handleVerExpedienteDoc = async (doc: ExpedienteDocItem) => {
+    if (!doc.url) return;
+    if (!doc.isPrivate) {
+      window.open(doc.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const { data, error } = await supabase.storage.from('documentos-juridicos').createSignedUrl(doc.url, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error('No se pudo generar el enlace del documento', { description: error?.message });
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
   // ── Acuerdos (graceful fallback) ───────────────────────────────────────────
   const { data: acuerdosData = [], refetch: refetchAcuerdos } = useQuery({
     queryKey: ['app-juridico-acuerdos', demandaIds],
@@ -762,6 +834,7 @@ function AppJuridicoDashboardInner() {
         accountId:        d.id_cuenta_cobranza ?? 0,
         accountCode:      d.id_cuenta_cobranza ? `CC-${String(d.id_cuenta_cobranza).padStart(6, '0')}` : '—',
         idPropiedad:      d.id_propiedad ?? null,
+        personaId:        personaId ?? null,
         fase2:            d.id_propiedad != null ? (fase2ByPropiedad.get(d.id_propiedad) ?? null) : null,
         proyectoId,
         proyectoNombre,
@@ -1607,7 +1680,7 @@ function AppJuridicoDashboardInner() {
                         { label: 'Registrar audiencia',  icon: CalendarDays,  action: () => handleAction('audiencia', selectedRow) },
                         { label: 'Registrar acuerdo',    icon: HeartHandshake,action: () => handleAction('acuerdo', selectedRow) },
                         { label: 'Subir documento',      icon: Upload,        action: () => openAction('documento', selectedRow) },
-                        { label: 'Descargar expediente', icon: Download,      action: () => navigate(`/admin/portal-escrituracion/expedientes?cuenta=${selectedRow.accountId}`) },
+                        { label: 'Descargar expediente', icon: Download,      action: () => openAction('expediente', selectedRow) },
                         {
                           label: 'Marcar como resuelto',
                           icon: CheckCircle2,
@@ -1947,12 +2020,6 @@ function AppJuridicoDashboardInner() {
                 );
               })()}
             </div>
-
-            <div className="p-4 border-t border-border shrink-0">
-              <Button className="w-full gap-2" onClick={() => navigate('/admin/portal-escrituracion/demandas')}>
-                Ir a Demandas <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
         )}
       </div>
@@ -2139,6 +2206,45 @@ function AppJuridicoDashboardInner() {
                     })}>
                     {uploadingDocumento ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Subir'}
                   </Button>
+                </div>
+              </>
+            )}
+
+            {/* Descargar expediente */}
+            {action.type === 'expediente' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Documentos del expediente</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                {loadingExpedienteDocs ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {expedienteDocs.map(doc => (
+                      <div key={doc.key} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-border">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className={cn('h-4 w-4 shrink-0', doc.url ? 'text-primary' : 'text-muted-foreground/40')} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{doc.label}</p>
+                            {!doc.url && (
+                              <p className="text-[11px] text-muted-foreground">
+                                {doc.key === 'notificacion' ? 'No se ha realizado' : 'No disponible'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {doc.url && (
+                          <Button size="sm" variant="outline" className="shrink-0" onClick={() => handleVerExpedienteDoc(doc)}>
+                            Ver
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cerrar</Button>
                 </div>
               </>
             )}
