@@ -60,37 +60,23 @@ function formatTelefono(digits: string): string {
   return `+${raw.slice(0, raw.length - 10)} ${local}`;
 }
 
-// Trae usuarios activos de los roles indicados con su teléfono resuelto:
-// usuarios.telefono y, si está vacío, fallback a personas.telefono.
-async function fetchUsuariosDeRoles(rolIds: number[]): Promise<PoolItem[]> {
-  if (rolIds.length === 0) return [];
+type UsuarioRow = {
+  nombre: string | null;
+  email: string | null;
+  rol_id: number | null;
+  telefono: string | null;
+  clave_pais_telefono: string | null;
+  id_persona: number | null;
+};
 
-  // Paginado: PostgREST corta en 1000 filas y el rol Cliente puede superarlo.
-  const usuarios: {
-    nombre: string | null;
-    email: string | null;
-    rol_id: number | null;
-    telefono: string | null;
-    clave_pais_telefono: string | null;
-    id_persona: number | null;
-  }[] = [];
-  for (let page = 0; ; page++) {
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("nombre, email, rol_id, telefono, clave_pais_telefono, id_persona")
-      .in("rol_id", rolIds)
-      .eq("activo", true)
-      .not("email", "is", null)
-      .range(page * 1000, (page + 1) * 1000 - 1);
-    if (error) break;
-    const batch = data || [];
-    usuarios.push(...(batch as typeof usuarios));
-    if (batch.length === 0) break;
-  }
+const USUARIO_TEL_SELECT = "nombre, email, rol_id, telefono, clave_pais_telefono, id_persona";
 
+// Resuelve el teléfono de cada usuario: usuarios.telefono y, si está vacío,
+// fallback a personas.telefono. La lada sale de paises.clave_pais_telefono
+// (columna char, de ahí el trim) y se guarda solo en dígitos: 527221514185.
+async function resolverTelefonos(usuarios: UsuarioRow[]): Promise<PoolItem[]> {
   if (usuarios.length === 0) return [];
 
-  // Fallback a personas para quienes no tienen teléfono en usuarios
   const personaIdsFaltantes = [
     ...new Set(
       usuarios
@@ -111,7 +97,7 @@ async function fetchUsuariosDeRoles(rolIds: number[]): Promise<PoolItem[]> {
   ]);
 
   const personaById = new Map((personas || []).map(p => [p.id, p]));
-  const ladaByPais = new Map((paises || []).map(p => [p.id, p.clave_pais_telefono]));
+  const ladaByPais = new Map((paises || []).map(p => [(p.id || "").trim(), p.clave_pais_telefono]));
 
   const out: PoolItem[] = [];
   for (const u of usuarios) {
@@ -133,6 +119,47 @@ async function fetchUsuariosDeRoles(rolIds: number[]): Promise<PoolItem[]> {
     });
   }
   return out;
+}
+
+// Trae usuarios activos de los roles indicados, con teléfono resuelto.
+async function fetchUsuariosDeRoles(rolIds: number[]): Promise<PoolItem[]> {
+  if (rolIds.length === 0) return [];
+
+  // Paginado: PostgREST corta en 1000 filas y el rol Cliente puede superarlo.
+  const usuarios: UsuarioRow[] = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select(USUARIO_TEL_SELECT)
+      .in("rol_id", rolIds)
+      .eq("activo", true)
+      .not("email", "is", null)
+      .range(page * 1000, (page + 1) * 1000 - 1);
+    if (error) break;
+    const batch = data || [];
+    usuarios.push(...(batch as UsuarioRow[]));
+    if (batch.length === 0) break;
+  }
+
+  return resolverTelefonos(usuarios);
+}
+
+// Teléfono por email, sin depender del rol. Necesario para los destinatarios ya
+// guardados en el aviso: pueden venir de un rol que ya no está marcado o de una
+// fila con id_rol NULL, y en ese caso no los cubre fetchUsuariosDeRoles.
+async function fetchTelefonosPorEmail(emails: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (emails.length === 0) return map;
+
+  const rows = await fetchAllChunked<UsuarioRow, string>(emails, (chunk, from, to) =>
+    supabase.from("usuarios").select(USUARIO_TEL_SELECT).in("email", chunk).range(from, to)
+  );
+
+  const items = await resolverTelefonos(rows);
+  for (const item of items) {
+    if (item.telefono) map.set(item.email.toLowerCase(), item.telefono);
+  }
+  return map;
 }
 
 interface Props {
@@ -339,6 +366,21 @@ export function AvisoDestinatariosSection({
             }
           } else {
             merged.push(u);
+          }
+        }
+      }
+
+      // Segunda pasada por email: cubre a los destinatarios guardados cuyo rol no
+      // quedó marcado (o cuya fila tiene id_rol NULL), que la carga por rol no ve.
+      const emailsSinTelefono = merged.filter(d => !d.telefono).map(d => d.email);
+      if (emailsSinTelefono.length > 0) {
+        const telByEmail = await fetchTelefonosPorEmail(emailsSinTelefono);
+        for (const item of merged) {
+          if (item.telefono) continue;
+          const tel = telByEmail.get(item.email.toLowerCase());
+          if (tel) {
+            item.telefono = tel;
+            telefonosRellenados = true;
           }
         }
       }
