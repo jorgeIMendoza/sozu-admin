@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Plus, Loader2, Users, Mail, ChevronDown, ChevronUp, Search, CheckSquare, Square, Building2, Layers, Home } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchAllChunked } from "@/lib/postgrest-batch";
 
 interface Destinatario {
   nombre: string;
@@ -37,6 +38,102 @@ interface Rol {
 }
 
 const CLIENTE_ROL_ID = 23;
+
+// Teléfono listo para WhatsApp: 10 dígitos + lada del país del usuario.
+// El edge `evaluar-triggers-evento` normaliza a 521XXXXXXXXXX, así que basta con
+// entregar los dígitos con la lada correcta cuando el país no es MX.
+function construirTelefono(raw: string | null | undefined, lada: string | null | undefined): string {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  // Ya incluye lada (>10 dígitos): se deja tal cual.
+  if (digits.length > 10) return digits;
+  const ladaDigits = String(lada || "+52").replace(/\D/g, "") || "52";
+  return `${ladaDigits}${digits}`;
+}
+
+// Presentación legible del teléfono almacenado (dígitos con lada): +52 7221514185
+function formatTelefono(digits: string): string {
+  const raw = String(digits || "").replace(/\D/g, "");
+  if (!raw) return "";
+  if (raw.length <= 10) return raw;
+  const local = raw.slice(-10);
+  return `+${raw.slice(0, raw.length - 10)} ${local}`;
+}
+
+// Trae usuarios activos de los roles indicados con su teléfono resuelto:
+// usuarios.telefono y, si está vacío, fallback a personas.telefono.
+async function fetchUsuariosDeRoles(rolIds: number[]): Promise<PoolItem[]> {
+  if (rolIds.length === 0) return [];
+
+  // Paginado: PostgREST corta en 1000 filas y el rol Cliente puede superarlo.
+  const usuarios: {
+    nombre: string | null;
+    email: string | null;
+    rol_id: number | null;
+    telefono: string | null;
+    clave_pais_telefono: string | null;
+    id_persona: number | null;
+  }[] = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("nombre, email, rol_id, telefono, clave_pais_telefono, id_persona")
+      .in("rol_id", rolIds)
+      .eq("activo", true)
+      .not("email", "is", null)
+      .range(page * 1000, (page + 1) * 1000 - 1);
+    if (error) break;
+    const batch = data || [];
+    usuarios.push(...(batch as typeof usuarios));
+    if (batch.length === 0) break;
+  }
+
+  if (usuarios.length === 0) return [];
+
+  // Fallback a personas para quienes no tienen teléfono en usuarios
+  const personaIdsFaltantes = [
+    ...new Set(
+      usuarios
+        .filter(u => !(u.telefono || "").trim() && u.id_persona)
+        .map(u => u.id_persona!)
+    ),
+  ];
+
+  const [personas, { data: paises }] = await Promise.all([
+    personaIdsFaltantes.length > 0
+      ? fetchAllChunked<{ id: number; telefono: string | null; clave_pais_telefono: string | null }, number>(
+          personaIdsFaltantes,
+          (chunk, from, to) =>
+            supabase.from("personas").select("id, telefono, clave_pais_telefono").in("id", chunk).range(from, to)
+        )
+      : Promise.resolve([] as { id: number; telefono: string | null; clave_pais_telefono: string | null }[]),
+    supabase.from("paises").select("id, clave_pais_telefono"),
+  ]);
+
+  const personaById = new Map((personas || []).map(p => [p.id, p]));
+  const ladaByPais = new Map((paises || []).map(p => [p.id, p.clave_pais_telefono]));
+
+  const out: PoolItem[] = [];
+  for (const u of usuarios) {
+    if (!u.email) continue;
+    let tel = (u.telefono || "").trim();
+    let clave = (u.clave_pais_telefono || "").trim();
+
+    if (!tel && u.id_persona) {
+      const persona = personaById.get(u.id_persona);
+      tel = (persona?.telefono || "").trim();
+      if (!clave) clave = (persona?.clave_pais_telefono || "").trim();
+    }
+
+    out.push({
+      nombre: u.nombre || u.email,
+      email: u.email,
+      rolIds: u.rol_id ? [u.rol_id] : [],
+      telefono: construirTelefono(tel, ladaByPais.get(clave || "MX") || "+52"),
+    });
+  }
+  return out;
+}
 
 interface Props {
   roles: Rol[];
@@ -223,31 +320,40 @@ export function AvisoDestinatariosSection({
         merged.push({ nombre: d.nombre, email: d.email, telefono: (d as any).telefono || "", rolIds: [] });
       }
 
-      if (selectedRoles.length > 0) {
-        const { data: usuarios } = await supabase
-          .from("usuarios")
-          .select("nombre, email, rol_id")
-          .in("rol_id", selectedRoles)
-          .eq("activo", true)
-          .not("email", "is", null);
+      let telefonosRellenados = false;
 
-        if (usuarios) {
-          for (const u of usuarios) {
-            if (!u.email) continue;
-            const existing = merged.find(p => p.email === u.email);
-            if (existing) {
-              if (u.rol_id && !existing.rolIds.includes(u.rol_id)) {
-                existing.rolIds.push(u.rol_id);
-              }
-            } else {
-              merged.push({ nombre: u.nombre || u.email, email: u.email, rolIds: u.rol_id ? [u.rol_id] : [] });
+      if (selectedRoles.length > 0) {
+        const usuarios = await fetchUsuariosDeRoles(selectedRoles);
+
+        for (const u of usuarios) {
+          const existing = merged.find(p => p.email === u.email);
+          if (existing) {
+            for (const rid of u.rolIds) {
+              if (!existing.rolIds.includes(rid)) existing.rolIds.push(rid);
             }
+            // El teléfono guardado en el aviso puede estar vacío (avisos creados
+            // antes de este fix): se rellena con el del usuario.
+            if (!existing.telefono && u.telefono) {
+              existing.telefono = u.telefono;
+              telefonosRellenados = true;
+            }
+          } else {
+            merged.push(u);
           }
         }
       }
 
       setPool(merged);
       setSelectedEmails(dbEmails);
+
+      // Propaga los teléfonos recién resueltos al padre para que se persistan al guardar.
+      if (telefonosRellenados) {
+        onDestinatariosChange(
+          merged
+            .filter(d => dbEmails.has(d.email))
+            .map(d => ({ nombre: d.nombre, email: d.email, telefono: d.telefono || "" }))
+        );
+      }
     };
 
     initPool();
@@ -326,24 +432,22 @@ export function AvisoDestinatariosSection({
 
     if (!wasSelected) {
       setLoadingRolId(rolId);
-      const { data: usuarios } = await supabase
-        .from("usuarios")
-        .select("nombre, email")
-        .eq("rol_id", rolId)
-        .eq("activo", true)
-        .not("email", "is", null);
+      const usuarios = await fetchUsuariosDeRoles([rolId]);
 
-      if (usuarios && usuarios.length > 0) {
+      if (usuarios.length > 0) {
         let addedCount = 0;
+        let sinTelefono = 0;
         const updatedPool = [...pool];
 
         for (const u of usuarios) {
-          if (!u.email) continue;
+          if (!u.telefono) sinTelefono++;
           const existing = updatedPool.find(p => p.email === u.email);
           if (existing) {
             if (!existing.rolIds.includes(rolId)) existing.rolIds.push(rolId);
+            // Completa el teléfono si el item ya estaba en el pool sin él.
+            if (!existing.telefono && u.telefono) existing.telefono = u.telefono;
           } else {
-            updatedPool.push({ nombre: u.nombre || u.email, email: u.email, rolIds: [rolId] });
+            updatedPool.push({ ...u, rolIds: [rolId] });
             addedCount++;
           }
         }
@@ -352,7 +456,7 @@ export function AvisoDestinatariosSection({
 
         const newSelected = new Set(selectedEmails);
         for (const u of usuarios) {
-          if (u.email) newSelected.add(u.email);
+          newSelected.add(u.email);
         }
         setSelectedEmails(newSelected);
         notifyParent(newSelected, updatedPool);
@@ -360,7 +464,9 @@ export function AvisoDestinatariosSection({
         if (addedCount > 0) {
           toast({
             title: `${addedCount} destinatarios agregados`,
-            description: `Se cargaron los usuarios activos del rol seleccionado`,
+            description: sinTelefono > 0
+              ? `Se cargaron los usuarios activos del rol. ${sinTelefono} sin teléfono (solo recibirán email).`
+              : `Se cargaron los usuarios activos del rol seleccionado`,
           });
         }
       }
@@ -434,7 +540,8 @@ export function AvisoDestinatariosSection({
     const newItem: PoolItem = {
       nombre: manualNombre.trim() || manualEmail.trim(),
       email: manualEmail.trim(),
-      telefono: manualTelefono.trim(),
+      // Mismo formato que los teléfonos traídos de BD (dígitos con lada; MX por default)
+      telefono: construirTelefono(manualTelefono, "+52"),
       rolIds: [],
     };
     const updatedPool = [...pool, newItem];
@@ -469,6 +576,7 @@ export function AvisoDestinatariosSection({
         (statusFilter === "unselected" && !selectedEmails.has(d.email));
       const matchesRole = roleFilter === "all" ||
         (roleFilter === "manual" && d.rolIds.length === 0) ||
+        (roleFilter === "sin-telefono" && !d.telefono) ||
         d.rolIds.includes(Number(roleFilter));
       return matchesSearch && matchesStatus && matchesRole;
     });
@@ -479,6 +587,8 @@ export function AvisoDestinatariosSection({
   const visibleItems = showAll ? filteredPool : filteredPool.slice(0, VISIBLE_COUNT);
   const hasMore = filteredPool.length > VISIBLE_COUNT;
   const selectedCount = selectedEmails.size;
+  // Seleccionados sin teléfono: solo pueden recibir email, nunca WhatsApp.
+  const selectedSinTelefono = pool.filter(d => selectedEmails.has(d.email) && !d.telefono).length;
 
   return (
     <div className="space-y-4">
@@ -622,6 +732,15 @@ export function AvisoDestinatariosSection({
             <Mail className="h-3 w-3 mr-1" />
             {selectedCount} de {filteredPool.length} seleccionado{selectedCount !== 1 ? "s" : ""}
           </Badge>
+          {selectedSinTelefono > 0 && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-400"
+              title="Estos destinatarios no tienen teléfono registrado: recibirán el aviso solo por email."
+            >
+              ⚠ {selectedSinTelefono} sin teléfono
+            </Badge>
+          )}
           {pool.length > 0 && (
             <div className="flex gap-1">
               <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={selectAll}>
@@ -655,6 +774,7 @@ export function AvisoDestinatariosSection({
                     <SelectItem key={r.id} value={String(r.id)}>{r.nombre}</SelectItem>
                   ))}
                   {hasManualItems && <SelectItem value="manual">Manual</SelectItem>}
+                  <SelectItem value="sin-telefono">Sin teléfono</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -709,8 +829,15 @@ export function AvisoDestinatariosSection({
                     <span className="truncate flex-1">
                       <span className="font-medium">{d.nombre}</span>
                       <span className="text-muted-foreground ml-1 text-xs">({d.email})</span>
-                      {d.telefono && (
-                        <span className="text-muted-foreground ml-1 text-[10px]">📱 {d.telefono}</span>
+                      {d.telefono ? (
+                        <span className="text-muted-foreground ml-1 text-[10px]">📱 {formatTelefono(d.telefono)}</span>
+                      ) : (
+                        <span
+                          className="ml-1 text-[10px] text-amber-600 dark:text-amber-400"
+                          title="Sin teléfono registrado: este destinatario solo recibirá el aviso por email."
+                        >
+                          ⚠ Sin teléfono
+                        </span>
                       )}
                       {clientProjects && clientProjects.length > 0 && (
                         <span className="text-muted-foreground ml-1 text-[10px]">
