@@ -24,6 +24,7 @@ interface Ejecucion {
   total_errores: number | null;
   estado: string;
   detalle_error: string | null;
+  ejecutado_por: string | null;
   avisos: { nombre: string } | null;
 }
 
@@ -42,6 +43,13 @@ const estadoColors: Record<string, "default" | "secondary" | "destructive" | "ou
   completado: "default",
   error: "destructive",
   parcial: "secondary",
+  enviando: "secondary",
+};
+
+const triggerLabels: Record<string, string> = {
+  evento: "Evento (automático)",
+  manual: "Manual",
+  cron: "Cron",
 };
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -118,6 +126,7 @@ export default function Ejecuciones() {
   const [isLoading, setIsLoading] = useState(true);
   const [filterAviso, setFilterAviso] = useState<string>("all");
   const [filterEstado, setFilterEstado] = useState<string>("all");
+  const [filterTrigger, setFilterTrigger] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [errorDetail, setErrorDetail] = useState<Ejecucion | null>(null);
   const [copied, setCopied] = useState(false);
@@ -132,10 +141,11 @@ export default function Ejecuciones() {
   const fetchData = async () => {
     setIsLoading(true);
     const [{ data: ejData }, { data: avData }] = await Promise.all([
+      // Sin filtro por tipo_trigger: la vista debe mostrar tanto las ejecuciones
+      // automáticas (evento/cron) como los envíos manuales desde "Enviar Avisos".
       supabase
         .from("avisos_ejecuciones")
         .select("*, avisos(nombre)")
-        .eq("tipo_trigger", "evento")
         .order("fecha_ejecucion", { ascending: false })
         .limit(500),
       supabase.from("avisos").select("id, nombre").order("nombre"),
@@ -150,9 +160,17 @@ export default function Ejecuciones() {
     fetchData();
   }, []);
 
+  // Tipos de trigger presentes en los datos ('evento', 'manual', 'cron'…), para
+  // no hardcodear el catálogo del filtro.
+  const triggerOptions = useMemo(
+    () => [...new Set(ejecuciones.map((e) => e.tipo_trigger).filter(Boolean))].sort(),
+    [ejecuciones]
+  );
+
   const filtered = ejecuciones.filter((e) => {
     if (filterAviso !== "all" && e.id_aviso !== parseInt(filterAviso)) return false;
     if (filterEstado !== "all" && e.estado !== filterEstado) return false;
+    if (filterTrigger !== "all" && e.tipo_trigger !== filterTrigger) return false;
     if (searchTerm) {
       const name = e.avisos?.nombre || "";
       const detail = e.detalle_error || "";
@@ -224,8 +242,18 @@ export default function Ejecuciones() {
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
             <SelectItem value="completado">Completado</SelectItem>
+            <SelectItem value="enviando">Enviando</SelectItem>
             <SelectItem value="parcial">Parcial</SelectItem>
             <SelectItem value="error">Error</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterTrigger} onValueChange={setFilterTrigger}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filtrar por trigger" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los triggers</SelectItem>
+            {triggerOptions.map((t) => (
+              <SelectItem key={t} value={t}>{triggerLabels[t] || t}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -237,6 +265,7 @@ export default function Ejecuciones() {
               <TableHead>Fecha</TableHead>
               <TableHead>Aviso</TableHead>
               <TableHead>Trigger</TableHead>
+              <TableHead>Ejecutado por</TableHead>
               <TableHead className="text-right">Destinatarios</TableHead>
               <TableHead className="text-right">Enviados</TableHead>
               <TableHead className="text-right">Errores</TableHead>
@@ -246,15 +275,18 @@ export default function Ejecuciones() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8">Cargando...</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay ejecuciones</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay ejecuciones</TableCell></TableRow>
             ) : pagedEjec.map((e) => (
               <TableRow key={e.id}>
                 <TableCell className="text-sm">{new Date(e.fecha_ejecucion).toLocaleString("es-MX")}</TableCell>
                 <TableCell className="font-medium">{e.avisos?.nombre || "—"}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{e.tipo_trigger}</Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground break-all">
+                  {e.ejecutado_por || "—"}
                 </TableCell>
                 <TableCell className="text-right">{e.total_destinatarios ?? 0}</TableCell>
                 <TableCell className="text-right">{e.total_enviados ?? 0}</TableCell>
