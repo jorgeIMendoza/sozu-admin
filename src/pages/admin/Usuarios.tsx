@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock, Check, ChevronsUpDown, Pencil, Building2, Mail } from "lucide-react";
+import { Plus, Search, Shield, UserCheck, UserX, Key, Loader2, RotateCcw, Lock, Check, ChevronsUpDown, Pencil, Building2, Mail, Phone } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,7 +93,7 @@ interface UsersTableProps {
   onActivate: (email: string) => void;
   onDeactivate: (email: string) => void;
   onChangeRole: (email: string, name: string, roleId: number | null) => void;
-  onEditUser: (email: string, name: string, roleId: number | null, personaId: number | null) => void;
+  onEditUser: (email: string, name: string, roleId: number | null, personaId: number | null, onlyPhone?: boolean) => void;
   onResendConfirmation: (email: string) => void;
   isResendingConfirmation: boolean;
   isInactiveTab?: boolean;
@@ -328,6 +328,21 @@ function UsersTable({
                         )}
                       </>
                     )}
+                    {isCurrentUser && !isInactiveTab && (
+                      /* La propia cuenta no se edita ni se desactiva (aplica también al
+                         superusuario), pero sí debe poder registrar su teléfono: sin él
+                         los avisos por WhatsApp nunca lo alcanzan. */
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEditUser(usuario.email, usuario.nombre || '', usuario.rol_id, usuario.id_persona, true)}
+                        title="Editar mi teléfono"
+                        className="hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-600"
+                      >
+                        <Phone className="h-3 w-3 mr-1" />
+                        Mi teléfono
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -352,6 +367,8 @@ export default function Usuarios() {
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null);
   const [selectedUserRoleId, setSelectedUserRoleId] = useState<number | null>(null);
   const [selectedUserPersonaId, setSelectedUserPersonaId] = useState<number | null>(null);
+  // true cuando se abre la edición de la propia cuenta: solo se permite el teléfono
+  const [editUserOnlyPhone, setEditUserOnlyPhone] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     email: "",
     nombre: "",
@@ -1532,11 +1549,12 @@ export default function Usuarios() {
                         setSelectedUserRoleId(roleId);
                         setIsChangeRoleDialogOpen(true);
                       }}
-                      onEditUser={(email, name, roleId, personaId) => {
+                      onEditUser={(email, name, roleId, personaId, onlyPhone) => {
                         setSelectedUserEmail(email);
                         setSelectedUserName(name);
                         setSelectedUserRoleId(roleId || null);
                         setSelectedUserPersonaId(personaId || null);
+                        setEditUserOnlyPhone(!!onlyPhone);
                         setIsEditUserDialogOpen(true);
                       }}
                       onResendConfirmation={(email) => resendConfirmationMutation.mutate(email)}
@@ -1613,11 +1631,12 @@ export default function Usuarios() {
                         setSelectedUserRoleId(roleId);
                         setIsChangeRoleDialogOpen(true);
                       }}
-                      onEditUser={(email, name, roleId, personaId) => {
+                      onEditUser={(email, name, roleId, personaId, onlyPhone) => {
                         setSelectedUserEmail(email);
                         setSelectedUserName(name);
                         setSelectedUserRoleId(roleId || null);
                         setSelectedUserPersonaId(personaId || null);
+                        setEditUserOnlyPhone(!!onlyPhone);
                         setIsEditUserDialogOpen(true);
                       }}
                       onResendConfirmation={(email) => resendConfirmationMutation.mutate(email)}
@@ -2234,12 +2253,14 @@ export default function Usuarios() {
               setSelectedUserName(null);
               setSelectedUserRoleId(null);
               setSelectedUserPersonaId(null);
+              setEditUserOnlyPhone(false);
             }
           }}
           userEmail={selectedUserEmail}
           userName={selectedUserName}
           userRoleId={selectedUserRoleId ?? undefined}
           userPersonaId={selectedUserPersonaId ?? undefined}
+          onlyPhone={editUserOnlyPhone}
         />
       )}
 
