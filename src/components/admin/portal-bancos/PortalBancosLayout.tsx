@@ -53,7 +53,7 @@ export const PortalBancosLayout = () => {
     .toLowerCase()
     .startsWith("supervisor banco");
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathDisabled } = useAllowedMenus();
 
   // Equipo: visible para Super Admin y para el Admin del banco (Supervisor).
   // Bancos: solo Super Admin (alta/baja de convenios).
@@ -76,7 +76,7 @@ export const PortalBancosLayout = () => {
   const NAV = [
     ...visibles,
     ...guaranteed.filter((a) => !visibles.some((v) => v.path === a.path)),
-  ].filter((i) => !disabledPaths.has(i.path));
+  ].filter((i) => !isPathDisabled(i.path));
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";

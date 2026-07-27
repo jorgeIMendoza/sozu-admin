@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/sozu-logo";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
@@ -95,7 +96,21 @@ const PortalSocioBancarioLayoutInner = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { canReturnToAdmin } = useCanReturnToAdmin();
+  const { isPathDisabled } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // El sidebar es hardcodeado, así que hay que respetar el apagado en BD
+  // (submenus.activo=false / menú padre inactivo) igual que el resto de portales.
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => !isPathDisabled(item.path)),
+        }))
+        .filter((group) => group.items.length > 0),
+    [isPathDisabled]
+  );
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -134,7 +149,7 @@ const PortalSocioBancarioLayoutInner = () => {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div key={group.label}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
               {group.label}

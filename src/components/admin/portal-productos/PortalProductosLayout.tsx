@@ -59,7 +59,7 @@ const PortalProductosLayoutInner = () => {
   const { impersonatedUser, isImpersonating } = usePortalProductosImpersonation();
   const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathDisabled } = useAllowedMenus();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Ocultar items cuyo submenú está apagado en BD (activo=false o menú padre inactivo).
@@ -68,10 +68,10 @@ const PortalProductosLayoutInner = () => {
       navGroups
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => !disabledPaths.has(item.path)),
+          items: group.items.filter((item) => !isPathDisabled(item.path)),
         }))
         .filter((group) => group.items.length > 0),
-    [disabledPaths]
+    [isPathDisabled]
   );
 
   // Carga de datos REALES de productos → store (reemplaza el mock).

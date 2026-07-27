@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Ambassador, AmbassadorAuditEvent, AmbassadorNotification, AdvisorNotification,
   Advisor, AmbassadorsSettings, AssignmentStatus, CommissionStatus,
@@ -132,6 +133,7 @@ const AmbassadorsContext = createContext<Ctx | null>(null);
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function AmbassadorsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
@@ -235,10 +237,20 @@ export function AmbassadorsProvider({ children }: { children: React.ReactNode })
     await Promise.all([loadAmbassadors(), loadReferrals(), loadAdvisors()]);
   }, [loadAmbassadors, loadReferrals, loadAdvisors]);
 
+  // Este provider envuelve TODAS las rutas de App.tsx, también las públicas
+  // (/auth/login, /oferta/*, /registro…). Sin este guard, al montar disparaba
+  // refresh() sin sesión y consultaba como `anon` el directorio de embajadores,
+  // los referidos (con PII de leads) y `usuarios` de roles internos 1/2/9/19
+  // —nombre, email y teléfono— en cada carga de la pantalla de login.
+  // Los datos solo se usan en /admin, así que se cargan únicamente con sesión.
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     refresh().finally(() => setLoading(false));
-  }, [refresh]);
+  }, [refresh, user]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 

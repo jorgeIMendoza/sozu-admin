@@ -38,7 +38,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
 };
 
 export function usePortalNavItems() {
-  const { disabledPaths } = useAllowedMenus();
+  const { isPathDisabled } = useAllowedMenus();
   const query = useQuery<PortalNavItem[]>({
     queryKey: ["portal-nav-submenus"],
     queryFn: async () => {
@@ -63,8 +63,8 @@ export function usePortalNavItems() {
   // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
   // La query ya filtra `submenus.activo=true`; esto cubre el menú padre inactivo.
   const data = useMemo(
-    () => query.data?.filter((item) => !disabledPaths.has(item.route)),
-    [query.data, disabledPaths],
+    () => query.data?.filter((item) => !isPathDisabled(item.route)),
+    [query.data, isPathDisabled],
   );
 
   return { ...query, data };

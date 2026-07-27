@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
+import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
@@ -88,6 +89,7 @@ export const AgentPortalLayout = () => {
   const location  = useLocation();
   const navigate  = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
+  const { isPathDisabled } = useAllowedMenus();
   const { hasInmobiliaria, isLoading: inmobLoading } = useAgentHasInmobiliaria();
   const fullAccess = useAgentPortalFullAccess();
   const { theme, setTheme } = useTheme();
@@ -128,13 +130,20 @@ export const AgentPortalLayout = () => {
   const { data: allTabs = FALLBACK_TABS, isLoading: tabsLoading } = useQuery({
     queryKey: ['agent-portal-tabs'],
     queryFn: async () => {
+      // `menus!inner(activo)`: si se apaga el menú padre en Administrar Menús,
+      // se apagan todas sus vistas aunque el submenú siga activo=true.
       const { data, error } = await (supabase as any)
         .from('submenus')
-        .select('nombre, vista_front_end, orden')
+        .select('nombre, vista_front_end, orden, menus!inner(activo)')
         .eq('menu_id', AGENT_MENU_ID)
         .eq('activo', true)
+        .eq('menus.activo', true)
         .order('orden');
-      if (error || !data || data.length === 0) return FALLBACK_TABS;
+      // Fallback SOLO si la query falló (fail-open por conectividad). Cero filas
+      // significa "todo apagado en BD" y debe respetarse: antes revivía los tabs
+      // hardcodeados y las vistas apagadas volvían al sidebar.
+      if (error) return FALLBACK_TABS;
+      if (!data) return FALLBACK_TABS;
       return data.map((s: any) => ({
         path: s.vista_front_end,
         label: s.nombre,
@@ -169,15 +178,19 @@ export const AgentPortalLayout = () => {
   );
 
   // Menú de la última sesión de este usuario: evita el skeleton al recargar.
+  // Se filtra contra las rutas apagadas en BD para que un cache viejo no pinte
+  // vistas que ya se desactivaron en Administrar Menús.
   const cacheEmail = profile?.email ?? null;
   const cachedTabs = useMemo(
     () =>
-      (readTabsCache(cacheEmail) || []).map((t) => ({
-        path: t.path,
-        label: t.label,
-        icon: iconMap[t.path] || Home,
-      })),
-    [cacheEmail]
+      (readTabsCache(cacheEmail) || [])
+        .filter((t) => !isPathDisabled(t.path))
+        .map((t) => ({
+          path: t.path,
+          label: t.label,
+          icon: iconMap[t.path] || Home,
+        })),
+    [cacheEmail, isPathDisabled]
   );
 
   const tabs = menuReady ? resolvedTabs : cachedTabs;
