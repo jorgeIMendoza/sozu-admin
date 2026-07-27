@@ -86,7 +86,7 @@ const PortalCondominioLayoutInner = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navFromDb = usePortalNav(CONDOMINIO_MENU_ID, iconMap, LayoutDashboard);
-  const { isPathAllowed, disabledPaths } = useAllowedMenus();
+  const { isPathAllowed, isPathDisabled } = useAllowedMenus();
   const { impersonatedRolId, isImpersonating } = useCondominioImpersonation();
 
   // Al impersonar: paths que el ROL impersonado puede LEER (submenus_permisos),
@@ -138,7 +138,7 @@ const PortalCondominioLayoutInner = () => {
     }
     // Menús por rol: solo los permitidos para el rol efectivo, y ocultar los
     // apagados en BD (submenu activo=false o menú padre inactivo).
-    return items.filter((i) => isEffectivelyAllowed(i.path) && !disabledPaths.has(i.path));
+    return items.filter((i) => isEffectivelyAllowed(i.path) && !isPathDisabled(i.path));
   })();
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
