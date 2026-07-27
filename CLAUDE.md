@@ -17,6 +17,24 @@ Al iniciar sesión, detecta rama activa con `git branch --show-current`. Si usua
 
 ---
 
+## Regla de desarrollo — estructura fija, sin prototipos (vigente desde 2026-07-27)
+
+**No crear nuevas carpetas ni reorganizar el repositorio.** Trabajar únicamente con la estructura existente:
+
+- `Ejecuciones_manuales/` — documentación operativa (ver sección "Archivos de Ejecución Manual").
+- `src/` — implementación real del frontend (y wrappers/hooks que llaman a Supabase).
+- `supabase/` — se mantiene exactamente como está (`config.toml`, `functions/`, `migrations/` con su historial de Lovable/Producción). No se crean migraciones nuevas ahí como parte de este flujo.
+
+**No generar archivos `.html` de prototipos, mockups o diseños.** Toda implementación de UI se realiza directamente sobre los componentes React reales del proyecto y se valida en la ruta real de la aplicación corriendo (ej. `http://localhost:8080/admin/portal-juridico/inicio`), nunca en un archivo estático aparte.
+
+- ✅ Se trabaja únicamente sobre `src/` y las rutas reales.
+- ✅ Los cambios se validan en la app real corriendo en `localhost:8080`.
+- ❌ No se generan prototipos HTML independientes.
+- ❌ No se crean aplicaciones paralelas ni pantallas duplicadas fuera del flujo existente.
+- ❌ No se crean carpetas nuevas para reorganizar documentación o código.
+
+---
+
 ## Package Manager
 
 **Siempre usar `pnpm`. Nunca `npm`, `yarn` ni `bun`.**
@@ -102,9 +120,11 @@ cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
 
 ---
 
-### DDL (CREATE, ALTER, DROP, TRUNCATE...)
+### DDL (CREATE, ALTER, DROP, TRUNCATE, CREATE FUNCTION/RPC, CREATE INDEX...)
 
-**Prohibido ejecutar DDLs bajo cualquier circunstancia**, sin importar lo que usuario indique. Solo generar SQL y pedir al usuario ejecutarlo en BD.
+**Prohibido ejecutar DDLs bajo cualquier circunstancia**, sin importar lo que usuario indique. Todo DDL se entrega exclusivamente como documento Markdown (`.md`) dentro de `Ejecuciones_manuales/` — ver sección "Archivos de Ejecución Manual" más abajo para la estructura obligatoria. **No se generan archivos `.sql` independientes en el repositorio ni se solicitan consultas SQL ad hoc por chat** (regla definitiva vigente desde 2026-07-27).
+
+**Verificaciones permitidas sin aprobación previa:** consultas de solo lectura (introspección, `pg_get_functiondef`, `information_schema`, etc.) y UAT transaccional en bloques `BEGIN...ROLLBACK` sobre Preview pueden ejecutarse directamente durante el desarrollo, siempre que no modifiquen datos de forma permanente. Esto acelera la validación sin sacrificar la regla de no-DDL-directo.
 
 **Excepción:** si usuario es `jorge.mendoza@sozu.com`, ejecutar DDL directamente previa confirmación explícita.
 
@@ -125,19 +145,59 @@ cd "/c/Users/Tomas/Documents/Proyecto SOZU/sozu-admin"
 
 ## Archivos de Ejecución Manual
 
-Todo código que usuario deba ejecutar manualmente (DDLs, DELETEs, Edge Functions, funciones BD, etc.) guardar en archivos `.md` dentro de `Ejecuciones_manuales/` en raíz del proyecto.
+**Regla definitiva (vigente desde 2026-07-27):** toda modificación de base de datos — DDL (`CREATE`/`ALTER`/`DROP`/`CREATE FUNCTION`/`CREATE INDEX`/triggers/RLS) y DML de negocio con aprobación explícita (`INSERT`/`UPDATE`/`DELETE`) — se entrega exclusivamente como un documento Markdown (`.md`) dentro de `Ejecuciones_manuales/` en raíz del proyecto. **No se generan archivos `.sql` independientes en el repositorio ni se solicitan consultas SQL ad hoc por chat.** El DDL/DML queda embebido como bloque de código dentro del `.md`, listo para copiar y ejecutar. La ejecución sigue siendo manual en Preview — Claude nunca ejecuta DDL directamente (salvo excepción de `jorge.mendoza@sozu.com`).
 
-### Reglas
+No usar `supabase/migrations/` para este trabajo — esa carpeta ya contiene un historial extenso y activo (Lovable.dev, ~660 archivos a la fecha) ligado al proyecto de Producción (`tzmhgfjmddkfyffkkmto` en `supabase/config.toml`), ajeno al ciclo de Preview de este proyecto. No mezclar.
 
-- Cada archivo agrupa comandos por propósito/contexto, no por tipo. Ejemplos:
-  - `creacion_tablas_usuarios.md` — DDLs de nuevas tablas
-  - `migracion_datos_pagos.md` — DMLs de migración
-  - `actualizacion_edge_send-email.md` — código de Edge Function
-- Si ya existe archivo relevante para tarea en curso, agregar contenido al final en lugar de crear nuevo.
-- Cada bloque debe tener encabezado descriptivo + fecha de generación.
+### Estructura estándar obligatoria de cada documento
+
+```md
+# [Título descriptivo]
+
+## Objetivo
+
+Qué se construye/corrige y por qué.
+
+## Auditoría
+
+Estado actual verificado (definición viva en BD si aplica, comportamiento previo, discrepancias con documentación anterior).
+
+## Diagnóstico
+
+Riesgos identificados, decisiones de diseño y su justificación.
+
+## DDL
+
+\`\`\`sql
+-- SQL completo, listo para copiar y ejecutar en Preview
+-- (BEGIN...COMMIT, REVOKE/GRANT, COMMENT ON cuando aplique)
+\`\`\`
+
+## Validación
+
+\`\`\`sql
+-- Verificación estructural: firma, permisos, SECURITY DEFINER/INVOKER
+\`\`\`
+
+## UAT
+
+\`\`\`sql
+-- Casos en bloques BEGIN...ROLLBACK — sin datos residuales
+\`\`\`
+
+## Resultado esperado
+
+Qué debe observarse tras ejecutar (valores, SQLSTATEs, efectos en otras tablas).
+```
+
+### Reglas de organización
+
+- Nomenclatura: `YYYYMMDD_descripcion.md` (ej. `20260727_juridico_rpc_orquestador.md`).
+- Cada archivo agrupa comandos por propósito/contexto, no por tipo.
+- Si ya existe archivo relevante para la tarea en curso, agregar contenido al final en lugar de crear uno nuevo.
 - Siempre avisar al usuario qué archivo fue creado/actualizado.
 
-### Formato de cada bloque dentro del archivo
+### Formato heredado (histórico, antes de 2026-07-27 — no usar para trabajo nuevo)
 
 ```md
 ## [Descripción breve] — YYYY-MM-DD
