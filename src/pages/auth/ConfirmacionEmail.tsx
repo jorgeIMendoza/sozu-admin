@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EmailOtpType } from '@supabase/supabase-js';
-import { CheckCircle, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Mail, AlertCircle, Loader2, MailCheck } from 'lucide-react';
 import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_PUBLISHABLE_KEY } from '@/lib/config';
 import { getPortalHost, type PortalKey } from '@/lib/portalUrls';
 
 const resolvePortalKey = (portal: string | null): PortalKey => {
@@ -61,6 +62,32 @@ const verifyWithTypeFallback = async (tokenHash: string, primary: EmailOtpType) 
   return { error: lastError };
 };
 
+type EstadoConfirmacion = {
+  existe: boolean;
+  confirmado: boolean;
+  confirmadoEnUsuarios: boolean | null;
+  rolId: number | null;
+};
+
+// Se llama sin sesión válida (el enlace acaba de fallar). `invoke` mandaría el
+// token de sesión que haya en localStorage, y uno vencido devuelve 401 antes de
+// entrar a la función: forzamos la anon key en el header.
+const consultarEstadoConfirmacion = async (email: string): Promise<EstadoConfirmacion | null> => {
+  const { data, error } = await supabase.functions.invoke<EstadoConfirmacion>(
+    'estado-confirmacion-email',
+    {
+      body: { email },
+      headers: { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
+    },
+  );
+
+  if (error) {
+    console.error('estado-confirmacion-email error:', error);
+    return null;
+  }
+  return data ?? null;
+};
+
 const getOtpType = (type: string | null): EmailOtpType => {
   switch (type) {
     case 'signup':
@@ -80,8 +107,47 @@ export default function ConfirmacionEmail() {
   const [ctaUrl, setCtaUrl] = useState(`${getPortalHost('inmobiliarias')}/auth/change-password`);
   const [ctaLabel, setCtaLabel] = useState('Ir a Cambiar Contraseña');
   const [loginUrl, setLoginUrl] = useState(`${getPortalHost('inmobiliarias')}/auth/login`);
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'ya-confirmado' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
+  const [emailEnlace, setEmailEnlace] = useState<string | null>(null);
+  const [puedeReenviar, setPuedeReenviar] = useState(false);
+  const [reenvio, setReenvio] = useState<'idle' | 'enviando' | 'enviado' | 'error'>('idle');
+  const [reenvioMsg, setReenvioMsg] = useState('');
+
+  const reenviarConfirmacion = async () => {
+    if (!emailEnlace) return;
+    setReenvio('enviando');
+    setReenvioMsg('');
+
+    const { data, error } = await supabase.functions.invoke<{ success?: boolean; message?: string }>(
+      'reenviar-confirmacion-email',
+      {
+        body: { email: emailEnlace },
+        headers: { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
+      },
+    );
+
+    if (error || data?.success === false) {
+      console.error('reenviar-confirmacion-email error:', error, data);
+      // Con status != 2xx, invoke deja `data` en null y el cuerpo viaja en
+      // error.context (Response); de ahí sale el motivo real del rechazo.
+      let motivo = data?.message ?? '';
+      const respuesta = (error as { context?: Response } | null)?.context;
+      if (!motivo && respuesta && typeof respuesta.json === 'function') {
+        motivo = await respuesta
+          .clone()
+          .json()
+          .then((cuerpo: { message?: string }) => cuerpo?.message ?? '')
+          .catch(() => '');
+      }
+      setReenvio('error');
+      setReenvioMsg(motivo || 'No pudimos reenviar el correo. Contacta a soporte.');
+      return;
+    }
+
+    setReenvio('enviado');
+    setReenvioMsg('Te enviamos un correo nuevo. Revisa tu bandeja de entrada y la carpeta de spam.');
+  };
 
   useEffect(() => {
     if (calledRef.current) return;
@@ -100,6 +166,7 @@ export default function ConfirmacionEmail() {
     setCtaUrl(getPortalUrl(portal, destination));
     setCtaLabel(destination === 'login' ? 'Ir a Iniciar Sesión' : 'Ir a Cambiar Contraseña');
     setLoginUrl(getPortalUrl(portal, 'login'));
+    setEmailEnlace(email?.toLowerCase().trim() || null);
 
     if (portal && requestedHost !== currentHost) {
       const nextUrl = new URL(window.location.href);
@@ -131,7 +198,23 @@ export default function ConfirmacionEmail() {
           );
 
           if (!alreadyConfirmed) {
-            setErrorMsg('El enlace de confirmación expiró o ya fue utilizado. Pide al administrador que reenvíe la confirmación.');
+            // El token está vencido o consumido, pero eso NO dice si la cuenta
+            // quedó confirmada: muchos usuarios se crean ya confirmados en Auth
+            // y para ellos el enlace es decorativo. Preguntamos el estado real
+            // antes de acusar un fallo que no existe.
+            const estado = email ? await consultarEstadoConfirmacion(email) : null;
+
+            if (estado?.confirmado) {
+              setStatus('ya-confirmado');
+              return;
+            }
+
+            setErrorMsg(
+              estado?.existe === false
+                ? 'No encontramos una cuenta con este correo. Contacta a tu asesor para que la registre de nuevo.'
+                : 'El enlace de confirmación venció (dura 24 horas) o ya fue utilizado. Solicita uno nuevo con el botón de abajo.',
+            );
+            setPuedeReenviar(Boolean(email) && estado?.existe !== false);
             setStatus('error');
             return;
           }
@@ -154,8 +237,15 @@ export default function ConfirmacionEmail() {
         }
       }
 
+      // post-confirmacion-registro exige prueba de titularidad del correo: el
+      // token de la sesión que dejó la verificación, o el token_hash del enlace
+      // si aún no se consumió. getSession() espera a que el cliente termine de
+      // hidratar la sesión (incluido el fragmento #access_token de los enlaces
+      // que pasan por /auth/v1/verify), si no `invoke` mandaría solo la anon key.
+      await supabase.auth.getSession();
+
       const { data, error } = await supabase.functions.invoke('post-confirmacion-registro', {
-        body: { email, nombre },
+        body: { email, nombre, token_hash: verified ? null : tokenHash, type: otpType },
       });
 
       if (error) {
@@ -271,6 +361,44 @@ export default function ConfirmacionEmail() {
           </>
         )}
 
+        {status === 'ya-confirmado' && (
+          <>
+            <div
+              className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full"
+              style={{ background: 'hsl(145 35% 95%)' }}
+            >
+              <MailCheck className="h-8 w-8" style={{ color: 'hsl(145 35% 51%)' }} />
+            </div>
+
+            <h1 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
+              Tu correo ya está confirmado
+            </h1>
+
+            <p className="text-sm mb-6" style={{ color: 'hsl(0 0% 45%)' }}>
+              Este enlace ya se había usado, pero tu cuenta está activa. Puedes iniciar sesión con
+              las credenciales que recibiste por correo.
+            </p>
+
+            <div
+              className="flex items-start gap-3 px-5 py-4 rounded-xl text-left text-sm mb-7"
+              style={{ background: 'hsl(210 80% 97%)', color: 'hsl(210 80% 30%)' }}
+            >
+              <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <p>
+                Si no encuentras el correo con tus credenciales, usa{' '}
+                <strong>¿Olvidaste tu contraseña?</strong> en la pantalla de inicio de sesión.
+              </p>
+            </div>
+
+            <a
+              href={loginUrl}
+              className="login-btn-primary flex items-center justify-center gap-2 no-underline"
+            >
+              Ir a Iniciar Sesión
+            </a>
+          </>
+        )}
+
         {status === 'error' && (
           <>
             {/* Error icon */}
@@ -290,10 +418,40 @@ export default function ConfirmacionEmail() {
               {errorMsg}
             </p>
 
+            {reenvioMsg && (
+              <p
+                className="text-sm mb-5 px-4 py-3 rounded-xl"
+                style={
+                  reenvio === 'error'
+                    ? { background: 'hsl(0 70% 97%)', color: 'hsl(0 70% 40%)' }
+                    : { background: 'hsl(145 35% 96%)', color: 'hsl(145 35% 30%)' }
+                }
+              >
+                {reenvioMsg}
+              </p>
+            )}
+
             {/* CTA */}
+            {puedeReenviar && reenvio !== 'enviado' && (
+              <button
+                type="button"
+                onClick={reenviarConfirmacion}
+                disabled={reenvio === 'enviando'}
+                className="login-btn-primary flex items-center justify-center gap-2 w-full mb-3 disabled:opacity-60"
+              >
+                {reenvio === 'enviando' && <Loader2 className="h-4 w-4 animate-spin" />}
+                {reenvio === 'enviando' ? 'Enviando…' : 'Reenviar confirmación'}
+              </button>
+            )}
+
             <a
               href={loginUrl}
-              className="login-btn-primary flex items-center justify-center gap-2 no-underline"
+              className={
+                puedeReenviar && reenvio !== 'enviado'
+                  ? 'text-sm font-semibold no-underline hover:underline'
+                  : 'login-btn-primary flex items-center justify-center gap-2 no-underline'
+              }
+              style={puedeReenviar && reenvio !== 'enviado' ? { color: 'hsl(0 0% 35%)' } : undefined}
             >
               Ir a Iniciar Sesión
             </a>
