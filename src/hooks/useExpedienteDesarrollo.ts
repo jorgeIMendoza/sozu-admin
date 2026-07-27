@@ -60,7 +60,8 @@ export function useExpedienteDesarrollo({
 }) {
   const qc = useQueryClient();
   const [uploadingTipoId, setUploadingTipoId] = useState<number | null>(null);
-  const [uploadErrorByTipo, setUploadErrorByTipo] = useState<Record<number, string | null>>({});
+  const [uploadProgressByTipo, setUploadProgressByTipo] = useState<Record<number, { current: number; total: number } | null>>({});
+  const [uploadErrorByTipo, setUploadErrorByTipo] = useState<Record<number, string[] | null>>({});
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
   const [downloadResult, setDownloadResult] = useState<BuildZipResult | null>(null);
@@ -96,46 +97,54 @@ export function useExpedienteDesarrollo({
 
   const totalDocs = grupos.reduce((s, g) => s + g.docs.length, 0);
 
-  // ── Upload ──────────────────────────────────────────────────────────────────
+  // ── Upload (uno o varios archivos a la vez) ────────────────────────────────
 
-  const upload = async (tipoId: number, file: File) => {
-    if (!proyectoId) return;
+  const uploadSingleFile = async (tipoId: number, file: File): Promise<void> => {
+    const safeName = sanitizeFilename(file.name);
+    const path = `expediente_desarrollo/${proyectoId}/${tipoId}-${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file);
+    if (uploadError) throw new Error(uploadError.message);
+
+    const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(path);
+
+    const { error: insertError } = await (supabase as any).from('documentos').insert({
+      id_proyecto: proyectoId,
+      id_tipo_documento: tipoId,
+      url: urlData.publicUrl,
+      id_estatus_verificacion: 1, // Pendiente — mismo default que CancelCuentaDialog.tsx
+      activo: true,
+      es_draft: false,
+    });
+    if (insertError) {
+      // FK violation típica cuando el catálogo tipos_documento aún no tiene la fila
+      // (ver Ejecuciones_manuales/20260727_notaria_expediente_desarrollo_tipos_documento.md).
+      const msg = insertError.code === '23503'
+        ? 'El tipo de documento no existe en el catálogo. Ejecuta la migración pendiente de tipos_documento antes de subir.'
+        : insertError.message;
+      throw new Error(msg);
+    }
+  };
+
+  const upload = async (tipoId: number, files: File[]) => {
+    if (!proyectoId || files.length === 0) return;
     setUploadingTipoId(tipoId);
     setUploadErrorByTipo(prev => ({ ...prev, [tipoId]: null }));
-    try {
-      const safeName = sanitizeFilename(file.name);
-      const path = `expediente_desarrollo/${proyectoId}/${tipoId}-${Date.now()}-${safeName}`;
-      const { error: uploadError } = await supabase.storage.from('documentos').upload(path, file);
-      if (uploadError) throw new Error(uploadError.message);
 
-      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(path);
-
-      const { error: insertError } = await (supabase as any).from('documentos').insert({
-        id_proyecto: proyectoId,
-        id_tipo_documento: tipoId,
-        url: urlData.publicUrl,
-        id_estatus_verificacion: 1, // Pendiente — mismo default que CancelCuentaDialog.tsx
-        activo: true,
-        es_draft: false,
-      });
-      if (insertError) {
-        // FK violation típica cuando el catálogo tipos_documento aún no tiene la fila
-        // (ver Ejecuciones_manuales/20260727_notaria_expediente_desarrollo_tipos_documento.md).
-        const msg = insertError.code === '23503'
-          ? 'El tipo de documento no existe en el catálogo. Ejecuta la migración pendiente de tipos_documento antes de subir.'
-          : insertError.message;
-        throw new Error(msg);
+    const errors: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgressByTipo(prev => ({ ...prev, [tipoId]: { current: i + 1, total: files.length } }));
+      try {
+        await uploadSingleFile(tipoId, files[i]);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Error desconocido al subir el documento.';
+        errors.push(files.length > 1 ? `${files[i].name}: ${msg}` : msg);
       }
-
-      await qc.invalidateQueries({ queryKey });
-    } catch (err) {
-      setUploadErrorByTipo(prev => ({
-        ...prev,
-        [tipoId]: err instanceof Error ? err.message : 'Error desconocido al subir el documento.',
-      }));
-    } finally {
-      setUploadingTipoId(null);
     }
+
+    if (errors.length > 0) setUploadErrorByTipo(prev => ({ ...prev, [tipoId]: errors }));
+    await qc.invalidateQueries({ queryKey });
+    setUploadingTipoId(null);
+    setUploadProgressByTipo(prev => ({ ...prev, [tipoId]: null }));
   };
 
   // ── Download all ────────────────────────────────────────────────────────────
@@ -182,6 +191,7 @@ export function useExpedienteDesarrollo({
     isError,
     upload,
     uploadingTipoId,
+    uploadProgressByTipo,
     uploadErrorByTipo,
     downloadAll,
     isDownloading,

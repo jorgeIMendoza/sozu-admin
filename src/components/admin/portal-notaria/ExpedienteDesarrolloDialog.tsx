@@ -35,7 +35,7 @@ export function ExpedienteDesarrolloDialog({
 }: ExpedienteDesarrolloDialogProps) {
   const {
     grupos, totalDocs, isLoading, isError,
-    upload, uploadingTipoId, uploadErrorByTipo,
+    upload, uploadingTipoId, uploadProgressByTipo, uploadErrorByTipo,
     downloadAll, isDownloading, downloadProgress, downloadResult, downloadError,
   } = useExpedienteDesarrollo({ proyectoId, proyectoNombre, usuarioEmail, enabled: open });
 
@@ -45,9 +45,9 @@ export function ExpedienteDesarrolloDialog({
     ? Math.round((downloadProgress.current / Math.max(downloadProgress.total, 1)) * 100)
     : 0;
 
-  const handleFileSelected = (tipoId: number, file: File | undefined) => {
-    if (!file) return;
-    upload(tipoId, file);
+  const handleFileSelected = (tipoId: number, fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    upload(tipoId, Array.from(fileList));
   };
 
   return (
@@ -120,10 +120,11 @@ export function ExpedienteDesarrolloDialog({
                 <input
                   ref={el => { fileInputRefs.current[g.tipoId] = el; }}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={e => {
-                    handleFileSelected(g.tipoId, e.target.files?.[0]);
-                    e.target.value = ''; // permite reintentar con el mismo archivo tras un error
+                    handleFileSelected(g.tipoId, e.target.files);
+                    e.target.value = ''; // permite reintentar con los mismos archivos tras un error
                   }}
                 />
                 <Button
@@ -134,13 +135,17 @@ export function ExpedienteDesarrolloDialog({
                   onClick={() => fileInputRefs.current[g.tipoId]?.click()}
                 >
                   {uploadingTipoId === g.tipoId
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Subiendo…</>
-                    : <><Upload className="h-3.5 w-3.5" /> Subir documento</>}
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Subiendo {uploadProgressByTipo[g.tipoId]?.current ?? 0}/{uploadProgressByTipo[g.tipoId]?.total ?? 0}…</>
+                    : <><Upload className="h-3.5 w-3.5" /> Subir documento(s)</>}
                 </Button>
                 {uploadErrorByTipo[g.tipoId] && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-destructive">
-                    <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>{uploadErrorByTipo[g.tipoId]}</span>
+                  <div className="space-y-1">
+                    {uploadErrorByTipo[g.tipoId]!.map((msg, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-destructive">
+                        <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>{msg}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
