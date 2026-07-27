@@ -1360,8 +1360,8 @@ export default function AdministrarAvisos() {
                   <p className="text-muted-foreground italic">Sin roles configurados (los destinatarios se calculan dinámicamente según la fuente del evento).</p>
                 ) : (
                   (() => {
-                    // correos puede venir como { destinatarios: [{email,nombre}] } o como array directo
-                    const extraerCorreos = (c: any): { email: string; nombre?: string }[] => {
+                    // correos puede venir como { destinatarios: [{email,nombre,telefono}] } o como array directo
+                    const extraerCorreos = (c: any): { email: string; nombre?: string; telefono?: string }[] => {
                       if (!c) return [];
                       if (Array.isArray(c)) {
                         return c.map((x: any) => typeof x === 'string' ? { email: x } : x).filter((x: any) => x?.email);
@@ -1378,6 +1378,9 @@ export default function AdministrarAvisos() {
                     const totalCorreos = rolesConCorreos.reduce((acc, r) => acc + r.correos.length, 0);
                     const esEvento = detailAviso.modo_trigger === 'evento';
                     const todosCorreos = rolesConCorreos.flatMap(r => r.correos);
+                    // Solo importa marcar "sin teléfono" cuando el aviso usa WhatsApp
+                    const usaWhatsapp = detailAviso.canal === 'whatsapp' || detailAviso.canal === 'ambos';
+                    const sinTelefono = todosCorreos.filter(c => !(c.telefono || '').trim()).length;
 
                     // CASO 1: Aviso por evento con correos específicos
                     // → La lista manual opera como whitelist sobre el cliente real del acuerdo
@@ -1391,11 +1394,23 @@ export default function AdministrarAvisos() {
                               Whitelist de <strong>{totalCorreos}</strong> correo{totalCorreos === 1 ? '' : 's'}: solo se notifica a los clientes que cumplan la condición y cuyo email esté en esta lista
                             </span>
                           </div>
+                          {usaWhatsapp && sinTelefono > 0 && (
+                            <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                              <span className="pl-5">
+                                ⚠ {sinTelefono} de {totalCorreos} sin teléfono: esos destinatarios solo recibirán email.
+                              </span>
+                            </div>
+                          )}
                           <ul className="text-xs text-muted-foreground space-y-0.5 pl-5">
                             {mostrar.map((c, i) => (
                               <li key={i}>
                                 {c.nombre ? <><strong className="text-foreground/80">{c.nombre}</strong> — </> : null}
                                 {c.email}
+                                {(c.telefono || '').trim() ? (
+                                  <span className="ml-1">📱 {c.telefono}</span>
+                                ) : (
+                                  <span className="ml-1 text-amber-600 dark:text-amber-400">⚠ sin teléfono</span>
+                                )}
                               </li>
                             ))}
                             {todosCorreos.length > mostrar.length && (
