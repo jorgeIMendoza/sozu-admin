@@ -130,7 +130,7 @@ function EventosPanel() {
                 <TableCell className="font-medium">
                   {lifecycleLabel[r.etapa_ciclo_vida] ?? r.etapa_ciclo_vida}
                   {r.etapa_ciclo_vida === "mql" && (
-                    <Badge className="ml-2 text-[9px] bg-amber-500/15 text-amber-700 dark:text-amber-300 border-transparent uppercase">Prioridad Rodrigo</Badge>
+                    <Badge className="ml-2 text-[9px] bg-amber-500/15 text-amber-700 dark:text-amber-300 border-transparent uppercase">Prioridad</Badge>
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-center w-8">→</TableCell>
