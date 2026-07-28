@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  RESERVATION_TOKEN_PARAM,
+  parseReservationToken,
+  withReservationToken,
+} from "@/lib/offers/reservation-token";
 import { useOfferById, useOfferStore } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
@@ -12,6 +17,9 @@ import OfferFooter from "@/components/offer/OfferFooter";
 const ApartarDirectoCapturePage = () => {
   const { offerToken } = useParams<{ offerToken: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Credencial del link personal del cliente: sin ella las RPC públicas no responden.
+  const reservationToken = parseReservationToken(searchParams.get(RESERVATION_TOKEN_PARAM));
 
   const isNumericToken = !!offerToken && !isNaN(parseInt(offerToken, 10));
   const mockOffer = useOfferById(offerToken ?? "");
@@ -80,7 +88,7 @@ const ApartarDirectoCapturePage = () => {
       });
       formalReservationId = fr.id;
     }
-    navigate(`/reservar/${formalReservationId}/wizard`);
+    navigate(withReservationToken(`/reservar/${formalReservationId}/wizard`, reservationToken));
   };
 
   // Paso 1: persiste nombre/teléfono del lead en BD (RPC SECURITY DEFINER anon).
@@ -89,12 +97,14 @@ const ApartarDirectoCapturePage = () => {
   const handleSaveData = async (data: { fullName: string; phoneDigits: string; countryCode: string }) => {
     if (!offer) return false;
     try {
-      const { error } = await (supabase as any).rpc("update_lead_datos", {
+      const { data: ok, error } = await (supabase as any).rpc("update_lead_datos", {
         p_oferta_id: Number(offer.id),
         p_nombre: data.fullName,
         p_telefono: data.phoneDigits,
+        // Sin token la RPC devuelve false y no escribe nada (fallo cerrado).
+        p_token: reservationToken,
       });
-      return !error;
+      return !error && ok !== false;
     } catch {
       return false;
     }

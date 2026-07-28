@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MifielSigningDialog } from "@/components/admin/MifielSigningDialog";
-import { FaceMatchTestDialog } from "@/components/admin/FaceMatchTestDialog";
+import { FaceVerifyDialog } from "@/components/admin/FaceVerifyDialog";
 import { ModalViewer } from "@/components/ui/modal-viewer";
 import { SignaturePadDialog } from "@/components/admin/SignaturePadDialog";
 import { Input } from "@/components/ui/input";
@@ -44,8 +44,6 @@ import {
   CaptureFlash,
   SelfieCameraOverlay,
   DocCameraOverlay,
-  VerificationComparator,
-  type VerificationResult,
 } from "@/components/admin/DocumentVerification";
 
 interface AgentOnboardingStepDialogProps {
@@ -342,8 +340,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const [capturedFront, setCapturedFront] = useState<string | null>(null);
   const [showFlash, setShowFlash] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
-  const [verificationDocId, setVerificationDocId] = useState<number | null>(null);
   const [capturedDocUrls, setCapturedDocUrls] = useState<{ front?: string; back?: string; passport?: string }>({});
   const capturedDocUrlsRef = useRef<{ front?: string; back?: string; passport?: string }>({});
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -365,8 +361,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const [docView, setDocView] = useState<{ url: string; nombre: string } | null>(null);
   // Visor de la identificación: una sola vista con todas sus caras (frente y reverso).
   const [identityView, setIdentityView] = useState<{ titulo: string; imagenes: { url: string; etiqueta: string }[] } | null>(null);
-  // Prueba de comparación facial local (Human): no altera el estatus del expediente.
-  const [faceTest, setFaceTest] = useState<{ url: string; label: string } | null>(null);
+  // Verificación facial local (Human). `modo: 'oficial'` guarda el resultado en el
+  // expediente; `modo: 'prueba'` solo muestra métricas para calibrar.
+  const [faceVerify, setFaceVerify] = useState<
+    { url: string; label: string; tipos: number[]; modo: 'oficial' | 'prueba' } | null
+  >(null);
   const [agentSignaturePadOpen, setAgentSignaturePadOpen] = useState(false);
   const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null);
   const [pendingSignAction, setPendingSignAction] = useState<"firmar" | "continuar" | null>(null);
@@ -757,20 +756,15 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   };
 
   /**
-   * Verificación biométrica sobre la identificación YA cargada: no vuelve a pedir el
-   * documento, solo la selfie, y la compara con las fotos que ya están en el expediente
-   * (`verificar-documento-identidad`). Al aceptar el resultado, los documentos quedan
+   * Verificación de identidad sobre la identificación YA cargada: no vuelve a pedir el
+   * documento, solo compara tu rostro con la foto del expediente. La comparación corre
+   * localmente en el navegador (`@vladmandic/human`); al pasar, los documentos quedan
    * con `id_estatus_verificacion = 2` y se habilita la firma de la carta.
    */
-  const iniciarVerificacionBiometrica = async () => {
+  const iniciarVerificacionBiometrica = () => {
     const pasaporte = getDocForType(PASAPORTE_DOC_TYPE);
     const frente = getDocForType(2);
-    const reverso = getDocForType(3);
     const usaPasaporte = identityMode === 'pasaporte' ? !!pasaporte : !frente && !!pasaporte;
-
-    const urls = usaPasaporte
-      ? { passport: pasaporte?.url as string | undefined }
-      : { front: frente?.url as string | undefined, back: reverso?.url as string | undefined };
     const docPrincipal = usaPasaporte ? pasaporte : frente;
 
     if (!docPrincipal?.url) {
@@ -778,11 +772,12 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       return;
     }
 
-    capturedDocUrlsRef.current = urls;
-    setCapturedDocUrls(urls);
-    setVerificationResult(null);
-    setVerificationDocId(docPrincipal.id);
-    await startCamera('selfie');
+    setFaceVerify({
+      url: docPrincipal.url,
+      label: usaPasaporte ? 'Pasaporte' : 'INE frente',
+      tipos: usaPasaporte ? [PASAPORTE_DOC_TYPE] : [...INE_DOC_TYPES],
+      modo: 'oficial',
+    });
   };
 
   // Camera functions
@@ -792,12 +787,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     setCapturedFront(null);
     activeVerifyCallsRef.current = 0;
     setVerifying(false);
-
-    if (step !== 'selfie') {
-      setVerificationResult(null);
-      setVerificationDocId(null);
-    }
-
     autoCaptureLockRef.current = false;
     try {
       const facingMode = step === 'selfie' ? 'user' : 'environment';
@@ -884,32 +873,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     }
   };
 
-  // Valida el documento contra el servicio de verificación de identidad
-  const verifyDocument = async (imageUrl: string, expectedType: string, selfieUrl?: string) => {
-    activeVerifyCallsRef.current += 1;
-    setVerifying(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('verificar-documento-identidad', {
-        body: { imageUrl, expectedType, selfieUrl },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data as VerificationResult;
-    } catch (err: any) {
-      console.error("Error verificando documento:", err);
-      toast.error("Error verificando documento", {
-        duration: 8000,
-        description: err.message || "Ocurrió un error inesperado. Intenta de nuevo.",
-      });
-      return null;
-    } finally {
-      activeVerifyCallsRef.current = Math.max(0, activeVerifyCallsRef.current - 1);
-      if (activeVerifyCallsRef.current === 0) {
-        setVerifying(false);
-      }
-    }
-  };
-
   // Procesa un blob ya capturado: sube + avanza de paso / verifica el documento.
   const processShot = async (blob: Blob, step: 'front' | 'back' | 'passport' | 'selfie') => {
     if (step === 'front') {
@@ -935,26 +898,12 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           capturedDocUrlsRef.current = next;
           return next;
         });
-        setVerificationDocId(result.docId);
         stopCamera();
-        // Pre-verifica el documento mostrando el spinner de validación
-        const urls = capturedDocUrlsRef.current;
-        const [frontCheck, backCheck] = await Promise.all([
-          urls.front ? verifyDocument(urls.front, 'ine_frente') : Promise.resolve(null),
-          verifyDocument(result.url, 'ine_reverso'),
-        ]);
-        const preResult = frontCheck ? {
-          ...frontCheck,
-          numero_identificacion: backCheck?.numero_identificacion || frontCheck.numero_identificacion,
-        } : backCheck;
-        if (preResult && !preResult.is_valid_document) {
-          // Not a valid INE — show result immediately, no selfie
-          setVerificationResult(preResult);
-          toast.error("El documento no es una identificación válida (INE/Pasaporte).", { duration: 6000 });
-          autoCaptureLockRef.current = false;
-        } else {
-          toast.success("INE reverso capturado. Ahora toma una selfie.", { duration: 4000 });
-          setTimeout(() => startCamera('selfie'), 300);
+        const frenteUrl = capturedDocUrlsRef.current.front;
+        toast.success("INE capturada. Ahora verifica tu identidad.", { duration: 4000 });
+        autoCaptureLockRef.current = false;
+        if (frenteUrl) {
+          setFaceVerify({ url: frenteUrl, label: 'INE frente', tipos: [...INE_DOC_TYPES], modo: 'oficial' });
         }
       } else {
         autoCaptureLockRef.current = false;
@@ -968,99 +917,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           capturedDocUrlsRef.current = next;
           return next;
         });
-        setVerificationDocId(result.docId);
         stopCamera();
-        // Pre-verifica el documento mostrando el spinner de validación
-        const preResult = await verifyDocument(result.url, 'pasaporte');
-        if (preResult && !preResult.is_valid_document) {
-          // Not a valid passport — show result immediately, no selfie
-          setVerificationResult(preResult);
-          toast.error("El documento no es una identificación válida (INE/Pasaporte).", { duration: 6000 });
-          autoCaptureLockRef.current = false;
-        } else {
-          toast.success("Pasaporte capturado. Ahora toma una selfie.", { duration: 4000 });
-          setTimeout(() => startCamera('selfie'), 300);
-        }
-      } else {
+        toast.success("Pasaporte capturado. Ahora verifica tu identidad.", { duration: 4000 });
         autoCaptureLockRef.current = false;
-      }
-    } else if (step === 'selfie') {
-      const file = new File([blob], `selfie_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      const selfieResult = await uploadAndGetUrl(SELFIE_DOC_TYPE, file);
-      if (selfieResult) {
-        stopCamera();
-        // Use ref for fresh URLs (avoids stale closure)
-        const urls = capturedDocUrlsRef.current;
-        const isPasaporteFlow = !!urls.passport;
-        const frontUrl = urls.front || '';
-        const backUrl = urls.back || '';
-        const passportUrl = urls.passport || '';
-        const primaryDocUrl = passportUrl || frontUrl;
-
-        if (!primaryDocUrl) {
-          toast.error("No se encontró la imagen del documento. Intenta de nuevo.", {
-            duration: 6000,
-            description: "Vuelve a capturar el documento desde el inicio.",
-          });
-          autoCaptureLockRef.current = false;
-          return;
-        }
-
-        // Spinner is shown via the `verifying` state — no toast needed
-
-        let aiResult: VerificationResult | null = null;
-
-        if (isPasaporteFlow) {
-          aiResult = await verifyDocument(primaryDocUrl, 'pasaporte', selfieResult.url);
-        } else {
-          const [frontVerification, backVerification] = await Promise.all([
-            verifyDocument(frontUrl, 'ine_frente', selfieResult.url),
-            backUrl ? verifyDocument(backUrl, 'ine_reverso') : Promise.resolve(null),
-          ]);
-
-          if (frontVerification) {
-            aiResult = {
-              ...frontVerification,
-              numero_identificacion:
-                backVerification?.numero_identificacion || frontVerification.numero_identificacion,
-            };
-          } else {
-            aiResult = backVerification;
-          }
-        }
-
-        // verification done — verifying state is cleared by verifyDocument
-
-        if (aiResult) {
-          setVerificationResult(aiResult);
-          const strongFaceMatch = aiResult.face_match === true && (aiResult.face_match_confidence ?? 0) >= 70;
-
-          if (!aiResult.is_valid_document) {
-            toast.error("Documento inválido", {
-              duration: 5000,
-              description: aiResult.rejection_reason || "Se rechazó la identificación. Vuelve a capturar.",
-            });
-          } else if (!strongFaceMatch) {
-            toast.error("Selfie no coincide con el documento", {
-              duration: 6000,
-              description: "No se permitirá guardar hasta obtener coincidencia facial confiable.",
-            });
-          } else {
-            toast.success("Verificación completada", {
-              duration: 3000,
-              description: "Revisa los resultados a continuación.",
-            });
-          }
-        } else {
-          toast.error("No se pudo verificar el documento", {
-            duration: 8000,
-            description: "No se pudo completar la validación. Intenta capturar de nuevo las fotos.",
-          });
-          // Reset to allow retry
-          autoCaptureLockRef.current = false;
-        }
+        setFaceVerify({ url: result.url, label: 'Pasaporte', tipos: [PASAPORTE_DOC_TYPE], modo: 'oficial' });
       } else {
-        toast.error("Error al subir la selfie. Intenta de nuevo.", { duration: 5000 });
         autoCaptureLockRef.current = false;
       }
     }
@@ -1202,67 +1063,6 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   const listedDocTypes = requireIdentityDocs
     ? visibleDocTypes.filter((t) => !CAMERA_DOC_TYPES.includes(t))
     : visibleDocTypes;
-
-  // Fetch persona data for comparator
-  const { data: personaData } = useQuery({
-    queryKey: ['agent-persona-for-verification', personaId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('personas')
-        .select('nombre_legal, curp, fecha_nacimiento, sexo')
-        .eq('id', personaId)
-        .single();
-      return data;
-    },
-    enabled: !!verificationResult,
-  });
-
-  // Show verification result comparator
-  if (verificationResult && verificationDocId) {
-    if (!personaData) {
-      return (
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm font-semibold text-foreground">Cargando datos del perfil...</p>
-        </div>
-      );
-    }
-    return (
-      <div className="pb-4">
-        <CaptureFlash show={showFlash} />
-        <VerificationComparator
-          result={verificationResult}
-          persona={personaData}
-          personaId={personaId}
-          documentId={verificationDocId}
-          allRelatedDocIds={
-            identityMode === 'ine'
-              ? existingDocs.filter((d: any) => INE_DOC_TYPES.includes(d.id_tipo_documento)).map((d: any) => d.id as number)
-              : undefined
-          }
-          onAccepted={() => {
-            setVerificationResult(null);
-            setVerificationDocId(null);
-            setCapturedDocUrls({});
-            capturedDocUrlsRef.current = {};
-            refetchDocs();
-          }}
-          onRejected={() => {
-            setVerificationResult(null);
-            setVerificationDocId(null);
-            setCapturedDocUrls({});
-            capturedDocUrlsRef.current = {};
-            // Restart camera for retry
-            if (identityMode === 'ine') {
-              startCamera('front');
-            } else {
-              startCamera('passport');
-            }
-          }}
-        />
-      </div>
-    );
-  }
 
   // Show verifying spinner
   if (verifying) {
@@ -1494,9 +1294,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setFaceTest({
+                  onClick={() => setFaceVerify({
                     url: docPrincipal.url,
                     label: usaPasaporte ? 'Pasaporte' : 'INE frente',
+                    tipos: usaPasaporte ? [PASAPORTE_DOC_TYPE] : [...INE_DOC_TYPES],
+                    modo: 'prueba',
                   })}
                   className="h-9 px-3 rounded-md font-bold text-xs text-muted-foreground hover:text-foreground"
                   title="Compara tu rostro contra tu identificación sin salir del dispositivo"
@@ -1710,13 +1512,18 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         title="Carta de Cumplimiento"
       />
 
-      {/* Prueba de comparación facial local (no cambia el expediente). */}
-      {faceTest && (
-        <FaceMatchTestDialog
+      {/* Verificación facial local (Human): en modo oficial marca la identificación
+          como validada; en modo prueba solo muestra métricas. */}
+      {faceVerify && (
+        <FaceVerifyDialog
           open
-          onOpenChange={(open) => { if (!open) setFaceTest(null); }}
-          docUrl={faceTest.url}
-          docLabel={faceTest.label}
+          onOpenChange={(open) => { if (!open) setFaceVerify(null); }}
+          docUrl={faceVerify.url}
+          docLabel={faceVerify.label}
+          modo={faceVerify.modo}
+          personaId={personaId}
+          tiposIdentificacion={faceVerify.tipos}
+          onVerified={() => { refetchDocs(); setFaceVerify(null); }}
         />
       )}
 

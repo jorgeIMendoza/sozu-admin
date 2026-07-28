@@ -396,15 +396,17 @@ export function NewProductOfferDialog({ propertyId, property, onSuccess }: NewPr
     queryKey: ['product-payment-schemes-for-offer', selectedProduct],
     queryFn: async () => {
       if (!selectedProduct) return [];
+      // Igual que en NewOfferDialog: los esquemas de producto vienen marcados como
+      // manuales desde la migración y son los válidos. Solo se descartan los ad-hoc
+      // (`manual_<id>_...`) creados para una oferta concreta.
       const { data, error } = await supabase
         .from('esquemas_pago')
         .select('*')
         .eq('id_producto', selectedProduct)
         .eq('activo', true)
-        .eq('es_manual', false)
         .order('orden', { ascending: true });
       if (error) throw error;
-      return data || [];
+      return (data || []).filter((s: any) => !/^manual_\d+_/i.test(s?.nombre ?? ''));
     },
     enabled: !!selectedProduct,
   });

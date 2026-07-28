@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { User, Mail, Phone, ShieldCheck, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  LINK_NO_VIGENTE,
+  cargarReservacionPublica,
+  parseReservationToken,
+} from "@/lib/offers/reservation-token";
 import { toast } from "@/hooks/use-toast";
 
 function InputField({
@@ -34,6 +39,7 @@ function InputField({
   );
 }
 
+/** Fila que devuelve el RPC `get_reservacion_publica`. */
 type Apartado = {
   id: number;
   email: string;
@@ -42,11 +48,15 @@ type Apartado = {
   estatus: string;
   activo: boolean;
   id_oferta: number | null;
+  nombre_persona?: string | null;
+  telefono_persona?: string | null;
 };
 
 export default function CapturaDatosReservaPage() {
   const { apartadoId } = useParams<{ apartadoId: string }>();
   const navigate = useNavigate();
+  // Credencial del link: el segmento de la URL debe ser el token de la reservación.
+  const token = parseReservationToken(apartadoId);
 
   const [apartado, setApartado] = useState<Apartado | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,45 +68,29 @@ export default function CapturaDatosReservaPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!apartadoId) { setLoadError("Link inválido."); setLoadingPage(false); return; }
-    const numericId = parseInt(apartadoId.replace(/^[A-Z]+-/, ""), 10);
-    if (!numericId) { setLoadError("Link inválido."); setLoadingPage(false); return; }
+    if (!token) { setLoadError(LINK_NO_VIGENTE); setLoadingPage(false); return; }
 
     (async () => {
-      const { data, error } = await (supabase as any)
-        .from("reservaciones")
-        .select("id, email, nombre, telefono, estatus, activo, id_oferta")
-        .eq("id", numericId)
-        .maybeSingle();
+      const row = await cargarReservacionPublica(supabase, token);
 
-      if (error || !data) { setLoadError("Este link no existe o ya no es válido."); setLoadingPage(false); return; }
-      if (!data.activo) { setLoadError("Este link ha sido desactivado."); setLoadingPage(false); return; }
-      if (data.estatus === "autorizado") {
-        navigate(`/reservar/${apartadoId}/confirmacion`, { replace: true });
+      if (!row) { setLoadError(LINK_NO_VIGENTE); setLoadingPage(false); return; }
+      if (!row.activo) { setLoadError("Este link ha sido desactivado."); setLoadingPage(false); return; }
+      if (row.estatus === "autorizado") {
+        navigate(`/reservar/${token}/confirmacion`, { replace: true });
         return;
       }
 
-      setApartado(data);
+      setApartado(row);
 
-      // Pre-fill si ya existe persona con ese email
-      const { data: persona } = await supabase
-        .from("personas")
-        .select("nombre_legal, telefono")
-        .eq("email", data.email)
-        .eq("activo", true)
-        .maybeSingle();
-
-      if (persona) {
-        if (persona.nombre_legal) setNombre(persona.nombre_legal);
-        if (persona.telefono) setTelefono(persona.telefono);
-      } else if (data.nombre) {
-        setNombre(data.nombre);
-        if (data.telefono) setTelefono(data.telefono);
-      }
+      // La RPC ya trae los datos de la persona ligada al correo de la reservación.
+      if (row.nombre_persona) setNombre(row.nombre_persona);
+      if (row.telefono_persona) setTelefono(row.telefono_persona);
+      if (!row.nombre_persona && row.nombre) setNombre(row.nombre);
+      if (!row.telefono_persona && row.telefono) setTelefono(row.telefono);
 
       setLoadingPage(false);
     })();
-  }, [apartadoId, navigate]);
+  }, [token, navigate]);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -113,72 +107,17 @@ export default function CapturaDatosReservaPage() {
     setLoading(true);
 
     try {
-      const email = apartado.email.trim().toLowerCase();
-      const nombreTrim = nombre.trim();
-      const telefonoTrim = telefono.trim();
+      // Todo el guardado ocurre server-side: upsert de la persona por el correo de
+      // la reservación, vínculo con la reservación y alta como Prospecto. El
+      // navegador no escribe en personas ni entidades_relacionadas.
+      const { data: ok, error } = await (supabase as any).rpc("guardar_datos_reservacion", {
+        p_token: token,
+        p_nombre: nombre.trim(),
+        p_telefono: telefono.trim(),
+      });
+      if (error || ok === false) throw new Error("Error guardando datos");
 
-      // UPSERT persona by email
-      let personaId: number | null = null;
-      const { data: personaExisting } = await supabase
-        .from("personas")
-        .select("id")
-        .eq("email", email)
-        .eq("activo", true)
-        .maybeSingle();
-
-      if (personaExisting) {
-        await supabase
-          .from("personas")
-          .update({ nombre_legal: nombreTrim, telefono: telefonoTrim })
-          .eq("id", personaExisting.id);
-        personaId = personaExisting.id;
-      } else {
-        const { data: newPersona, error: insertError } = await (supabase as any)
-          .from("personas")
-          .insert({ email, nombre_legal: nombreTrim, telefono: telefonoTrim, tipo_persona: "pf", es_draft: true, activo: true })
-          .select("id")
-          .single();
-        if (insertError || !newPersona) throw new Error("Error guardando datos");
-        personaId = newPersona.id;
-      }
-
-      // UPDATE reservaciones
-      await (supabase as any)
-        .from("reservaciones")
-        .update({ id_persona: personaId, nombre: nombreTrim, telefono: telefonoTrim, fecha_actualizacion: new Date().toISOString() })
-        .eq("id", apartado.id);
-
-      // UPSERT entidades_relacionadas como Prospecto (id_tipo_entidad=7) si hay proyecto
-      if (apartado.id_oferta && personaId) {
-        const { data: oferta } = await (supabase as any)
-          .from("ofertas")
-          .select("id_proyecto")
-          .eq("id", apartado.id_oferta)
-          .maybeSingle();
-
-        if (oferta?.id_proyecto) {
-          const { data: existing } = await (supabase as any)
-            .from("entidades_relacionadas")
-            .select("id")
-            .eq("id_persona", personaId)
-            .eq("id_tipo_entidad", 7)
-            .eq("id_proyecto", oferta.id_proyecto)
-            .maybeSingle();
-
-          if (existing) {
-            await (supabase as any)
-              .from("entidades_relacionadas")
-              .update({ activo: true })
-              .eq("id", existing.id);
-          } else {
-            await (supabase as any)
-              .from("entidades_relacionadas")
-              .insert({ id_persona: personaId, id_tipo_entidad: 7, id_proyecto: oferta.id_proyecto, activo: true });
-          }
-        }
-      }
-
-      navigate(`/reservar/${apartadoId}/hold`);
+      navigate(`/reservar/${token}/hold`);
     } catch {
       toast({ title: "Error", description: "No se pudieron guardar tus datos. Intenta de nuevo.", duration: 4000 });
     } finally {

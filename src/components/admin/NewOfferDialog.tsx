@@ -192,6 +192,12 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+/**
+ * La base no puede emitir links de oferta digital todavía. Marca interna: al
+ * usuario solo se le dice que contacte al administrador.
+ */
+const DIGITAL_NO_DISPONIBLE = "DIGITAL_NO_DISPONIBLE";
+
 /** Datos necesarios para regenerar los PDFs de una oferta ya creada. */
 type OfferPdfContext = {
   offerId: number;
@@ -234,6 +240,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   // Datos del popup para compartir la oferta digital recién generada.
   const [shareOffer, setShareOffer] = useState<{
     url: string;
+    /** Misma oferta sin credencial: solo para que el asesor la revise. */
+    previewUrl: string;
     leadName: string;
     leadEmail: string;
     leadPhone: string;
@@ -541,23 +549,29 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
       let schemesMap: Record<number, any[]> = {};
       if (productIds.length > 0) {
+        // NO se filtra por `es_manual`: casi todos los esquemas de producto están
+        // marcados como manuales (vienen de la migración) y son los buenos. Lo que
+        // sí se descarta son los ad-hoc creados por una oferta concreta, que llevan
+        // el prefijo `manual_<id>_` en el nombre.
         const { data: schemes } = await supabase
           .from("esquemas_pago")
           .select("*")
           .in("id_producto", productIds)
-          .eq("es_manual", false)
           .eq("activo", true)
           .order("orden", { ascending: true })
           .order("id", { ascending: true });
-        
+
         if (schemes) {
-          schemesMap = schemes.reduce((acc, scheme) => {
-            if (!acc[scheme.id_producto]) {
-              acc[scheme.id_producto] = [];
-            }
-            acc[scheme.id_producto].push(scheme);
-            return acc;
-          }, {} as Record<number, any[]>);
+          const esAdHoc = (nombre?: string | null) => /^manual_\d+_/i.test(nombre ?? "");
+          schemesMap = schemes
+            .filter((scheme: any) => !esAdHoc(scheme.nombre))
+            .reduce((acc, scheme) => {
+              if (!acc[scheme.id_producto]) {
+                acc[scheme.id_producto] = [];
+              }
+              acc[scheme.id_producto].push(scheme);
+              return acc;
+            }, {} as Record<number, any[]>);
         }
       }
 
@@ -715,6 +729,17 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       propertySchemeId?: number | null;
     }) => {
       console.log("Mutation function called with:", data);
+
+      // Oferta digital: se comprueba ANTES de crear nada que la base pueda emitir
+      // el link del cliente. Si no, se aborta sin dejar oferta ni persona a medias.
+      if (data.digital) {
+        const probe = await (supabase as any).from("reservaciones").select("token").limit(0);
+        if (probe.error) {
+          console.error("Oferta digital no disponible (reservaciones.token):", probe.error);
+          throw new Error(DIGITAL_NO_DISPONIBLE);
+        }
+      }
+
       let personId = data.selectedPersonId;
       
       // Create, get, or update person
@@ -1016,24 +1041,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
           continue;
         }
 
-        // Fetch payment schemes for this product with es_manual = false
-        const { data: productSchemes } = await supabase
+        // Esquemas del producto. No se filtra por `es_manual`: los de catálogo
+        // vienen marcados así desde la migración; solo se descartan los ad-hoc
+        // (`manual_<id>_...`) creados para una oferta concreta.
+        const { data: productSchemesRaw } = await supabase
           .from("esquemas_pago")
           .select("*")
           .eq("id_producto", productId)
-          .eq("es_manual", false)
           .eq("activo", true)
+          .order("orden", { ascending: true })
           .order("id", { ascending: true });
 
-        if (!productSchemes || productSchemes.length === 0) {
-          productOffersResults.warnings.push(
-            `${product.tipo === 'bodega' ? 'Bodega' : 'Estacionamiento'} "${product.nombre}" no tiene esquemas de pago configurados`
-          );
-          continue;
-        }
+        const productSchemes = (productSchemesRaw || []).filter(
+          (s: any) => !/^manual_\d+_/i.test(s?.nombre ?? '')
+        );
 
-        // Use user-selected scheme or null if "sin seleccionar"
-        const selectedSchemeId = schemeSelections[productId];
+        // El esquema del producto NO es obligatorio para el asesor: si no eligió
+        // uno, se toma el primero disponible; si el producto no tiene ninguno, la
+        // oferta se genera igual sin esquema (se define al cerrar la venta).
+        const selectedSchemeId =
+          schemeSelections[productId] ?? productSchemes[0]?.id ?? null;
 
         // Generate or reuse CLABE only if a payment scheme is selected
         let clabeData: string | null = null;
@@ -1120,32 +1147,34 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         creador: profile?.email
       });
 
-      // Show main offer success message
-      toast({
-        title: "Oferta creada",
-        description: `La oferta para la propiedad ${propertyNumber} ha sido generada exitosamente.`,
-      });
-
-
-      // Show product offers results
-      if (result.productOffersResults.created > 0) {
-        toast({
-          title: "Ofertas de productos generadas",
-          description: `Se generaron ${result.productOffersResults.created} oferta(s) de productos.`,
-        });
-      }
-
-      if (result.productOffersResults.warnings.length > 0) {
-        result.productOffersResults.warnings.forEach(warning => {
-          toast({
-            title: "Aviso",
-            description: warning,
-            variant: "destructive",
-          });
-        });
-      }
-      
       const isDigital = !!variables.data.digital;
+
+      // En oferta digital el éxito se confirma hasta tener el link: si el flujo
+      // falla, la oferta se revierte y no debe haberse anunciado como creada.
+      if (!isDigital) {
+        toast({
+          title: "Oferta creada",
+          description: `La oferta para la propiedad ${propertyNumber} ha sido generada exitosamente.`,
+        });
+
+        if (result.productOffersResults.created > 0) {
+          toast({
+            title: "Ofertas de productos generadas",
+            description: `Se generaron ${result.productOffersResults.created} oferta(s) de productos.`,
+          });
+        }
+
+        if (result.productOffersResults.warnings.length > 0) {
+          result.productOffersResults.warnings.forEach(warning => {
+            toast({
+              title: "Aviso",
+              description: warning,
+              variant: "destructive",
+            });
+          });
+        }
+      }
+
       const allOfferIdsForEmail = [
         result.offerId,
         ...result.productOffersResults.createdOffers.map((po) => po.offerId),
@@ -1192,19 +1221,26 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
       if (isDigital) {
         try {
+          // El link del cliente se identifica con `reservaciones.token` (uuid): es la
+          // credencial que autoriza consultar el estado del pago y guardar sus datos.
           const { data: reservacion, error: aptError } = await (supabase as any)
             .from('reservaciones')
             .insert({ email: result.leadEmail, id_oferta: result.offerId })
-            .select('id')
+            .select('id, token')
             .single();
           if (aptError) throw aptError;
-          const ofertaLink = `${window.location.origin}/oferta/O-${String(result.offerId).padStart(6, "0")}/RES-${String(reservacion.id).padStart(6, "0")}`;
+          const ofertaBase = `${window.location.origin}/oferta/O-${String(result.offerId).padStart(6, "0")}`;
+          const ofertaLink = `${ofertaBase}/${reservacion.token}`;
+          // Link de revisión: la misma oferta sin credencial. Sirve para que el
+          // asesor la revise; no permite continuar con el pago.
+          const ofertaLinkPreview = ofertaBase;
           if (import.meta.env.DEV) {
             console.log('[DEV] Link oferta digital (no se envía correo en dev sin secret):', ofertaLink);
           }
           // Popup para compartir el link (WhatsApp / correo / copiar / web).
           setShareOffer({
             url: ofertaLink,
+            previewUrl: ofertaLinkPreview,
             leadName: result.leadName,
             leadEmail: result.leadEmail,
             leadPhone: result.leadPhone || '',
@@ -1212,24 +1248,35 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             projectName: propertyDetails?.entidades_relacionadas?.proyectos?.nombre,
             pdfContext,
           });
+          // El correo va en su propio try: con el link ya emitido, que falle el
+          // envío no justifica revertir la oferta.
           if (sendEmailOnGenerate) {
-            const { sendMultipleOffersEmailDirect } = await emailServicePromise;
-            await sendMultipleOffersEmailDirect({
-              offerIds: allOfferIdsForEmail,
-              propertyNumber,
-              recipientEmail: result.leadEmail,
-              recipientName: result.leadName,
-              reservationLink: ofertaLink,
-              preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
-                ? digitalAttachments.filter(a => a.tipo === 'propiedad')
-                : digitalAttachments.length > 0 ? digitalAttachments : undefined,
-            });
-            toast({
-              title: "Correo enviado",
-              description: "La oferta digital fue enviada al correo del prospecto.",
-              duration: 5000,
-              variant: "success",
-            });
+            try {
+              const { sendMultipleOffersEmailDirect } = await emailServicePromise;
+              await sendMultipleOffersEmailDirect({
+                offerIds: allOfferIdsForEmail,
+                propertyNumber,
+                recipientEmail: result.leadEmail,
+                recipientName: result.leadName,
+                reservationLink: ofertaLink,
+                preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
+                  ? digitalAttachments.filter(a => a.tipo === 'propiedad')
+                  : digitalAttachments.length > 0 ? digitalAttachments : undefined,
+              });
+              toast({
+                title: "Correo enviado",
+                description: "La oferta digital fue enviada al correo del prospecto.",
+                duration: 5000,
+                variant: "success",
+              });
+            } catch (emailErr) {
+              console.error('Error enviando el correo de la oferta digital:', emailErr);
+              toast({
+                title: "Oferta digital generada",
+                description: "No se pudo enviar el correo, pero puedes compartir el link desde aquí.",
+                duration: 6000,
+              });
+            }
           } else {
             toast({
               title: "Oferta digital generada",
@@ -1238,14 +1285,33 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             });
           }
         } catch (digitalErr: any) {
+          // El detalle solo va a consola: al usuario no se le exponen nombres de
+          // tablas, columnas ni códigos de la base.
           console.error('Error en flujo oferta digital:', digitalErr);
+
+          // Sin link no hay oferta digital utilizable: se revierte lo creado para
+          // no dejar ofertas huérfanas que nadie puede compartir ni cobrar.
+          try {
+            const idsARevertir = [result.offerId, ...result.productOffersResults.createdOffers.map((po) => po.offerId)];
+            await (supabase as any).from('ofertas').update({ activo: false }).in('id', idsARevertir);
+          } catch (rollbackErr) {
+            console.error('Error revirtiendo la oferta digital:', rollbackErr);
+          }
+
           toast({
-            title: "Oferta generada",
-            description: digitalErr?.code === '42P01'
-              ? "DDL reservaciones pendiente de ejecutar en BD."
-              : "No se pudo completar el flujo digital. La oferta sí quedó creada.",
+            title: "No se generó la oferta",
+            description: "No fue posible crear la oferta digital. Contacta al administrador.",
             variant: "destructive",
           });
+
+          setSendEmailOnGenerate(false);
+          setPendingButton(null);
+          queryClient.invalidateQueries({ queryKey: ["properties"] });
+          setOpen(false);
+          form.reset();
+          setSelectedPerson(null);
+          setSearchTerm("");
+          return;
         }
       } else if (sendEmailOnGenerate) {
         try {
@@ -1283,7 +1349,18 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     },
     onError: (error: any) => {
       console.error("Error creating offer:", error);
-      
+
+      // La base no puede emitir el link: se abortó antes de crear nada.
+      if (error?.message === DIGITAL_NO_DISPONIBLE) {
+        toast({
+          title: "No se generó la oferta",
+          description: "La oferta digital no está disponible en este momento. Contacta al administrador.",
+          variant: "destructive",
+        });
+        setPendingButton(null);
+        return;
+      }
+
       // Handle specific database constraint errors
       if (error?.code === "23505" && error?.details?.includes("rfc")) {
         form.setError("rfc", {
@@ -1391,10 +1468,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       })
     ].filter(p => p.precioFinal > 0 && !p.es_incluido);
 
-    const valid = allProducts.filter(p => p.hasSchemes);
-    const invalid = allProducts.filter(p => !p.hasSchemes);
-    
-    return { valid, invalid, total: allProducts.length };
+    // Todos generan oferta: el esquema es opcional (se define en la venta). Los
+    // que no tienen ninguno se listan aparte solo como aviso informativo.
+    const sinEsquema = allProducts.filter(p => !p.hasSchemes);
+
+    return { valid: allProducts, invalid: sinEsquema, total: allProducts.length };
   }, [includedProducts]);
 
   // Calculate manual scheme amounts
@@ -1471,9 +1549,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     // La CLABE de apartado se expone al cliente si el prospecto está
     // identificado con RFC **o** CURP (ver el gate en lib/offers/use-offer-db).
     if (!isValidRFC(pendingFormData.rfc) && !isValidCURP(pendingFormData.curp)) {
-      reasons.push("el prospecto no tiene un RFC ni una CURP válidos");
+      reasons.push("el prospecto no tiene RFC ni CURP capturados");
     }
-    if (pendingFormData.mode === "precargada" && !propertySchemeSelection) reasons.push("no se seleccionó un plan de pago");
+    if (pendingFormData.mode === "precargada" && !propertySchemeSelection) reasons.push("la propiedad no tiene un plan de pago seleccionado");
 
     return reasons;
   }, [pendingFormData, propertySchemeSelection]);
@@ -1482,20 +1560,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     console.log("Form submitted successfully!");
     onTrackSubmit?.();
 
+    // Ni el plan de pago ni el RFC/CURP bloquean la generación: son datos de la
+    // etapa de venta. Sin ellos la oferta digital simplemente no muestra la CLABE
+    // de apartado, y se avisa en el diálogo de confirmación.
     const missingScheme = data.mode === "precargada" && !localSchemeId;
-
-    // Sin plan de pago la oferta digital no puede mostrar la CLABE de apartado
-    // ni el plan al cliente, así que se bloquea antes de crearla.
-    if (data.digital && missingScheme) {
-      toast({
-        title: "Selecciona un plan de pago",
-        description: "La oferta digital necesita un esquema de pago para mostrar la CLABE de apartado y el plan al cliente.",
-        variant: "destructive",
-      });
-      setPendingButton(null);
-      return;
-    }
-
     const missingRFC = !isValidRFC(data.rfc) && !isValidCURP(data.curp);
     const shouldShowBankingConfirm = missingScheme || missingRFC;
 
@@ -1759,11 +1827,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                           }}
                         >
                           <SelectTrigger className="h-7 text-xs w-48">
-                            <SelectValue placeholder="Sin seleccionar" />
+                            <SelectValue placeholder="Usar el primero disponible" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">
-                              <span className="text-muted-foreground">Sin seleccionar</span>
+                              <span className="text-muted-foreground">
+                                {p.paymentSchemes?.length > 0 ? "Usar el primero disponible" : "Sin esquema"}
+                              </span>
                             </SelectItem>
                             {p.paymentSchemes?.map((scheme: any) => (
                               <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -2649,13 +2719,19 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
 
     {/* Confirmation Dialog for generating multiple offers */}
     <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-      <AlertDialogContent className={cn("max-w-lg", forceLight && "light")}>
-        <AlertDialogHeader>
+      {/* flex + max-h: con varios productos el contenido crecía y se desbordaba,
+          tapando los botones. Ahora solo scrollea el cuerpo. */}
+      <AlertDialogContent className={cn("flex max-h-[90vh] max-w-lg flex-col", forceLight && "light")}>
+        <AlertDialogHeader className="shrink-0">
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
             {productsWithPriceInfo.total > 0 ? "Confirmar generación de ofertas" : "Confirmar generación de oferta"}
           </AlertDialogTitle>
-          <AlertDialogDescription className="space-y-4">
+        </AlertDialogHeader>
+        {/* asChild → <div>: el contenido lleva listas y tarjetas, que no pueden
+            anidarse dentro del <p> que renderiza Description por defecto. */}
+        <AlertDialogDescription asChild>
+            <div className="-mr-2 min-h-0 flex-1 space-y-4 overflow-y-auto pr-2 text-sm text-muted-foreground">
             {productsWithPriceInfo.total > 0 && (
               <p>
                 Esta propiedad tiene {productsWithPriceInfo.total} producto(s) con costo extra.
@@ -2744,11 +2820,13 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               }}
                             >
                               <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Sin seleccionar" />
+                                <SelectValue placeholder="Usar el primero disponible" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">
-                                  <span className="text-muted-foreground">Sin seleccionar</span>
+                                  <span className="text-muted-foreground">
+                                    {p.paymentSchemes?.length > 0 ? "Usar el primero disponible" : "Sin esquema"}
+                                  </span>
                                 </SelectItem>
                                 {p.paymentSchemes?.map((scheme: any) => (
                                   <SelectItem key={scheme.id} value={scheme.id.toString()}>
@@ -2776,9 +2854,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                               </SelectContent>
                             </Select>
                             {!productSchemeSelections[p.id_producto] ? (
-                              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                <AlertTriangle className="h-3 w-3" />
-                                Se generará PDF sin cuenta CLABE (no hay esquema seleccionado)
+                              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                <Info className="h-3 w-3 shrink-0" />
+                                {p.paymentSchemes?.length > 0
+                                  ? `Se usará "${p.paymentSchemes[0]?.nombre}" por defecto.`
+                                  : "Sin esquema configurado: la oferta se genera y el esquema se define en la venta."}
                               </p>
                             ) : !p.hasCuentaMadreStp ? (
                               <p className="text-xs text-destructive mt-1 flex items-center gap-1">
@@ -2796,12 +2876,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             </div>
 
             {productsWithPriceInfo.invalid.length > 0 && (
-              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-2">
-                <div className="flex items-start gap-2 text-sm text-destructive">
-                  <AlertTriangle className="h-4 w-4 mt-0.5" />
+              <div className="bg-muted/50 border border-border rounded-lg p-3 space-y-2">
+                <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Info className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
-                    <span className="font-medium">
-                      {productsWithPriceInfo.invalid.length} producto(s) NO tienen esquemas de pago configurados:
+                    <span className="font-medium text-foreground">
+                      {productsWithPriceInfo.invalid.length} producto(s) sin esquema de pago:
                     </span>
                     <ul className="ml-4 mt-1">
                       {productsWithPriceInfo.invalid.map((p, i) => (
@@ -2809,7 +2889,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                       ))}
                     </ul>
                     <p className="mt-2 text-xs">
-                      Estos productos NO generarán oferta. Configure sus esquemas de pago primero.
+                      Su oferta se genera igual; el esquema se define al cerrar la venta.
                     </p>
                   </div>
                 </div>
@@ -2821,12 +2901,16 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 <div className="flex items-start gap-2 text-sm text-amber-700">
                   <AlertTriangle className="h-4 w-4 mt-0.5" />
                   <div>
-                    <span className="font-medium">Aviso de datos bancarios:</span>
+                    <span className="font-medium">La oferta no mostrará la CLABE para pagar:</span>
                     <ul className="ml-4 mt-1 list-disc">
                       {confirmBankingReasons.map((reason, idx) => (
-                        <li key={idx}>La oferta se generará sin sección de datos bancarios porque {reason}.</li>
+                        <li key={idx}>{reason}.</li>
                       ))}
                     </ul>
+                    <p className="mt-2 text-xs">
+                      Puedes generarla igual y completar esos datos después; el cliente verá
+                      la CLABE en cuanto estén capturados.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -2856,9 +2940,9 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
                 Se generará 1 PDF automáticamente.
               </p>
             )}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
+            </div>
+        </AlertDialogDescription>
+        <AlertDialogFooter className="shrink-0">
           <AlertDialogCancel onClick={handleCancelGenerate}>
             Cancelar
           </AlertDialogCancel>
@@ -2878,6 +2962,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         open={!!shareOffer}
         onOpenChange={(o) => { if (!o) setShareOffer(null); }}
         url={shareOffer.url}
+        previewUrl={shareOffer.previewUrl}
         leadName={shareOffer.leadName}
         leadEmail={shareOffer.leadEmail}
         leadPhone={shareOffer.leadPhone}

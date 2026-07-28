@@ -25,7 +25,7 @@ import {
   useOfferStore,
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
-import { useCanSeeSalesFlow } from "@/lib/access/salesFlowWhitelist";
+import { parseReservationToken, withReservationToken } from "@/lib/offers/reservation-token";
 import { AlertCircle, Building2, Calendar, ChevronRight, ExternalLink, Facebook, Globe, Home, Instagram, Landmark, Loader2, MapPin, ScanEye, Sparkles, UserRound, Youtube } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -95,6 +95,9 @@ function DevelopmentSocialLinks({ socials, variant = "desktop" }: {
 
 const OfferPage = () => {
   const { offerId, reservationId } = useParams<{ offerId: string; reservationId?: string }>();
+  // Token (uuid) del link personal del cliente. Los links viejos (RES-000028) no
+  // traen credencial: la oferta se ve, pero el flujo de pago no puede avanzar.
+  const reservationToken = parseReservationToken(reservationId);
   const { data: offerResult, isLoading: dbLoading } = useOfferFromDB(offerId ?? "");
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
@@ -111,8 +114,6 @@ const OfferPage = () => {
   const navigate = useNavigate();
   const [gateModalOpen, setGateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("unidad");
-  // Gate estático: solo los aprobadores del flujo de venta ven el botón de pago.
-  const canSeeSalesFlow = useCanSeeSalesFlow();
 
   const preReservation = useOfferStore((s) =>
     s.preReservations.find(
@@ -140,7 +141,11 @@ const OfferPage = () => {
 
   const handleCtaClick = () => {
     if (reservationId) {
-      navigate(`/reservar/${reservationId}`);
+      // Link real que recibe el cliente (/oferta/O-xxxxxx/<token>): va directo a
+      // confirmar/editar sus datos y de ahí al wizard con la CLABE SPEI. Se usa el
+      // id numérico de la oferta porque es lo que resuelven esas pantallas, y el
+      // token viaja como query param: es la credencial de las RPC públicas.
+      navigate(withReservationToken(`/reservar/${offer?.id}/datos`, reservationToken));
     } else {
       setGateModalOpen(true);
     }
@@ -185,10 +190,15 @@ const OfferPage = () => {
   );
   const isExpired = offer.status === "expired" || daysToExpiry < 0;
   const isReserved = offer.status === "pre_reserved" || offer.status === "converted_to_account";
-  const ctaDisabled = isExpired || isReserved;
-  // El flujo de pago (sin Stripe, por SPEI) está en fase de aprobación interna:
-  // solo los usuarios en la whitelist ven el botón "Continuar con el pago".
-  const APARTADO_HABILITADO = canSeeSalesFlow;
+  // Solo el link personal con token (uuid) habilita el pago. Sin segmento es una
+  // vista previa —la que usa el asesor para revisar la oferta— y con un segmento
+  // que no es uuid (links viejos) el link ya no es válido.
+  const esVistaPrevia = !reservationId;
+  const linkNoVigente = !!reservationId && !reservationToken;
+  const ctaDisabled = isExpired || isReserved || esVistaPrevia || linkNoVigente;
+  // El bloque de pago se pinta siempre: al cliente con su link (habilitado) y al
+  // asesor en la vista previa (deshabilitado, para que vea cómo lo verá su cliente).
+  const APARTADO_HABILITADO = true;
 
   // Precisión completa (hasta 2 decimales): sin redondear/cortar para que
   // precio, metraje y $/m² reconcilien exacto entre sí.
@@ -225,7 +235,15 @@ const OfferPage = () => {
     ? (heroPct < 0 ? "Total con descuento" : "Total con aumento")
     : "Total";
 
-  const ctaLabel = isExpired ? "Oferta vencida" : isReserved ? "No disponible" : "Continuar con el pago";
+  const ctaLabel = isExpired
+    ? "Oferta vencida"
+    : isReserved
+    ? "No disponible"
+    : linkNoVigente
+    ? "Link no vigente"
+    : esVistaPrevia
+    ? "Vista previa · sin pago"
+    : "Continuar con el pago";
 
   const hasPaymentPlans = !!(offer.paymentPlans && offer.paymentPlans.length > 0);
 
@@ -286,6 +304,32 @@ const OfferPage = () => {
               </div>
 
             </header>
+
+            {/* Vista previa del asesor: la oferta completa, sin poder pagar. */}
+            {!isExpired && !isReserved && esVistaPrevia && (
+              <div className="rounded-lg bg-muted/60 border border-border px-3 py-2 flex items-start gap-2 mb-4">
+                <ScanEye className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-[12px] text-muted-foreground leading-snug">
+                  <span className="font-semibold text-foreground">Vista previa.</span>{" "}
+                  Así verá el cliente su oferta. Para apartar necesita su link personal,
+                  el que se comparte desde el panel.
+                </p>
+              </div>
+            )}
+
+            {/* Link viejo (sin token): puede ver la oferta, no puede pagar. */}
+            {!isExpired && !isReserved && linkNoVigente && (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2 flex items-start gap-2 mb-4">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-700 leading-snug">
+                  <span className="font-semibold">Este link ya no está vigente para pagar.</span>{" "}
+                  <span className="text-muted-foreground">
+                    Puedes revisar tu oferta, pero para continuar con el apartado pide a tu
+                    asesor que te comparta el link actualizado.
+                  </span>
+                </p>
+              </div>
+            )}
 
             {/* Unidad ya vendida/apartada: tiene cuenta de cobranza activa, ya no se comercializa. */}
             {!isExpired && isReserved && (
@@ -633,39 +677,38 @@ const OfferPage = () => {
                   </div>
                 </div>
 
-                {/* CTA - ocultar en links con reservationId (flujo digital, Stripe pendiente) */}
-                {!reservationId && (
-                  <div className="pt-4">
-                    {isExpired ? (
-                      <div className="rounded-md bg-destructive/8 border border-destructive/20 px-3 py-3 text-center space-y-1.5">
-                        <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
-                        <p className="text-[10px] text-muted-foreground leading-relaxed">
-                          Contacta a tu asesor para recibir una oferta actualizada.
+                {/* CTA — también en los links con reservationId: el pago del apartado
+                    ya es por SPEI (sin Stripe), así que el cliente puede continuar. */}
+                <div className="pt-4">
+                  {isExpired ? (
+                    <div className="rounded-md bg-destructive/8 border border-destructive/20 px-3 py-3 text-center space-y-1.5">
+                      <p className="text-xs font-semibold text-destructive">Oferta vencida</p>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                        Contacta a tu asesor para recibir una oferta actualizada.
+                      </p>
+                    </div>
+                  ) : APARTADO_HABILITADO ? (
+                    <>
+                      <button
+                        onClick={ctaDisabled ? undefined : handleCtaClick}
+                        disabled={ctaDisabled}
+                        className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                          ctaDisabled
+                            ? "bg-muted text-muted-foreground cursor-not-allowed"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
+                        }`}
+                      >
+                        {ctaLabel}
+                        {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
+                      </button>
+                      {!ctaDisabled && (
+                        <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
+                          Apartado reembolsable · Sin compromiso
                         </p>
-                      </div>
-                    ) : APARTADO_HABILITADO ? (
-                      <>
-                        <button
-                          onClick={ctaDisabled ? undefined : handleCtaClick}
-                          disabled={ctaDisabled}
-                          className={`w-full h-11 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                            ctaDisabled
-                              ? "bg-muted text-muted-foreground cursor-not-allowed"
-                              : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-transform"
-                          }`}
-                        >
-                          {ctaLabel}
-                          {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
-                        </button>
-                        {!ctaDisabled && (
-                          <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
-                            Apartado reembolsable · Sin compromiso
-                          </p>
-                        )}
-                      </>
-                    ) : null}
-                  </div>
-                )}
+                      )}
+                    </>
+                  ) : null}
+                </div>
               </div>
 
               {/* Offer ID */}
@@ -683,10 +726,10 @@ const OfferPage = () => {
       </div>{/* /max-w-7xl */}
 
       {/* ── FOOTER UNIFICADO - sello empresarial (fondo oscuro, siempre visible) ── */}
-      <OfferFooter offer={offer} className={`mt-8 ${!reservationId && APARTADO_HABILITADO ? "mb-20 lg:mb-0" : ""}`} />
+      <OfferFooter offer={offer} className={`mt-8 ${APARTADO_HABILITADO ? "mb-20 lg:mb-0" : ""}`} />
 
       {/* Mobile sticky CTA - solo con apartado habilitado (el aviso de vencida ya sale arriba) */}
-      {!reservationId && APARTADO_HABILITADO && (
+      {APARTADO_HABILITADO && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border">
           <div className="px-4 py-3">
             <button
