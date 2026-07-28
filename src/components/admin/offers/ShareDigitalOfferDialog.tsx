@@ -2,7 +2,8 @@ import React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ModalFormHeader, MODAL_BODY_CLS } from "@/components/ui/modal-form";
-import { Globe, Mail, Copy, Download, Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Globe, Mail, Copy, Download, Loader2, ScanEye, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -22,8 +23,10 @@ export function claveALada(raw: string | null | undefined): string {
 export interface ShareDigitalOfferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Link público de la oferta digital (`/oferta/O-xxxxxx/RES-xxxxxx`). */
+  /** Link personal del cliente (`/oferta/O-xxxxxx/<token>`): el único que permite pagar. */
   url: string;
+  /** Misma oferta sin credencial (`/oferta/O-xxxxxx`): revisión del asesor, sin pago. */
+  previewUrl?: string;
   /** Nombre del prospecto, para personalizar el mensaje. */
   leadName?: string;
   /** Correo del prospecto: destinatario por defecto del mailto. */
@@ -57,6 +60,7 @@ export function ShareDigitalOfferDialog({
   open,
   onOpenChange,
   url,
+  previewUrl,
   leadName,
   leadEmail,
   leadPhone,
@@ -82,11 +86,21 @@ export function ShareDigitalOfferDialog({
     ? `${claveALada(leadPhoneCountry)}${whatsappDigits}`
     : "";
 
-  const handle = (method: "web" | "whatsapp" | "email" | "copy") => {
-    onShare?.(method);
+  const handle = (method: "web" | "whatsapp" | "email" | "copy" | "preview" | "copy-preview") => {
+    onShare?.(method as any);
     switch (method) {
       case "web":
         window.open(url, "_blank", "noopener");
+        break;
+      case "preview":
+        window.open(previewUrl || url, "_blank", "noopener");
+        break;
+      case "copy-preview":
+        navigator.clipboard.writeText(previewUrl || url);
+        toast({
+          title: "Link demo copiado",
+          description: "Solo para revisión: con este link nadie puede apartar.",
+        });
         break;
       case "whatsapp":
         window.open(
@@ -108,7 +122,10 @@ export function ShareDigitalOfferDialog({
         break;
       case "copy":
         navigator.clipboard.writeText(url);
-        toast({ title: "Copiado", description: "Link de la oferta copiado al portapapeles." });
+        toast({
+          title: "Link real copiado",
+          description: "Es el que permite apartar: mándalo solo a tu cliente.",
+        });
         break;
     }
     // El popup NO se cierra al compartir: el agente puede mandar el link por
@@ -122,43 +139,98 @@ export function ShareDigitalOfferDialog({
         // Solo cierra con Esc o la X: un clic fuera no debe tirar el link.
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <ModalFormHeader
-          title="Compartir oferta digital"
-          subtitle={unidad || undefined}
-        />
+        <ModalFormHeader title="Compartir oferta digital" subtitle={unidad || undefined} />
         <div className={cn(MODAL_BODY_CLS, "gap-3")}>
           <Button variant="primary-outline" className="w-full" onClick={() => handle("web")}>
-            <Globe className="h-4 w-4" /> Ver página web
+            <Globe className="h-4 w-4 shrink-0" /> Ver página web
           </Button>
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" className="gap-2 justify-start" onClick={() => handle("whatsapp")}>
-              <WhatsAppIcon className="h-5 w-5 text-green-500" /> WhatsApp
+            <Button variant="outline" className="justify-center gap-2" onClick={() => handle("whatsapp")}>
+              <WhatsAppIcon className="h-4 w-4 shrink-0 text-green-500" /> WhatsApp
             </Button>
-            <Button variant="outline" className="gap-2 justify-start" onClick={() => handle("email")}>
-              <Mail className="h-5 w-5 text-muted-foreground" /> Correo
+            <Button variant="outline" className="justify-center gap-2" onClick={() => handle("email")}>
+              <Mail className="h-4 w-4 shrink-0 text-muted-foreground" /> Correo
             </Button>
-            <Button variant="outline" className="gap-2 justify-start" onClick={() => handle("copy")}>
-              <Copy className="h-5 w-5 text-muted-foreground" /> Copiar link
+            <Button variant="outline" className="justify-center gap-2" onClick={() => handle("copy")}>
+              <Copy className="h-4 w-4 shrink-0 text-muted-foreground" /> Copiar link
             </Button>
             <Button
               variant="outline"
-              className="gap-2 justify-start"
+              className="justify-center gap-2"
               disabled={!onDownloadPdf || downloadingPdf}
               onClick={() => { onShare?.("pdf"); onDownloadPdf?.(); }}
             >
               {downloadingPdf ? (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
               ) : (
-                <Download className="h-5 w-5 text-muted-foreground" />
+                <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
               {downloadingPdf ? "Generando..." : "Descargar PDF"}
             </Button>
           </div>
-          {whatsappTarget && (
-            <p className="text-xs text-muted-foreground">
-              WhatsApp se abrirá con el número +{whatsappTarget}.
-            </p>
-          )}
+
+          {/* Demo: misma oferta sin credencial, para revisión interna. Va como
+              extra debajo de las acciones, no como footer. */}
+          <div className="flex items-center justify-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground"
+              onClick={() => handle("preview")}
+            >
+              <ScanEye className="h-3 w-3 shrink-0" /> Ver demo
+            </Button>
+            <span className="text-muted-foreground/40">·</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground"
+              onClick={() => handle("copy-preview")}
+            >
+              <Copy className="h-3 w-3 shrink-0" /> Copiar demo
+            </Button>
+            <span className="text-muted-foreground/40">·</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground"
+                >
+                  <Info className="h-3 w-3 shrink-0" /> Información
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="center" side="top" className="w-80 space-y-3 text-[12px] leading-snug">
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">Link del cliente</p>
+                  <p className="text-muted-foreground">
+                    Es el que abren WhatsApp, Correo, Copiar link y Ver página web.
+                    Personal e intransferible: el único con el que se puede apartar la unidad.
+                  </p>
+                  <p className="break-all rounded bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    {url}
+                  </p>
+                </div>
+                <div className="space-y-1 border-t border-border pt-2">
+                  <p className="font-semibold text-foreground">Demo</p>
+                  <p className="text-muted-foreground">
+                    La misma oferta, con el botón de pago bloqueado. Sirve para revisarla
+                    o enseñarla; si se comparte por error, nadie puede apartar con ella.
+                  </p>
+                  {previewUrl && (
+                    <p className="break-all rounded bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {previewUrl}
+                    </p>
+                  )}
+                </div>
+                {whatsappTarget && (
+                  <p className="border-t border-border pt-2 text-muted-foreground">
+                    WhatsApp se abrirá con el número +{whatsappTarget}.
+                  </p>
+                )}
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
