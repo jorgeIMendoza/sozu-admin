@@ -1,78 +1,67 @@
 import { useState } from 'react';
-import { Plus, Trash2, Users, Check, ChevronsUpDown } from 'lucide-react';
+import { Users, Check, ChevronsUpDown, Trash2, Plus, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { formatCurrency } from '@/lib/portal-estructura-comisiones/utils/calculations';
+import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
+import type { Role } from '@/lib/portal-estructura-comisiones/types/simulator';
 import {
-  useRolesOrganizacionales, useCrearRolOrganizacional, useDesactivarRolOrganizacional,
   usePuestosOrganizacionales, useCrearPuesto, useActualizarPuesto, useEliminarPuesto,
   useProyectosActivosDirectorio, useBuscarUsuarios,
-  type RolOrganizacional, type PuestoOrganizacional, type RoleType, type RoleBelongsTo,
+  type PuestoOrganizacional,
 } from '@/hooks/usePortalEstructuraComisiones/useDirectorioPuestos';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 
 export default function DirectorioPuestosTab() {
-  const { data: roles = [] } = useRolesOrganizacionales();
+  // El catálogo de roles (qué puestos existen) viene de "Puestos y Sueldos"
+  // — ya no se administra por separado aquí. Este tab solo asigna personas
+  // reales (con sueldo real) a esos roles.
+  const { roles } = useSimulator();
   const { data: puestos = [] } = usePuestosOrganizacionales();
   const { data: proyectos = [] } = useProyectosActivosDirectorio();
-  const crearRol = useCrearRolOrganizacional();
-  const desactivarRol = useDesactivarRolOrganizacional();
-  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
 
   const monthlyCost = (p: PuestoOrganizacional) => p.sueldo_base * (1 + p.prestaciones_pct / 100) + p.bono_fijo;
   const totalMonthlyCost = puestos.reduce((s, p) => s + monthlyCost(p), 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold">Directorio de Personal</h2>
-          <p className="text-sm text-muted-foreground">
-            Roles reales de la empresa y qué usuario ocupa cada puesto — independiente del catálogo de roles y permisos del sistema.
-            Costo fijo mensual total: <span className="font-semibold text-foreground">{formatCurrency(totalMonthlyCost)}</span>
-          </p>
-        </div>
-        <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5"><Plus className="h-3.5 w-3.5" /> Nuevo Rol</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Nuevo Rol</DialogTitle></DialogHeader>
-            <RoleForm
-              onSave={(r) => { crearRol.mutate(r); setRoleDialogOpen(false); }}
-              onCancel={() => setRoleDialogOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
+      <div>
+        <h2 className="text-xl font-bold">Directorio de Personal</h2>
+        <p className="text-sm text-muted-foreground">
+          Qué usuario real ocupa cada puesto del catálogo de <strong>Puestos y Sueldos</strong> — independiente del catálogo de roles y permisos del sistema.
+          Costo fijo mensual total: <span className="font-semibold text-foreground">{formatCurrency(totalMonthlyCost)}</span>
+        </p>
       </div>
 
-      {/* Roles list */}
+      {/* Roles list — de solo lectura, se administran en Puestos y Sueldos */}
       <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Roles Definidos</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Roles del Catálogo</h3>
+          <Link
+            to="/admin/portal-estructura-comisiones/structure"
+            className="text-xs text-accent hover:underline flex items-center gap-1"
+          >
+            Administrar en Puestos y Sueldos <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
         {roles.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">Sin roles definidos aún.</p>
+          <p className="text-sm text-muted-foreground italic">Sin roles definidos aún en Puestos y Sueldos.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {roles.map(role => (
-              <div key={role.id} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm group">
+              <div key={role.id} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
                 <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-medium">{role.nombre}</span>
-                <Badge variant={role.pertenece_a === 'sozu_central' ? 'default' : 'secondary'} className="text-[10px]">
-                  {role.pertenece_a === 'sozu_central' ? 'SOZU' : 'Proyecto'}
+                <span className="font-medium">{role.name}</span>
+                <Badge variant={role.belongsTo === 'sozu_central' ? 'default' : 'secondary'} className="text-[10px]">
+                  {role.belongsTo === 'sozu_central' ? 'SOZU' : 'Proyecto'}
                 </Badge>
-                {role.participa_comision && (
+                {role.participatesInCommission && (
                   <Badge variant="outline" className="text-[10px] border-accent text-accent">Comisión</Badge>
                 )}
-                <button onClick={() => desactivarRol.mutate(role.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Trash2 className="h-3 w-3 text-destructive" />
-                </button>
               </div>
             ))}
           </div>
@@ -84,7 +73,7 @@ export default function DirectorioPuestosTab() {
         title="SOZU Central"
         idProyecto={null}
         puestos={puestos.filter(p => p.id_proyecto === null)}
-        availableRoles={roles.filter(r => r.pertenece_a === 'sozu_central')}
+        availableRoles={roles.filter(r => r.belongsTo === 'sozu_central')}
       />
 
       {/* Per-project */}
@@ -94,7 +83,7 @@ export default function DirectorioPuestosTab() {
           title={proyecto.nombre}
           idProyecto={proyecto.id}
           puestos={puestos.filter(p => p.id_proyecto === proyecto.id)}
-          availableRoles={roles.filter(r => r.pertenece_a === 'project')}
+          availableRoles={roles.filter(r => r.belongsTo === 'project')}
         />
       ))}
     </div>
@@ -105,7 +94,7 @@ function PuestosSection({ title, idProyecto, puestos, availableRoles }: {
   title: string;
   idProyecto: number | null;
   puestos: PuestoOrganizacional[];
-  availableRoles: RolOrganizacional[];
+  availableRoles: Role[];
 }) {
   const crearPuesto = useCrearPuesto();
   const actualizarPuesto = useActualizarPuesto();
@@ -164,10 +153,10 @@ function PuestosSection({ title, idProyecto, puestos, availableRoles }: {
                 <td>
                   <select
                     value={p.id_rol}
-                    onChange={e => actualizarPuesto.mutate({ id: p.id, id_rol: +e.target.value })}
+                    onChange={e => actualizarPuesto.mutate({ id: p.id, id_rol: e.target.value })}
                     className="rounded border bg-transparent px-2 py-1 text-sm"
                   >
-                    {availableRoles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                    {availableRoles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
                 </td>
                 <td>
@@ -263,52 +252,5 @@ function UsuarioPicker({ email, nombreLibre, onSelectUsuario, onSetNombreLibre }
         </Command>
       </PopoverContent>
     </Popover>
-  );
-}
-
-function RoleForm({ onSave, onCancel }: { onSave: (r: { nombre: string; tipo: RoleType; pertenece_a: RoleBelongsTo; participa_comision: boolean }) => void; onCancel: () => void }) {
-  const [nombre, setNombre] = useState('');
-  const [tipo, setTipo] = useState<RoleType>('operative');
-  const [perteneceA, setPerteneceA] = useState<RoleBelongsTo>('project');
-  const [comision, setComision] = useState(true);
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <Label>Nombre del Rol</Label>
-        <Input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Gerente de Ventas" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>Tipo</Label>
-          <Select value={tipo} onValueChange={(v) => setTipo(v as RoleType)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="strategic">Estratégico</SelectItem>
-              <SelectItem value="operative">Operativo</SelectItem>
-              <SelectItem value="support">Soporte</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Pertenece a</Label>
-          <Select value={perteneceA} onValueChange={(v) => setPerteneceA(v as RoleBelongsTo)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="sozu_central">SOZU Central</SelectItem>
-              <SelectItem value="project">Proyecto</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={comision} onCheckedChange={setComision} />
-        <Label>Participa en comisión</Label>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-        <Button disabled={!nombre} onClick={() => onSave({ nombre, tipo, pertenece_a: perteneceA, participa_comision: comision })}>Guardar</Button>
-      </div>
-    </div>
   );
 }

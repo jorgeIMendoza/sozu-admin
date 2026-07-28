@@ -2,33 +2,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Directorio de Personal — catálogo real de roles de empresa (Director, Asesor,
- * etc., tabla `roles_organizacionales`) y de los puestos ocupados por usuarios
- * reales (`puestos_organizacionales`), independiente del catálogo `roles` /
- * `usuarios.rol_id` de autenticación y permisos, y también independiente del
- * simulador abstracto de "Roles y Sueldos" (`SimulatorContext`/`localStorage`),
- * que sigue funcionando igual.
+ * Directorio de Personal — puestos ocupados por usuarios reales
+ * (`puestos_organizacionales`): quién ocupa cada puesto, en qué proyecto real
+ * y con qué sueldo. Independiente del catálogo `roles` / `usuarios.rol_id` de
+ * autenticación y permisos.
  *
- * Probe graceful: si las tablas aún no existen (DDL pendiente, ver
+ * El catálogo de ROLES (qué puestos existen: nombre, tipo, a qué pertenecen,
+ * si participa en comisión) ya no vive aquí — se toma directo de "Puestos y
+ * Sueldos" (`useSimulator().roles`, `SimulatorContext`/`localStorage`), la
+ * misma fuente que ya usa el Motor de Comisiones y el Organigrama, en vez de
+ * mantener un catálogo separado y duplicado en `roles_organizacionales`.
+ * `puestos_organizacionales.id_rol` es `text` (id de ese catálogo local), sin
+ * FK — mismo patrón ya usado en `comisiones_reglas.id_rol`.
+ *
+ * Probe graceful: si la tabla aún no existe (DDL pendiente, ver
  * `Ejecuciones_manuales/directorio_personal_estructura_comisiones.md`), las
  * consultas devuelven `[]` en vez de romper la UI.
  */
 
-export type RoleType = "strategic" | "operative" | "support";
-export type RoleBelongsTo = "sozu_central" | "project";
-
-export interface RolOrganizacional {
-  id: number;
-  nombre: string;
-  tipo: RoleType;
-  pertenece_a: RoleBelongsTo;
-  participa_comision: boolean;
-  activo: boolean;
-}
-
 export interface PuestoOrganizacional {
   id: number;
-  id_rol: number;
+  id_rol: string;
   id_proyecto: number | null;
   email_usuario: string | null;
   nombre_ocupante: string | null;
@@ -39,56 +33,7 @@ export interface PuestoOrganizacional {
   activo: boolean;
 }
 
-const ROLES_KEY = "roles-organizacionales";
 const PUESTOS_KEY = "puestos-organizacionales";
-
-export function useRolesOrganizacionales() {
-  return useQuery<RolOrganizacional[]>({
-    queryKey: [ROLES_KEY],
-    staleTime: 30_000,
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("roles_organizacionales")
-        .select("id, nombre, tipo, pertenece_a, participa_comision, activo")
-        .eq("activo", true)
-        .order("nombre");
-      if (error || !data) return [];
-      return data as RolOrganizacional[];
-    },
-  });
-}
-
-export interface NuevoRolInput {
-  nombre: string;
-  tipo: RoleType;
-  pertenece_a: RoleBelongsTo;
-  participa_comision: boolean;
-}
-
-export function useCrearRolOrganizacional() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: NuevoRolInput) => {
-      const { error } = await (supabase as any).from("roles_organizacionales").insert(input);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ROLES_KEY] }),
-  });
-}
-
-export function useDesactivarRolOrganizacional() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await (supabase as any)
-        .from("roles_organizacionales")
-        .update({ activo: false })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ROLES_KEY] }),
-  });
-}
 
 export function usePuestosOrganizacionales() {
   return useQuery<PuestoOrganizacional[]>({

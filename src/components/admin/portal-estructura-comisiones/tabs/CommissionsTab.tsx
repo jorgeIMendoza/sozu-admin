@@ -1,40 +1,23 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2, Save } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Trash2, Info, Send, Loader2, Building2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import SyncCommissionsDialog from '../shared/SyncCommissionsDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProyectosMotorComisiones } from '@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones';
 import { useEnviarPropuesta, type MotorSnapshot } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
-
-interface SyncHistoryEntry {
-  id: string;
-  date: string;
-  user: string;
-  rolesAdded: number;
-}
-
-const SYNC_HISTORY_KEY = 'sozu_commission_sync_history';
-const loadHistory = (): SyncHistoryEntry[] => {
-  try { return JSON.parse(localStorage.getItem(SYNC_HISTORY_KEY) || '[]'); } catch { return []; }
-};
-const saveHistory = (h: SyncHistoryEntry[]) => localStorage.setItem(SYNC_HISTORY_KEY, JSON.stringify(h));
 
 export default function CommissionsTab() {
   const {
     channels, roles, roleAssignments, motorConfig, updateMotorConfig, motorProjectId, setMotorProjectId,
     motorLoading, motorDirty, motorSaving, saveMotorComisiones,
-    commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
+    commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule,
   } = useSimulator();
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [history, setHistory] = useState<SyncHistoryEntry[]>(loadHistory);
 
   const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
   const proyectoActual = proyectosMotor.find(p => p.id === motorProjectId);
@@ -44,18 +27,6 @@ export default function CommissionsTab() {
   const enviarPropuesta = useEnviarPropuesta();
   const [validarOpen, setValidarOpen] = useState(false);
 
-  const commRoles = roles.filter(r => r.participatesInCommission);
-
-  // La matriz canal×puesto es del proyecto seleccionado — se sincroniza cada
-  // vez que cambia el proyecto. Espera a que `motorLoading` termine: si esto
-  // corriera mientras la carga de `commissionRules` del proyecto nuevo sigue
-  // en vuelo, calcularía "faltantes" contra datos todavía del proyecto
-  // anterior (o vacíos) y agregaría filas duplicadas.
-  useEffect(() => {
-    if (motorProjectId != null && !motorLoading) syncMissingCommissionRules();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [motorProjectId, motorLoading]);
-
   // Ya no autoguarda: avisa antes de cerrar/recargar si hay cambios sin guardar.
   useEffect(() => {
     if (!motorDirty) return;
@@ -64,32 +35,23 @@ export default function CommissionsTab() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [motorDirty]);
 
-  const rolesToAdd = useMemo(() => {
-    let n = 0;
+  // Reglas con más de una fila para el mismo rol dentro del mismo canal — no
+  // deberían poder crearse (ver `addRule`/el <select> de Rol más abajo, que
+  // ya no ofrecen un rol repetido), pero se detectan igual como red de
+  // seguridad para datos que ya existieran así. Mientras exista alguno, se
+  // bloquea "Guardar cambios" para que el usuario los resuelva primero.
+  const duplicateRuleIds = useMemo(() => {
+    const dup = new Set<string>();
     channels.forEach(ch => {
-      commRoles.forEach(role => {
-        if (!commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id)) n++;
+      const byRole = new Map<string, string[]>();
+      commissionRules.filter(r => r.channelId === ch.id).forEach(r => {
+        byRole.set(r.roleId, [...(byRole.get(r.roleId) || []), r.id]);
       });
+      byRole.forEach(ids => { if (ids.length > 1) ids.forEach(id => dup.add(id)); });
     });
-    return n;
-  }, [commissionRules, channels, commRoles]);
-
-  const handleConfirmSync = async () => {
-    const added = await syncMissingCommissionRules();
-
-    const entry: SyncHistoryEntry = {
-      id: crypto.randomUUID(),
-      date: new Date().toISOString(),
-      user: 'Admin',
-      rolesAdded: added,
-    };
-    const next = [entry, ...history].slice(0, 50);
-    setHistory(next);
-    saveHistory(next);
-
-    toast.success('Roles agregados. Presiona "Guardar cambios" para persistirlos.');
-    setSyncOpen(false);
-  };
+    return dup;
+  }, [commissionRules, channels]);
+  const hasDuplicateRoles = duplicateRuleIds.size > 0;
 
   const buildSnapshot = (): MotorSnapshot => ({
     totalCommissionPct: motorConfig.totalCommissionPct,
@@ -137,6 +99,15 @@ export default function CommissionsTab() {
   const updateRule = (ruleId: string, updates: Partial<typeof commissionRules[0]>) => {
     const rule = commissionRules.find(r => r.id === ruleId);
     if (!rule) return;
+    if (updates.roleId && updates.roleId !== rule.roleId) {
+      const clashes = commissionRules.some(
+        r => r.id !== ruleId && r.channelId === rule.channelId && r.roleId === updates.roleId
+      );
+      if (clashes) {
+        toast.error('Ese rol ya tiene una regla en este canal.');
+        return;
+      }
+    }
     updateCommissionRule({ ...rule, ...updates });
   };
 
@@ -184,34 +155,23 @@ export default function CommissionsTab() {
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} className="gap-1.5">
-                    <RefreshCw className="h-3.5 w-3.5" /> Sincronizar roles y comisiones
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  Agrega al motor los roles nuevos que falten desde Roles y Sueldos.
-                </TooltipContent>
-              </Tooltip>
-              <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
-                <History className="h-3.5 w-3.5" /> Histórico
-              </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
                   <span>
                     <Button
                       variant="default"
                       size="sm"
                       onClick={() => setValidarOpen(true)}
-                      disabled={motorDirty}
+                      disabled={motorDirty || hasDuplicateRoles}
                       className="gap-1.5"
                     >
                       <Send className="h-3.5 w-3.5" /> Enviar a validar
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {motorDirty && (
+                {(motorDirty || hasDuplicateRoles) && (
                   <TooltipContent className="max-w-xs text-xs">
-                    Guarda los cambios pendientes antes de enviar a validar.
+                    {hasDuplicateRoles
+                      ? 'Resuelve los roles duplicados antes de enviar a validar.'
+                      : 'Guarda los cambios pendientes antes de enviar a validar.'}
                   </TooltipContent>
                 )}
               </Tooltip>
@@ -232,7 +192,7 @@ export default function CommissionsTab() {
                       variant={motorDirty ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => saveMotorComisiones()}
-                      disabled={!motorDirty || motorSaving}
+                      disabled={!motorDirty || motorSaving || hasDuplicateRoles}
                       className="gap-1.5"
                     >
                       {motorSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -241,9 +201,11 @@ export default function CommissionsTab() {
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs text-xs">
-                  {motorDirty
-                    ? 'Tienes cambios sin guardar en la matriz de comisiones o la Comisión Total.'
-                    : 'No hay cambios pendientes por guardar.'}
+                  {hasDuplicateRoles
+                    ? 'Hay roles duplicados en un mismo canal — elimina o reasigna una de las filas repetidas antes de guardar.'
+                    : motorDirty
+                      ? 'Tienes cambios sin guardar en la matriz de comisiones o la Comisión Total.'
+                      : 'No hay cambios pendientes por guardar.'}
                 </TooltipContent>
               </Tooltip>
             </>
@@ -265,7 +227,7 @@ export default function CommissionsTab() {
       <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground flex items-start gap-2">
         <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
         <span>
-          Los roles se cargan automáticamente desde la sección <strong>Roles y Sueldos</strong>. Puedes eliminarlos o modificar su comisión.
+          Usa <strong>+ Agregar Rol</strong> en cada canal para traer roles desde <strong>Puestos y Sueldos</strong> — ese catálogo es la fuente de verdad. No se permite agregar el mismo rol dos veces en un canal.
         </span>
       </div>
 
@@ -273,6 +235,12 @@ export default function CommissionsTab() {
         Comisión total: <span className="font-bold text-accent">{motorConfig.totalCommissionPct}%</span>
       </div>
 
+      {motorLoading ? (
+        <div className="rounded-xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando matriz de comisiones…
+        </div>
+      ) : (
+      <>
       {/* Channel cards */}
       {channels.map(ch => {
         const channelRules = commissionRules.filter(r => r.channelId === ch.id);
@@ -301,6 +269,8 @@ export default function CommissionsTab() {
           ? <CheckCircle className="h-3.5 w-3.5" />
           : <AlertTriangle className="h-3.5 w-3.5" />;
 
+        const channelHasUnusedRole = roles.some(r => !channelRules.some(cr => cr.roleId === r.id));
+
         return (
           <div key={ch.id} className="rounded-xl border bg-card p-5">
             <div className="flex items-center justify-between mb-3">
@@ -313,9 +283,20 @@ export default function CommissionsTab() {
                   {statusIcon}
                   {statusText}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => addRule(ch.id)}>
-                  <Plus className="h-3 w-3 mr-1" /> Agregar Rol
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button variant="outline" size="sm" onClick={() => addRule(ch.id)} disabled={!channelHasUnusedRole}>
+                        <Plus className="h-3 w-3 mr-1" /> Agregar Rol
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!channelHasUnusedRole && (
+                    <TooltipContent className="max-w-xs text-xs">
+                      Todos los roles de Puestos y Sueldos ya están agregados a este canal.
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               </div>
             </div>
 
@@ -344,19 +325,39 @@ export default function CommissionsTab() {
                   {channelRules.map(rule => {
                     const { role, assignment } = getRoleInfo(rule.roleId);
                     const sharePct = comisionInterna > 0 ? (rule.percentage / comisionInterna) * 100 : 0;
+                    const isDuplicate = duplicateRuleIds.has(rule.id);
+                    // No ofrece un rol que ya esté usado en OTRA fila de este mismo canal —
+                    // evita poder crear un duplicado desde este selector. El rol actual de
+                    // esta fila siempre se incluye para que el <select> pueda mostrarlo.
+                    const availableRoles = roles.filter(r =>
+                      r.id === rule.roleId || (
+                        (r.participatesInCommission) &&
+                        !channelRules.some(cr => cr.id !== rule.id && cr.roleId === r.id)
+                      )
+                    );
                     return (
-                      <tr key={rule.id}>
+                      <tr key={rule.id} className={isDuplicate ? 'bg-destructive/5' : undefined}>
                         <td>
                           <div className="flex flex-col gap-0.5">
-                            <select
-                              value={rule.roleId}
-                              onChange={e => updateRule(rule.id, { roleId: e.target.value })}
-                              className="rounded border bg-transparent px-2 py-1 text-sm font-medium"
-                            >
-                              {roles.filter(r => r.participatesInCommission || r.id === rule.roleId).map(r => (
-                                <option key={r.id} value={r.id}>{r.name}</option>
-                              ))}
-                            </select>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={rule.roleId}
+                                onChange={e => updateRule(rule.id, { roleId: e.target.value })}
+                                className={`rounded border bg-transparent px-2 py-1 text-sm font-medium ${isDuplicate ? 'border-destructive text-destructive' : ''}`}
+                              >
+                                {availableRoles.map(r => (
+                                  <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                              </select>
+                              {isDuplicate && (
+                                <Tooltip>
+                                  <TooltipTrigger><AlertTriangle className="h-3.5 w-3.5 text-destructive" /></TooltipTrigger>
+                                  <TooltipContent className="max-w-xs text-xs">
+                                    Este rol está repetido en este canal. Elimina o reasigna una de las filas duplicadas — no se puede guardar mientras exista un duplicado.
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
                             {assignment && role && (
                               <span className="text-[11px] text-muted-foreground pl-2">
                                 {formatCurrency(assignment.baseSalary)} / mes · {role.belongsTo === 'sozu_central' ? 'SOZU' : 'Proyecto'}
@@ -452,39 +453,8 @@ export default function CommissionsTab() {
           </div>
         );
       })}
-
-      {historyOpen && (
-        <div className="rounded-xl border bg-card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold flex items-center gap-2"><History className="h-4 w-4" /> Histórico de sincronización</h3>
-            <Badge variant="outline" className="text-[10px]">{history.length} registros</Badge>
-          </div>
-          {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">Sin sincronizaciones registradas.</p>
-          ) : (
-            <div className="max-h-80 overflow-auto space-y-2">
-              {history.map(h => (
-                <div key={h.id} className="rounded-lg border px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium">Sincronización</span>
-                    <span className="text-muted-foreground">{new Date(h.date).toLocaleString('es-MX')} · {h.user}</span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    Roles agregados: <strong>{h.rolesAdded}</strong>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      </>
       )}
-
-      <SyncCommissionsDialog
-        open={syncOpen}
-        onOpenChange={setSyncOpen}
-        rolesToAdd={rolesToAdd}
-        onConfirm={handleConfirmSync}
-      />
 
       {/* Enviar a validar — Portal Alta Dirección */}
       <Dialog open={validarOpen} onOpenChange={setValidarOpen}>

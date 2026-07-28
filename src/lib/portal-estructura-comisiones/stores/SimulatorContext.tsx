@@ -11,6 +11,9 @@ import {
   updateReglaComisionRemota, deleteReglaComisionRemota,
   fetchMotorConfigReal, updateMotorConfigRemoto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
+import {
+  fetchRolesReales, seedRolesReales, insertRolReal, updateRolReal, deleteRolReal,
+} from '@/hooks/usePortalEstructuraComisiones/useRolesRealesSync';
 
 const DEFAULT_MOTOR_CONFIG: MotorConfig = { totalCommissionPct: 6 };
 
@@ -54,8 +57,6 @@ interface SimulatorContextType extends AppState {
   addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project') => void;
   updateCommissionRule: (rule: CommissionRule) => void;
   deleteCommissionRule: (id: string) => void;
-  /** Agrega localmente las combinaciones canal×puesto que falten para los roles que participan en comisión. No persiste — requiere `saveMotorComisiones`. */
-  syncMissingCommissionRules: () => number;
   /** Config real del Motor de Comisiones (Modo A/B + Comisión Total) del proyecto seleccionado. Local únicamente. */
   updateMotorConfig: (config: MotorConfig) => void;
   /** Persiste en el servidor todos los cambios locales acumulados (reglas agregadas/editadas/eliminadas + Comisión Total) para el proyecto seleccionado. */
@@ -142,16 +143,33 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Roles ("Puestos y Sueldos") — mismo patrón que Canales: compartidos vía
+  // Supabase (`roles_organizacionales`) en vez de vivir solo en localStorage.
+  // Si la tabla existe pero está vacía, se siembra con los roles que ya
+  // tenía este navegador (para no perder el catálogo del primero que
+  // sincroniza). Directorio de Personal, Organigrama y Motor de Comisiones
+  // leen `roles` de este mismo contexto, así que quedan compartidos también
+  // sin ningún cambio adicional en esos tabs.
+  useEffect(() => {
+    (async () => {
+      const remoteRoles = await fetchRolesReales();
+      if (remoteRoles !== null && remoteRoles.length === 0) {
+        await seedRolesReales(state.roles);
+      }
+      setState(prev => ({
+        ...prev,
+        roles: remoteRoles && remoteRoles.length > 0 ? remoteRoles : prev.roles,
+      }));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // La matriz de Comisiones (canal × puesto) y la config del motor (Modo/Total)
   // son por proyecto — se recargan cada vez que cambia `motorProjectId`. Sin
   // proyecto seleccionado, quedan vacías/en default (nada que editar todavía).
-  //
-  // `motorLoading` marca la ventana en la que este fetch está en vuelo.
-  // Es importante para que otros efectos (ej. el auto-sync de roles nuevos en
-  // `CommissionsTab.tsx`) no operen sobre `commissionRules` todavía obsoleto
-  // (del proyecto anterior) mientras este fetch no haya resuelto — hacerlo
-  // causaba que se intentaran crear reglas que ya existían en el proyecto
-  // nuevo, y Postgres rechazaba el insert con `23505 duplicate key`.
+  // `motorLoading` marca la ventana en la que este fetch está en vuelo, para
+  // que `CommissionsTab.tsx` pueda mostrar un estado de carga en vez de un
+  // canal vacío momentáneo mientras llegan los datos del proyecto nuevo.
   useEffect(() => {
     setMotorDirty(false);
     setPendingDeletes([]);
@@ -204,9 +222,24 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     addProject: (p) => update(s => ({ ...s, projects: [...s.projects, p] })),
     updateProject: (p) => update(s => ({ ...s, projects: s.projects.map(x => x.id === p.id ? p : x) })),
     deleteProject: (id) => update(s => ({ ...s, projects: s.projects.filter(x => x.id !== id) })),
-    addRole: (r) => update(s => ({ ...s, roles: [...s.roles, r] })),
-    updateRole: (r) => update(s => ({ ...s, roles: s.roles.map(x => x.id === r.id ? r : x) })),
-    deleteRole: (id) => update(s => ({ ...s, roles: s.roles.filter(x => x.id !== id) })),
+    addRole: (r) => {
+      update(s => ({ ...s, roles: [...s.roles, r] }));
+      insertRolReal(r).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error(`No se pudo guardar el rol "${r.name}" en el servidor.`);
+      });
+    },
+    updateRole: (r) => {
+      update(s => ({ ...s, roles: s.roles.map(x => x.id === r.id ? r : x) }));
+      updateRolReal(r).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error(`No se pudo guardar el rol "${r.name}" en el servidor.`);
+      });
+    },
+    deleteRole: (id) => {
+      update(s => ({ ...s, roles: s.roles.filter(x => x.id !== id) }));
+      deleteRolReal(id).then(({ ok, tableMissing }) => {
+        if (!ok && !tableMissing) toast.error('No se pudo eliminar el rol en el servidor.');
+      });
+    },
     addRoleAssignment: (ra) => update(s => ({ ...s, roleAssignments: [...s.roleAssignments, ra] })),
     updateRoleAssignment: (ra) => update(s => ({ ...s, roleAssignments: s.roleAssignments.map(x => x.id === ra.id ? ra : x) })),
     deleteRoleAssignment: (id) => update(s => ({ ...s, roleAssignments: s.roleAssignments.filter(x => x.id !== id) })),
@@ -293,35 +326,6 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       update(s => ({ ...s, commissionRules: s.commissionRules.filter(r => r.id !== id) }));
       if (!id.startsWith('local-')) setPendingDeletes(prev => [...prev, id]);
       setMotorDirty(true);
-    },
-    // Agrega localmente (sin tocar el servidor) las combinaciones canal×puesto
-    // que falten para los roles que participan en comisión. Antes esto
-    // insertaba directo en la BD y se disparaba automáticamente al cambiar de
-    // proyecto (ver efecto de `motorProjectId` arriba) — si ese insert
-    // corría con `commissionRules` todavía del proyecto anterior (fetch en
-    // vuelo), calculaba "faltantes" que en realidad ya existían para el
-    // proyecto nuevo, y el INSERT completo fallaba con `23505 duplicate key`.
-    // Al ser ahora 100% local, ese fetch en vuelo ya no puede reventar nada;
-    // el usuario guarda con el botón cuando quiere persistir.
-    syncMissingCommissionRules: () => {
-      if (motorProjectId == null) return 0;
-      const commRoles = state.roles.filter(r => r.participatesInCommission);
-      const missing: CommissionRule[] = [];
-      state.channels.forEach(ch => {
-        commRoles.forEach(role => {
-          const exists = state.commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id);
-          if (!exists) {
-            missing.push({
-              id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId: ch.id, roleId: role.id, percentage: 0,
-              pool: role.belongsTo === 'sozu_central' ? 'sozu' : 'project',
-            });
-          }
-        });
-      });
-      if (missing.length === 0) return 0;
-      update(s => ({ ...s, commissionRules: [...s.commissionRules, ...missing] }));
-      setMotorDirty(true);
-      return missing.length;
     },
     updateMotorConfig: (config) => {
       if (motorProjectId == null) return;
