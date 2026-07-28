@@ -1030,7 +1030,14 @@ function AppJuridicoDashboardInner() {
     mutationFn: async ({
       demandaId, idAsunto, file, tipoDocumento, descripcion,
     }: { demandaId: number; idAsunto: string | null; file: File; tipoDocumento: string; descripcion: string }) => {
-      const path = `demanda-${demandaId}/${Date.now()}-${file.name}`;
+      // Supabase Storage rechaza keys con acentos/espacios/caracteres especiales
+      // ("Invalid key"). nombre_archivo en BD conserva el nombre original tal cual;
+      // solo la key de Storage se sanitiza.
+      const safeName = file.name
+        .normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '') // quita acentos (o con tilde -> o)
+        .replace(/[^a-zA-Z0-9._-]/g, '_') // espacios y simbolos -> _
+        .replace(/_+/g, '_');
+      const path = `demanda-${demandaId}/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from('documentos-juridicos')
         .upload(path, file);
