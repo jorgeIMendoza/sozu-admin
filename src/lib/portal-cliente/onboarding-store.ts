@@ -110,10 +110,23 @@ export type OnboardingLevel = 0 | 1 | 2;
 export type PurchaseType = "contado" | "credito";
 export type PurchaseRecency = "reciente" | "antiguo";
 
+// Unidad real seleccionada en el paso 1 (traída de la BD, desarrollo Margot).
+export interface SelectedUnit {
+  id: string;
+  numero: string;
+  piso: string;
+  modelo: string | null;
+  m2Interiores: number | null;
+  m2Exteriores: number | null;
+  descripcion: string | null;
+  imagen: string | null;
+}
+
 export interface OnboardingState {
   step: number;
   personType: PersonType;
   unitId: string | null;
+  selectedUnit: SelectedUnit | null;
   unitConfirmed: boolean;
   accountEmail: string | null;
   accountPhone: string | null;
@@ -322,6 +335,7 @@ const initialOnboarding: OnboardingState = {
   step: 1,
   personType: "fisica",
   unitId: null,
+  selectedUnit: null,
   unitConfirmed: false,
   accountEmail: null,
   accountPhone: null,
@@ -493,91 +507,102 @@ export function findField(doc: UploadedDoc | undefined, key: string): string | u
 
 export function getPropertyById(state: PortalState, id: string | null): Property | undefined {
   if (!id) return undefined;
-  return state.properties.find((p) => p.id === id);
+  const found = state.properties.find((p) => p.id === id);
+  if (found) return found;
+  // Unidad real seleccionada de la BD: la mapeamos a la forma Property para las vistas.
+  // No trae folio real / dueño original (eso lo resuelve el área legal en Fase D).
+  const su = state.onboarding.selectedUnit;
+  if (su && su.id === id) {
+    return {
+      id: su.id,
+      project: "margot",
+      unit: su.numero,
+      address: `Desarrollo Margot · Piso ${su.piso}`,
+      folioReal: "",
+      originalOwnerId: "",
+      currentOwnerId: "",
+      maintenanceMonthly: 0,
+      model: su.modelo ?? undefined,
+      floor: su.piso ? Number(su.piso) : undefined,
+      floorTotal: 17,
+      mInt: su.m2Interiores ?? undefined,
+      mExt: su.m2Exteriores ?? undefined,
+      description: su.descripcion ?? undefined,
+      image: su.imagen ?? undefined,
+    };
+  }
+  return undefined;
 }
 
 export function computeVerification(state: PortalState): VerificationCheck[] {
   const { onboarding, demo } = state;
-  const property = getPropertyById(state, onboarding.unitId);
-  const idDoc = onboarding.docs.find((d) => d.type === "id_oficial" && d.confirmed);
-  const escritura = onboarding.docs.find((d) => d.type === "escritura" && d.confirmed);
-  const rpp = onboarding.docs.find((d) => d.type === "certificado_rpp");
-  const predial = onboarding.docs.find((d) => d.type === "predial" && d.confirmed);
+  const confirmedDoc = (t: DocType) => onboarding.docs.find((d) => d.type === t && d.confirmed);
+  const ine = confirmedDoc("id_oficial");
+  const curpDoc = confirmedDoc("curp");
+  const csf = confirmedDoc("csf");
+  const escritura = onboarding.docs.find((d) => d.type === "escritura");
 
-  const nameId = findField(idDoc, "nombre");
-  const nameEsc = findField(escritura, "adquirente");
-  const nameRpp = findField(rpp, "titular_registral");
-  const folioEsc = findField(escritura, "folio_real");
-  const folioRpp = findField(rpp, "folio_real");
-  const folioPred = findField(predial, "folio_real");
-  const vendedor = findField(escritura, "vendedor");
+  const norm = (s?: string) => (s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 
-  const nameMatch =
-    !!nameId && !!nameEsc && (demo.forceNameMismatch ? false : nameId === nameEsc);
-  const folioConsistent = (() => {
-    if (demo.forceFolioMismatch) return false;
-    const vals = [folioEsc, folioRpp, folioPred].filter(Boolean);
-    if (vals.length < 2) return false;
-    return vals.every((v) => v === vals[0]);
-  })();
-  const unitMatch = !!property && folioEsc === property.folioReal && !demo.forceFolioMismatch;
-  const chainOk =
-    !!property && !!vendedor && (demo.forceChainMismatch ? false : vendedor === property.originalOwnerId);
-  const rppOk =
-    !!rpp &&
-    (rpp.managedBySozu ? true : demo.rppState === "vigente");
+  // Cruces que SÍ podemos hacer en el front: consistencia de nombre y CURP entre
+  // los documentos con datos extraídos (INE por cámara+IA, CURP y CSF por PDF).
+  const names = [
+    { src: "INE", v: norm(findField(ine, "nombre")) },
+    { src: "CURP", v: norm(findField(curpDoc, "nombre")) },
+    { src: "CSF", v: norm(findField(csf, "razon_social")) },
+  ].filter((n) => n.v.length > 2);
+  const curps = [findField(ine, "curp"), findField(curpDoc, "curp")]
+    .map((c) => norm(c))
+    .filter((c) => c.length > 5);
+
+  const nameConsistent = names.length >= 2 && names.every((n) => n.v === names[0].v);
+  const nameFail = names.length >= 2 && (demo.forceNameMismatch || !nameConsistent);
+  const curpConsistent = curps.length >= 2 && curps.every((c) => c === curps[0]);
+
+  // Cruces contra el registro SOZU (RPP / dueño original) + validez de escritura:
+  // los resuelve el área legal al recibir la solicitud (backend, Fase D).
+  const PENDING = "Se validará en la revisión del área legal de SOZU (Portal Condominio).";
 
   return [
     {
       key: "name",
-      label: "Nombre en ID = titular en escritura = titular en RPP",
-      status: idDoc && escritura ? (nameMatch && (!nameRpp || nameRpp === nameId) ? "ok" : "fail") : "idle",
+      label: "Nombre consistente entre tus documentos (INE · CURP · CSF)",
+      status: names.length < 2 ? "idle" : nameFail ? "fail" : "ok",
       detail:
-        idDoc && escritura
-          ? nameMatch
-            ? `Coincide: ${nameId}`
-            : `No coincide (ID: ${nameId ?? "—"}, escritura: ${nameEsc ?? "—"})`
-          : "Sube ID y escritura para validar",
+        names.length < 2
+          ? "Se coteja cuando tengas al menos dos documentos con nombre."
+          : nameFail
+            ? `No coincide entre fuentes → ${names.map((n) => `${n.src}: ${n.v}`).join(" · ")}`
+            : `Coincide en todas tus fuentes: ${names[0].v}`,
     },
     {
-      key: "folio",
-      label: "Folio real consistente entre escritura, RPP y predial",
-      status: escritura && (rpp || predial) ? (folioConsistent ? "ok" : "fail") : "idle",
-      detail: folioConsistent
-        ? `Folio: ${folioEsc}`
-        : "Los documentos deben referir el mismo folio real",
+      key: "curp",
+      label: "CURP consistente entre tus documentos",
+      status: curps.length < 2 ? "idle" : curpConsistent ? "ok" : "fail",
+      detail:
+        curps.length < 2
+          ? "Se coteja cuando haya dos documentos con CURP (INE y CURP)."
+          : curpConsistent
+            ? `Coincide: ${curps[0]}`
+            : `No coincide: ${[...new Set(curps)].join(" · ")}`,
     },
     {
-      key: "unit",
-      label: "Inmueble = unidad SOZU seleccionada",
-      status: property && escritura ? (unitMatch ? "ok" : "fail") : "idle",
-      detail: property
-        ? unitMatch
-          ? `Coincide con folio ${property.folioReal}`
-          : `Unidad SOZU: ${property.folioReal}`
-        : "Selecciona unidad en el paso 1",
+      key: "titularidad",
+      label: "Titularidad registral (inscripción en el RPP)",
+      status: "idle",
+      detail: PENDING,
     },
     {
       key: "chain",
-      label: "Cadena de dominio: vendedor en escritura = dueño original SOZU",
-      status: escritura && property ? (chainOk ? "ok" : "fail") : "idle",
-      detail: chainOk
-        ? "El vendedor coincide con el registro SOZU."
-        : "Requiere revisión del área legal (posible venta intermedia).",
+      label: "Cadena de dominio (vendedor = dueño registrado en SOZU)",
+      status: "idle",
+      detail: PENDING,
     },
     {
-      key: "rpp",
-      label: "Certificado RPP vigente (≤90 días) sin gravámenes bloqueantes",
-      status: rpp ? (rppOk ? "ok" : demo.rppState === "gravamen" ? "warn" : "fail") : "idle",
-      detail: !rpp
-        ? "Sube el certificado o solicita que SOZU lo gestione."
-        : rpp.managedBySozu
-          ? "SOZU lo gestionará ante el RPP de Jalisco."
-          : demo.rppState === "vigente"
-            ? "Vigente."
-            : demo.rppState === "vencido"
-              ? "Vencido (>90 días)."
-              : "Con gravamen que impide reconocimiento.",
+      key: "escritura",
+      label: "Validez de la escritura pública",
+      status: "idle",
+      detail: escritura ? PENDING : "Sube tu escritura en el paso de Documentos.",
     },
   ];
 }
@@ -589,17 +614,16 @@ export function requiredDocsFor(personType: PersonType): DocType[] {
       "poder_rl",
       "id_rl",
       "escritura",
-      "certificado_rpp",
       "predial",
       "csf",
     ];
   }
-  return ["id_oficial", "escritura", "certificado_rpp", "predial", "curp", "csf"];
+  return ["id_oficial", "escritura", "predial", "curp", "csf"];
 }
 
 export const DOC_LABELS: Record<DocType, string> = {
   id_oficial: "Identificación oficial (INE / Pasaporte)",
-  escritura: "Escritura pública de compraventa",
+  escritura: "Copia certificada de la escritura pública (u original)",
   certificado_rpp: "Certificado del RPP (inscripción / titularidad)",
   predial: "Predial reciente",
   curp: "CURP",
