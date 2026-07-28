@@ -99,6 +99,11 @@ export interface ExpedienteVentaDetalle {
   numero_factura_externa: string | null;
   pago_apartado: PagoCliente | null;
   pago_enganche: PagoCliente | null;
+  /** Todos los pagos del cliente aplicados al concepto Apartado (id_concepto=1).
+   *  Un concepto puede liquidarse en varias parcialidades/pagos. */
+  pagos_apartado: PagoCliente[];
+  /** Todos los pagos del cliente aplicados al concepto Enganche (id_concepto=2). */
+  pagos_enganche: PagoCliente[];
   oferta_comercial: {
     id_oferta: number | null;
     precio_final: number;
@@ -412,6 +417,42 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
           }
         }
       });
+
+      // Todos los pagos del cliente por concepto (Apartado=1, Enganche=2). Cada
+      // concepto puede haberse liquidado en varias parcialidades/pagos; se agrupa
+      // por (concepto, pago) sumando el monto aplicado y se toma el comprobante
+      // (url_recibo para efectivo/transferencia, url_cep para STP).
+      const acuerdoConceptoMap = new Map<number, number>(
+        (acuerdos || []).map((a: any) => [a.id, a.id_concepto as number]),
+      );
+      const pagosPorConcepto = new Map<
+        number,
+        Map<number, { monto: number; fecha: string; url_recibo: string | null }>
+      >();
+      ((aplicacionesPago || []) as Array<any>).forEach((ap) => {
+        const concepto = acuerdoConceptoMap.get(ap.id_acuerdo_pago);
+        const pagoId = ap.pagos?.id as number | null | undefined;
+        const fecha = ap.pagos?.fecha_pago as string | null | undefined;
+        if (concepto == null || pagoId == null || !fecha) return;
+        const url = ap.pagos?.url_recibo ?? ap.pagos?.url_cep ?? null;
+        if (!pagosPorConcepto.has(concepto)) pagosPorConcepto.set(concepto, new Map());
+        const inner = pagosPorConcepto.get(concepto)!;
+        const montoAp = Number(ap.monto ?? 0);
+        const prev = inner.get(pagoId);
+        if (prev) {
+          prev.monto += montoAp;
+        } else {
+          inner.set(pagoId, {
+            monto: montoAp,
+            fecha: new Date(fecha).toISOString().slice(0, 10),
+            url_recibo: url,
+          });
+        }
+      });
+      const pagosDeConcepto = (concepto: number): PagoCliente[] =>
+        Array.from(pagosPorConcepto.get(concepto)?.values() ?? [])
+          .map((v) => ({ monto: v.monto, fecha: v.fecha, url_recibo: v.url_recibo }))
+          .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
       // Persona-lead (prospecto inicial)
       const idPersonaLead = (oferta as any)?.id_persona_lead ?? null;
@@ -1061,6 +1102,8 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         numero_factura_externa: numeroFacturaExterna,
         pago_apartado: pagoApartado,
         pago_enganche: pagoEnganche,
+        pagos_apartado: pagosDeConcepto(1),
+        pagos_enganche: pagosDeConcepto(2),
         oferta_comercial: (() => {
           const sumMonto = (concepto: number) =>
             (acuerdos || [])
