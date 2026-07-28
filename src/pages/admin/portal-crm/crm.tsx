@@ -179,6 +179,7 @@ type ContactRow = {
   lifecycle_stage: string;
   source_platform: string | null;
   source_name: string | null;
+  origen: string | null;
   contact_owner: string | null;
   owner_name: string | null;
   last_activity_at: string | null;
@@ -526,7 +527,7 @@ export function CrmContacts() {
         const pMap: Record<number, any> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, p]));
         let atrMap: Record<number, any> = {};
         const atrRes = await (supabase as any).from("crm_leads_atribucion")
-          .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
+          .select("id_entidad_relacionada, estatus_lead, etapa_ciclo_vida, id_propietario, origen, meta_form_name, meta_campaign_id, meta_ad_id, meta_platform, meta_created_time, meta_field_data")
           .in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
         if (!atrRes.error) atrMap = Object.fromEntries((atrRes.data ?? []).map((a: any) => [a.id_entidad_relacionada, a]));
         const ownerIds = Array.from(new Set(Object.values(atrMap).map((a: any) => a?.id_propietario).filter(Boolean)));
@@ -549,6 +550,7 @@ export function CrmContacts() {
             lead_status: a?.estatus_lead ?? "nuevo",
             lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
             source_platform: a?.meta_platform ?? null, source_name: a?.meta_form_name ?? null,
+            origen: a?.origen ?? null,
             contact_owner: a?.id_propietario ?? null,
             owner_name: a?.id_propietario ? (ownerNameMap[a.id_propietario] ?? null) : null,
             last_activity_at: e.fecha_actualizacion ?? null, next_task_at: null, lead_score: 0,
@@ -907,14 +909,25 @@ export function CrmContacts() {
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.created_at ? fmtDate(c.created_at) : "—"}</td>;
                         case "updated":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
-                        case "source":
+                        case "source": {
+                          // Fuente del registro = campo `origen` de crm_leads_atribucion.
+                          const fuente = c.origen === "formulario_web"
+                            ? { txt: "Web Sozu.com", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+                            : (c.origen === "meta" || c.meta_platform)
+                            ? { txt: "Meta", cls: "bg-blue-50 text-blue-700 border-blue-200" }
+                            : c.origen === "importacion"
+                            ? { txt: "Importación", cls: "bg-amber-50 text-amber-700 border-amber-200" }
+                            : c.origen === "crm"
+                            ? { txt: "CRM", cls: "bg-violet-50 text-violet-700 border-violet-200" }
+                            : { txt: "Manual", cls: "bg-slate-50 text-slate-500 border-slate-200" };
                           return (
                             <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${c.source_platform ? "bg-primary/5 text-primary border-primary/20" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
-                                {c.source_platform ? "Por form" : "Manual"}
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${fuente.cls}`}>
+                                {fuente.txt}
                               </span>
                             </td>
                           );
+                        }
                         case "meta_form_name":
                           return (
                             <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">
@@ -1139,6 +1152,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         estatus_lead: form.lead_status,
         etapa_ciclo_vida: form.lifecycle_stage,
         id_propietario: form.contact_owner || user?.id || null,
+        origen: "crm",
       });
       if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
       // 4. Categoría (procedencia) seleccionada (best-effort: si la tabla aún no existe, el contacto igual queda creado)
