@@ -38,7 +38,7 @@ const CustomerAccountView = ({ offer, preReservation, formalReservation }: Props
     if (!agentOfferId) return;
     (async () => {
       const { data: oferta } = await supabase
-        .from("ofertas").select("email_creador").eq("id", agentOfferId).single();
+        .from("ofertas").select("email_creador").eq("id", Number(agentOfferId)).single();
       if (!oferta?.email_creador) return;
       const { data: usuario } = await supabase
         .from("usuarios").select("id_persona").eq("email", oferta.email_creador).single();

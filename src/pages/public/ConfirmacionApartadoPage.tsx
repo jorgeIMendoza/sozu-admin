@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  LINK_NO_VIGENTE,
+  cargarReservacionPublica,
+  parseReservationToken,
+  type ReservacionPublica,
+} from "@/lib/offers/reservation-token";
 import { CheckCircle2, Clock, Loader2, AlertCircle, Mail } from "lucide-react";
 import { HOLD_AMOUNT_MXN } from "@/lib/offers/card-hold-processor";
 
-type Apartado = {
-  id: number;
-  email: string;
-  nombre: string | null;
-  fecha_expiracion: string | null;
-  fecha_activacion: string | null;
-};
+type Apartado = ReservacionPublica;
 
-function formatDate(iso: string | null) {
+function formatDate(iso?: string | null) {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("es-MX", {
     day: "numeric",
@@ -25,27 +25,21 @@ function formatDate(iso: string | null) {
 
 export default function ConfirmacionApartadoPage() {
   const { apartadoId } = useParams<{ apartadoId: string }>();
+  const token = parseReservationToken(apartadoId);
   const [apartado, setApartado] = useState<Apartado | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!apartadoId) { setLoadError("Link inválido."); setLoading(false); return; }
-    const numericId = parseInt(apartadoId.replace(/^[A-Z]+-/, ""), 10);
-    if (!numericId) { setLoadError("Link inválido."); setLoading(false); return; }
+    if (!token) { setLoadError(LINK_NO_VIGENTE); setLoading(false); return; }
 
     (async () => {
-      const { data, error } = await (supabase as any)
-        .from("reservaciones")
-        .select("id, email, nombre, fecha_expiracion, fecha_activacion")
-        .eq("id", numericId)
-        .maybeSingle();
-
-      if (error || !data) { setLoadError("No se encontró el apartado."); setLoading(false); return; }
-      setApartado(data);
+      const row = await cargarReservacionPublica(supabase, token);
+      if (!row) { setLoadError(LINK_NO_VIGENTE); setLoading(false); return; }
+      setApartado(row);
       setLoading(false);
     })();
-  }, [apartadoId]);
+  }, [token]);
 
   if (loading) {
     return (

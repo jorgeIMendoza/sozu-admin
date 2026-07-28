@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { CheckCircle2, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { useRef, useState } from "react";
+import { Loader2, Lock, ShieldCheck } from "lucide-react";
 import type { OfertaComercial } from "@/lib/offers/offer-data";
 
 const COUNTRY_CODES = [
@@ -73,20 +73,22 @@ const Field = ({
 const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultFullName, defaultPhone, defaultDialCode, onBack, onComplete, onSaveData }: Props) => {
   const isFormal = context === "formal_direct";
   const emailLocked = isFormal || Boolean(defaultEmail);
-  const twoStep = typeof onSaveData === "function";
 
   const [fullName, setFullName] = useState(defaultFullName ?? "");
   const [email] = useState(defaultEmail ?? "");
   const [countryCode, setCountryCode] = useState(defaultDialCode ?? "+52");
   const [phoneDigits, setPhoneDigits] = useState((defaultPhone ?? "").replace(/\D/g, "").slice(0, 10));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // Flujo dos pasos: confirmar/guardar datos antes de continuar.
-  const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Cualquier edición invalida la confirmación previa (obliga a re-guardar).
-  const markDirty = () => { if (twoStep) { setConfirmed(false); setSaveError(null); } };
+  // Valores con los que se cargó la pantalla: si no cambian, no hay nada que guardar.
+  const originales = useRef({
+    fullName: (defaultFullName ?? "").trim(),
+    phoneDigits: (defaultPhone ?? "").replace(/\D/g, "").slice(0, 10),
+  });
+
+  const markDirty = () => setSaveError(null);
 
   const validatePhone = (digits: string) => {
     const clean = digits.replace(/\D/g, "");
@@ -116,27 +118,35 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultF
     });
   };
 
-  // Paso 1 (two-step): confirma + persiste nombre/teléfono en BD.
-  const handleSave = async () => {
-    if (!isValid || !onSaveData || saving) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const ok = await onSaveData({
-        fullName: fullName.trim(),
-        phoneDigits: phoneDigits.replace(/\D/g, ""),
-        countryCode,
-      });
-      // Aunque falle el guardado en BD, los datos ya viajan en memoria al flujo;
-      // se marca confirmado para no bloquear, pero se avisa del fallo.
-      if (!ok) setSaveError("Tus datos se aplicarán al continuar con tu solicitud.");
-      setConfirmed(true);
-    } catch {
-      setSaveError("Tus datos se aplicarán al continuar con tu solicitud.");
-      setConfirmed(true);
-    } finally {
-      setSaving(false);
+  /**
+   * Confirmar y continuar. El guardado solo ocurre si el usuario cambió nombre o
+   * teléfono; si los deja igual, no se toca la BD y se avanza directo. Un fallo
+   * al guardar tampoco detiene el flujo: los datos viajan en memoria.
+   */
+  const handleConfirmarYContinuar = async () => {
+    if (!isValid || saving) return;
+
+    const nombreLimpio = fullName.trim();
+    const telLimpio = phoneDigits.replace(/\D/g, "");
+    const huboCambios =
+      nombreLimpio !== originales.current.fullName ||
+      telLimpio !== originales.current.phoneDigits;
+
+    if (onSaveData && huboCambios) {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const ok = await onSaveData({ fullName: nombreLimpio, phoneDigits: telLimpio, countryCode });
+        if (!ok) setSaveError("Tus datos se aplicarán al continuar con tu solicitud.");
+        else originales.current = { fullName: nombreLimpio, phoneDigits: telLimpio };
+      } catch {
+        setSaveError("Tus datos se aplicarán al continuar con tu solicitud.");
+      } finally {
+        setSaving(false);
+      }
     }
+
+    handleSubmit();
   };
 
   return (
@@ -249,53 +259,23 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultF
         </p>
       </div>
 
-      {/* CTA */}
+      {/* CTA — un solo paso: confirma y continúa. Si el usuario editó algo se
+          guarda en BD; si dejó los datos tal cual, solo avanza. */}
       <div className="space-y-2">
-        {twoStep && !confirmed ? (
-          <>
-            <button
-              type="button"
-              disabled={!isValid || saving}
-              onClick={handleSave}
-              className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <><Loader2 className="w-4 h-4 motion-safe:animate-spin" />Guardando…</>
-              ) : (
-                "Actualizar datos"
-              )}
-            </button>
-            <p className="text-[10px] text-muted-foreground/50 text-center">
-              Confirma que tu nombre y teléfono son correctos antes de continuar.
-            </p>
-          </>
-        ) : twoStep ? (
-          <>
-            <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-success">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Datos confirmados
-            </div>
-            {saveError && (
-              <p className="text-[11px] text-muted-foreground text-center leading-relaxed">{saveError}</p>
-            )}
-            <button
-              type="button"
-              disabled={!isValid}
-              onClick={handleSubmit}
-              className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center"
-            >
-              Continuar
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            disabled={!isValid}
-            onClick={handleSubmit}
-            className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center"
-          >
-            Continuar
-          </button>
+        <button
+          type="button"
+          disabled={!isValid || saving}
+          onClick={handleConfirmarYContinuar}
+          className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+        >
+          {saving ? (
+            <><Loader2 className="w-4 h-4 motion-safe:animate-spin" />Guardando…</>
+          ) : (
+            "Confirmar y continuar"
+          )}
+        </button>
+        {saveError && (
+          <p className="text-[11px] text-muted-foreground text-center leading-relaxed">{saveError}</p>
         )}
         <p className="text-[10px] text-muted-foreground/50 text-center">
           Al continuar aceptas el Aviso de Privacidad y los Términos de SOZU.
