@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Section, KV } from "./_shared";
+import { ComprobantesPagoClienteList } from "@/components/admin/drawers-shared/ComprobantesPagoClienteList";
 import {
   type FacturaComisionSozuPorGenerar,
   useGenerarFacturaComisionSozu,
@@ -243,28 +244,10 @@ export function EjecucionFacturaSozuContent({
             <Loader2 className="h-3 w-3 animate-spin" /> Cargando comprobantes…
           </p>
         ) : (
-          <div className="space-y-2">
-            {detalle?.pago_apartado ? (
-              <PagoRow
-                etiqueta="Apartado"
-                fecha={detalle.pago_apartado.fecha}
-                monto={detalle.pago_apartado.monto}
-                urlRecibo={detalle.pago_apartado.url_recibo}
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground">Sin pago de apartado registrado</p>
-            )}
-            {detalle?.pago_enganche ? (
-              <PagoRow
-                etiqueta="Enganche"
-                fecha={detalle.pago_enganche.fecha}
-                monto={detalle.pago_enganche.monto}
-                urlRecibo={detalle.pago_enganche.url_recibo}
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground">Sin pago de enganche registrado</p>
-            )}
-          </div>
+          <ComprobantesPagoClienteList
+            pagosApartado={detalle?.pagos_apartado ?? []}
+            pagosEnganche={detalle?.pagos_enganche ?? []}
+          />
         )}
       </Section>
 
