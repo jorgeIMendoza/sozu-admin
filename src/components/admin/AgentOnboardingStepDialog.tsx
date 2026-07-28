@@ -384,6 +384,24 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     enabled: activeDocTypes.includes(48),
   });
 
+  /**
+   * Firmante que corresponde al AGENTE dentro de un registro de `firmas_digitales`.
+   * La EF `mifiel-crear-documento` arma `signatories` con los firmantes de la carta
+   * primero y el agente SIEMPRE al final, y guarda ahí su `email` + `widget_id`.
+   *
+   * No se depende de `personaForMifiel`: esa query es asíncrona (el primer clic la
+   * agarraba sin resolver) y además puede venir vacía por RLS cuando un usuario de
+   * soporte abre el expediente de otro agente. El dato guardado es la fuente estable.
+   */
+  const firmanteAgenteDe = (firma: any): { email?: string; widget_id?: string | null } | null => {
+    const lista = Array.isArray(firma?.firmantes) ? firma.firmantes : [];
+    if (!lista.length) return null;
+    const porEmail = personaForMifiel?.email
+      ? lista.find((f: any) => f?.email === personaForMifiel.email)
+      : null;
+    return porEmail || lista[lista.length - 1] || null;
+  };
+
   // Fetch carta acuerdo config to check if autograph is required
   const CARTA_ACUERDO_ID = "ce94b2d7-dcc8-4f91-a8d8-882264556c3e";
   const { data: cartaConfig } = useQuery({
@@ -450,7 +468,10 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
       // Check if the agent has already signed
       const mifielSigners = mifielData.document?.signers || mifielData.document?.signatories || [];
-      const agentSigner = mifielSigners.find((s: any) => s.email === personaForMifiel?.email);
+      const emailAgente = firmanteAgenteDe(data)?.email;
+      const agentSigner = emailAgente
+        ? mifielSigners.find((s: any) => s.email === emailAgente)
+        : undefined;
       const agentAlreadySigned = agentSigner?.signed === true || agentSigner?.current === false;
 
       if (remoteCancelledStates.has(remoteState) && data.estado !== 'cancelado') {
@@ -530,6 +551,33 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
     const persona = signPersonaRef.current ?? personaForMifiel;
     setSendingToMifiel(true);
     try {
+      // Guarda anti-duplicado: crear el documento es lo que reserva el crédito de
+      // verificación biométrica en Mifiel. Si ya hay uno vivo para esta persona
+      // (doble clic, o `firmaExistente` aún sin refrescar), se reusa en vez de
+      // quemar otro crédito.
+      const { data: firmaViva } = await (supabase as any)
+        .from('firmas_digitales')
+        .select('*')
+        .eq('tipo_documento', 'carta_acuerdos')
+        .eq('referencia_id', personaId)
+        .in('estado', ['enviado', 'firmado_parcial'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const envFirmaViva = firmaViva?.metadata?.environment;
+      if (firmaViva?.mifiel_document_id && (!envFirmaViva || envFirmaViva === ENVIRONMENT)) {
+        const widGuardado = firmanteAgenteDe(firmaViva)?.widget_id || null;
+        await refetchFirma();
+        if (widGuardado) {
+          setMifielWidgetId(widGuardado);
+          setMifielDialogOpen(true);
+        } else {
+          toast.info("Ya tienes una carta en proceso de firma. Usa 'Continuar firma'.");
+        }
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("mifiel-crear-documento", {
         body: {
           agente_email: persona!.email,
@@ -549,7 +597,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       } else {
         toast.success("Documento enviado a firma. Revisa tu correo.");
       }
-      refetchFirma();
+      await refetchFirma();
     } catch (err: any) {
       // supabase-js solo expone "Edge Function returned a non-2xx status code";
       // el motivo real viene en el body de la respuesta (err.context). Ese detalle
@@ -564,28 +612,35 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
   };
 
   const handleContinuarFirmaInternal = async () => {
-    if (!firmaExistente?.mifiel_document_id) {
+    setSyncingFirma(true);
+    // Trabajar con el registro más reciente, no con el del último render: la query
+    // se refresca cada 30 s y el clic puede caer entre dos ciclos (por eso el primer
+    // intento fallaba y el segundo abría).
+    const firma = (await refetchFirma()).data ?? firmaExistente;
+
+    if (!firma?.mifiel_document_id) {
+      setSyncingFirma(false);
       toast.error("No se encontró un documento activo para continuar firma.");
       return;
     }
 
     // Guardia de entorno: verificar que el documento fue creado en el mismo entorno
-    const docEnv = (firmaExistente as any).metadata?.environment;
+    const docEnv = (firma as any).metadata?.environment;
     if (docEnv && docEnv !== ENVIRONMENT) {
+      setSyncingFirma(false);
       const label = docEnv === 'production' ? 'Producción' : 'Sandbox/Desarrollo';
       toast.error(`Este documento fue creado en ${label}. Se cancelará para generar uno nuevo en el entorno actual.`);
       await (supabase as any)
         .from('firmas_digitales')
         .update({ estado: 'cancelado' })
-        .eq('id', firmaExistente.id);
+        .eq('id', firma.id);
       await refetchFirma();
       return;
     }
 
-    setSyncingFirma(true);
     try {
       const { data: mifielData, error: mifielError } = await supabase.functions.invoke('mifiel-consultar-documento', {
-        body: { document_id: firmaExistente.mifiel_document_id, environment: ENVIRONMENT },
+        body: { document_id: firma.mifiel_document_id, environment: ENVIRONMENT },
       });
 
       const upstreamStatus = Number(mifielData?.upstream_status || 0);
@@ -604,7 +659,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           await (supabase as any)
             .from('firmas_digitales')
             .update({ estado: 'cancelado' })
-            .eq('id', firmaExistente.id);
+            .eq('id', firma.id);
           await refetchFirma();
           toast.error("Este documento ya no existe en Mifiel. Se sincronizó el estado en la BD.");
           return;
@@ -620,7 +675,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         await (supabase as any)
           .from('firmas_digitales')
           .update({ estado: 'cancelado' })
-          .eq('id', firmaExistente.id);
+          .eq('id', firma.id);
         await refetchFirma();
         toast.error("Este documento ya no está disponible para firma en Mifiel. Se sincronizó como cancelado.");
         return;
@@ -630,7 +685,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
         await (supabase as any)
           .from('firmas_digitales')
           .update({ estado: 'completado' })
-          .eq('id', firmaExistente.id);
+          .eq('id', firma.id);
         await refetchFirma();
         refetchDocs();
         toast.success("Este documento ya aparece como firmado en Mifiel. Se sincronizó el estado.");
@@ -638,8 +693,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
       }
 
       const mifielSigners = mifielData.document?.signers || mifielData.document?.signatories || [];
-      const agentSigner = mifielSigners.find((s: any) => s.email === personaForMifiel?.email);
-      const wid = agentSigner?.widget_id || null;
+      const firmanteAgente = firmanteAgenteDe(firma);
+      const agentSigner = firmanteAgente?.email
+        ? mifielSigners.find((s: any) => s.email === firmanteAgente.email)
+        : undefined;
+      // Respaldo: el `widget_id` que la EF ya guardó al crear el documento. Evita
+      // depender de que Mifiel lo devuelva otra vez en la consulta.
+      const wid = agentSigner?.widget_id || firmanteAgente?.widget_id || null;
 
       if (wid) {
         setMifielWidgetId(wid);
@@ -1272,10 +1332,13 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                 </Button>
               )}
               <Button
-                variant="outline"
+                variant={completo ? 'ghost' : 'outline'}
                 size="sm"
                 onClick={() => startDocumentCamera(usaPasaporte ? PASAPORTE_DOC_TYPE : 2)}
-                className="h-9 px-3 rounded-md font-bold text-xs"
+                className={cn(
+                  "h-9 px-3 rounded-md font-bold text-xs",
+                  completo && "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {completo ? 'Subir una nueva' : `Capturar ${usaPasaporte ? 'pasaporte' : 'INE'}`}
               </Button>
@@ -1290,7 +1353,9 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   Verificar identidad
                 </Button>
               )}
-              {completo && docPrincipal?.url && (
+              {/* Prueba de cámara: solo tiene sentido ANTES de verificar. Una vez
+                  verificada la identidad, deja de mostrarse para no sumar ruido. */}
+              {completo && !identidadVerificada && docPrincipal?.url && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1303,7 +1368,7 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
                   className="h-9 px-3 rounded-md font-bold text-xs text-muted-foreground hover:text-foreground"
                   title="Compara tu rostro contra tu identificación sin salir del dispositivo"
                 >
-                  Probar comparación local (beta)
+                  Probar cámara
                 </Button>
               )}
             </div>
@@ -1347,6 +1412,22 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
           const FirmaIcon = firmaStatus.icon;
 
+          // Una línea que explique en qué punto va la carta: el badge solo da el
+          // estado, no qué sigue.
+          const firmaAyuda = firmaCompletada
+            ? 'Carta firmada por todas las partes. Puedes consultarla cuando quieras.'
+            : pendienteContraparte
+            ? 'Ya firmaste. Falta la firma de SOZU para cerrar el documento.'
+            : firmaEnProgreso
+            ? 'Tu carta ya está lista en Mifiel. Continúa para firmarla.'
+            : cartaHabilitada
+            ? 'Al firmar se abre tu carta para revisarla y firmarla en línea.'
+            : requireIdentityDocs && !identityDocsComplete
+            ? 'Agrega tu INE (frente y reverso) o tu pasaporte para habilitar la firma.'
+            : requireIdentityDocs && !identidadVerificada
+            ? 'Verifica tu identidad con una selfie para habilitar la firma.'
+            : 'Completa tu información básica para habilitar la firma.';
+
           return (
             <div
               key={typeId}
@@ -1354,11 +1435,14 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
             >
               <div className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <PenTool className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {docType?.nombre || 'Carta de Acuerdos'}
-                    </span>
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <PenTool className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">
+                        {docType?.nombre || 'Carta de Acuerdos'}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{firmaAyuda}</p>
+                    </div>
                   </div>
                   <Badge
                     variant="outline"
@@ -1384,19 +1468,16 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
 
                   {!firmaCompletada && !firmaEnProgreso && !isValidated && (
                     !cartaHabilitada ? (
-                      <div className="flex-1 text-center">
-                        <Button
-                          size="sm"
-                          disabled
-                          className="w-full h-10 rounded-md font-semibold text-xs gap-1.5 whitespace-normal leading-tight py-2"
-                        >
-                          {requireIdentityDocs && !identityDocsComplete
-                            ? 'Primero agrega tu INE (frente y reverso) o tu pasaporte'
-                            : requireIdentityDocs && !identidadVerificada
-                            ? 'Verifica tu identidad para habilitar la firma'
-                            : 'Completa tu información básica y documentos para firmar'}
-                        </Button>
-                      </div>
+                      // El motivo del bloqueo va en la línea de ayuda de arriba:
+                      // el botón se queda corto y legible.
+                      <Button
+                        size="sm"
+                        disabled
+                        variant="outline"
+                        className="flex-1 h-10 rounded-md font-bold text-xs gap-1.5"
+                      >
+                        Firmar carta
+                      </Button>
                     ) : (
                     <Button
                       size="sm"
@@ -1501,7 +1582,11 @@ function AgentDocumentsStep({ personaId, filterDocTypes, onTrackFieldChange, onT
           onOpenChange={setMifielDialogOpen}
           widgetId={mifielWidgetId}
           onSuccess={handleMifielSuccess}
-          onError={(err) => toast.error("Error en firma: " + err)}
+          onError={(err) => {
+            // Detalle del proveedor solo en consola; al agente, mensaje neutro.
+            console.error("[mifiel-widget-firma]", err);
+            toast.error("No se pudo completar la firma. Inténtalo de nuevo.");
+          }}
         />
       )}
 

@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useEffect, useRef, useState } from "react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Loader2 } from "lucide-react";
+import { ModalFormHeader } from "@/components/ui/modal-form";
+import { Loader2, ShieldCheck, AlertCircle } from "lucide-react";
 
 interface MifielSigningDialogProps {
   open: boolean;
@@ -12,31 +13,49 @@ interface MifielSigningDialogProps {
   onError?: (error: string) => void;
 }
 
+const TITULO = "Firma digital";
+const SUBTITULO = "Revisa tu carta y fírmala de forma electrónica";
+
 export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, onError }: MifielSigningDialogProps) {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const scriptLoadedRef = useRef(false);
   const signedRef = useRef(false);
+  // 'cargando' hasta que el widget se monta; 'error' si el script no baja.
+  const [estado, setEstado] = useState<"cargando" | "listo" | "error">("cargando");
+
+  // Callbacks por ref: en el padre son funciones inline (identidad nueva en cada
+  // render). Si entraran en las deps del efecto, el widget se desmontaría y volvería
+  // a montarse a media firma.
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  }, [onSuccess, onError]);
 
   useEffect(() => {
     if (!open || !widgetId) return;
+    let cancelado = false;
     signedRef.current = false;
+    setEstado("cargando");
 
     const loadWidget = () => {
-      if (!containerRef.current) return;
+      if (cancelado || !containerRef.current) return;
       containerRef.current.innerHTML = "";
 
       const widget = document.createElement("mifiel-widget") as any;
       widget.setAttribute("id", widgetId);
-    const env = import.meta.env.VITE_ENVIRONMENT || "development";
+      const env = import.meta.env.VITE_ENVIRONMENT || "development";
       widget.setAttribute("environment", env === "production" ? "production" : "sandbox");
       containerRef.current.appendChild(widget);
+      setEstado("listo");
 
       widget.addEventListener("signSuccess", () => {
         signedRef.current = true;
         if (containerRef.current) containerRef.current.innerHTML = "";
         onOpenChange(false);
-        onSuccess?.();
+        onSuccessRef.current?.();
       });
       widget.addEventListener("signError", (e: any) => {
         // Delay error handling to allow signSuccess to fire first (widget race condition)
@@ -47,7 +66,7 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
           onOpenChange(false);
           const msg = e?.detail?.message || "";
           if (msg && !msg.includes("already") && !msg.includes("Ya fue firmado")) {
-            onError?.(msg);
+            onErrorRef.current?.(msg);
           }
         }, 500);
       });
@@ -57,39 +76,83 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
     const mifielHost = mifielEnv === "production" ? "app.mifiel.com" : "app-sandbox.mifiel.com";
     const scriptSrc = `https://${mifielHost}/widget-component/index.js`;
 
-    if (!scriptLoadedRef.current && !document.querySelector(`script[src="${scriptSrc}"]`)) {
+    // Esperar a que el custom element quede registrado, en vez de adivinar con un
+    // setTimeout: era la causa de que el primer intento fallara y el segundo sí.
+    const montarCuandoEsteListo = () => {
+      if (cancelado) return;
+      if (!window.customElements) {
+        setEstado("error");
+        return;
+      }
+      // Con tope: si el elemento nunca se registra, no dejamos el spinner eterno.
+      const vencido = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout mifiel-widget")), 15000)
+      );
+      Promise.race([window.customElements.whenDefined("mifiel-widget"), vencido])
+        .then(() => loadWidget())
+        .catch((e) => {
+          console.error("[mifiel-widget]", e);
+          if (!cancelado) setEstado("error");
+        });
+    };
+
+    if (!document.querySelector(`script[src="${scriptSrc}"]`)) {
       const script = document.createElement("script");
       script.src = scriptSrc;
       script.type = "module";
       script.onload = () => {
         scriptLoadedRef.current = true;
-        setTimeout(loadWidget, 500);
+        montarCuandoEsteListo();
       };
       script.onerror = () => {
         console.error("Failed to load Mifiel widget script from:", scriptSrc);
+        if (!cancelado) setEstado("error");
       };
       document.head.appendChild(script);
     } else {
       scriptLoadedRef.current = true;
-      setTimeout(loadWidget, 300);
+      montarCuandoEsteListo();
     }
-  }, [open, widgetId, onSuccess, onError]);
+
+    return () => {
+      cancelado = true;
+    };
+  }, [open, widgetId, onOpenChange]);
 
   const content = (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="rounded-md border border-primary/20 bg-primary/5 p-3 mx-1 mb-3">
-        <p className="text-xs text-primary font-medium">
-          🔐 La firma digital robustecerá la veracidad legal del documento, complementando tu firma autógrafa.
+    <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-4 sm:px-6 sm:py-5">
+      {/* Nota legal: mismo tono que el resto del portal, sin emoji. */}
+      <div className="flex items-start gap-2.5 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-2.5">
+        <ShieldCheck className="mt-px size-4 shrink-0 text-primary" />
+        <p className="text-xs font-medium leading-relaxed text-primary">
+          La firma digital robustece la validez legal del documento. Al terminar, tu carta queda
+          registrada en tu expediente.
         </p>
       </div>
-      <div className="flex-1 overflow-auto">
-        <div ref={containerRef} className="mifiel-fullwidth min-h-full flex items-start justify-center">
-          <div className="flex flex-col items-center gap-3 py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Cargando firma digital...</p>
+
+      <div className="relative min-h-0 flex-1 overflow-auto rounded-md border border-border bg-card">
+        {estado !== "listo" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-card px-6 text-center">
+            {estado === "cargando" ? (
+              <>
+                <Loader2 className="size-7 animate-spin text-primary" />
+                <p className="text-sm font-medium text-muted-foreground">Cargando tu carta…</p>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="size-7 text-destructive" />
+                <p className="text-sm font-semibold text-foreground">No se pudo cargar la firma</p>
+                <p className="max-w-sm text-xs text-muted-foreground">
+                  Revisa tu conexión y vuelve a intentarlo. Si el problema sigue, contacta a tu
+                  administrador.
+                </p>
+              </>
+            )}
           </div>
-        </div>
+        )}
+        <div ref={containerRef} className="mifiel-fullwidth flex min-h-full items-start justify-center p-2 sm:p-3" />
       </div>
+
       <style>{`
         .mifiel-fullwidth mifiel-widget {
           --mifiel-widget-max-width: 100% !important;
@@ -111,12 +174,12 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[98vh] h-[98vh] rounded-t-3xl overflow-hidden flex flex-col">
-          <DrawerHeader className="text-left pb-1 px-4 shrink-0">
-            <DrawerTitle>Firma Digital</DrawerTitle>
-            <DrawerDescription>Firma la Carta de Acuerdos de forma electrónica</DrawerDescription>
+        <DrawerContent className="flex h-[96vh] max-h-[96vh] flex-col overflow-hidden rounded-t-2xl">
+          <DrawerHeader className="shrink-0 border-b border-border px-4 pb-3 pt-2 text-left">
+            <DrawerTitle className="text-base font-bold text-foreground">{TITULO}</DrawerTitle>
+            <DrawerDescription className="mt-0.5 text-xs text-muted-foreground">{SUBTITULO}</DrawerDescription>
           </DrawerHeader>
-          <div className="flex-1 overflow-hidden flex flex-col px-1 pb-1">{content}</div>
+          {content}
         </DrawerContent>
       </Drawer>
     );
@@ -124,12 +187,11 @@ export function MifielSigningDialog({ open, onOpenChange, widgetId, onSuccess, o
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-full max-h-[95vh] h-[95vh] overflow-hidden flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Firma Digital</DialogTitle>
-          <DialogDescription>Firma la Carta de Acuerdos de forma electrónica</DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 overflow-hidden flex flex-col">{content}</div>
+      {/* Ancho contenido (antes 95vw): el widget se lee mejor en una columna
+          acotada y el modal deja de tapar toda la pantalla. */}
+      <DialogContent className="flex h-[90vh] max-h-[90vh] w-[calc(100vw-2rem)] max-w-[900px] flex-col gap-0 overflow-hidden rounded-md border border-border bg-card p-0 shadow-lg">
+        <ModalFormHeader title={TITULO} subtitle={SUBTITULO} />
+        {content}
       </DialogContent>
     </Dialog>
   );
