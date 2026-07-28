@@ -911,15 +911,22 @@ export function CrmContacts() {
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap tabular-nums">{c.last_activity_at ? fmtDate(c.last_activity_at) : "—"}</td>;
                         case "source": {
                           // Fuente del registro = campo `origen` de crm_leads_atribucion.
-                          const fuente = c.origen === "formulario_web"
-                            ? { txt: "Web Sozu.com", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" }
-                            : (c.origen === "meta" || c.meta_platform)
-                            ? { txt: "Meta", cls: "bg-blue-50 text-blue-700 border-blue-200" }
-                            : c.origen === "importacion"
-                            ? { txt: "Importación", cls: "bg-amber-50 text-amber-700 border-amber-200" }
-                            : c.origen === "crm"
-                            ? { txt: "CRM", cls: "bg-violet-50 text-violet-700 border-violet-200" }
-                            : { txt: "Manual", cls: "bg-slate-50 text-slate-500 border-slate-200" };
+                          // Los leads del formulario web guardan el DOMINIO en `origen` (ej. "margot.com").
+                          const o = (c.origen ?? "").trim();
+                          const KNOWN_ORIGEN: Record<string, { txt: string; cls: string }> = {
+                            meta:           { txt: "Meta",        cls: "bg-blue-50 text-blue-700 border-blue-200" },
+                            importacion:    { txt: "Importación", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+                            crm:            { txt: "CRM",         cls: "bg-violet-50 text-violet-700 border-violet-200" },
+                            manual:         { txt: "Manual",      cls: "bg-slate-50 text-slate-500 border-slate-200" },
+                            formulario_web: { txt: "Web",         cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                          };
+                          const fuente = KNOWN_ORIGEN[o]
+                            ? KNOWN_ORIGEN[o]
+                            : o
+                            ? { txt: `Web · ${o}`, cls: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+                            : c.meta_platform
+                            ? KNOWN_ORIGEN.meta
+                            : KNOWN_ORIGEN.manual;
                           return (
                             <td key={col.id} className="p-3">
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${fuente.cls}`}>

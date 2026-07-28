@@ -12,6 +12,7 @@ import {
   Loader2,
   FileText,
   Search,
+  UserCheck,
   X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,7 @@ import {
 } from "@/components/admin/portal-administracion/drawers/content/EjecucionPagoExternoContent";
 import { EjecucionDispersionExpedienteContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionDispersionExpedienteContent";
 import { EjecucionFacturaSozuContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionFacturaSozuContent";
+import { EjecucionAprobarComisionExternaContent } from "@/components/admin/portal-administracion/drawers/content/EjecucionAprobarComisionExternaContent";
 import {
   useFacturasComisionSozuPorGenerar,
   type FacturaComisionSozuPorGenerar,
@@ -70,6 +72,7 @@ type SelectedItem =
   | { tipo: "factura_sozu"; data: FacturaComisionSozuPorGenerar }
   | { tipo: "cobro"; data: CobroPorGestionar }
   | { tipo: "pago_externo"; data: ComisionExterna }
+  | { tipo: "aprobar_externo"; data: ComisionExterna }
   | { tipo: "dispersion_interna"; data: DispersionInternaPendiente };
 
 /* ──────────────────────────────────────────────────────────
@@ -313,6 +316,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const facturasSozuRef = useRef<HTMLDivElement>(null);
   const cobrosRef = useRef<HTMLDivElement>(null);
   const externosRef = useRef<HTMLDivElement>(null);
+  const aprobarExternosRef = useRef<HTMLDivElement>(null);
   const dispersionesRef = useRef<HTMLDivElement>(null);
 
   // BD real: facturas comisión SOZU por generar
@@ -352,6 +356,8 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const [pageCobros, setPageCobros] = useState(0);
   const [sortExternos, setSortExternos] = useState<SortDir>("asc");
   const [pageExternos, setPageExternos] = useState(0);
+  const [sortAprobarExternos, setSortAprobarExternos] = useState<SortDir>("asc");
+  const [pageAprobarExternos, setPageAprobarExternos] = useState(0);
   const [sortDispersiones, setSortDispersiones] = useState<SortDir>("asc");
   const [pageDispersiones, setPageDispersiones] = useState(0);
 
@@ -370,6 +376,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     setPageFacturasSozu(0);
     setPageCobros(0);
     setPageExternos(0);
+    setPageAprobarExternos(0);
     setPageDispersiones(0);
   };
   const handleSearchChange = (value: string) => {
@@ -517,6 +524,34 @@ export default function PortalAdministracionBandejaEjecucionPage() {
     [externosFiltrados],
   );
 
+  // Comisiones externas POR APROBAR — devengadas (aún sin aprobar). Al aprobar
+  // se habilita que el comisionista externo suba su factura en plataforma.
+  const aprobarExternosAll = useMemo(
+    () => (comisionesExternasAll ?? []).filter((c) => c.estado === "devengada"),
+    [comisionesExternasAll],
+  );
+  const aprobarExternosSorted = useMemo(() => {
+    const factor = sortAprobarExternos === "asc" ? -1 : 1;
+    return [...aprobarExternosAll].sort(
+      (a, b) => factor * (a.dias_desde_devengo - b.dias_desde_devengo),
+    );
+  }, [aprobarExternosAll, sortAprobarExternos]);
+  const aprobarExternosVisible = useMemo(() => {
+    return aprobarExternosSorted.filter((p) => {
+      if (!matchFiltros(p)) return false;
+      if (!searchQuery) return true;
+      const fields = [formatCuentaFolio(p), p.beneficiario_nombre, p.numero_departamento];
+      return fields.some((v) => !!v && v.toLowerCase().includes(searchQuery));
+    });
+  }, [aprobarExternosSorted, searchQuery, proyectoFilter, entidadFilter]);
+  const aprobarExternosTotal = aprobarExternosAll.length;
+  const aprobarExternosVisibleCount = aprobarExternosVisible.length;
+  const aprobarExternosTotalPages = Math.max(1, Math.ceil(aprobarExternosVisibleCount / PAGE_SIZE));
+  const aprobarExternosMonto = useMemo(
+    () => aprobarExternosAll.reduce((s, r) => s + r.monto_comision, 0),
+    [aprobarExternosAll],
+  );
+
   // Dispersiones internas: orden por fecha_compra (igual que Facturas SOZU).
   const dispersionesInternasSorted = useMemo(() => {
     const rows = dispersionesInternas ?? [];
@@ -551,6 +586,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
 
   const cobrosPage = paginate(cobrosVisible, pageCobros);
   const externosPage = paginate(externosVisible, pageExternos);
+  const aprobarExternosPage = paginate(aprobarExternosVisible, pageAprobarExternos);
   const dispersionesInternasPage = paginate(dispersionesInternasVisible, pageDispersiones);
 
   const scrollTo = (ref: React.RefObject<HTMLDivElement>) => {
@@ -652,6 +688,20 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           icon={Receipt}
           tone="teal"
           onClick={() => scrollTo(facturasSozuRef)}
+        />
+        <KpiCard
+          label="Comisiones externas por aprobar"
+          count={externosLoading ? "…" : aprobarExternosTotal}
+          amountLabel={
+            externosLoading
+              ? "Cargando…"
+              : externosError
+                ? "Error al cargar"
+                : fmtMxn(aprobarExternosMonto)
+          }
+          icon={UserCheck}
+          tone="orange"
+          onClick={() => scrollTo(aprobarExternosRef)}
         />
         <KpiCard
           label="Cobros por gestionar"
@@ -835,6 +885,120 @@ export default function PortalAdministracionBandejaEjecucionPage() {
           totalCount={facturasSozuVisibleCount}
           pageSize={PAGE_SIZE}
           onPageChange={setPageFacturasSozu}
+        />
+      </section>
+
+      {/* ─── 0b. Comisiones externas por aprobar ─── */}
+      <section ref={aprobarExternosRef} className="mb-8" style={{ scrollMarginTop: 72 }}>
+        <SectionHeader
+          icon={UserCheck}
+          iconColor="bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
+          title="Comisiones externas por aprobar"
+          description="Comisiones de externos aún sin aprobar. Al aprobar se habilita que el comisionista suba su factura en plataforma."
+          count={aprobarExternosVisibleCount}
+          right={
+            <SortToggle
+              value={sortAprobarExternos}
+              onChange={(v) => {
+                setSortAprobarExternos(v);
+                setPageAprobarExternos(0);
+              }}
+            />
+          }
+        />
+        <Card>
+          <CardContent className="p-0">
+            {externosLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando comisiones externas…
+              </div>
+            ) : externosError ? (
+              <div className="py-10 text-center text-sm text-red-600">
+                Error al cargar: {(externosError as Error).message}
+              </div>
+            ) : aprobarExternosPage.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                {hayFiltrosActivos
+                  ? "Sin resultados que coincidan con los filtros."
+                  : "No hay comisiones externas por aprobar."}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">ID Cuenta</TableHead>
+                      <TableHead className="text-xs">Proyecto</TableHead>
+                      <TableHead className="text-xs">Modelo</TableHead>
+                      <TableHead className="text-xs">Producto</TableHead>
+                      <TableHead className="text-xs">No. Depa</TableHead>
+                      <TableHead className="text-xs">Nombre comisionista</TableHead>
+                      <TableHead className="text-xs">Tipo</TableHead>
+                      <TableHead className="text-xs text-right">% Comisión</TableHead>
+                      <TableHead className="text-xs text-right">Monto</TableHead>
+                      <TableHead className="text-xs text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {aprobarExternosPage.map((p) => (
+                      <TableRow key={p.id_comisionista}>
+                        <TableCell className="font-medium text-xs font-mono whitespace-nowrap">
+                          {formatCuentaFolio(p)}
+                        </TableCell>
+                        <TableCell className="text-sm">{p.proyecto_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm">{p.modelo_nombre || "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {p.producto_nombre || "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">{p.numero_departamento || "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          <div>{p.beneficiario_nombre}</div>
+                          {p.beneficiario_rfc && (
+                            <div className="text-[10px] text-muted-foreground font-mono">
+                              {p.beneficiario_rfc}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                            {BENEFICIARIO_TIPO_LABEL[p.beneficiario_tipo]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-right tabular-nums">
+                          {p.porcentaje_comision.toFixed(2)}%
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-semibold tabular-nums">
+                          {fmtMxn(p.monto_comision)}
+                          <span className="block text-[9px] text-muted-foreground font-normal">
+                            + IVA
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            data-cta="admin.bandeja.aprobar-comision-externa"
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => setSelected({ tipo: "aprobar_externo", data: p })}
+                            aria-label={`Ver detalle y aprobar ${formatCuentaFolio(p)}`}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Ver detalle
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <PaginationBar
+          page={pageAprobarExternos}
+          totalPages={aprobarExternosTotalPages}
+          totalCount={aprobarExternosVisibleCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPageAprobarExternos}
         />
       </section>
 
@@ -1405,6 +1569,35 @@ export default function PortalAdministracionBandejaEjecucionPage() {
               ventaContext={vctx}
             >
               <EjecucionPagoExternoContent entity={pagoEntity} onClose={close} />
+            </EjecucionDrawer>
+          );
+        }
+
+        if (selected.tipo === "aprobar_externo") {
+          const p = selected.data;
+          const propiedadLabel =
+            [p.proyecto_nombre, p.modelo_nombre, p.numero_departamento ? `Depto ${p.numero_departamento}` : null]
+              .filter(Boolean)
+              .join(" · ") || "—";
+          const vctx = {
+            folio: formatCuentaFolio(p),
+            propiedad: propiedadLabel,
+            cliente: p.beneficiario_nombre,
+            precio_venta: p.precio_final,
+            comision_total_sozu: p.monto_comision,
+            porcentaje_comision: p.porcentaje_comision,
+            estado_venta: "Vendida" as const,
+            dias_desde_apartado: p.dias_desde_devengo,
+          };
+          return (
+            <EjecucionDrawer
+              open={open}
+              onOpenChange={onOpenChange}
+              entityType="ejecucion_aprobar_externo"
+              entityId={formatCuentaFolio(p)}
+              ventaContext={vctx}
+            >
+              <EjecucionAprobarComisionExternaContent entity={p} onClose={close} />
             </EjecucionDrawer>
           );
         }
