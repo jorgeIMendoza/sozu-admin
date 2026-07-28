@@ -43,9 +43,10 @@ const PORTAL_LABELS: Record<string, { label: string; color: string }> = {
   inmobiliarias: { label: 'Portal Inmobiliarias', color: 'hsl(158 64% 38%)' },
   clientes: { label: 'Portal Clientes', color: 'hsl(210 80% 45%)' },
   embajadores: { label: 'Portal Embajadores', color: 'hsl(280 60% 45%)' },
+  propietarios: { label: 'Portal Propietarios', color: 'hsl(210 80% 45%)' },
 };
 
-export default function Login({ portalContext }: { portalContext?: 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null }) {
+export default function Login({ portalContext }: { portalContext?: 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

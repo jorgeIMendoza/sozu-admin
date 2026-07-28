@@ -1,5 +1,5 @@
 import { usePortal, computeVerification, type CheckStatus } from "@/lib/portal-cliente/onboarding-store";
-import { AlertTriangle, CheckCircle2, Circle, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Info, XCircle } from "lucide-react";
 
 const ICON: Record<CheckStatus, { Icon: typeof Circle; color: string }> = {
   ok: { Icon: CheckCircle2, color: "text-primary" },
@@ -40,6 +40,15 @@ export function Step5Verification() {
             </div>
           );
         })}
+      </div>
+
+      <div className="flex items-start gap-3 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <div>
+          Los puntos en gris (titularidad registral, cadena de dominio y validez de la escritura)
+          los valida el <strong>área legal de SOZU</strong> al recibir tu solicitud; no se aprueban
+          de forma automática.
+        </div>
       </div>
 
       {anyFail && (

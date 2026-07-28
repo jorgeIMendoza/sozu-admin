@@ -35,23 +35,18 @@ export default function RegistrarPropiedadPage() {
 
   const checks = computeVerification(state);
   const requiredDocs = requiredDocsFor(onboarding.personType);
-  const rppResolved =
-    onboarding.rppInTramite ||
-    onboarding.docs.some(
-      (d) => d.type === "certificado_rpp" && (d.confirmed || d.managedBySozu),
-    );
   const escrituraConfirmed = onboarding.docs.some((d) => d.type === "escritura" && d.confirmed);
   const allConfirmed = (() => {
     if (onboarding.personType === "fisica") {
       const idConfirmed = onboarding.docs.some((d) => d.type === "id_oficial" && d.confirmed);
-      return idConfirmed && escrituraConfirmed && rppResolved;
+      return idConfirmed && escrituraConfirmed;
     }
-    // Persona moral: acta + poder + id del RL + escritura + RPP resuelto.
+    // Persona moral: acta + poder + id del RL + escritura.
     const actaOk = onboarding.docs.some((d) => d.type === "acta_constitutiva" && d.confirmed);
     const poderOk = onboarding.docs.some((d) => d.type === "poder_rl" && d.confirmed);
     const idRlOk = onboarding.docs.some((d) => d.type === "id_rl" && d.confirmed);
     void requiredDocs;
-    return actaOk && poderOk && idRlOk && escrituraConfirmed && rppResolved;
+    return actaOk && poderOk && idRlOk && escrituraConfirmed;
   })();
 
   const noFail = checks.every((c) => c.status !== "fail");
@@ -110,7 +105,7 @@ export default function RegistrarPropiedadPage() {
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Rail izquierdo — stepper vertical (oculto en móvil) */}
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-card md:flex">
+      <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col self-start border-r border-border bg-card md:flex">
         <div className="border-b border-border px-4 py-4">
           <BrandLogo />
         </div>
@@ -217,7 +212,7 @@ export default function RegistrarPropiedadPage() {
           </div>
         </div>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1">
           <div className="mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-8">
             <section className="rounded-xl border border-border bg-card p-5 shadow-sm md:p-7">
               {step === 1 && <Step1IdentifyUnit />}

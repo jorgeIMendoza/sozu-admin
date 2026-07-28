@@ -1,12 +1,10 @@
 import { DocumentUploader } from "./DocumentUploader";
-import { Button } from "@/components/ui/button";
 import {
   usePortal,
-  requiredDocsFor,
   type PurchaseType,
   type PurchaseRecency,
 } from "@/lib/portal-cliente/onboarding-store";
-import { CheckCircle2, Clock, Info, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, Info } from "lucide-react";
 
 type Requirement = "obligatorio" | "opcional" | "condicional";
 
@@ -63,26 +61,12 @@ export function Step4Documents() {
   const personType = usePortal((s) => s.onboarding.personType);
   const onboarding = usePortal((s) => s.onboarding);
   const setOnb = usePortal((s) => s.setOnboarding);
-  const removeDoc = usePortal((s) => s.removeDoc);
 
-  const { purchaseType, purchaseRecency, rppInTramite } = onboarding;
+  const { purchaseType, purchaseRecency } = onboarding;
   const isCredito = purchaseType === "credito";
   const isReciente = purchaseRecency === "reciente";
 
-  const rppDoc = onboarding.docs.find((d) => d.type === "certificado_rpp");
-  const rppUploaded = !!rppDoc;
-
-  function markInTramite() {
-    if (rppDoc) removeDoc(rppDoc.id);
-    // SWAP POINT: alta de solicitud de "en trámite de inscripción" al área legal.
-    setOnb({ rppInTramite: true });
-  }
-  function undoInTramite() {
-    setOnb({ rppInTramite: false });
-  }
-
   const isMoral = personType === "moral";
-  const titularNoun = isMoral ? "la razón social" : "tu nombre";
 
   // Header + calificador — comunes a ambas variantes
   const Header = (
@@ -129,15 +113,14 @@ export function Step4Documents() {
             <div>
               {isCredito && (
                 <div>
-                  Con crédito hipotecario, es normal que tu certificado del RPP muestre la
-                  hipoteca como gravamen (el titular registral es {titularNoun}). No te
+                  Con crédito hipotecario es normal que tu escritura mencione la hipoteca; no te
                   descalifica.
                 </div>
               )}
               {isReciente && (
                 <div className={isCredito ? "mt-1" : ""}>
-                  En compras recientes, el predial y la inscripción registral pueden aún no
-                  estar a nombre de {isMoral ? "la empresa" : "ti"}. Es normal.
+                  En compras recientes, el predial puede aún no estar a nombre de{" "}
+                  {isMoral ? "la empresa" : "ti"}. Es normal.
                 </div>
               )}
             </div>
@@ -147,65 +130,12 @@ export function Step4Documents() {
     </>
   );
 
-  const RppSection = (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        <RequirementChip level="obligatorio" />
-        <span className="text-[11px] text-muted-foreground">
-          Se resuelve subiéndolo, con "SOZU lo gestiona" o marcando "en trámite".
-        </span>
-      </div>
-
-      {!rppInTramite && <DocumentUploader type="certificado_rpp" allowManagedBySozu />}
-
-      {rppInTramite && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div>
-              <h4 className="text-sm font-semibold text-foreground">
-                Certificado del RPP (inscripción / titularidad)
-              </h4>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Marcado como en trámite de inscripción.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1 rounded-md border border-state-review/30 bg-state-review/10 px-2 py-0.5 text-xs font-medium text-state-review">
-              <Clock className="h-3 w-3" />
-              En revisión
-            </span>
-          </div>
-          <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm text-foreground">
-            El área legal verificará el avance de tu inscripción en el RPP de Jalisco usando
-            el folio real de tu escritura.
-            {/* SWAP POINT: alta de caso "en trámite de inscripción". */}
-            <div className="mt-2 flex justify-end">
-              <Button variant="ghost" size="sm" onClick={undoInTramite}>
-                <Trash2 className="mr-1 h-3 w-3" /> Deshacer
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!rppInTramite && !rppUploaded && isReciente && (
-        <button
-          type="button"
-          onClick={markInTramite}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-primary/40 bg-primary/5 px-4 py-2.5 text-xs font-medium text-primary transition hover:bg-primary/10"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" />
-          No lo tengo: mi inscripción está en trámite
-        </button>
-      )}
-    </div>
-  );
-
   const ClosingBanner = (
     <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/30 p-3 text-[11px] text-muted-foreground">
       <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
       <span>
-        Ningún documento se aprueba solo: son evidencia para el área legal. La presencia de
-        una hipoteca en tu certificado del RPP no bloquea este paso.
+        Ningún documento se aprueba solo: son evidencia para que el área correspondiente valide
+        tu titularidad.
       </span>
     </div>
   );
@@ -254,18 +184,14 @@ export function Step4Documents() {
             <RequirementChip level="obligatorio" />
             {isReciente && (
               <span className="text-[11px] text-muted-foreground">
-                Si la compra es muy reciente, la inscripción puede estar en trámite; la
-                escritura sí existe desde la firma.
+                Si la compra es muy reciente, la escritura sí existe desde la firma.
               </span>
             )}
           </div>
           <DocumentUploader type="escritura" />
         </div>
 
-        {/* 5. Certificado del RPP */}
-        {RppSection}
-
-        {/* 6. Predial (opcional) */}
+        {/* 5. Predial (opcional) */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <RequirementChip level="opcional" />
@@ -276,7 +202,7 @@ export function Step4Documents() {
           <DocumentUploader type="predial" optional />
         </div>
 
-        {/* 7. Constancia de situación fiscal de la moral */}
+        {/* 6. Constancia de situación fiscal de la moral */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <RequirementChip level="condicional" />
@@ -311,18 +237,14 @@ export function Step4Documents() {
           <RequirementChip level="obligatorio" />
           {isReciente && (
             <span className="text-[11px] text-muted-foreground">
-              Si la compra es muy reciente, la inscripción puede estar en trámite; la escritura
-              sí existe desde la firma.
+              Si la compra es muy reciente, la escritura sí existe desde la firma.
             </span>
           )}
         </div>
         <DocumentUploader type="escritura" />
       </div>
 
-      {/* 3. Certificado del RPP */}
-      {RppSection}
-
-      {/* 4. Predial (opcional) */}
+      {/* 3. Predial (opcional) */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
           <RequirementChip level="opcional" />
@@ -331,7 +253,7 @@ export function Step4Documents() {
         <DocumentUploader type="predial" optional />
       </div>
 
-      {/* 5. CURP (condicional) */}
+      {/* 4. CURP (condicional) */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
           <RequirementChip level="condicional" />
@@ -342,7 +264,7 @@ export function Step4Documents() {
         <DocumentUploader type="curp" optional />
       </div>
 
-      {/* 6. Constancia de situación fiscal (condicional) */}
+      {/* 5. Constancia de situación fiscal (condicional) */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
           <RequirementChip level="condicional" />
