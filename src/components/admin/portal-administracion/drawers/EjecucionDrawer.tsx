@@ -31,6 +31,7 @@ export function EjecucionDrawer({
     | "ejecucion_pago_externo"
     | "ejecucion_dispersion"
     | "ejecucion_excepcion"
+    | "ejecucion_aprobar_externo"
   >;
   entityId: string;
   subtitle?: string;
