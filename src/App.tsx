@@ -484,13 +484,15 @@ const isAgentesSubdomain = matchPortal('agentes');
 const isClientesSubdomain = matchPortal('clientes');
 const isEmbajadoresSubdomain = matchPortal('embajadores');
 const isCrmSubdomain = matchPortal('crm');
+const isPropietariosSubdomain = matchPortal('propietarios');
 
 // Determine portal context from subdomain for login page branding
-const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | null => {
+const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | null => {
   if (isAgentesSubdomain) return 'agentes';
   if (isInmobiliariasSubdomain) return 'inmobiliarias';
   if (isClientesSubdomain) return 'clientes';
   if (isEmbajadoresSubdomain) return 'embajadores';
+  if (isPropietariosSubdomain) return 'propietarios';
   return null;
 };
 const portalContext = getPortalContext();
@@ -618,6 +620,17 @@ const App = () => (
                     <Route path="portal-embajador/perfil" element={<EmbajadorPerfil />} />
                     <Route path="*" element={<Navigate to="/admin/portal-embajador/inicio" replace />} />
                   </Route>
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+              ) : isPropietariosSubdomain ? (
+                <Routes>
+                  <Route path="/login" element={<Login portalContext="propietarios" />} />
+                  <Route path="/auth/login" element={<Login portalContext="propietarios" />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/registrar-propiedad" element={<RegistrarPropiedadPage />} />
+                  <Route path="/" element={<Navigate to="/registrar-propiedad" replace />} />
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
               ) : isClientesSubdomain ? (

@@ -19,7 +19,7 @@ export function BrandLogo({ className = "", showTagline = true, variant = "dark"
       />
       {showTagline && (
         <span className="border-l border-border pl-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-          Portal del Cliente
+          Registrar propiedad
         </span>
       )}
     </div>

@@ -63,10 +63,34 @@ export function extractCURPFields(text: string): CURPExtractedFields {
     if (s) sexo = /^(HOMBRE|MASCULINO)/i.test(s) ? "H" : "M";
   }
 
-  const nombres = labelValue(t, ["Nombre\\(s\\)", "Nombres?"]);
-  const primerAp = labelValue(t, ["Primer[\\s]?[Aa]pellido", "Apellido[\\s]?[Pp]aterno"]);
-  const segundoAp = labelValue(t, ["Segundo[\\s]?[Aa]pellido", "Apellido[\\s]?[Mm]aterno"]);
-  const nombre = [nombres, primerAp, segundoAp].filter(Boolean).join(" ").trim() || null;
+  // Nombre — RENAPO tiene dos formatos:
+  //  (a) "Constancia de la CURP" (actual): el nombre (mayúsculas) aparece junto a
+  //      la clave y antes de las etiquetas "Clave: Nombre". El texto de pdfjs sale
+  //      desordenado (el cuerpo con "PRESENTE" va primero), por eso se ancla en la
+  //      clave CURP, no en "PRESENTE" ni en el label "Nombre".
+  //  (b) formato antiguo con campos Nombre(s)/Primer apellido/Segundo apellido.
+  const NAME_RUN = "([A-ZÁÉÍÓÚÑ]{2,}(?:\\s+[A-ZÁÉÍÓÚÑ]{2,}){1,5})";
+  let nombre: string | null = null;
+
+  // (a1) nombre en mayúsculas inmediatamente después de la clave CURP.
+  if (curp) {
+    const m = t.match(new RegExp(curp + "\\s+" + NAME_RUN));
+    if (m) nombre = m[1].replace(/\s+/g, " ").trim();
+  }
+  // (a2) nombre en mayúsculas justo antes de la etiqueta "Clave".
+  if (!nombre) {
+    const m = t.match(new RegExp(NAME_RUN + "\\s+Clave\\b"));
+    if (m) nombre = m[1].replace(/\s+/g, " ").trim();
+  }
+  // (b) campos separados.
+  if (!nombre) {
+    const structured = [
+      labelValue(t, ["Nombre\\(s\\)"]),
+      labelValue(t, ["Primer[\\s]?[Aa]pellido", "Apellido[\\s]?[Pp]aterno"]),
+      labelValue(t, ["Segundo[\\s]?[Aa]pellido", "Apellido[\\s]?[Mm]aterno"]),
+    ].filter(Boolean).join(" ").trim();
+    if (structured.length >= 5) nombre = structured;
+  }
 
   const fechaNacimiento =
     (curp ? fechaFromCurp(curp) : null) ??
@@ -129,22 +153,57 @@ export interface CSFExtractedFields {
 export function extractCSFFields(text: string): CSFExtractedFields {
   const t = norm(text);
 
+  // La CSF trae campos separados y etiquetados. Sobre texto normalizado (espacios
+  // colapsados) `labelValue` corta los valores de 2+ palabras en mayúsculas (cree
+  // que la 2a palabra es otra etiqueta), así que capturamos el valor MAYÚSCULA
+  // entre cada etiqueta y la siguiente.
+  const between = (start: string, ends: string[]): string | null => {
+    const m = t.match(
+      new RegExp(start + "\\s*:?\\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{1,70}?)\\s+(?:" + ends.join("|") + ")"),
+    );
+    return m ? m[1].replace(/\s+/g, " ").trim() : null;
+  };
+
+  const razonSocial = labelValue(t, ["Denominaci[oó]n[/\\s]*(?:o\\s*)?Raz[oó]n\\s*Social"], 80);
+  const nombreS = between("Nombre\\s*\\(s\\)", ["Primer\\s+Apellido"]);
+  const apPaterno = between("Primer\\s+Apellido", ["Segundo\\s+Apellido"]);
+  const apMaterno = between("Segundo\\s+Apellido", ["Fecha", "Nombre\\s+Comercial", "Datos", "CURP", "RFC"]);
+  const nombreCompleto = [nombreS, apPaterno, apMaterno].filter(Boolean).join(" ").trim();
+  const nombre =
+    razonSocial ||
+    (nombreCompleto.length >= 5
+      ? nombreCompleto
+      : labelValue(t, ["Nombre\\s*\\(s\\)", "Nombre"], 80));
+
+  const regimen =
+    t
+      .match(/R[eé]gimen\s+de\s+[Ll]as?\s+[A-Za-zÁÉÍÓÚáéíóúñ\s,]+?(?=\s+\d{2}\/\d{2}\/\d{4}|\s+Fecha\b|$)/)?.[0]
+      ?.replace(/\s+/g, " ")
+      .trim() ?? labelValue(t, ["R[eé]gimen(?:\\s*Fiscal)?"], 60);
+
+  // Rechaza valores que son en realidad la etiqueta del siguiente campo (campo vacío).
+  const cleanNum = (v: string | null): string | null => {
+    if (!v) return null;
+    const s = v.trim();
+    return /\d/.test(s) || s.length <= 3 ? s : null;
+  };
+
   return {
     rfc: t.match(RFC_RE)?.[0] ?? null,
     curp: t.match(CURP_RE)?.[0] ?? null,
-    nombre: labelValue(t, [
-      "Denominaci[oó]n[/\\s]*(?:o\\s*)?Raz[oó]n\\s*Social",
-      "Nombre\\s*\\(s\\)",
-      "Nombre",
-    ], 80),
-    regimen: labelValue(t, ["R[eé]gimen(?:\\s*Fiscal)?"], 60),
+    nombre,
+    regimen,
     codigoPostal:
       t.match(/C[oó]digo\s*Postal\s*:?\s*(\d{5})/i)?.[1] ??
       t.match(/\bC\.?P\.?\s*:?\s*(\d{5})/i)?.[1] ??
       null,
-    calle: labelValue(t, ["Nombre\\s*de\\s*(?:la\\s*)?Vialidad", "Vialidad", "Calle"]),
-    colonia: labelValue(t, ["Nombre\\s*de\\s*la\\s*Colonia", "Colonia"]),
-    numExt: labelValue(t, ["N[uú]mero\\s*Exterior", "No\\.?\\s*Exterior", "Num\\.?\\s*Ext"], 12),
-    numInt: labelValue(t, ["N[uú]mero\\s*Interior", "No\\.?\\s*Interior", "Num\\.?\\s*Int"], 12),
+    calle:
+      between("Nombre\\s*de\\s*(?:la\\s*)?Vialidad", ["N[uú]mero\\s+Exterior", "Tipo\\s+de\\s+Vialidad"]) ??
+      labelValue(t, ["Nombre\\s*de\\s*(?:la\\s*)?Vialidad", "Vialidad", "Calle"]),
+    colonia:
+      between("Nombre\\s*de\\s*la\\s*Colonia", ["Nombre\\s+de\\s+la\\s+Localidad", "Nombre\\s+del\\s+Municipio", "Entre\\s+Calle"]) ??
+      labelValue(t, ["Nombre\\s*de\\s*la\\s*Colonia", "Colonia"]),
+    numExt: cleanNum(labelValue(t, ["N[uú]mero\\s*Exterior", "No\\.?\\s*Exterior", "Num\\.?\\s*Ext"], 12)),
+    numInt: cleanNum(labelValue(t, ["N[uú]mero\\s*Interior", "No\\.?\\s*Interior", "Num\\.?\\s*Int"], 12)),
   };
 }
