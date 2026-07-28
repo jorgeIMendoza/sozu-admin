@@ -16,8 +16,12 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useAsuntosActivos } from '@/modules/juridico/queries/useAsuntosActivos';
+import { useEtapasPorTipoAsunto } from '@/modules/juridico/queries/useEtapasPorTipoAsunto';
 import { CrearExpedienteDialog } from '@/modules/juridico/components/CrearExpedienteDialog';
 import { CambiarEtapaDialog } from '@/modules/juridico/components/CambiarEtapaDialog';
+import { useRegistrarActuacion, JURIDICO_QUERY_KEYS } from '@/modules/juridico/hooks/useRegistrarActuacion';
+import type { TipoActuacion, TipoOrigen } from '@/modules/juridico/services/registrarActuacion';
+import { JuridicoServiceError, normalizeJuridicoError } from '@/modules/juridico/services/errors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +33,7 @@ type LegalCaseStatus =
 interface Fase2Info {
   idAsunto:                string;
   idTipoAsunto:            string;
+  tipoAsuntoNombre:        string;
   folioExpediente:         string;
   folioAsunto:             string;
   idEtapaActual:           string | null;
@@ -93,7 +98,7 @@ interface AbogadoItem {
 }
 
 type ActionType =
-  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo' | 'documento' | 'expediente'
+  | 'status' | 'observation' | 'penalty' | 'audiencia' | 'acuerdo' | 'documento' | 'expediente' | 'actuacion'
   | 'notificacion' | 'regularizacion' | 'proc_demanda' | 'admision'
   | 'emplazamiento' | 'contestacion' | 'audiencia_proc' | 'sentencia' | 'acuerdo_proc';
 
@@ -127,6 +132,50 @@ const TIPO_DOCUMENTO_OPTIONS: { value: string; label: string }[] = [
 ];
 const TIPO_DOCUMENTO_LABEL: Record<string, string> =
   Object.fromEntries(TIPO_DOCUMENTO_OPTIONS.map(o => [o.value, o.label]));
+
+// T1 registrar_actuacion — CAMBIO_ETAPA excluida (uso interno de T2, el RPC la rechaza con
+// JUR-0010); APERTURA excluida del selector manual (evento de sistema generado por T3).
+const TIPO_ACTUACION_OPTIONS: { value: TipoActuacion; label: string }[] = [
+  { value: 'NOTIFICACION', label: 'Notificación' },
+  { value: 'CONTESTACION', label: 'Contestación' },
+  { value: 'AUDIENCIA',    label: 'Audiencia' },
+  { value: 'PRUEBA',       label: 'Prueba' },
+  { value: 'RECURSO',      label: 'Recurso' },
+  { value: 'RESOLUCION',   label: 'Resolución' },
+  { value: 'CORRECCION',   label: 'Corrección' },
+  { value: 'OTRO',         label: 'Otro' },
+];
+
+const TIPO_ORIGEN_OPTIONS: { value: TipoOrigen; label: string }[] = [
+  { value: 'INTERNO', label: 'Interno' },
+  { value: 'EXTERNO', label: 'Externo' },
+  { value: 'JUZGADO',  label: 'Juzgado' },
+  { value: 'PROFECO',  label: 'PROFECO' },
+  { value: 'CLIENTE',  label: 'Cliente' },
+];
+
+function mensajeErrorActuacion(e: JuridicoServiceError): string {
+  if (e.code === 'JUR-0009') return 'La descripción no puede estar vacía.';
+  if (e.code === 'JUR-0011') return 'El asunto no existe o no tienes acceso a él.';
+  if (e.code === 'JUR-0012') return 'El asunto ya no está activo.';
+  if (e.code === 'JUR-0013') return 'La fecha de actuación no puede ser futura.';
+  if (e.code === 'JUR-0016') return 'La descripción supera el límite de 5 000 caracteres.';
+  if (e.code === 'JUR-0000') return 'Tu sesión no tiene un usuario jurídico activo vinculado.';
+  return e.message;
+}
+
+/** Fila normalizada de actuaciones_procesales — Fase 2, timeline enriquecido (Incremento 2). */
+interface ActuacionRow {
+  id: number;
+  tipo_actuacion: string;
+  origen: string;
+  fecha_actuacion: string;
+  descripcion: string | null;
+  resultado: string | null;
+  etapa_al_momento: number | null;
+  creado_por: string;
+  fecha_creacion: string;
+}
 
 interface ExpedienteDocItem {
   key: string;
@@ -175,6 +224,21 @@ const fmtDate = (s: string | null | undefined) => {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+
+/**
+ * Días restantes a partir de una fecha límite YA expuesta por el backend (Fase 2:
+ * fecha_limite_contestacion; legacy: fecha_limite_regularizacion) — nunca calcula una
+ * fecha desde cero en frontend, solo la diferencia contra hoy.
+ */
+type DiasRestantesInfo = { dias: number; label: 'Vencido' | 'Por vencer' | 'En plazo'; colorCls: string };
+
+function diasRestantesInfo(fechaLimite: string | null | undefined): DiasRestantesInfo | null {
+  if (!fechaLimite) return null;
+  const dias = Math.ceil((new Date(fechaLimite).getTime() - Date.now()) / 86400000);
+  if (dias < 0) return { dias, label: 'Vencido', colorCls: 'text-red-600' };
+  if (dias <= 5) return { dias, label: 'Por vencer', colorCls: 'text-amber-600' };
+  return { dias, label: 'En plazo', colorCls: 'text-emerald-600' };
+}
 
 // UI → DB status mapping. DB CHECK constraint accepts exactly 7 values:
 //   SIN_DEMANDA | NOTIFICADO | EN_PROCESO | ACUERDO | LITIGIO | RESUELTO | CERRADO
@@ -328,6 +392,7 @@ function AppJuridicoDashboardInner() {
   const [actionInput, setActionInput] = useState('');
   const [actionInput2, setActionInput2] = useState('');
   const [actionInput3, setActionInput3] = useState('');
+  const [actionInput4, setActionInput4] = useState('');
   const [actionFile, setActionFile] = useState<File | null>(null);
   const actionRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
@@ -336,9 +401,10 @@ function AppJuridicoDashboardInner() {
     setActionInput(defaultVal);
     setActionInput2('');
     setActionInput3('');
+    setActionInput4('');
     setActionFile(null);
   };
-  const closeAction = () => { setAction(null); setActionInput(''); setActionFile(null); };
+  const closeAction = () => { setAction(null); setActionInput(''); setActionInput4(''); setActionFile(null); };
 
   // ── Proceso de demanda form state ──────────────────────────────────────────
   const [procesoForm, setProcesoForm] = useState({
@@ -589,6 +655,7 @@ function AppJuridicoDashboardInner() {
       map.set(Number(a.idPropiedad), {
         idAsunto: a.idAsunto,
         idTipoAsunto: a.idTipoAsunto,
+        tipoAsuntoNombre: a.tipoAsuntoNombre,
         folioExpediente: a.folioExpediente,
         folioAsunto: a.folioAsunto,
         idEtapaActual: a.idEtapaActual,
@@ -955,6 +1022,97 @@ function AppJuridicoDashboardInner() {
   const selectedAcuerdos   = selectedRow ? (acuerdosMap[selectedRow.demandaId] ?? []) : [];
   const selectedDocs       = selectedRow ? (docsMap[selectedRow.demandaId] ?? []) : [];
 
+  // ── Fase 2 — actuaciones_procesales del asunto seleccionado (Incrementos 2 y 3) ────
+  // Misma queryKey que ya invalidan useRegistrarActuacion/useCambiarEtapaAsunto — se
+  // refresca sola tras T1/T2, sin invalidación adicional.
+  const { data: actuacionesFase2 = [] } = useQuery({
+    queryKey: JURIDICO_QUERY_KEYS.actuaciones(selectedRow?.fase2?.idAsunto ?? ''),
+    enabled: !!selectedRow?.fase2?.idAsunto,
+    queryFn: async (): Promise<ActuacionRow[]> => {
+      const { data, error } = await (supabase as any)
+        .from('actuaciones_procesales')
+        .select('id, tipo_actuacion, origen, fecha_actuacion, descripcion, resultado, etapa_al_momento, creado_por, fecha_creacion')
+        .eq('id_asunto', selectedRow!.fase2!.idAsunto)
+        .order('fecha_actuacion', { ascending: false })
+        .order('id', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ActuacionRow[];
+    },
+  });
+
+  // Catálogo de etapas del tipo_asunto del asunto seleccionado — para resolver
+  // etapa_al_momento (id) → nombre. Hook ya existente, ya usado por CambiarEtapaDialog.
+  const { data: etapasAsuntoSeleccionado = [] } = useEtapasPorTipoAsunto(selectedRow?.fase2?.idTipoAsunto ?? null);
+  const etapasNombreMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of etapasAsuntoSeleccionado) m.set(e.id, e.nombre);
+    return m;
+  }, [etapasAsuntoSeleccionado]);
+
+  // Abogado responsable del asunto (asuntos_juridicos.id_abogado_responsable no está
+  // expuesta por useAsuntosActivos — waterfall de 2 pasos, solo lectura, local a este panel).
+  const { data: asuntoDetalleFase2 } = useQuery({
+    queryKey: ['app-juridico-asunto-detalle', selectedRow?.fase2?.idAsunto],
+    enabled: !!selectedRow?.fase2?.idAsunto,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('asuntos_juridicos')
+        .select('id_abogado_responsable')
+        .eq('id', selectedRow!.fase2!.idAsunto)
+        .maybeSingle();
+      return data as { id_abogado_responsable: number | null } | null;
+    },
+  });
+  const { data: abogadoResponsableNombre } = useQuery({
+    queryKey: ['app-juridico-abogado-responsable', asuntoDetalleFase2?.id_abogado_responsable],
+    enabled: !!asuntoDetalleFase2?.id_abogado_responsable,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from('perfiles_juridicos')
+        .select('nombre_completo')
+        .eq('id', asuntoDetalleFase2!.id_abogado_responsable)
+        .maybeSingle();
+      return (data?.nombre_completo as string | undefined) ?? undefined;
+    },
+  });
+
+  // Bitácora combinada: legacy (demandas_timeline) + Fase 2 (actuaciones_procesales),
+  // normalizadas a una sola forma y ordenadas por fecha descendente (Incremento 2).
+  const mergedTimeline = useMemo(() => {
+    const legacyItems = selectedTimeline.map((ev: any) => ({
+      id: `legacy-${ev.id}`,
+      fecha: ev.fecha_creacion as string,
+      tipo: ev.tipo_evento as string,
+      descripcion: (ev.descripcion ?? null) as string | null,
+      etapaNombre: null as string | null,
+      usuario: (ev.creado_por ?? null) as string | null,
+    }));
+    const fase2Items = actuacionesFase2.map((a) => ({
+      id: `fase2-${a.id}`,
+      fecha: a.fecha_actuacion,
+      tipo: a.tipo_actuacion,
+      descripcion: a.descripcion,
+      etapaNombre: a.etapa_al_momento != null ? (etapasNombreMap.get(String(a.etapa_al_momento)) ?? null) : null,
+      usuario: a.creado_por as string | null,
+    }));
+    return [...legacyItems, ...fase2Items].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  }, [selectedTimeline, actuacionesFase2, etapasNombreMap]);
+
+  // Historial de etapas: cadena de etapa_al_momento de cada CAMBIO_ETAPA (ascendente) +
+  // etapa actual al final — 100% derivado de datos ya cargados, sin query nueva (Incremento 3).
+  const historialEtapas = useMemo(() => {
+    if (!selectedRow?.fase2) return [] as string[];
+    const cambios = actuacionesFase2
+      .filter(a => a.tipo_actuacion === 'CAMBIO_ETAPA')
+      .slice()
+      .sort((a, b) => new Date(a.fecha_actuacion).getTime() - new Date(b.fecha_actuacion).getTime() || a.id - b.id);
+    const nombres = cambios
+      .map(a => (a.etapa_al_momento != null ? etapasNombreMap.get(String(a.etapa_al_momento)) ?? null : null))
+      .filter((n): n is string => !!n);
+    if (selectedRow.fase2.etapaActualNombre) nombres.push(selectedRow.fase2.etapaActualNombre);
+    return nombres;
+  }, [actuacionesFase2, etapasNombreMap, selectedRow]);
+
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const insertTimeline = async (demandaId: number, tipoEvento: string, descripcion: string) => {
@@ -1157,6 +1315,10 @@ function AppJuridicoDashboardInner() {
     },
     onError: (err: any) => toast.error('Error al actualizar proceso', { description: err.message }),
   });
+
+  // T1 — registrar_actuacion. Hook ya existente (servicio + 35 tests); su onSuccess ya
+  // invalidacion JURIDICO_QUERY_KEYS.actuaciones/.asunto — el feedback de UI se maneja aquí.
+  const registrarActuacionMutation = useRegistrarActuacion();
 
   // ── Action helpers ─────────────────────────────────────────────────────────
   const handleAction = (type: ActionType, row: LegalRow) => {
@@ -1539,13 +1701,17 @@ function AppJuridicoDashboardInner() {
                       </td>
                       {/* Días restantes (Fase 2: fecha_limite_contestacion; legacy: regularización) */}
                       <td className="px-3 py-3 text-center tabular-nums">
-                        {row.fase2?.fechaLimiteContestacion ? (() => {
-                          const d = Math.ceil((new Date(row.fase2.fechaLimiteContestacion).getTime() - Date.now()) / 86400000);
-                          return <span className={cn('text-xs font-semibold', d < 0 ? 'text-red-600' : d <= 5 ? 'text-amber-600' : 'text-slate-600')}>{d}d</span>;
-                        })() : hasProcesoCol && row.fechaLimiteRegularizacion && row.estatusRegularizacion === 'EN_ESPERA' ? (() => {
-                          const d = Math.ceil((new Date(row.fechaLimiteRegularizacion).getTime() - Date.now()) / 86400000);
-                          return <span className={cn('text-xs font-semibold', d < 0 ? 'text-red-600' : d <= 5 ? 'text-amber-600' : 'text-slate-600')}>{d < 0 ? `${d}d` : `${d}d`}</span>;
-                        })() : <span className="text-[11px] text-muted-foreground/40">—</span>}
+                        {(() => {
+                          const fechaLimite = row.fase2?.fechaLimiteContestacion
+                            ?? (hasProcesoCol && row.estatusRegularizacion === 'EN_ESPERA' ? row.fechaLimiteRegularizacion : null);
+                          const info = diasRestantesInfo(fechaLimite);
+                          if (!info) return <span className="text-[11px] text-muted-foreground/40">—</span>;
+                          return (
+                            <span className={cn('text-xs font-semibold whitespace-nowrap', info.colorCls)}>
+                              {info.label} ({Math.abs(info.dias)}d)
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -1630,6 +1796,60 @@ function AppJuridicoDashboardInner() {
 
               {detailTab === 'resumen' && (
                 <>
+                  {selectedRow.fase2 && (() => {
+                    const diasInfo = diasRestantesInfo(selectedRow.fase2.fechaLimiteContestacion);
+                    return (
+                      <section className="space-y-2">
+                        <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Expediente jurídico</h3>
+                        <dl className="space-y-1.5">
+                          {[
+                            ['Folio expediente', selectedRow.fase2.folioExpediente],
+                            ['Folio asunto',      selectedRow.fase2.folioAsunto],
+                            ['Tipo de asunto',    selectedRow.fase2.tipoAsuntoNombre],
+                            ['Etapa actual',      selectedRow.fase2.etapaActualNombre ?? 'Sin etapa'],
+                          ].map(([l, v]) => (
+                            <div key={l} className="flex justify-between gap-3">
+                              <dt className="text-xs text-muted-foreground shrink-0">{l}</dt>
+                              <dd className="text-xs font-medium text-right">{v}</dd>
+                            </div>
+                          ))}
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-xs text-muted-foreground shrink-0">Días restantes</dt>
+                            <dd className="text-xs font-medium text-right">
+                              {diasInfo
+                                ? <span className={diasInfo.colorCls}>{diasInfo.label} ({Math.abs(diasInfo.dias)}d)</span>
+                                : <span className="text-muted-foreground">—</span>}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-xs text-muted-foreground shrink-0">Abogado responsable</dt>
+                            <dd className="text-xs font-medium text-right">
+                              {abogadoResponsableNombre ?? (asuntoDetalleFase2 ? 'Sin asignar' : '—')}
+                            </dd>
+                          </div>
+                        </dl>
+                        {historialEtapas.length > 0 && (
+                          <div className="pt-1.5">
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">Historial de etapas</p>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {historialEtapas.map((nombre, i) => (
+                                <span key={i} className="flex items-center gap-1">
+                                  {i > 0 && <span className="text-muted-foreground/50 text-xs">→</span>}
+                                  <span className={cn(
+                                    'px-1.5 py-0.5 rounded-full text-[11px]',
+                                    i === historialEtapas.length - 1 ? 'bg-primary/10 text-primary font-medium' : 'bg-muted text-muted-foreground',
+                                  )}>
+                                    {nombre}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })()}
+
                   <section className="space-y-2">
                     <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Información general</h3>
                     <dl className="space-y-1.5">
@@ -1686,6 +1906,35 @@ function AppJuridicoDashboardInner() {
                         { label: 'Actualizar % penalidad', icon: FileText,    action: () => handleAction('penalty', selectedRow) },
                         { label: 'Registrar audiencia',  icon: CalendarDays,  action: () => handleAction('audiencia', selectedRow) },
                         { label: 'Registrar acuerdo',    icon: HeartHandshake,action: () => handleAction('acuerdo', selectedRow) },
+                        {
+                          label: 'Registrar actuación',
+                          icon: ScrollText,
+                          action: () => {
+                            if (!selectedRow.fase2) {
+                              toast.info('Requiere expediente Fase 2', { description: "Crea el expediente primero con el botón 'Expediente' en la tabla." });
+                              return;
+                            }
+                            openAction('actuacion', selectedRow);
+                            setActionInput3(new Date().toISOString().slice(0, 10));
+                          },
+                        },
+                        {
+                          label: 'Cambiar etapa',
+                          icon: ArrowRight,
+                          action: () => {
+                            if (!selectedRow.fase2) {
+                              toast.info('Requiere expediente Fase 2', { description: "Crea el expediente primero con el botón 'Expediente' en la tabla." });
+                              return;
+                            }
+                            setCambiarEtapaCtx({
+                              idAsunto: selectedRow.fase2.idAsunto,
+                              idTipoAsunto: selectedRow.fase2.idTipoAsunto,
+                              etapaActualId: selectedRow.fase2.idEtapaActual,
+                              etapaEsTerminal: selectedRow.fase2.etapaEsTerminal,
+                            });
+                          },
+                        },
+                        { label: 'Ver timeline', icon: Clock, action: () => setDetailTab('bitacora') },
                         { label: 'Subir documento',      icon: Upload,        action: () => openAction('documento', selectedRow) },
                         { label: 'Descargar expediente', icon: Download,      action: () => openAction('expediente', selectedRow) },
                         {
@@ -1754,20 +2003,27 @@ function AppJuridicoDashboardInner() {
               {detailTab === 'bitacora' && (
                 <section className="space-y-3">
                   <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Bitácora del caso</h3>
-                  {selectedTimeline.length === 0 ? (
+                  {mergedTimeline.length === 0 ? (
                     <div className="text-center py-8">
                       <Clock className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
                       <p className="text-xs text-muted-foreground">Sin eventos en la bitácora</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {selectedTimeline.map((ev: any) => (
+                      {mergedTimeline.map((ev) => (
                         <div key={ev.id} className="flex gap-3">
                           <div className="shrink-0 mt-1.5"><div className="h-2 w-2 rounded-full bg-primary" /></div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium">{ev.tipo_evento?.replace(/_/g, ' ')}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-medium">{ev.tipo?.replace(/_/g, ' ')}</p>
+                              {ev.etapaNombre && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium shrink-0">
+                                  {ev.etapaNombre}
+                                </span>
+                              )}
+                            </div>
                             {ev.descripcion && <p className="text-xs text-muted-foreground mt-0.5">{ev.descripcion}</p>}
-                            <p className="text-[11px] text-muted-foreground/60 mt-0.5">{ev.creado_por} · {fmtDate(ev.fecha_creacion)}</p>
+                            <p className="text-[11px] text-muted-foreground/60 mt-0.5">{ev.usuario ?? 'sistema'} · {fmtDate(ev.fecha)}</p>
                           </div>
                         </div>
                       ))}
@@ -2212,6 +2468,70 @@ function AppJuridicoDashboardInner() {
                       descripcion: actionInput2.trim(),
                     })}>
                     {uploadingDocumento ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Subir'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Registrar actuación (T1 registrar_actuacion) */}
+            {action.type === 'actuacion' && (
+              <>
+                <h2 className="text-sm font-bold mb-1">Registrar actuación</h2>
+                <p className="text-xs text-muted-foreground mb-4">{action.row.unitCode} — {action.row.clienteName}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Tipo de actuación *</label>
+                    <Select value={actionInput} onValueChange={setActionInput}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar tipo..." /></SelectTrigger>
+                      <SelectContent>
+                        {TIPO_ACTUACION_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Origen *</label>
+                    <Select value={actionInput2} onValueChange={setActionInput2}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar origen..." /></SelectTrigger>
+                      <SelectContent>
+                        {TIPO_ORIGEN_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Fecha de actuación *</label>
+                    <input type="date" value={actionInput3} max={new Date().toISOString().slice(0, 10)}
+                      onChange={e => setActionInput3(e.target.value)}
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Descripción *</label>
+                    <textarea value={actionInput4} onChange={e => setActionInput4(e.target.value)} rows={3}
+                      placeholder="Describe la actuación realizada..."
+                      className="w-full text-sm border border-border rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
+                  <Button className="flex-1"
+                    disabled={!actionInput || !actionInput2 || !actionInput3 || !actionInput4.trim() || registrarActuacionMutation.isPending || !action.row.fase2}
+                    onClick={async () => {
+                      if (!action.row.fase2) return;
+                      try {
+                        await registrarActuacionMutation.mutateAsync({
+                          idAsunto: action.row.fase2.idAsunto,
+                          tipoActuacion: actionInput as TipoActuacion,
+                          origen: actionInput2 as TipoOrigen,
+                          fechaActuacion: actionInput3,
+                          descripcion: actionInput4.trim(),
+                        });
+                        toast.success('Actuación registrada');
+                        closeAction();
+                      } catch (err) {
+                        const e = err instanceof JuridicoServiceError ? err : normalizeJuridicoError(err);
+                        toast.error('No se pudo registrar la actuación', { description: mensajeErrorActuacion(e) });
+                      }
+                    }}>
+                    {registrarActuacionMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Registrar'}
                   </Button>
                 </div>
               </>
