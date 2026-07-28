@@ -193,6 +193,7 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
           etapa_ciclo_vida: c.etapa_ciclo_vida || "lead",
           id_propietario: (c.propietario && ownerByKey.get(norm(c.propietario))) || user?.id || null,
           origen_agente: c.origen_agente || null,
+          origen: "importacion",
         });
         // Categoría fija del lote (best-effort).
         if (catFija) {
