@@ -638,6 +638,7 @@ const App = () => (
                   {/* Nuevas páginas flujo oferta completo */}
                   <Route path="/reservar/:offerToken/datos" element={<ApartarDirectoCapturePage />} />
                   <Route path="/reservar/:offerToken/continuar" element={<ApartarDirectoContinuarPage />} />
+                  <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
                   <Route path="/reservar/:formalReservationId/provisional-activado" element={<ApartadoProvisionalActivadoPage />} />
                   <Route path="/apartado-provisional/:formalReservationId" element={<ApartadoProvisionalDashboardPage />} />
                   <Route path="/apartado-liberado/:formalReservationId" element={<ApartadoLiberadoPage />} />
@@ -649,7 +650,6 @@ const App = () => (
                   <Route path="/verificar/:prospectId" element={<VerificationCallbackOfferPage />} />
                   <Route path="/verificacion/:prospectId" element={<VerificationCallbackOfferPage />} />
                   {/* Wizard de reserva */}
-                  <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
                   {/* Apartado provisional (DB-backed) */}
                   <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
                   <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />
@@ -713,6 +713,7 @@ const App = () => (
                 {/* Flujo oferta completo */}
                 <Route path="/reservar/:offerToken/datos" element={<ApartarDirectoCapturePage />} />
                 <Route path="/reservar/:offerToken/continuar" element={<ApartarDirectoContinuarPage />} />
+                <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
                 <Route path="/reservar/:formalReservationId/provisional-activado" element={<ApartadoProvisionalActivadoPage />} />
                 <Route path="/apartado-provisional/:formalReservationId" element={<ApartadoProvisionalDashboardPage />} />
                 <Route path="/apartado-liberado/:formalReservationId" element={<ApartadoLiberadoPage />} />
@@ -722,7 +723,6 @@ const App = () => (
                 <Route path="/verificar-email/:prospectId" element={<EmailVerificationOfferPage />} />
                 <Route path="/verificar/:prospectId" element={<VerificationCallbackOfferPage />} />
                 <Route path="/verificacion/:prospectId" element={<VerificationCallbackOfferPage />} />
-                <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
                 {/* Apartado provisional (DB-backed) */}
                 <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
                 <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />

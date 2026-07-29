@@ -47,7 +47,7 @@ const LegacyWizardRedirect = () => {
     return <Navigate to="/en-adquisicion" replace />;
   }
 
-  // 18.10.A: el wizard pre-hold se eliminó; cualquier ruta legacy lleva a /reservar.
+  // Cualquier ruta legacy del wizard aterriza en la pantalla de pago del apartado.
   return <Navigate to={`/reservar/${formalReservation.id}/wizard`} replace />;
 };
 
