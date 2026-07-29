@@ -7,8 +7,13 @@ import { cn } from "@/lib/utils";
 import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 
 /**
- * ModalViewerDetail — modal partido: a la IZQUIERDA un recurso visual (PDF,
- * imagen, doc) y a la DERECHA información/datos escritos (header + body + footer).
+ * ModalViewerDetail - modal partido: un recurso visual (PDF, imagen, doc) a un
+ * lado e información/datos escritos al otro (header + body + footer).
+ *
+ * Por defecto el recurso va a la IZQUIERDA. Con `resourceSide="right"` se
+ * invierte: primero el formulario y la vista previa a la derecha (útil cuando el
+ * usuario elige/sube el archivo dentro del propio modal y la previsualización es
+ * consecuencia de lo que capturó).
  *
  * Caso de uso: ver una evidencia junto a su detalle/edición (p. ej. comprobante
  * de pago + formulario de validación). Agnóstico al tipo de archivo. Resuelve
@@ -91,8 +96,10 @@ export interface ModalViewerDetailProps {
   /** ancho/estilos del contenedor (default max-w-4xl). */
   className?: string;
   bodyClassName?: string;
-  /** Estilos extra del panel izquierdo (p. ej. `aspect-[4/3] md:aspect-auto`). */
+  /** Estilos extra del panel del recurso (p. ej. `aspect-[4/3] md:aspect-auto`). */
   resourceClassName?: string;
+  /** Lado del recurso visual en desktop. Default `left`. */
+  resourceSide?: "left" | "right";
 }
 
 export function ModalViewerDetail({
@@ -107,12 +114,15 @@ export function ModalViewerDetail({
   className,
   bodyClassName,
   resourceClassName,
+  resourceSide = "left",
 }: ModalViewerDetailProps) {
   const { url, loading, error } = useResourceUrl(open, resourceUrl);
   const isImage = resourceUrl ? /\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(resourceUrl) : false;
 
+  // En móvil el recurso siempre va arriba; en desktop el orden lo decide resourceSide.
   const resourceWrapperCls = cn(
     "relative min-h-[240px] overflow-hidden bg-muted md:h-[90vh] md:min-h-0",
+    resourceSide === "right" && "md:order-2",
     resourceClassName,
   );
 
@@ -148,10 +158,10 @@ export function ModalViewerDetail({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={cn("w-full gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-4xl", className)}>
         <div className="grid max-h-[90vh] grid-cols-1 md:grid-cols-2">
-          {/* Izquierda: recurso visual */}
+          {/* Recurso visual (izquierda por defecto, derecha con resourceSide) */}
           {resource}
-          {/* Derecha: header + detalle + footer */}
-          <div className="flex min-h-0 flex-col md:max-h-[90vh]">
+          {/* Header + detalle + footer */}
+          <div className={cn("flex min-h-0 flex-col md:max-h-[90vh]", resourceSide === "right" && "md:order-1")}>
             <ModalFormHeader title={title} subtitle={subtitle} />
             <div className={cn(MODAL_BODY_CLS, "flex-1", bodyClassName)}>{children}</div>
             {footer ? <div className={MODAL_FOOTER_CLS}>{footer}</div> : null}

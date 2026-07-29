@@ -545,7 +545,8 @@ export function computeVerification(state: PortalState): VerificationCheck[] {
   const norm = (s?: string) => (s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 
   // Cruces que SÍ podemos hacer en el front: consistencia de nombre y CURP entre
-  // los documentos con datos extraídos (INE por cámara+IA, CURP y CSF por PDF).
+  // los documentos con datos extraídos (CURP y CSF por PDF). La identificación
+  // oficial se sube como PDF y la revisa una persona → no aporta campos aquí.
   const names = [
     { src: "INE", v: norm(findField(ine, "nombre")) },
     { src: "CURP", v: norm(findField(curpDoc, "nombre")) },
