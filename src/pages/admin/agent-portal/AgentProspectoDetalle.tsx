@@ -18,7 +18,7 @@ import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarPlus, Check, FileText, Loader2, MessageSquare, Pencil } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Check, ExternalLink, FileText, Loader2, MessageSquare, Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -146,17 +146,50 @@ const AgentProspectoDetalle = () => {
     enabled: personaId > 0,
   });
 
-  // Ofertas
+  // Ofertas del prospecto, con el token del link y si ya tienen cuenta de cobranza
+  // (en ese caso la unidad ya no está disponible y el link no lleva al pago).
   const { data: ofertas = [] } = useQuery({
     queryKey: ["prospecto-ofertas", personaId],
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("ofertas")
-        .select("id, fecha_generacion")
+        .select("id, fecha_generacion, id_propiedad, id_producto")
         .eq("id_persona_lead", personaId)
         .eq("activo", true)
         .order("fecha_generacion", { ascending: false });
-      return (data || []) as any[];
+
+      const rows = (data || []) as any[];
+      if (rows.length === 0) return rows;
+
+      const ofertaIds = rows.map((o) => o.id);
+      const propIds = [...new Set(rows.map((o) => o.id_propiedad).filter(Boolean))];
+
+      const [reservasRes, cuentasRes, propsRes] = await Promise.all([
+        (supabase as any).from("reservaciones")
+          .select("id_oferta, token").in("id_oferta", ofertaIds).eq("activo", true)
+          .order("id", { ascending: false }),
+        (supabase as any).from("cuentas_cobranza")
+          .select("id, id_oferta").in("id_oferta", ofertaIds).eq("activo", true),
+        propIds.length > 0
+          ? (supabase as any).from("propiedades").select("id, numero_propiedad").in("id", propIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      const tokenPorOferta = new Map<number, string>();
+      for (const r of (reservasRes.data || [])) {
+        if (!tokenPorOferta.has(r.id_oferta)) tokenPorOferta.set(r.id_oferta, r.token);
+      }
+      const conCuenta = new Set((cuentasRes.data || []).map((c: any) => c.id_oferta));
+      const propMap = new Map<number, string>(
+        (propsRes.data || []).map((p: any) => [p.id, p.numero_propiedad])
+      );
+
+      return rows.map((o) => ({
+        ...o,
+        token: tokenPorOferta.get(o.id) || null,
+        tiene_cuenta: conCuenta.has(o.id),
+        propiedad_nombre: propMap.get(o.id_propiedad) || "",
+      }));
     },
     enabled: personaId > 0,
   });
@@ -330,6 +363,49 @@ const AgentProspectoDetalle = () => {
             </div>
           </div>
         </SectionCard>
+
+        {/* Ofertas digitales del prospecto */}
+        {ofertas.length > 0 && (
+          <SectionCard icon={FileText} title="Ofertas digitales" bodyClassName="p-5 md:p-6">
+            <div className="space-y-2.5">
+              {ofertas.map((o: any) => {
+                const base = `${window.location.origin}/oferta/O-${String(o.id).padStart(6, "0")}`;
+                const link = o.token ? `${base}/${o.token}` : base;
+                return (
+                  <div
+                    key={o.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3.5 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {o.propiedad_nombre ? `Unidad ${o.propiedad_nombre}` : `Oferta #${o.id}`}
+                        {o.id_producto ? " · producto" : ""}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {o.fecha_generacion
+                          ? new Date(o.fecha_generacion).toLocaleDateString("es-MX", {
+                              day: "2-digit", month: "short", year: "numeric",
+                            })
+                          : ""}
+                        {o.tiene_cuenta && " · Ya no está disponible para venta"}
+                        {!o.tiene_cuenta && !o.token && " · Sin link de cliente"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => window.open(link, "_blank", "noopener")}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Ver oferta
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+        )}
 
         {/* Actividad */}
         <SectionCard icon={MessageSquare} title="Actividad" bodyClassName="p-5 md:p-6">

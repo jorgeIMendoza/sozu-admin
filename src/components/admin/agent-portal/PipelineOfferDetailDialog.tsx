@@ -5,11 +5,12 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
+import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
 import { ENVIRONMENT } from "@/lib/config";
 import { toast } from "sonner";
 
@@ -36,6 +37,66 @@ export function PipelineOfferDetailDialog({
 
   const isProducto = oferta?.is_producto;
   const alreadyHasScheme = !!oferta?.id_esquema_pago_seleccionado;
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Link digital de la oferta: `reservaciones.token` es la credencial del cliente.
+  // Solo aplica a ofertas de propiedad (las de producto no tienen link propio).
+  const { data: linkDigital, isLoading: loadingLink } = useQuery({
+    queryKey: ['pipeline-link-digital', oferta?.id],
+    queryFn: async () => {
+      const { data: reserva } = await (supabase as any)
+        .from('reservaciones')
+        .select('id, token, email')
+        .eq('id_oferta', oferta.id)
+        .eq('activo', true)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let lead: any = null;
+      if (oferta?.id_persona_lead) {
+        const { data } = await (supabase as any)
+          .from('personas')
+          .select('nombre_legal, email, telefono, clave_pais_telefono')
+          .eq('id', oferta.id_persona_lead)
+          .maybeSingle();
+        lead = data;
+      }
+      return { reserva: reserva ?? null, lead };
+    },
+    enabled: open && !!oferta?.id && !isProducto,
+  });
+
+  // Ofertas creadas antes del flujo digital (o solo con PDF) no tienen reservación:
+  // se crea al vuelo para poder compartir el link.
+  const crearLinkMutation = useMutation({
+    mutationFn: async () => {
+      const email = linkDigital?.lead?.email || linkDigital?.reserva?.email;
+      if (!email) throw new Error('El prospecto no tiene correo registrado');
+      const { data, error } = await (supabase as any)
+        .from('reservaciones')
+        .insert({ email, id_oferta: oferta.id })
+        .select('id, token, email')
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline-link-digital', oferta?.id] });
+      setShareOpen(true);
+    },
+    onError: (e: any) => {
+      console.error('Error creando el link digital:', e);
+      toast.error(e?.message === 'El prospecto no tiene correo registrado'
+        ? 'El prospecto no tiene correo registrado'
+        : 'No se pudo generar el link. Contacta al administrador.');
+    },
+  });
+
+  const ofertaBaseUrl = `${window.location.origin}/oferta/O-${String(oferta?.id ?? '').padStart(6, '0')}`;
+  const shareUrl = linkDigital?.reserva?.token
+    ? `${ofertaBaseUrl}/${linkDigital.reserva.token}`
+    : '';
 
   // Fetch property details
   const { data: propertyDetail } = useQuery({
@@ -454,6 +515,22 @@ export function PipelineOfferDetailDialog({
             </p>
           )}
           <Button variant="cancel" onClick={() => onOpenChange(false)}>Cerrar</Button>
+          {!isProducto && (
+            shareUrl ? (
+              <Button variant="outline" onClick={() => setShareOpen(true)}>
+                <Share2 className="h-4 w-4" /> Compartir
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => crearLinkMutation.mutate()}
+                disabled={loadingLink || crearLinkMutation.isPending}
+              >
+                {crearLinkMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                Generar link
+              </Button>
+            )
+          )}
           {!alreadyHasScheme && selectedSchemeId && (
             <Button variant="primary-outline" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}> {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Guardar plan seleccionado
@@ -461,6 +538,23 @@ export function PipelineOfferDetailDialog({
           )}
         </div>
       </DialogContent>
+
+      {/* Reenviar la oferta digital: mismo popup que al generarla. */}
+      {shareUrl && (
+        <ShareDigitalOfferDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={shareUrl}
+          previewUrl={ofertaBaseUrl}
+          leadName={linkDigital?.lead?.nombre_legal ?? oferta?.lead_nombre}
+          leadEmail={linkDigital?.lead?.email ?? linkDigital?.reserva?.email}
+          leadPhone={linkDigital?.lead?.telefono ?? undefined}
+          leadPhoneCountry={linkDigital?.lead?.clave_pais_telefono ?? 'MX'}
+          propertyNumber={oferta?.propiedad_nombre}
+          projectName={oferta?.proyecto_nombre}
+          forceLight
+        />
+      )}
     </Dialog>
   );
 }
