@@ -118,21 +118,16 @@ export default function LogsActividad() {
      const uniqueUsuarios = [...new Set([...uniqueUsuariosFromLogs, ...allUserEmails])].sort() as string[];
       setAvailableUsuarios(uniqueUsuarios as string[]);
 
-      // Get unique workflows - use raw SQL via RPC for distinct values
-      const { data: workflowsData } = await supabase.rpc('execute_safe_query', {
-        query_text: `SELECT DISTINCT workflow FROM logs_actividad WHERE workflow IS NOT NULL ORDER BY workflow`,
-        max_rows: 500
-      });
-      
-      const uniqueWorkflows: string[] = [];
-      if (Array.isArray(workflowsData)) {
-        for (const row of workflowsData) {
-          if (typeof row === 'object' && row !== null && 'workflow' in row) {
-            const workflow = (row as { workflow: string }).workflow;
-            if (workflow) uniqueWorkflows.push(workflow);
-          }
-        }
-      }
+      // Get unique workflows - dedupe en cliente (misma tabla que ya se lee arriba)
+      const { data: workflowsData } = await supabase
+        .from('logs_actividad')
+        .select('workflow')
+        .not('workflow', 'is', null)
+        .limit(10000);
+
+      const uniqueWorkflows = [...new Set(
+        (workflowsData || []).map(r => r.workflow).filter(Boolean) as string[]
+      )].sort();
       setAvailableWorkflows(uniqueWorkflows);
     } catch (err) {
       console.error('Error fetching filter options:', err);
