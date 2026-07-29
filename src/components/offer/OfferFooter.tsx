@@ -1,5 +1,6 @@
 import sozuLogo from "@/assets/sozu-logo.png";
 import type { OfertaComercial } from "@/lib/offers/offer-data";
+import { LEGAL_LINKS } from "@/lib/legalUrls";
 
 interface Props {
   offer: OfertaComercial;
@@ -72,8 +73,23 @@ const OfferFooter = ({ offer, className = "" }: Props) => {
           </div>
         </div>
 
+        {/* Enlaces legales (viven en el sitio corporativo de SOZU) */}
+        <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+          {LEGAL_LINKS.map((l) => (
+            <a
+              key={l.key}
+              href={l.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-medium text-zinc-400 underline-offset-2 transition-colors hover:text-zinc-200 hover:underline"
+            >
+              {l.label}
+            </a>
+          ))}
+        </div>
+
         {/* Línea legal */}
-        <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col md:flex-row md:items-center md:justify-between gap-1 text-center md:text-left">
+        <div className="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-1 text-center md:text-left">
           <p className="text-[9px] text-zinc-500 leading-relaxed">
             SOZU © 2026 · Comercializador autorizado{offer.development ? ` de ${offer.development.legalName ?? offer.property.projectName}` : ""}. Oferta personal e intransferible.
           </p>
