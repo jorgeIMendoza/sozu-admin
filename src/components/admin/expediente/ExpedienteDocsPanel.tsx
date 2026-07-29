@@ -12,11 +12,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { extractCSFFields } from '@/utils/pdfDocumentExtractors';
 import { validateCSFPdf } from '@/utils/pdfDocumentValidators';
+import { extractPdfText } from '@/utils/pdfText';
 import { matchRegimenId } from '@/utils/regimenMatch';
 import { useQuery } from '@tanstack/react-query';
 import { Camera, Eye, Loader2, PenLine, Pencil, Upload, UploadCloud } from 'lucide-react';
-import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
-import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -30,8 +29,6 @@ import { toast } from 'sonner';
  * confirmación → guarda documento validado + datos fiscales en `personas`), firma
  * digital delegada al llamador y visores in-app.
  */
-
-GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 export const INE_TIPOS = [2, 3];
 export const PASAPORTE_TIPO = 4;
@@ -87,18 +84,6 @@ const BADGE: Record<ExpDocEstado, { label: string; color: string; bg: string }> 
 };
 
 /** Extrae el texto de un PDF (constancia SAT) en el navegador con pdf.js. */
-async function extractPdfText(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const pdf = await getDocument({ data: buffer }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    pages.push(content.items.map((it: any) => ('str' in it ? it.str : '')).join(' '));
-  }
-  return pages.join('\n').trim();
-}
-
 /** Zona profesional de subida: arrastra o selecciona (PDF). */
 export function DocDropzone({ accept, uploading, onFile }: { accept: string; uploading: boolean; onFile: (f: File) => void }) {
   const [drag, setDrag] = useState(false);
