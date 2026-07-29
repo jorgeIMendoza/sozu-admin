@@ -35,10 +35,13 @@ import { useClienteImpersonation } from "@/contexts/ClienteImpersonationContext"
 import { toast } from "sonner";
 import { validateCURPPdf, validateCSFPdf, validateActaNacimientoPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields, extractActaNacimientoFields } from "@/utils/pdfDocumentExtractors";
-import { ClienteINECameraCapture } from "@/components/admin/portal-cliente/ClienteINECameraCapture";
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { OCUPACIONES_OPCIONES, normalizarOcupacion, esOcupacionOtro } from "@/lib/portal-cliente/ocupaciones";
 import { ProfileSectionRow } from "@/components/admin/perfil/ProfileSectionRow";
+import { ModalViewerDetail } from "@/components/ui/modal-viewer-detail";
+import { FieldLabel, SECTION_CLS } from "@/components/ui/modal-form";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Button } from "@/components/ui/button";
 
 /* ─── helpers ─── */
 const INPUT_CLS =
@@ -395,11 +398,15 @@ const ClientePerfil = () => {
   } | null>(null);
   const [savingConfirm, setSavingConfirm] = useState(false);
 
-  /* Captura por cámara (INE frente+reverso o pasaporte, sin subir archivos) */
-  const [ineCaptureOpen, setIneCaptureOpen] = useState(false);
-  const [cameraMode, setCameraMode] = useState<"ine" | "pasaporte">("ine");
-  // Persona destino de la captura por cámara (titular en sesión o representante legal).
-  const [cameraPersonaId, setCameraPersonaId] = useState<number | null>(null);
+  /* Identificación oficial: modal partido (datos + vista previa del PDF a la
+     derecha). El cliente elige tipo de documento, adjunta el PDF, lo revisa en la
+     previsualización y guarda. Siempre se ofrecen las dos opciones, también al
+     corregir un documento equivocado. */
+  const [idDialog, setIdDialog] = useState<null | { slotKey: string; owner: "self" | "rep"; personaId: number | null }>(null);
+  const [idChoice, setIdChoice] = useState<"ine" | "pasaporte">("ine");
+  const [idFile, setIdFile] = useState<File | null>(null);
+  const [idPreview, setIdPreview] = useState<string | null>(null);
+  const [idSaving, setIdSaving] = useState(false);
   const pendingAfterPwRef = useRef<(() => void) | null>(null);
   const justAuthedRef = useRef(false);
   const clienteEmail = isImpersonating ? (impersonatedClienteEmail ?? null) : (profile?.email ?? null);
@@ -408,11 +415,40 @@ const ClientePerfil = () => {
   // texto y se extraen sus campos. El resto de documentos se aceptan tal cual
   // (imagen o PDF) y quedan en estatus 1 = "En revisión" para revisión manual.
   const AUTO_VALIDATE_TIPO_IDS = [5, 6];
+  // Identificación oficial: se sube como PDF, ya no se captura con cámara ni se
+  // valida biométricamente. Queda en estatus 1 (En revisión) para validación
+  // manual, igual que antes.
+  //   63 = INE completo (frente y reverso en un solo PDF) - tipo nuevo, ver
+  //        Ejecuciones_manuales/documentos/05_tipo_documento_ine_completo.md
+  //    4 = Pasaporte (un solo archivo, ya existía)
+  //  2/3 = Frente/Reverso INE - solo lectura: cargas históricas por separado.
+  const INE_COMPLETO_TIPO_ID = 63;
+  const ID_DOC_TIPO_IDS = [2, 3, 4, INE_COMPLETO_TIPO_ID];
   const TIPO_NOMBRE: Record<number, string> = {
-    1: "Acta de nacimiento", 2: "INE frente", 3: "INE reverso", 4: "Pasaporte",
+    1: "Acta de nacimiento", 2: "INE", 3: "INE reverso", 4: "Pasaporte",
     5: "CURP", 6: "Constancia de situación fiscal",
     8: "Comprobante de domicilio", 11: "Acta de matrimonio",
+    [INE_COMPLETO_TIPO_ID]: "Identificación oficial",
   };
+  // Etiquetas de los documentos de identidad ya validados: se conservan tal cual
+  // se cargaron antes (frente/reverso por separado) para no cambiarle la vista a
+  // clientes anteriores.
+  const ID_LEGACY_LABEL: Record<number, string> = {
+    2: "INE Frente", 3: "INE Reverso", 4: "Pasaporte",
+    [INE_COMPLETO_TIPO_ID]: "INE (frente y reverso)",
+  };
+  const ID_OPCION = {
+    ine: {
+      tipoId: INE_COMPLETO_TIPO_ID,
+      label: "INE",
+      aviso: "Sube un solo archivo PDF que contenga el frente y el reverso de tu INE. El documento debe estar escaneado, completo y legible. Si no cumple estas condiciones, la revisión se rechazará y deberás cargarlo nuevamente.",
+    },
+    pasaporte: {
+      tipoId: 4,
+      label: "Pasaporte",
+      aviso: "Sube un solo archivo PDF con la página de datos de tu pasaporte. El documento debe estar escaneado, completo y legible. Si no cumple estas condiciones, la revisión se rechazará y deberás cargarlo nuevamente.",
+    },
+  } as const;
 
   /* ── Queries ── */
   const { data: persona, isLoading: loadingPersona } = useQuery({
@@ -483,6 +519,22 @@ const ClientePerfil = () => {
       }));
     },
     enabled: !!effectivePersonaId,
+  });
+
+  /* ── El tipo "INE completo" (63) llega por migración. Si la BD todavía no lo
+     tiene, el INSERT en `documentos` fallaría por FK, así que se verifica antes
+     de dejar subir (ver bloque de identidad en handleUploadDoc). ── */
+  const { data: ineCompletoDisponible = false } = useQuery({
+    queryKey: ["tipo-documento-existe", INE_COMPLETO_TIPO_ID],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("tipos_documento")
+        .select("id")
+        .eq("id", INE_COMPLETO_TIPO_ID)
+        .maybeSingle();
+      return !!data;
+    },
+    staleTime: 600_000,
   });
 
   /* ── Persona moral: resolver persona del representante legal (vía vinculación) ── */
@@ -624,14 +676,15 @@ const ClientePerfil = () => {
 
   type DocSlot = {
     key: string; label: string; tipoIds: number[]; primaryTipoId: number;
-    required: boolean; cat: string; owner: "self" | "rep"; camera?: boolean;
+    required: boolean; cat: string; owner: "self" | "rep"; hint?: string;
+    // Slot de identificación oficial: INE (tipos 2/3) o pasaporte (tipo 4). El
+    // cliente elige uno; con uno basta. Se renderiza aparte (ver IDENTIDAD abajo).
+    identity?: boolean;
   };
 
   // Persona física (comportamiento actual, sin cambios). owner siempre 'self'.
   const PF_SLOTS: DocSlot[] = [
-    { key: "ine_frente",      label: "INE Frente",                     tipoIds: [2],  primaryTipoId: 2,  required: true,  cat: "personal",   owner: "self", camera: true },
-    { key: "ine_reverso",     label: "INE Reverso",                    tipoIds: [3],  primaryTipoId: 3,  required: true,  cat: "personal",   owner: "self", camera: true },
-    { key: "pasaporte",       label: "Pasaporte",                      tipoIds: [4],  primaryTipoId: 4,  required: false, cat: "personal",   owner: "self", camera: true },
+    { key: "identidad",       label: "Identificación oficial",         tipoIds: ID_DOC_TIPO_IDS, primaryTipoId: INE_COMPLETO_TIPO_ID, required: true, cat: "personal", owner: "self", identity: true },
     { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],  primaryTipoId: 1,  required: false, cat: "personal",   owner: "self" },
     { key: "curp",            label: "CURP",                           tipoIds: [5],  primaryTipoId: 5,  required: true,  cat: "personal",   owner: "self" },
     { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],  primaryTipoId: 6,  required: true,  cat: "financiero", owner: "self" },
@@ -650,11 +703,9 @@ const ClientePerfil = () => {
     { key: "csf_empresa",       label: "Constancia de situación fiscal",    tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "empresa",  owner: "self" },
     { key: "domicilio_empresa", label: "Comprobante de domicilio fiscal",   tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "empresa",  owner: "self" },
     // Representante legal (la sección ya indica de quién son → labels cortas).
-    // Identificación oficial = mismo estándar que PF: INE frente+reverso (cámara) o pasaporte.
+    // Identificación oficial = mismo estándar que PF: INE (PDF frente+reverso) o pasaporte.
     { key: "poder_notarial",     label: "Poder notarial",                   tipoIds: [9],                 primaryTipoId: 9,                 required: true,  cat: "replegal", owner: "rep" },
-    { key: "ine_frente_rep",     label: "INE Frente",                       tipoIds: [2],                 primaryTipoId: 2,                 required: true,  cat: "replegal", owner: "rep", camera: true },
-    { key: "ine_reverso_rep",    label: "INE Reverso",                      tipoIds: [3],                 primaryTipoId: 3,                 required: true,  cat: "replegal", owner: "rep", camera: true },
-    { key: "pasaporte_rep",      label: "Pasaporte",                        tipoIds: [4],                 primaryTipoId: 4,                 required: false, cat: "replegal", owner: "rep", camera: true },
+    { key: "identidad_rep",      label: "Identificación oficial",           tipoIds: ID_DOC_TIPO_IDS,     primaryTipoId: INE_COMPLETO_TIPO_ID, required: true, cat: "replegal", owner: "rep", identity: true },
     { key: "curp_rep",           label: "CURP",                             tipoIds: [5],                 primaryTipoId: 5,                 required: true,  cat: "replegal", owner: "rep" },
     { key: "csf_rep",            label: "Constancia de situación fiscal",   tipoIds: [6],                 primaryTipoId: 6,                 required: true,  cat: "replegal", owner: "rep" },
     { key: "domicilio_rep",      label: "Comprobante de domicilio",         tipoIds: [8],                 primaryTipoId: 8,                 required: true,  cat: "replegal", owner: "rep" },
@@ -1073,6 +1124,11 @@ const ClientePerfil = () => {
     estatus: number,
     personaUpdates?: Record<string, string>,
     targetPersonaId?: number | null,
+    // Tipos adicionales a retirar junto con el nuevo documento. Caso INE: el PDF
+    // escaneado se registra en tipo 2 y reemplaza también a los reversos (tipo 3)
+    // que se hubieran cargado por separado, para que el slot no siga mostrando el
+    // estatus del documento viejo.
+    alsoExpireTipoIds?: number[],
   ): Promise<boolean> => {
     const personaId = targetPersonaId ?? effectivePersonaId;
     if (!personaId) return false;
@@ -1105,6 +1161,15 @@ const ClientePerfil = () => {
           .update({ activo: false, id_estatus_verificacion: 4 })
           .in("id", otherIds);
       }
+    }
+
+    if (alsoExpireTipoIds && alsoExpireTipoIds.length > 0) {
+      await (supabase as any)
+        .from("documentos")
+        .update({ activo: false, id_estatus_verificacion: 4 })
+        .eq("id_persona", personaId)
+        .in("id_tipo_documento", alsoExpireTipoIds)
+        .eq("activo", true);
     }
 
     const { error: insertErr } = await (supabase as any).from("documentos").insert({
@@ -1149,6 +1214,62 @@ const ClientePerfil = () => {
     return true;
   };
 
+  /* ── Identificación oficial: elegir tipo, adjuntar PDF, previsualizar y guardar ── */
+
+  const closeIdDialog = () => {
+    setIdDialog(null);
+    setIdFile(null);
+    setIdPreview((p) => { if (p) URL.revokeObjectURL(p); return null; });
+    setIdSaving(false);
+  };
+
+  const openIdDialog = (slotKey: string, owner: "self" | "rep", personaId: number | null) => {
+    setIdChoice("ine");
+    setIdFile(null);
+    setIdPreview((p) => { if (p) URL.revokeObjectURL(p); return null; });
+    setIdDialog({ slotKey, owner, personaId });
+  };
+
+  // Solo PDF: el escaneo trae las dos vistas en un archivo y no se valida por IA.
+  const pickIdFile = (file: File) => {
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      toast.error("La identificación debe subirse en PDF. Escanea el documento y sube el archivo.", { duration: 8000 });
+      return;
+    }
+    setIdFile(file);
+    setIdPreview((p) => { if (p) URL.revokeObjectURL(p); return URL.createObjectURL(file); });
+  };
+
+  // La identidad es un solo documento: al guardar, cualquier otra identificación
+  // activa (frente/reverso heredados, pasaporte o INE previo) queda reemplazada.
+  const saveIdentityDoc = async () => {
+    if (!idDialog || !idFile) return;
+    const tipoId = ID_OPCION[idChoice].tipoId;
+    if (idDialog.owner === "rep" && !idDialog.personaId) {
+      toast.error("No hay representante legal vinculado.");
+      return;
+    }
+    if (tipoId === INE_COMPLETO_TIPO_ID && !ineCompletoDisponible) {
+      toast.error("El catálogo de documentos de esta base aún no incluye el INE completo. Avísale a soporte antes de subirlo.", { duration: 10000 });
+      return;
+    }
+    setIdSaving(true);
+    setUploadingSlot(idDialog.slotKey);
+    try {
+      const ok = await commitDoc(
+        idFile, tipoId, 1, undefined, idDialog.personaId,
+        ID_DOC_TIPO_IDS.filter(t => t !== tipoId),
+      );
+      if (!ok) return;
+      toast.success("Identificación enviada para revisión");
+      closeIdDialog();
+    } finally {
+      setIdSaving(false);
+      setUploadingSlot(null);
+    }
+  };
+
   const handleUploadDoc = async (
     file: File,
     slotKey: string,
@@ -1157,6 +1278,9 @@ const ClientePerfil = () => {
     targetPersonaId?: number | null,
   ) => {
     if (!effectivePersonaId) return;
+
+    // La identificación oficial no pasa por aquí: tiene su propio modal con
+    // vista previa y guardado (`saveIdentityDoc`).
 
     // Docs del representante legal (persona vinculada): se guardan en SU persona y
     // NO auto-capturan datos en el perfil (la extracción CURP/CSF aplica solo al
@@ -1264,8 +1388,8 @@ const ClientePerfil = () => {
       return;
     }
 
-    // Resto (INE, pasaporte, acta matrimonio, comprobante domicilio):
-    // se acepta el archivo tal cual (imagen o PDF), sin validación → estatus 1 (En revisión).
+    // Resto (acta de matrimonio, comprobante de domicilio, docs de empresa):
+    // se acepta el archivo tal cual, sin validación → estatus 1 (En revisión).
     setUploadingSlot(slotKey);
     try {
       const ok = await commitDoc(file, primaryTipoId, 1);
@@ -1558,12 +1682,115 @@ const ClientePerfil = () => {
                     <div className="flex flex-col gap-2.5">
                       {groupSlots.map((slot) => {
                         const slotDocs = allDocs.filter(d => slot.tipoIds.includes(d.tipoId) && d.owner === slot.owner);
+
+                        /* ── Identificación oficial: INE o pasaporte, uno u otro ── */
+                        if (slot.identity) {
+                          const repFalta = slot.owner === 'rep' && !repLegalPersonaId;
+                          const personaDestino = slot.owner === 'rep' ? repLegalPersonaId : effectivePersonaId;
+                          const subiendo = uploadingSlot === slot.key;
+                          // Ya validados → se muestran como siempre (frente/reverso o pasaporte).
+                          const validados = slotDocs.filter(d => d.status === 'verified');
+                          const pendientes = slotDocs.filter(d => d.status !== 'verified');
+                          const bestPend = pendientes.find(d => d.status === 'review') || pendientes[0];
+                          // Identidad vigente = un documento único validado (INE completo o
+                          // pasaporte) o el par histórico frente + reverso ambos validados.
+                          // Si algo expiró o falta la mitad del par, se pide identificación nueva.
+                          const identidadVigente =
+                            validados.some(d => d.tipoId === INE_COMPLETO_TIPO_ID || d.tipoId === 4) ||
+                            (validados.some(d => d.tipoId === 2) && validados.some(d => d.tipoId === 3));
+                          const abrirIdDialog = () => openIdDialog(slot.key, slot.owner, personaDestino);
+                          const estado = bestPend?.status ?? 'missing';
+                          const pendBadge = estado === 'review' ? { c:'text-[#B5730A]', bg:'bg-[#FBEFD9]' } : estado === 'rejected' ? { c:'text-[#B84A3C]', bg:'bg-[#FBE9E7]' } : { c:'text-[#6B7280]', bg:'bg-[#F2F4F5]' };
+                          const pendLabel = repFalta ? 'Sin representante legal' : estado === 'review' ? 'En revisión' : estado === 'rejected' ? 'Rechazado' : estado === 'expired' ? 'Expirado' : 'Pendiente';
+                          const iconoAccion = subiendo
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : (estado === 'missing' || estado === 'expired' || estado === 'rejected') ? <Upload className="h-4 w-4" /> : <Pencil className="h-4 w-4" />;
+                          return (
+                            <div key={slot.key} className="flex flex-col gap-2.5">
+                              {/* El archivo se elige dentro del modal (con vista previa). */}
+                              {validados.map((d) => (
+                                <div key={`${slot.key}-${d.id}`} className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
+                                    <FileText className="h-4 w-4" />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                      <span className="text-[13px] font-bold text-[#171A1D]">{ID_LEGACY_LABEL[d.tipoId] ?? slot.label}</span>
+                                      <span className="rounded-full bg-[#E8F5EE] px-2.5 py-[3px] text-[9.5px] font-bold text-[hsl(158_64%_38%)]">Aprobado</span>
+                                    </div>
+                                    <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{d.date ? `Subido el ${d.date}` : 'Aprobado'}</p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <button
+                                      onClick={abrirIdDialog}
+                                      disabled={subiendo || repFalta}
+                                      title="Reemplazar identificación"
+                                      className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                                    </button>
+                                    {d.url && (
+                                      <button
+                                        onClick={() => setPreviewDoc({ title: ID_LEGACY_LABEL[d.tipoId] ?? slot.label, url: d.url! })}
+                                        title="Ver documento"
+                                        className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Sin identidad vigente → el cliente elige INE o pasaporte y sube el PDF. */}
+                              {!identidadVigente && (
+                                <div className="flex items-center gap-3.5 rounded-md border border-[#ECEEF0] bg-white px-4 py-[13px]">
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#F2F4F5] text-[#6B7280]">
+                                    <FileText className="h-4 w-4" />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                      <span className="text-[13px] font-bold text-[#171A1D]">{slot.label}</span>
+                                      <span className={`rounded-full px-2.5 py-[3px] text-[9.5px] font-bold ${pendBadge.bg} ${pendBadge.c}`}>{pendLabel}</span>
+                                    </div>
+                                    <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">
+                                      {repFalta
+                                        ? 'Falta capturar al representante legal'
+                                        : bestPend?.date
+                                        ? `Subido el ${bestPend.date}`
+                                        : 'INE o pasaporte, en un PDF escaneado y nítido'}
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <button
+                                      onClick={abrirIdDialog}
+                                      disabled={subiendo || repFalta}
+                                      title={repFalta ? 'Primero captura al representante legal' : bestPend ? 'Reemplazar identificación' : 'Subir identificación'}
+                                      className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {iconoAccion}
+                                    </button>
+                                    {bestPend?.url && (
+                                      <button
+                                        onClick={() => setPreviewDoc({ title: ID_LEGACY_LABEL[bestPend.tipoId] ?? slot.label, url: bestPend.url! })}
+                                        title="Ver documento"
+                                        className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8]"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
                         const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
                         const status = best?.status ?? 'missing';
                         const isUploading = uploadingSlot === slot.key;
                         const hasFile = !!best?.url;
-                        const isCamera = !!slot.camera;
-                        // Ícono de acción: subir/cámara solo si falta el archivo, está
+                        // Ícono de acción: subir solo si falta el archivo, está
                         // vencido o fue rechazado (hay que cargar uno nuevo). Si está
                         // aprobado o en revisión → lápiz (reemplazar por si se equivocaron).
                         const needsUpload = status === 'missing' || status === 'expired' || status === 'rejected';
@@ -1582,24 +1809,24 @@ const ClientePerfil = () => {
                                 <span className="text-[13px] font-bold text-[#171A1D]">{slot.label}</span>
                                 <span className={`rounded-full px-2.5 py-[3px] text-[9.5px] font-bold ${badge.bg} ${badge.c}`}>{badgeLabel}</span>
                               </div>
-                              <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{repMissing ? 'Falta capturar al representante legal' : best?.date ? `Subido el ${best.date}` : 'Sin cargar'}</p>
+                              <p className="mt-0.5 text-[11.5px] font-medium text-[#9AA3AD]">{repMissing ? 'Falta capturar al representante legal' : best?.date ? `Subido el ${best.date}` : slot.hint ?? 'Sin cargar'}</p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
                               <input
                                 ref={(el) => { fileInputRefs.current[slot.key] = el; }}
                                 type="file"
-                                accept={AUTO_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
+                                accept={AUTO_VALIDATE_TIPO_IDS.includes(slot.primaryTipoId) || ID_DOC_TIPO_IDS.includes(slot.primaryTipoId) ? '.pdf' : '.pdf,.jpg,.jpeg,.png,.webp'}
                                 className="hidden"
                                 onChange={(e) => { const file = e.target.files?.[0]; if (file) handleUploadDoc(file, slot.key, slot.primaryTipoId, slot.owner, slotPersonaId); e.target.value = ''; }}
                               />
-                              {/* INE frente/reverso y pasaporte → captura por cámara. Resto → subir archivo. */}
+                              {/* Todos los documentos, identificación incluida, se suben como archivo. */}
                               <button
-                                onClick={() => { if (isCamera) { setCameraMode(slot.key.startsWith('pasaporte') ? 'pasaporte' : 'ine'); setCameraPersonaId(slotPersonaId ?? effectivePersonaId); setIneCaptureOpen(true); } else fileInputRefs.current[slot.key]?.click(); }}
+                                onClick={() => fileInputRefs.current[slot.key]?.click()}
                                 disabled={isUploading || repMissing}
-                                title={repMissing ? 'Primero captura al representante legal' : needsUpload ? (isCamera ? 'Capturar con cámara' : 'Subir documento') : 'Reemplazar documento'}
+                                title={repMissing ? 'Primero captura al representante legal' : needsUpload ? 'Subir documento' : 'Reemplazar documento'}
                                 className="flex h-9 w-9 items-center justify-center rounded-md border border-[#ECEEF0] bg-white text-[#4B5563] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : needsUpload ? (isCamera ? <Camera className="h-4 w-4" /> : <Upload className="h-4 w-4" />) : <Pencil className="h-4 w-4" />}
+                                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : needsUpload ? <Upload className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                               </button>
                               {hasFile && (
                                 <button
@@ -2491,19 +2718,103 @@ const ClientePerfil = () => {
           onConfirm={handleConfirmDoc}
         />
 
-        {effectivePersonaId && (
-          <ClienteINECameraCapture
-            open={ineCaptureOpen}
-            onOpenChange={setIneCaptureOpen}
-            personaId={cameraPersonaId ?? effectivePersonaId}
-            isDesktop={isDesktop}
-            mode={cameraMode}
-            onCompleted={() => {
-              queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs", effectivePersonaId] });
-              queryClient.refetchQueries({ queryKey: ["cliente-perfil-docs-rep", cameraPersonaId] });
-            }}
-          />
-        )}
+        {/* ══════════════════════════════════════════════
+            Identificación oficial: tipo + PDF con vista previa a la derecha.
+            Usa el modal estándar partido (ui/modal-viewer-detail): header sin
+            ícono, selector único (SearchableSelect) y footer cancel/primary.
+        ══════════════════════════════════════════════ */}
+        <ModalViewerDetail
+          open={!!idDialog}
+          onOpenChange={(v) => { if (!v) closeIdDialog(); }}
+          title="Identificación oficial"
+          subtitle="Elige el tipo de documento, adjunta el PDF y revísalo antes de guardar"
+          resourceSide="right"
+          className="sm:max-w-4xl [font-family:system-ui,-apple-system,sans-serif]"
+          /* Sin alto fijo: la vista previa se estira al alto de la columna del formulario. */
+          resourceClassName="md:h-auto md:min-h-[420px]"
+          resource={
+            idPreview ? (
+              <object data={`${idPreview}#toolbar=0&navpanes=0`} type="application/pdf" className="h-[45vh] w-full md:h-full">
+                <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center">
+                  <FileText className="h-9 w-9 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">
+                    Tu navegador no puede mostrar el PDF aquí. El archivo se guardará igual.
+                  </p>
+                </div>
+              </object>
+            ) : (
+              <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center">
+                <FileText className="h-9 w-9 text-muted-foreground/40" />
+                <p className="text-sm font-medium text-muted-foreground">Vista previa</p>
+                <p className="max-w-[220px] text-xs text-muted-foreground/80">
+                  Adjunta tu PDF para revisarlo aquí antes de guardarlo.
+                </p>
+              </div>
+            )
+          }
+          footer={
+            <>
+              <Button variant="cancel" onClick={closeIdDialog} disabled={idSaving}>
+                Cancelar
+              </Button>
+              <Button variant="primary-outline" onClick={saveIdentityDoc} disabled={!idFile || idSaving}>
+                {idSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando</> : 'Guardar'}
+              </Button>
+            </>
+          }
+        >
+          <div>
+            <FieldLabel required>Tipo de identificación</FieldLabel>
+            <SearchableSelect
+              value={idChoice}
+              onValueChange={(v) => setIdChoice(v as 'ine' | 'pasaporte')}
+              options={[
+                { value: 'ine',       label: 'INE',       hint: 'Frente y reverso en un solo PDF' },
+                { value: 'pasaporte', label: 'Pasaporte', hint: 'Página de datos' },
+              ]}
+              placeholder="Selecciona el documento"
+            />
+          </div>
+
+          <div className="flex items-start gap-2.5 rounded-md border border-amber-300/70 bg-amber-50 px-3.5 py-3 dark:border-amber-500/30 dark:bg-amber-950/30">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+            <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">{ID_OPCION[idChoice].aviso}</p>
+          </div>
+
+          <div>
+            <FieldLabel required>Archivo PDF</FieldLabel>
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-input bg-muted/40 px-4 py-6 text-center transition-colors hover:bg-muted">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">
+                {idFile ? 'Cambiar archivo' : 'Adjuntar PDF'}
+              </span>
+              <span className="text-xs text-muted-foreground">Solo PDF, escaneado y legible</span>
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                disabled={idSaving}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickIdFile(f); e.target.value = ''; }}
+              />
+            </label>
+            {idFile && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{idFile.name}</span>
+                <span className="shrink-0 num">· {(idFile.size / 1024 / 1024).toFixed(2)} MB</span>
+              </p>
+            )}
+          </div>
+
+          <div className={SECTION_CLS}>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Con una identificación es suficiente: INE o pasaporte. El documento queda En revisión y
+              lo valida nuestro equipo; si sustituye a uno anterior, el previo se marca como
+              reemplazado.
+            </p>
+          </div>
+        </ModalViewerDetail>
+
       </div>
     </div>
   );
