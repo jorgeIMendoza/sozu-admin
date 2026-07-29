@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Loader2, Lock, ShieldCheck } from "lucide-react";
 import type { OfertaComercial } from "@/lib/offers/offer-data";
+import { LEGAL_URLS } from "@/lib/legalUrls";
 
 const COUNTRY_CODES = [
   { code: "+52", flag: "🇲🇽" },
@@ -28,6 +29,12 @@ interface Props {
    * Debe devolver true si el guardado fue exitoso.
    */
   onSaveData?: (data: { fullName: string; phoneDigits: string; countryCode: string }) => Promise<boolean>;
+  /** Texto del botón principal. Por defecto "Confirmar y continuar". */
+  submitLabel?: string;
+  /** Bloquea el botón mientras el llamador procesa (p. ej. creando la cuenta). */
+  submitting?: boolean;
+  /** Contenido extra antes del CTA (p. ej. la subida de la Constancia). */
+  extraFields?: React.ReactNode;
 }
 
 const Field = ({
@@ -70,7 +77,7 @@ const Field = ({
   </div>
 );
 
-const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultFullName, defaultPhone, defaultDialCode, onBack, onComplete, onSaveData }: Props) => {
+const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultFullName, defaultPhone, defaultDialCode, onBack, onComplete, onSaveData, submitLabel, submitting = false, extraFields }: Props) => {
   const isFormal = context === "formal_direct";
   const emailLocked = isFormal || Boolean(defaultEmail);
 
@@ -255,30 +262,53 @@ const ProspectCaptureForm = ({ offer, agentName, context, defaultEmail, defaultF
       <div className="flex items-start gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5">
         <ShieldCheck className="w-3.5 h-3.5 text-success flex-shrink-0 mt-0.5" />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Datos protegidos bajo el Aviso de Privacidad de SOZU (LFPDPPP México).
+          Datos protegidos conforme al{" "}
+          <a
+            href={LEGAL_URLS.avisoPrivacidad}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
+          >
+            Aviso de privacidad
+          </a>{" "}
+          de SOZU (LFPDPPP México).
         </p>
       </div>
+
+      {extraFields}
 
       {/* CTA — un solo paso: confirma y continúa. Si el usuario editó algo se
           guarda en BD; si dejó los datos tal cual, solo avanza. */}
       <div className="space-y-2">
         <button
           type="button"
-          disabled={!isValid || saving}
+          disabled={!isValid || saving || submitting}
           onClick={handleConfirmarYContinuar}
           className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
         >
-          {saving ? (
-            <><Loader2 className="w-4 h-4 motion-safe:animate-spin" />Guardando…</>
+          {saving || submitting ? (
+            <><Loader2 className="w-4 h-4 motion-safe:animate-spin" />{submitting ? (submitLabel ?? "Procesando…") : "Guardando…"}</>
           ) : (
-            "Confirmar y continuar"
+            submitLabel ?? "Confirmar y continuar"
           )}
         </button>
         {saveError && (
           <p className="text-[11px] text-muted-foreground text-center leading-relaxed">{saveError}</p>
         )}
-        <p className="text-[10px] text-muted-foreground/50 text-center">
-          Al continuar aceptas el Aviso de Privacidad y los Términos de SOZU.
+        <p className="text-[10px] leading-relaxed text-muted-foreground/60 text-center">
+          Al continuar aceptas el{" "}
+          <a href={LEGAL_URLS.avisoPrivacidad} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+            Aviso de privacidad
+          </a>
+          , los{" "}
+          <a href={LEGAL_URLS.terminos} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+            Términos y condiciones
+          </a>{" "}
+          y la{" "}
+          <a href={LEGAL_URLS.politicaDatos} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+            Política de datos
+          </a>{" "}
+          de SOZU.
         </p>
       </div>
 

@@ -21,6 +21,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { PipelineOfferDetailDialog } from "@/components/admin/agent-portal/PipelineOfferDetailDialog";
+import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
 
 const STAGES = [
   { key: 'all', label: 'Todas', color: 'bg-gray-100 text-gray-800', borderColor: 'border-gray-400' },
@@ -79,6 +80,8 @@ const AgentPipeline = () => {
   const [activeStage, setActiveStage] = useState<string>('all');
   const [searchProspecto, setSearchProspecto] = useState<string>('');
   const [selectedOferta, setSelectedOferta] = useState<any>(null);
+  const [shareOferta, setShareOferta] = useState<any>(null);
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
   const { permissions } = useAgentPortalPermissions();
   const pipelinePerms = permissions['/admin/agent/pipeline'];
   const { presentationMode, mask } = useAgentPresentation();
@@ -90,6 +93,38 @@ const AgentPipeline = () => {
     registrarVista('/admin/agent/pipeline');
     track({ page: 'agent_pipeline', elementId: 'page_view', elementType: 'page' });
   }, []);
+
+  // Link del cliente (con token) y su versión demo, para el popup de compartir.
+  const baseUrlDe = (o: any) => `${window.location.origin}/oferta/O-${String(o.id).padStart(6, '0')}`;
+  const shareUrlDe = (o: any) => (o?.reserva_token ? `${baseUrlDe(o)}/${o.reserva_token}` : baseUrlDe(o));
+
+  const descargarPdf = async (o: any) => {
+    setDescargandoPdf(true);
+    try {
+      const { generarYDescargarPdfOferta } = await import('@/lib/offers/offer-pdf');
+      const n = await generarYDescargarPdfOferta({
+        propertyId: o.id_propiedad,
+        offerId: o.id,
+        propertyNumber: o.propiedad_nombre || '',
+        leadName: o.lead_nombre,
+        leadEmail: o.lead_email,
+        leadPhone: o.lead_telefono,
+        creatorEmail: o.email_creador,
+        isProductOffer: !!o.is_producto,
+        productId: o.id_producto,
+      });
+      toast({ title: 'PDF descargado', description: `Se descargaron ${n} PDF(s).` });
+    } catch (err) {
+      console.error('Error generando el PDF de la oferta:', err);
+      toast({
+        title: 'Error al generar el PDF',
+        description: 'No se pudo generar el PDF de la oferta. Inténtalo de nuevo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDescargandoPdf(false);
+    }
+  };
 
   const { data: ofertas = [], isLoading } = useQuery({
     queryKey: ['agent-pipeline', agentEmail],
@@ -116,7 +151,7 @@ const AgentPipeline = () => {
           ? (supabase as any).from('propiedades').select('id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo').in('id', propIds)
           : { data: [] as any[] },
         leadIds.length > 0
-          ? (supabase as any).from('personas').select('id, nombre_legal, nombre_comercial').in('id', leadIds)
+          ? (supabase as any).from('personas').select('id, nombre_legal, nombre_comercial, email, telefono, clave_pais_telefono').in('id', leadIds)
           : { data: [] as any[] },
         ofertaIds.length > 0
           ? (supabase as any).from('cuentas_cobranza').select('id, id_oferta, contrato_draft').in('id_oferta', ofertaIds).eq('activo', true)
@@ -198,6 +233,22 @@ const AgentPipeline = () => {
 
       const propMap = new Map<number, any>((propRes.data || []).map((p: any) => [p.id, p]));
       const leadMap = new Map<number, string>((leadRes.data || []).map((l: any) => [l.id, l.nombre_legal || l.nombre_comercial || 'Sin nombre']));
+      const leadDatosMap = new Map<number, any>((leadRes.data || []).map((l: any) => [l.id, l]));
+
+      // Token de la reservación: es la credencial del link que se comparte con el
+      // cliente. Sin token el link solo sirve como demo (no permite apartar).
+      const { data: reservasData } = ofertaIds.length > 0
+        ? await (supabase as any)
+            .from('reservaciones')
+            .select('id_oferta, token')
+            .in('id_oferta', ofertaIds)
+            .eq('activo', true)
+            .order('id', { ascending: false })
+        : { data: [] as any[] };
+      const tokenByOferta = new Map<number, string>();
+      for (const r of (reservasData || [])) {
+        if (!tokenByOferta.has(r.id_oferta)) tokenByOferta.set(r.id_oferta, r.token);
+      }
       const productoMap = new Map<number, any>((productosRes.data || []).map((p: any) => [p.id, p]));
       const cuentaByOferta = new Map<number, any>();
       (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaByOferta.set(c.id_oferta, c); });
@@ -214,6 +265,10 @@ const AgentPipeline = () => {
         const enriched = {
           ...o,
           lead_nombre: leadMap.get(o.id_persona_lead) || 'Sin prospecto',
+          lead_email: leadDatosMap.get(o.id_persona_lead)?.email || null,
+          lead_telefono: leadDatosMap.get(o.id_persona_lead)?.telefono || null,
+          lead_clave_pais: leadDatosMap.get(o.id_persona_lead)?.clave_pais_telefono || 'MX',
+          reserva_token: tokenByOferta.get(o.id) || null,
           propiedad_nombre: prop?.numero_propiedad || '',
           producto_nombre: producto?.nombre || '',
           precio: isProducto ? (producto?.precio_lista || null) : (prop?.precio_lista || null),
@@ -364,10 +419,31 @@ const AgentPipeline = () => {
               formatCurrency={formatCurrency}
               getStageInfo={getStageInfo}
               onClick={() => setSelectedOferta(oferta)}
+              onShare={() => setShareOferta(oferta)}
             />
           ))
         )}
       </div>
+
+      {/* Compartir / reenviar: mismo popup que al generar la oferta. El PDF se
+          genera aquí a demanda, sin depender de haberlo descargado antes. */}
+      {shareOferta && (
+        <ShareDigitalOfferDialog
+          open={!!shareOferta}
+          onOpenChange={(v) => { if (!v) setShareOferta(null); }}
+          url={shareUrlDe(shareOferta)}
+          previewUrl={baseUrlDe(shareOferta)}
+          leadName={shareOferta.lead_nombre}
+          leadEmail={shareOferta.lead_email ?? undefined}
+          leadPhone={shareOferta.lead_telefono ?? undefined}
+          leadPhoneCountry={shareOferta.lead_clave_pais ?? 'MX'}
+          propertyNumber={shareOferta.propiedad_nombre}
+          projectName={shareOferta.proyecto_nombre}
+          forceLight
+          downloadingPdf={descargandoPdf}
+          onDownloadPdf={() => descargarPdf(shareOferta)}
+        />
+      )}
 
       {selectedOferta && (
         <PipelineOfferDetailDialog
@@ -382,11 +458,12 @@ const AgentPipeline = () => {
   );
 };
 
-function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
+function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick, onShare }: {
   oferta: any;
   formatCurrency: (v: number) => string;
   getStageInfo: (s: string) => { key: string; label: string; color: string; borderColor: string };
   onClick?: () => void;
+  onShare?: () => void;
 }) {
   const { mask } = useAgentPresentation();
   const stageInfo = getStageInfo(oferta.stage);
@@ -412,23 +489,15 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
   const venceDate = genDate ? new Date(genDate) : null;
   if (venceDate) venceDate.setDate(venceDate.getDate() + 5);
 
-  // Reenviar - envía PDF al email del lead ya registrado
-  const handleReenviar = async (e: React.MouseEvent) => {
+  // Link del cliente: solo con token puede apartar. Sin token queda el demo.
+  const ofertaBaseUrl = `${window.location.origin}/oferta/O-${String(oferta.id).padStart(6, '0')}`;
+  const ofertaUrl = oferta.reserva_token ? `${ofertaBaseUrl}/${oferta.reserva_token}` : ofertaBaseUrl;
+
+  // Reenviar: abre el popup de compartir con el link del cliente. El PDF se genera
+  // ahí mismo a demanda, ya no depende de haberlo descargado antes.
+  const handleReenviar = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!hasUrl) {
-      toast({
-        title: "PDF no disponible",
-        description: "Descarga la oferta primero para generar el PDF.",
-        duration: 5000,
-      });
-      return;
-    }
-    const { sendOfferEmailDirect } = await import('@/services/offerEmailService');
-    sendOfferEmailDirect({
-      offerId: oferta.id,
-      propertyNumber: oferta.propiedad_nombre || '',
-      tipo: oferta.is_producto ? 'producto' : 'propiedad',
-    });
+    onShare?.();
   };
 
   return (
@@ -486,20 +555,16 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick }: {
       {/* Footer: acciones */}
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
         <button
-          onClick={(e) => { e.stopPropagation(); window.open(`/oferta/${oferta.id}`, '_blank'); }}
+          onClick={(e) => { e.stopPropagation(); window.open(ofertaUrl, '_blank', 'noopener'); }}
+          title={oferta.reserva_token ? 'Abrir el link del cliente' : 'Vista previa: esta oferta no tiene link de cliente'}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
         >
           Oferta digital <ExternalLink className="h-3.5 w-3.5" />
         </button>
         <button
           onClick={handleReenviar}
-          title={hasUrl ? 'Reenviar oferta por correo' : 'Descarga la oferta primero'}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold",
-            hasUrl
-              ? "border-border text-muted-foreground hover:bg-muted"
-              : "border-border text-muted-foreground/70 cursor-not-allowed"
-          )}
+          title="Compartir o reenviar la oferta"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
         >
           <Mail className="h-3.5 w-3.5" /> Reenviar
         </button>

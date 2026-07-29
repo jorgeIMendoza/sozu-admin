@@ -52,9 +52,7 @@ const ApartarDirectoContinuarPage = () => {
 
     clearPendingFlow(prospect.id);
 
-    // 18.10.A: el cliente va directo de la verificación de email al hold de tarjeta.
-    // Se elimina el wizard intermedio de Tipo + Identidad (que se re-montará en 18.10.B como
-    // bloque "Completar apartado" post-hold).
+    // Tras verificar su correo, el cliente va directo a la pantalla de pago.
     navigate(`/reservar/${formalReservationId}/wizard`, { replace: true });
   }, [offer, prospect, navigate, reservations, initiateFormalReservation, clearPendingFlow]);
 

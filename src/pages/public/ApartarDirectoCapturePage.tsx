@@ -1,19 +1,35 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  RESERVATION_TOKEN_PARAM,
-  parseReservationToken,
-  withReservationToken,
-} from "@/lib/offers/reservation-token";
-import { useOfferById, useOfferStore } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
+import { useOfferById, useOfferStore } from "@/lib/offers/offer-data";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { useAgentById, type Agent } from "@/lib/offers/agent-data";
 import { supabase } from "@/integrations/supabase/client";
 import ProspectCaptureForm from "@/components/capture/ProspectCaptureForm";
 import PublicShell from "@/components/offer/PublicShell";
 import OfferFooter from "@/components/offer/OfferFooter";
+import { CsfUploadCard, type CsfCampos } from "@/components/offer/CsfUploadCard";
+import { getPortalLoginUrl } from "@/lib/portalUrls";
+import {
+  RESERVATION_TOKEN_PARAM,
+  parseReservationToken,
+  withReservationToken,
+} from "@/lib/offers/reservation-token";
+import { CheckCircle2, ExternalLink, Loader2, LogIn, Mail, MousePointerClick } from "lucide-react";
+import { toast } from "sonner";
 
+/** Login del portal de clientes, para quien ya tiene cuenta. */
+const PORTAL_CLIENTE_URL = getPortalLoginUrl("clientes");
+
+/**
+ * Paso previo al pago del apartado: el cliente confirma sus datos y sube su
+ * Constancia de Situación Fiscal, que es requisito para poder pagar (el SPEI se
+ * valida contra el RFC/CURP del ordenante). De aquí pasa a la pantalla de pago.
+ *
+ * Si ya es cliente de SOZU (usuario activo + al menos una propiedad) no se le
+ * vuelve a pedir nada: se le manda a iniciar sesión en su portal.
+ */
 const ApartarDirectoCapturePage = () => {
   const { offerToken } = useParams<{ offerToken: string }>();
   const navigate = useNavigate();
@@ -27,12 +43,44 @@ const ApartarDirectoCapturePage = () => {
   const offer = isNumericToken ? (dbOfferResult?.offer ?? null) : (mockOffer ?? null);
   const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
+  const [csfLista, setCsfLista] = useState(false);
+
+  // Store local del flujo: prospecto + reserva que consume la pantalla de pago.
+  const prospectos = useOfferStore((st) => st.prospects);
+  const createProspect = useOfferStore((st) => st.createProspect);
+  const verifyProspect = useOfferStore((st) => st.verifyProspect);
+  const setActiveProspect = useOfferStore((st) => st.setActiveProspect);
+  const reservations = useFormalReservationStore((st) => st.reservations);
+  const initiateFormalReservation = useFormalReservationStore((st) => st.initiateFormalReservation);
+
+  // ¿El lead ya es cliente de SOZU (usuario activo + al menos una propiedad)?
+  // En ese caso no se le vuelve a dar de alta: va directo a iniciar sesión.
+  const { data: estadoCliente, isLoading: cargandoEstado } = useQuery({
+    queryKey: ["oferta-estado-cliente", reservationToken],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("get_cliente_estado_oferta", {
+        p_token: reservationToken,
+      });
+      if (error) return null;
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row ?? null) as {
+        tiene_acceso: boolean;
+        tiene_propiedades: boolean;
+        es_cliente_existente: boolean;
+        email_enmascarado: string | null;
+      } | null;
+    },
+    enabled: !!reservationToken,
+  });
+
+  const esClienteExistente = !!estadoCliente?.es_cliente_existente;
+
   const agentOfferId = offer?.id;
   useEffect(() => {
     if (!agentOfferId) return;
     (async () => {
       const { data: oferta } = await supabase
-        .from("ofertas").select("email_creador").eq("id", agentOfferId).single();
+        .from("ofertas").select("email_creador").eq("id", Number(agentOfferId)).single();
       if (!oferta?.email_creador) return;
       const { data: usuario } = await supabase
         .from("usuarios").select("id_persona").eq("email", oferta.email_creador).single();
@@ -54,48 +102,23 @@ const ApartarDirectoCapturePage = () => {
   }, [agentOfferId]);
   const agent = agentFromDB ?? mockAgent ?? undefined;
 
-  const createProspect = useOfferStore((s) => s.createProspect);
-  const findProspectByEmail = useOfferStore((s) => s.findProspectByEmail);
-  const setActiveProspect = useOfferStore((s) => s.setActiveProspect);
-  const verifyProspect = useOfferStore((s) => s.verifyProspect);
-  const initiateFormalReservation = useFormalReservationStore(
-    (s) => s.initiateFormalReservation
-  );
-  const reservations = useFormalReservationStore((s) => s.reservations);
-
-  useEffect(() => {
-    if (isNumericToken && dbLoading) return;
-    if (!offer) navigate("/");
-  }, [offer, navigate, isNumericToken, dbLoading]);
-
   if (isNumericToken && dbLoading) return null;
-  if (!offer) return null;
 
-  const proceedDirectlyToWizard = (prospectId: string) => {
-    const existing = reservations.find(
-      (r) => r.prospectId === prospectId && r.offerId === offer.id
+  if (!offer) {
+    return (
+      <PublicShell>
+        <div className="mx-auto max-w-md px-4 py-20 text-center">
+          <h1 className="mb-2 text-xl font-semibold">Oferta no encontrada</h1>
+          <p className="text-sm text-muted-foreground">
+            El link puede haber expirado. Contacta a tu asesor para recibir uno nuevo.
+          </p>
+        </div>
+      </PublicShell>
     );
-    let formalReservationId: string;
-    if (existing) {
-      formalReservationId = existing.id;
-    } else {
-      const fr = initiateFormalReservation({
-        preReservationId: null,
-        prospectId,
-        offerId: offer.id,
-        agentId: offer.agentId ?? "AGT-RAMON",
-        appliedAmountMXN: 0,
-      });
-      formalReservationId = fr.id;
-    }
-    navigate(withReservationToken(`/reservar/${formalReservationId}/wizard`, reservationToken));
-  };
+  }
 
-  // Paso 1: persiste nombre/teléfono del lead en BD (RPC SECURITY DEFINER anon).
-  // El usuario confirma/corrige sus datos antes de continuar. Si la RPC no existe
-  // aún, no bloquea: los datos igual viajan en memoria al resto del flujo.
+  // Guarda nombre/teléfono corregidos. Solo se llama si el cliente los editó.
   const handleSaveData = async (data: { fullName: string; phoneDigits: string; countryCode: string }) => {
-    if (!offer) return false;
     try {
       const { data: ok, error } = await (supabase as any).rpc("update_lead_datos", {
         p_oferta_id: Number(offer.id),
@@ -110,22 +133,63 @@ const ApartarDirectoCapturePage = () => {
     }
   };
 
+  // Constancia: el archivo va al bucket `documentos` y el registro + los datos
+  // fiscales los escribe la RPC (anon no puede tocar `documentos` ni `personas`).
+  const handleGuardarCsf = async (file: File, campos: CsfCampos) => {
+    if (!reservationToken) return false;
+    const marcarLista = (ok: boolean) => { if (ok) setCsfLista(true); return ok; };
+    try {
+      const path = `oferta-digital/${offer.id}/csf_${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabase.storage.from("documentos").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
+
+      const { data: ok, error } = await (supabase as any).rpc("guardar_csf_oferta", {
+        p_token: reservationToken,
+        p_url: publicUrl,
+        p_rfc: campos.rfc || null,
+        p_curp: campos.curp || null,
+        p_nombre: campos.nombre || null,
+        p_regimen: campos.regimen || null,
+        p_cp: campos.cp || null,
+        p_calle: campos.calle || null,
+        p_num_ext: campos.numExt || null,
+        p_num_int: campos.numInt || null,
+        p_colonia: campos.colonia || null,
+      });
+      return marcarLista(!error && ok !== false);
+    } catch (e) {
+      console.error("Error guardando la constancia:", e);
+      return false;
+    }
+  };
+
+  // Con los datos confirmados y la Constancia cargada, pasa a la pantalla de pago.
   const handleComplete = (data: { fullName: string; email: string; phone: string }) => {
-    const existing = findProspectByEmail(data.email);
-    if (existing) {
-      if (existing.verificationStatus !== "verified") verifyProspect(existing.id);
-      setActiveProspect(existing.id);
-      proceedDirectlyToWizard(existing.id);
+    if (!csfLista) {
+      toast.error("Sube tu Constancia de Situación Fiscal para continuar con el pago.");
       return;
     }
-    const prospect = createProspect({
+    const existing = prospectos.find((p) => p.email?.toLowerCase() === data.email.toLowerCase());
+    const prospectId = existing?.id ?? createProspect({
       fullName: data.fullName,
       email: data.email,
       phone: data.phone,
       source: "formal_direct",
-    });
-    verifyProspect(prospect.id);
-    proceedDirectlyToWizard(prospect.id);
+    }).id;
+    verifyProspect(prospectId);
+    setActiveProspect(prospectId);
+
+    const reserva = reservations.find((r) => r.prospectId === prospectId && r.offerId === offer.id);
+    const formalReservationId = reserva?.id ?? initiateFormalReservation({
+      preReservationId: null,
+      prospectId,
+      offerId: offer.id,
+      agentId: offer.agentId ?? "AGT-RAMON",
+      appliedAmountMXN: 0,
+    }).id;
+
+    navigate(withReservationToken(`/reservar/${formalReservationId}/wizard`, reservationToken));
   };
 
   return (
@@ -136,19 +200,69 @@ const ApartarDirectoCapturePage = () => {
       developmentName={offer.property.projectName}
     >
       <div className="flex flex-col min-h-[calc(100vh-56px)]">
-        {/* Form top-align — sin panel de propiedad (ya se mostró en la oferta) */}
         <div className="flex-1 flex items-start justify-center px-4 py-4">
-          <div className="w-full max-w-[380px]">
-            <ProspectCaptureForm
-              offer={offer}
-              context="formal_direct"
-              defaultEmail={offer.prospectEmail}
-              defaultFullName={offer.prospectName}
-              defaultPhone={offer.prospectPhone}
-              defaultDialCode={offer.prospectDialCode}
-              onSaveData={handleSaveData}
-              onComplete={handleComplete}
-            />
+          <div className="w-full max-w-[420px]">
+            {cargandoEstado ? (
+              <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Un momento…
+              </div>
+            ) : esClienteExistente ? (
+              /* Ya es cliente de SOZU: no se le vuelve a dar de alta. */
+              <div className="space-y-6 py-4">
+                <div className="space-y-2">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/[0.06]">
+                    <LogIn className="h-5 w-5 text-primary" />
+                  </div>
+                  <h1 className="text-[1.6rem] font-bold leading-tight tracking-tight text-foreground">
+                    Ya tienes cuenta en SOZU
+                  </h1>
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">
+                    Tu correo{" "}
+                    <span className="font-semibold text-foreground">
+                      {estadoCliente?.email_enmascarado ?? "registrado"}
+                    </span>{" "}
+                    ya está dado de alta y tienes propiedades con nosotros. No necesitas
+                    volver a registrarte: entra a tu portal y continúa con tu pago desde ahí.
+                  </p>
+                </div>
+
+                <a
+                  href={PORTAL_CLIENTE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.99]"
+                >
+                  Iniciar sesión en mi portal <ExternalLink className="h-4 w-4" />
+                </a>
+
+                <p className="text-center text-[11px] leading-relaxed text-muted-foreground/70">
+                  Se abre en una pestaña nueva; esta oferta se queda aquí.
+                  <br />
+                  ¿No recuerdas tu contraseña? Recupérala desde la pantalla de acceso.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <ProspectCaptureForm
+                  offer={offer}
+                  context="formal_direct"
+                  defaultEmail={offer.prospectEmail}
+                  defaultFullName={offer.prospectName}
+                  defaultPhone={offer.prospectPhone}
+                  defaultDialCode={offer.prospectDialCode}
+                  onSaveData={handleSaveData}
+                  onComplete={handleComplete}
+                  submitLabel="Continuar con el pago"
+                  extraFields={
+                    <CsfUploadCard
+                      required
+                      onGuardar={handleGuardarCsf}
+                      hint="La necesitamos para validar tu pago: el SPEI se verifica contra el RFC o CURP de quien transfiere."
+                    />
+                  }
+                />
+              </div>
+            )}
           </div>
         </div>
 
