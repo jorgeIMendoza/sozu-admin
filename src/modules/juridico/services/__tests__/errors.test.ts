@@ -83,6 +83,12 @@ describe('SQLSTATE_MAP — completitud del catálogo', () => {
     ['P0028', 'JUR-0028'],
   ];
 
+  // T4: crear_asunto
+  const t4Entries: [string, string][] = [
+    ['P0029', 'JUR-0029'],
+    ['P0030', 'JUR-0030'],
+  ];
+
   it.each(t1Entries)('T1 — %s → %s', (pgCode, jurCode) => {
     expect(SQLSTATE_MAP[pgCode]).toBe(jurCode);
   });
@@ -99,8 +105,12 @@ describe('SQLSTATE_MAP — completitud del catálogo', () => {
     expect(SQLSTATE_MAP[pgCode]).toBe(jurCode);
   });
 
-  it('contiene exactamente 21 entradas (T1×9 + T2×4 + T3×7 + Orquestador×1)', () => {
-    expect(Object.keys(SQLSTATE_MAP)).toHaveLength(21);
+  it.each(t4Entries)('T4 — %s → %s', (pgCode, jurCode) => {
+    expect(SQLSTATE_MAP[pgCode]).toBe(jurCode);
+  });
+
+  it('contiene exactamente 23 entradas (T1×9 + T2×4 + T3×7 + Orquestador×1 + T4×2)', () => {
+    expect(Object.keys(SQLSTATE_MAP)).toHaveLength(23);
   });
 
   it('no contiene entradas desconocidas', () => {
@@ -109,6 +119,7 @@ describe('SQLSTATE_MAP — completitud del catálogo', () => {
       'P0017','P0018','P0019','P0020',
       'P0021','P0022','P0023','P0024','P0025','P0026','P0027',
       'P0028',
+      'P0029','P0030',
     ]);
     for (const key of Object.keys(SQLSTATE_MAP)) {
       expect(known.has(key)).toBe(true);
