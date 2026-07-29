@@ -350,12 +350,20 @@ export default function Compradores() {
     mutationFn: async (personData: any) => {
       const { entityType, representativeId, commercialRepresentativeId, inmobiliariaId, tempBankAccounts, tempBeneficiaries, pendingDocuments, porcentaje_comision, ...cleanPersonData } = personData;
       
-      const { error: updateError } = await supabase
+      // .select() para distinguir "bloqueado por RLS" de "guardado": sin él PostgREST
+      // devuelve 0 filas sin error y la mutación reportaba éxito sin haber escrito nada.
+      const { data: updated, error: updateError } = await supabase
         .from('personas')
         .update(cleanPersonData)
-        .eq('id', editingComprador?.id);
-      
+        .eq('id', editingComprador?.id)
+        .select('id');
+
       if (updateError) throw updateError;
+      if (!updated || updated.length === 0) {
+        throw new Error(
+          'No se guardó ningún cambio: tu rol no tiene permiso para editar este comprador.'
+        );
+      }
       
       // Actualizar representante legal para cualquier tipo de persona (PF o PM)
       if (representativeId !== undefined) {
@@ -367,8 +375,10 @@ export default function Compradores() {
         if (repError) throw repError;
       }
 
-      // Si se actualizó el id_conyuge, sincronizar cuentas de compradores
-      if (cleanPersonData.id_conyuge !== undefined && editingComprador?.id) {
+      // Si se actualizó el id_conyuge, sincronizar cuentas de compradores.
+      // PersonForm siempre envía la llave (null cuando no hay cónyuge), así que se valida
+      // el valor y no su presencia: sin cónyuge no hay nada que sincronizar.
+      if (cleanPersonData.id_conyuge && editingComprador?.id) {
         const { data: syncResult, error: syncError } = await supabase
           .rpc('sync_conyuge_compradores', {
             p_id_persona: editingComprador.id
