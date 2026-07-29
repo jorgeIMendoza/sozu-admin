@@ -709,12 +709,20 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
       return;
     }
 
-    // Validation for spouse selection (solo para personas físicas)
-    if (tipoPersona === 'pf' && (idEstadoCivil === '2' || idEstadoCivil === 2)) {
-      if (!idConyuge) {
-        toast.error("Debes seleccionar un cónyuge cuando el estado civil es 'Casado(a) bienes mancomunados'.");
-        return;
-      }
+    // Validation for spouse selection (solo para personas físicas).
+    // Solo se exige cuando el matrimonio se declara en ESTA edición. Los registros que ya
+    // venían con estado civil 2 y sin cónyuge (34 en prod, 65 en dev) quedarían inservibles:
+    // la validación bloqueaba cualquier cambio, incluso el teléfono, y el cónyuge real muchas
+    // veces no existe como comprador para poder seleccionarlo.
+    const yaEraCasadoBienesMancomunados = Number(initialData?.id_estado_civil) === 2;
+    if (
+      tipoPersona === 'pf' &&
+      (idEstadoCivil === '2' || idEstadoCivil === 2) &&
+      !idConyuge &&
+      !yaEraCasadoBienesMancomunados
+    ) {
+      toast.error("Debes seleccionar un cónyuge cuando el estado civil es 'Casado(a) bienes mancomunados'.");
+      return;
     }
 
     // Validation for legal representative (mandatory for Inmobiliarias)
@@ -794,16 +802,23 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
     if (idConyuge && initialData?.id) {
       try {
         // Update the spouse's id_conyuge and id_estado_civil
-        const { error: spouseError } = await supabase
+        // .select() para detectar el bloqueo por RLS: sin él un UPDATE denegado devuelve
+        // 0 filas sin error y la relación recíproca quedaba sin escribir en silencio.
+        const { data: spouseUpdated, error: spouseError } = await supabase
           .from('personas')
           .update({
             id_conyuge: initialData.id,
             id_estado_civil: 2, // Set to "Casado(a) bienes mancomunados"
           })
-          .eq('id', parseInt(idConyuge));
-        
+          .eq('id', parseInt(idConyuge))
+          .select('id');
+
         if (spouseError) {
           toast.error("Error al actualizar el cónyuge: " + spouseError.message);
+          return;
+        }
+        if (!spouseUpdated || spouseUpdated.length === 0) {
+          toast.error("No se pudo vincular al cónyuge: tu rol no tiene permiso para editar ese registro.");
           return;
         }
       } catch (error) {
@@ -1674,6 +1689,12 @@ export function PersonForm({ onSubmit, initialData, isLoading, onCancel, entityT
                                   <p className="text-sm text-muted-foreground">
                                     Al seleccionar un cónyuge, automáticamente se actualizará su estado civil a "Casado(a) bienes mancomunados" y se establecerá la relación recíproca.
                                   </p>
+                                  {Number(initialData?.id_estado_civil) === 2 && !idConyuge && (
+                                    <p className="text-sm text-amber-600">
+                                      Este registro ya venía como casado por bienes mancomunados sin cónyuge capturado.
+                                      Puedes guardar los demás datos; asigna el cónyuge cuando exista como comprador en el sistema.
+                                    </p>
+                                  )}
                                 </div>
                               )}
                             </div>

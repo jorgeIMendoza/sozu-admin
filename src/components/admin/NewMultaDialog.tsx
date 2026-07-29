@@ -37,11 +37,11 @@ export function NewMultaDialog({ open, onOpenChange, acuerdoId, cuentaId, acuerd
     queryKey: ["tipos_multa"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .rpc('execute_safe_query', {
-          query_text: 'SELECT id, nombre, activo FROM tipos_multa WHERE activo = true ORDER BY nombre',
-          max_rows: 100
-        });
-      
+        .from('tipos_multa')
+        .select('id, nombre, activo')
+        .eq('activo', true)
+        .order('nombre');
+
       if (error) throw error;
       return (data as unknown as TipoMulta[]) || [];
     },
