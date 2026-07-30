@@ -10,10 +10,11 @@ import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/sozu-logo";
-import { BankImpersonationProvider } from "@/contexts/BankImpersonationContext";
+import { BankImpersonationProvider, useCurrentBanco } from "@/contexts/BankImpersonationContext";
 import { BankImpersonationSelector } from "./BankImpersonationSelector";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { usePortalNav, type PortalNavItem } from "@/hooks/usePortalNav";
+import { usePortalNav } from "@/hooks/usePortalNav";
+import { bancoThemeVars } from "@/lib/portal-bancos/branding";
 
 const BANCOS_MENU_ID = 32;
 
@@ -26,57 +27,32 @@ const iconMap: Record<string, LucideIcon> = {
   "/admin/portal-bancos/notarias": ScrollText,
 };
 
-// Ítems garantizados aunque el submenu aún no exista en BD (la navegación del
-// portal se lee de `submenus`).
-const ADMIN_ITEMS: PortalNavItem[] = [
-  { path: "/admin/portal-bancos/equipo", label: "Equipo", icon: Users },
-  { path: "/admin/portal-bancos/bancos", label: "Bancos", icon: Landmark },
-  { path: "/admin/portal-bancos/notarias", label: "Notarías", icon: ScrollText },
-];
-
-const EQUIPO_PATH = "/admin/portal-bancos/equipo";
-const BANCOS_PATH = "/admin/portal-bancos/bancos";
-const NOTARIAS_PATH = "/admin/portal-bancos/notarias";
-
-export const PortalBancosLayout = () => {
+/**
+ * Shell del portal. Vive DENTRO de `BankImpersonationProvider` porque necesita
+ * el banco en scope (`useCurrentBanco`) para el branding: logo junto al nombre
+ * del usuario y colores de marca aplicados a todo el portal.
+ */
+const PortalBancosShell = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navAll = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
-  const isSuperAdmin = profile?.rol_id === 1;
-  // Admin de banco (Supervisor Banco) — detección por nombre (ids varían por
-  // ambiente). Puede administrar el Equipo, pero SOLO de su propio banco.
-  const isSupervisorBanco = (profile?.rol_nombre ?? "")
-    .trim()
-    .toLowerCase()
-    .startsWith("supervisor banco");
-  const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { isPathDisabled } = useAllowedMenus();
+  const banco = useCurrentBanco();
+  // Colores del banco → variables CSS del design system. Sin color de marca (o
+  // en la vista global "Super Administrador") se conserva el verde SOZU.
+  const themeVars = bancoThemeVars(banco?.color_marca);
 
-  // Equipo: visible para Super Admin y para el Admin del banco (Supervisor).
-  // Bancos: solo Super Admin (alta/baja de convenios).
-  const canSeeEquipo = isSuperAdmin || isSupervisorBanco;
-  const canSeeBancos = isSuperAdmin;
-  const visibles = navAll.filter((i) => {
-    if (i.path === EQUIPO_PATH) return canSeeEquipo;
-    if (i.path === BANCOS_PATH) return canSeeBancos;
-    return true;
-  });
-  // Garantizar los ítems aunque el submenu no exista en BD, según acceso.
-  const guaranteed = ADMIN_ITEMS.filter(
-    (a) =>
-      (a.path === EQUIPO_PATH && canSeeEquipo) ||
-      (a.path === BANCOS_PATH && canSeeBancos) ||
-      // Notarías: directorio de contacto visible para todos los roles del portal.
-      a.path === NOTARIAS_PATH,
-  );
-  // Ocultar ítems cuyo submenú (o menú padre) está apagado en BD (activo=false).
-  const NAV = [
-    ...visibles,
-    ...guaranteed.filter((a) => !visibles.some((v) => v.path === a.path)),
-  ].filter((i) => !isPathDisabled(i.path));
+  const navAll = usePortalNav(BANCOS_MENU_ID, iconMap, Inbox);
+  const { canReturnToAdmin } = useCanReturnToAdmin();
+  const { isPathAllowed } = useAllowedMenus();
+
+  // Navegación 100% desde BD: `submenus` del menú (usePortalNav) filtrado por el
+  // permiso de lectura del rol. Antes había ítems hardcodeados (Equipo / Bancos /
+  // Notarías) con reglas por rol_id/nombre, así que "Notarías" aparecía siempre
+  // aunque no existiera el submenú y Equipo se mostraba a roles sin permiso.
+  // `isPathAllowed` ya descarta las vistas apagadas (submenu/menú activo=false).
+  const NAV = navAll.filter((i) => isPathAllowed(i.path));
 
   const isActive = (p: string) => location.pathname === p || location.pathname.startsWith(p + "/");
   const current = NAV.find((i) => isActive(i.path))?.label ?? "Portal Bancos";
@@ -90,12 +66,18 @@ export const PortalBancosLayout = () => {
 
   const sidebar = (
     <>
-      {/* Brand */}
+      {/* Brand — SOZU + marca del banco en scope (si tiene branding cargado) */}
       <div className="px-5 py-4 border-b border-border-soft flex flex-col gap-1">
         <SozuLogo className="h-6" />
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-500">
           Portal Bancos
         </p>
+        {banco && (
+          <div className="flex items-center gap-2 pt-2">
+            <BancoMark banco={banco} className="h-6 w-6" />
+            <span className="text-[11px] font-medium text-foreground truncate">{banco.nombre}</span>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
@@ -137,6 +119,7 @@ export const PortalBancosLayout = () => {
             <p className="text-[13px] font-medium text-foreground truncate">{userName}</p>
             <p className="text-[11px] text-muted-foreground truncate">{userRole}</p>
           </div>
+          {banco && <BancoMark banco={banco} className="h-6 w-6" />}
         </div>
 
         <div className="flex gap-2">
@@ -164,9 +147,7 @@ export const PortalBancosLayout = () => {
   );
 
   return (
-    <BankImpersonationProvider>
-      <PortalTrackingProvider portal="bancos">
-        <div className="min-h-screen flex antialiased">
+        <div className="min-h-screen flex antialiased" style={themeVars}>
           {/* Desktop sidebar */}
           <aside className="hidden lg:flex lg:flex-col border-r border-border bg-sidebar fixed inset-y-0 left-0 z-30 w-64">
             {sidebar}
@@ -188,9 +169,13 @@ export const PortalBancosLayout = () => {
                 <span className="text-muted-foreground">{current}</span>
               </div>
               <div className="flex items-center gap-3 min-w-0">
+                {/* Logo del banco del usuario, junto a su nombre */}
+                {banco && <BancoMark banco={banco} className="h-8 w-8" />}
                 <div className="min-w-0 text-right">
                   <p className="text-sm font-medium text-foreground truncate">{userName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{userRole}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {banco ? `${userRole} · ${banco.nombre}` : userRole}
+                  </p>
                 </div>
                 <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[12px] font-semibold shrink-0">
                   {initials}
@@ -212,8 +197,11 @@ export const PortalBancosLayout = () => {
                   <p className="text-[15px] font-semibold text-foreground tracking-tight truncate">{current}</p>
                 </div>
               </div>
-              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold shrink-0">
-                {initials}
+              <div className="flex items-center gap-2 shrink-0">
+                {banco && <BancoMark banco={banco} className="h-7 w-7" />}
+                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-semibold">
+                  {initials}
+                </div>
               </div>
             </header>
 
@@ -223,9 +211,52 @@ export const PortalBancosLayout = () => {
             </main>
           </div>
         </div>
-      </PortalTrackingProvider>
-    </BankImpersonationProvider>
   );
 };
+
+/**
+ * Marca del banco: ícono cuadrado (`icono_url`) o, en su defecto, el logo
+ * (`logo_url`). Sin imagen cargada cae a un cuadro con el color de marca y las
+ * iniciales, para que el portal nunca quede sin identidad visual.
+ */
+function BancoMark({
+  banco,
+  className,
+}: {
+  banco: { nombre: string; color_marca: string | null; logo_url: string | null; icono_url: string | null };
+  className?: string;
+}) {
+  const src = banco.icono_url ?? banco.logo_url;
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={banco.nombre}
+        className={cn("rounded-md border bg-white object-contain shrink-0", className)}
+      />
+    );
+  }
+  const ini = banco.nombre.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "B";
+  return (
+    <span
+      className={cn(
+        "rounded-md border flex items-center justify-center text-[10px] font-bold text-white shrink-0",
+        className,
+      )}
+      style={{ backgroundColor: banco.color_marca ?? "#9ca3af" }}
+      title={banco.nombre}
+    >
+      {ini}
+    </span>
+  );
+}
+
+export const PortalBancosLayout = () => (
+  <BankImpersonationProvider>
+    <PortalTrackingProvider portal="bancos">
+      <PortalBancosShell />
+    </PortalTrackingProvider>
+  </BankImpersonationProvider>
+);
 
 export default PortalBancosLayout;

@@ -245,12 +245,17 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   // "Banco" entrar directamente (fallback por si los submenús aún no están
   // asignados a su rol en BD para ese ambiente).
   if (location.pathname.startsWith('/admin/portal-bancos')) {
-    // Administración del portal (agentes / bancos con convenio): solo Super Admin.
-    const esAdminPortalBancos =
-      location.pathname.startsWith('/admin/portal-bancos/equipo') ||
-      location.pathname.startsWith('/admin/portal-bancos/bancos');
-    if (esAdminPortalBancos) {
-      return profile?.rol_id === 1
+    // Administración del portal (equipo / bancos con convenio): requiere permiso
+    // EXPLÍCITO de lectura sobre ESA vista en BD. Antes estaba hardcodeado a
+    // rol_id === 1, lo que mandaba a 403 a Supervisor Banco / Operador Banco pese
+    // a tener el permiso asignado en `submenus_permisos`.
+    const ADMIN_PATHS = [
+      '/admin/portal-bancos/equipo',
+      '/admin/portal-bancos/bancos',
+    ];
+    const adminPath = ADMIN_PATHS.find((p) => location.pathname.startsWith(p));
+    if (adminPath) {
+      return allowedPaths.has(adminPath)
         ? <>{children}</>
         : <Navigate to="/admin/access-denied" replace />;
     }
