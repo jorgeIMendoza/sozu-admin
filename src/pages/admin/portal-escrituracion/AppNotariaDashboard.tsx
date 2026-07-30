@@ -653,35 +653,38 @@ export function AppNotariaDashboard() {
     return map;
   }, [tiposDocData]);
 
-  const tipoDocIds = useMemo(() => Object.values(tipoDocId), [tipoDocId]);
+  // ── documentos vigentes (via las FKs id_documento_* de notaria_proceso) ────
+  // notaria_proceso ya no se resuelve por "más reciente por fecha": cada fila
+  // apunta con una FK real al documento vigente. Solo hace falta traer esos
+  // documentos por id.
+  const documentoIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const p of procesosData) {
+      for (const col of [
+        'id_documento_proyecto_escritura', 'id_documento_cotizacion', 'id_documento_clg',
+        'id_documento_predial', 'id_documento_siapa', 'id_documento_escritura_firmada', 'id_documento_rpp',
+      ]) {
+        if (p[col] != null) ids.add(p[col] as number);
+      }
+    }
+    return [...ids];
+  }, [procesosData]);
 
-  // ── documentos (archivos reales — proyecto de escritura, cotización, etc.) ─
   const { data: documentosData = [] } = useQuery({
-    queryKey: ['notaria-documentos', cuentaIds, tipoDocIds],
-    enabled: cuentaIds.length > 0 && tipoDocIds.length > 0,
+    queryKey: ['notaria-documentos', documentoIds],
+    enabled: documentoIds.length > 0,
     queryFn: async () => {
       const { data } = await supabase
         .from('documentos')
-        .select('id, id_cuenta_cobranza, id_tipo_documento, url, fecha_creacion')
-        .in('id_cuenta_cobranza', cuentaIds as any)
-        .in('id_tipo_documento', tipoDocIds as any)
-        .eq('activo', true)
-        .order('fecha_creacion', { ascending: false });
+        .select('id, url, id_tipo_documento')
+        .in('id', documentoIds as any);
       return (data ?? []) as any[];
     },
   });
 
-  // Mapa cuentaId → tipoDocumentoId → documento vigente (el primero es el más
-  // reciente porque la query ya viene ordenada desc; no requiere columna
-  // "es_vigente", el historial completo queda disponible por fecha).
-  const documentosMap = useMemo(() => {
-    const map: Record<number, Record<number, any>> = {};
-    for (const d of documentosData) {
-      if (!map[d.id_cuenta_cobranza]) map[d.id_cuenta_cobranza] = {};
-      if (!map[d.id_cuenta_cobranza][d.id_tipo_documento]) {
-        map[d.id_cuenta_cobranza][d.id_tipo_documento] = d;
-      }
-    }
+  const documentosPorId = useMemo(() => {
+    const map: Record<number, any> = {};
+    for (const d of documentosData) map[d.id] = d;
     return map;
   }, [documentosData]);
 
@@ -734,9 +737,8 @@ export function AppNotariaDashboard() {
     const credito = creditosMap[c.id];
     const proceso = procesosMap[c.id];
     const cita    = citasMap[comp?.id_persona ?? -1];
-    const docsCuenta = documentosMap[c.id] ?? {};
-    const docProyecto   = tipoDocId['Proyecto de escritura']  ? docsCuenta[tipoDocId['Proyecto de escritura']]  : null;
-    const docCotizacion = tipoDocId['Cotización notarial']    ? docsCuenta[tipoDocId['Cotización notarial']]    : null;
+    const docProyecto   = proceso?.id_documento_proyecto_escritura ? documentosPorId[proceso.id_documento_proyecto_escritura] : null;
+    const docCotizacion = proceso?.id_documento_cotizacion         ? documentosPorId[proceso.id_documento_cotizacion]         : null;
 
     // Usa totales por propiedad: suma de TODAS las cuentas (bodega, estac., etc.)
     const montoPagado  = pagosSumByProp[c.id_propiedad] || 0;
@@ -788,7 +790,7 @@ export function AppNotariaDashboard() {
       creditoId:         credito?.id ?? null,
       lastUpdatedAt:     proceso?.fecha_actualizacion ?? c.fecha_actualizacion ?? null,
     } satisfies NotaryRow;
-  }), [rawCuentas, pagosSumByProp, precioFinalByProp, creditosMap, procesosMap, citasMap, documentosMap, tipoDocId]);
+  }), [rawCuentas, pagosSumByProp, precioFinalByProp, creditosMap, procesosMap, citasMap, documentosPorId]);
 
   // DEV debug
   if (import.meta.env.DEV) {
@@ -1650,7 +1652,9 @@ export function AppNotariaDashboard() {
                         const { data: docIns } = await supabase.from('documentos')
                           .insert({ id_cuenta_cobranza: selectedRow.cuentaId, id_tipo_documento: idTipo, url: urlData.publicUrl })
                           .select('id').single();
-                        const upd = { vobo_desarrollador: 'NO_ENVIADO', estatus: 'PROYECTO_EN_ELABORACION' };
+                        // La FK id_documento_proyecto_escritura pasa a apuntar a la nueva
+                        // version subida; la anterior no se borra, queda como historial.
+                        const upd = { vobo_desarrollador: 'NO_ENVIADO', estatus: 'PROYECTO_EN_ELABORACION', id_documento_proyecto_escritura: docIns?.id ?? null };
                         if (selectedRow.procesoId) {
                           await (supabase as any).from('notaria_proceso').update(upd).eq('id', selectedRow.procesoId);
                         } else {
@@ -1695,7 +1699,8 @@ export function AppNotariaDashboard() {
                         const { data: docIns } = await supabase.from('documentos')
                           .insert({ id_cuenta_cobranza: selectedRow.cuentaId, id_tipo_documento: idTipo, url: urlData.publicUrl })
                           .select('id').single();
-                        const upd = { cotizacion_estatus: 'ENVIADA' };
+                        // La FK id_documento_cotizacion pasa a apuntar a la nueva version.
+                        const upd = { cotizacion_estatus: 'ENVIADA', id_documento_cotizacion: docIns?.id ?? null };
                         if (selectedRow.procesoId) {
                           await (supabase as any).from('notaria_proceso').update(upd).eq('id', selectedRow.procesoId);
                         } else {
