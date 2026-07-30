@@ -2,6 +2,7 @@
 // Un solo screen con pestañas: Vistas (Campañas, Atribución) + Configuración
 // (Eventos de conversión gestionable, Conexión). Montado en /marketing/meta.
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { lifecycleLabel } from "@/lib/crm-lib";
@@ -294,6 +295,127 @@ function ConexionPanel() {
 }
 
 // ============================================================
+// Panel: Registro de envíos (log CAPI — trazabilidad, pedido por Rodrigo #10)
+// ============================================================
+type CapiEvento = {
+  id: number;
+  id_entidad_relacionada: number | null;
+  event_name: string;
+  event_id: string;
+  status: string;
+  events_received: number | null;
+  fbtrace_id: string | null;
+  intentos: number;
+  test_event_code: string | null;
+  error: string | null;
+  fecha_creacion: string;
+};
+
+function CapiStatusBadge({ status }: { status: string }) {
+  if (status === "sent")
+    return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent">Enviado</Badge>;
+  if (status === "error")
+    return <Badge className="bg-red-500/15 text-red-700 dark:text-red-400 border-transparent">Error</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground">Omitido</Badge>;
+}
+
+function RegistroPanel() {
+  const qc = useQueryClient();
+  const [missing, setMissing] = useState(false);
+
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ["crm-meta-capi-eventos"],
+    queryFn: async (): Promise<CapiEvento[]> => {
+      const { data, error } = await (supabase as any)
+        .from("crm_meta_capi_eventos")
+        .select("id, id_entidad_relacionada, event_name, event_id, status, events_received, fbtrace_id, intentos, test_event_code, error, fecha_creacion")
+        .order("fecha_creacion", { ascending: false })
+        .limit(100);
+      if (error) { setMissing(true); return []; }
+      setMissing(false);
+      return (data ?? []) as CapiEvento[];
+    },
+  });
+
+  const fmt = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <Badge variant="outline" className="text-primary border-primary/40">Log · trazabilidad CAPI</Badge>
+          <p className="text-sm text-muted-foreground mt-2 max-w-xl">
+            Cada evento que el CRM manda a Meta (Conversions API) queda registrado aquí: estado, recepción de Meta, reintentos y rastreo (fbtrace_id).
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => qc.invalidateQueries({ queryKey: ["crm-meta-capi-eventos"] })}>
+          <RefreshCw className="w-4 h-4 mr-1" />Actualizar
+        </Button>
+      </div>
+
+      {missing && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-amber-800 dark:text-amber-400">
+            Falta la tabla <code>crm_meta_capi_eventos</code> (corre la migración) para ver el registro.
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-md border bg-card overflow-x-auto">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Fecha</TableHead>
+            <TableHead>Evento</TableHead>
+            <TableHead>Contacto</TableHead>
+            <TableHead className="text-center">Estado</TableHead>
+            <TableHead className="text-center">Recibidos</TableHead>
+            <TableHead className="text-center">Intentos</TableHead>
+            <TableHead>fbtrace_id / error</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-5 w-full" /></TableCell></TableRow>
+              ))
+            ) : rows.length === 0 ? (
+              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground text-sm">
+                Aún no se han enviado eventos a Meta. Cuando un lead avance de etapa (ej. a MQL), aparecerá aquí.
+              </TableCell></TableRow>
+            ) : rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="whitespace-nowrap text-sm">{fmt(r.fecha_creacion)}</TableCell>
+                <TableCell className="font-medium">
+                  {r.event_name}
+                  {r.test_event_code && <Badge variant="outline" className="ml-2 text-[10px]">prueba</Badge>}
+                </TableCell>
+                <TableCell>
+                  {r.id_entidad_relacionada ? (
+                    <Link to={`/admin/portal-crm/ventas/contactos/${r.id_entidad_relacionada}`} className="text-primary hover:underline text-sm">
+                      #{r.id_entidad_relacionada}
+                    </Link>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center"><CapiStatusBadge status={r.status} /></TableCell>
+                <TableCell className="text-center tabular-nums">{r.events_received ?? "—"}</TableCell>
+                <TableCell className="text-center tabular-nums">{r.intentos}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={r.status === "error" ? (r.error ?? "") : (r.fbtrace_id ?? "")}>
+                  {r.status === "error" ? (r.error ?? "—") : (r.fbtrace_id ?? "—")}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // Módulo (pestañas)
 // ============================================================
 export function MetaAdsModule() {
@@ -305,11 +427,13 @@ export function MetaAdsModule() {
           <TabsTrigger value="campanas">Campañas + métricas</TabsTrigger>
           <TabsTrigger value="atribucion">Atribución / embudo</TabsTrigger>
           <TabsTrigger value="eventos">Eventos de conversión</TabsTrigger>
+          <TabsTrigger value="registro">Registro de envíos</TabsTrigger>
           <TabsTrigger value="conexion">Conexión</TabsTrigger>
         </TabsList>
         <TabsContent value="campanas" className="mt-4"><CrmMetaAds /></TabsContent>
         <TabsContent value="atribucion" className="mt-4"><AtribucionPanel /></TabsContent>
         <TabsContent value="eventos" className="mt-4"><EventosPanel /></TabsContent>
+        <TabsContent value="registro" className="mt-4"><RegistroPanel /></TabsContent>
         <TabsContent value="conexion" className="mt-4"><ConexionPanel /></TabsContent>
       </Tabs>
     </div>
