@@ -6,6 +6,8 @@ import {
   HardHat,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
+  PlayCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useConstructionProgress } from "@/lib/portal-cliente/construction-progress-data";
@@ -13,11 +15,14 @@ import { useConstructionProgress } from "@/lib/portal-cliente/construction-progr
 interface ConstructionProgressProps {
   cuentaId: string;
   activeStageId?: string; // "post_entrega" → simplified mode
+  /** Cuando la sección es el contenido único de una pestaña, abrirla ya expandida */
+  defaultExpanded?: boolean;
 }
 
-const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressProps) => {
+const ConstructionProgress = ({ cuentaId, activeStageId, defaultExpanded = false }: ConstructionProgressProps) => {
   const { data, isLoading } = useConstructionProgress(cuentaId);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -34,9 +39,13 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
   if (!data) return null;
 
   const isCompleted = activeStageId === "post_entrega";
-  const featuredVideoUrl = data.featuredVideoUrl;
-  const featuredVideoTitle = data.featuredVideoTitle ?? data.updates[0]?.videoTitle ?? "Recorrido del avance";
-  const featuredDate = data.updates[0]?.date;
+  const videos = data.updates.filter((u) => !!u.videoUrl);
+  const selected = videos.find((v) => v.id === selectedVideoId) ?? videos[0];
+
+  const featuredVideoUrl = selected?.videoUrl ?? data.featuredVideoUrl;
+  const featuredWatchUrl = selected?.videoWatchUrl ?? data.featuredVideoWatchUrl;
+  const featuredVideoTitle = selected?.videoTitle ?? data.featuredVideoTitle ?? "Recorrido del avance";
+  const featuredDate = selected?.date;
 
   return (
     <section className="rounded-2xl bg-card border border-border overflow-hidden animate-fade-in">
@@ -60,16 +69,17 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
 
         {expanded && (
           <div className="border-t border-border">
-            {/* Video embed - active projects only, not post_entrega */}
-            {!isCompleted && featuredVideoUrl && (
+            {/* Video embed */}
+            {featuredVideoUrl ? (
               <div className="min-w-0">
                 <div className="aspect-video w-full max-w-full bg-black overflow-hidden">
                   <iframe
+                    key={featuredVideoUrl}
                     src={featuredVideoUrl}
-                    className="w-full h-full"
-                    allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                    referrerPolicy="strict-origin-when-cross-origin"
                     allowFullScreen
-                    loading="lazy"
                     title={featuredVideoTitle}
                   />
                 </div>
@@ -77,10 +87,58 @@ const ConstructionProgress = ({ cuentaId, activeStageId }: ConstructionProgressP
                   <p className="text-[12px] font-semibold text-foreground leading-snug">
                     {featuredVideoTitle}
                   </p>
-                  {featuredDate && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{featuredDate}</p>
-                  )}
+                  <div className="flex items-center justify-between gap-3 mt-0.5">
+                    {featuredDate && (
+                      <p className="text-[11px] text-muted-foreground">{featuredDate}</p>
+                    )}
+                    {featuredWatchUrl && (
+                      <a
+                        href={featuredWatchUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline shrink-0"
+                      >
+                        Ver en YouTube
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
                 </div>
+
+                {/* Videos anteriores */}
+                {videos.length > 1 && (
+                  <div className="px-4 py-3 border-b border-border">
+                    <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-muted-foreground mb-2">
+                      Videos de avance
+                    </p>
+                    <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
+                      {videos.map((v) => {
+                        const active = v.id === selected?.id;
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => setSelectedVideoId(v.id)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors ${
+                              active
+                                ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                                : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <PlayCircle className="w-3.5 h-3.5" />
+                            {v.videoTitle || v.month}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="px-4 py-4 border-b border-border">
+                <p className="text-[12px] text-muted-foreground">
+                  Aún no hay videos de avance publicados para este proyecto.
+                </p>
               </div>
             )}
 
