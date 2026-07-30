@@ -3294,28 +3294,37 @@ export function CrmTasks() {
       const rows: any[] = res.data ?? [];
       if (!rows.length) return [];
 
+      // Resolver en LOTES: con muchas tareas, un solo .in() con ~1000 ids genera una URL
+      // demasiado larga y PostgREST la rechaza (el contacto salía como "—"). Chunks de 150.
+      const fetchInChunks = async (table: string, cols: string, col: string, ids: any[]) => {
+        const out: any[] = [];
+        for (let i = 0; i < ids.length; i += 150) {
+          const { data } = await (supabase as any).from(table).select(cols).in(col, ids.slice(i, i + 150));
+          if (data) out.push(...data);
+        }
+        return out;
+      };
+
       // Resolver nombre de contacto: entidades_relacionadas → personas.
       const entIds = Array.from(new Set(rows.map((r) => r.id_entidad_relacionada).filter(Boolean)));
       const contactMap: Record<number, string> = {};
       if (entIds.length) {
-        const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-          .select("id, id_persona").in("id", entIds);
-        const personaByEnt: Record<number, number> = Object.fromEntries((ents ?? []).map((e: any) => [e.id, e.id_persona]));
+        const ents = await fetchInChunks("entidades_relacionadas", "id, id_persona", "id", entIds);
+        const personaByEnt: Record<number, number> = Object.fromEntries(ents.map((e: any) => [e.id, e.id_persona]));
         const personaIds = Array.from(new Set(Object.values(personaByEnt).filter(Boolean)));
         if (personaIds.length) {
-          const { data: personas } = await (supabase as any).from("personas")
-            .select("id, nombre_legal, nombre_comercial").in("id", personaIds);
-          const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+          const personas = await fetchInChunks("personas", "id, nombre_legal, nombre_comercial", "id", personaIds);
+          const pName: Record<number, string> = Object.fromEntries(personas.map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
           for (const [entId, pId] of Object.entries(personaByEnt)) contactMap[Number(entId)] = pName[pId as number] ?? "Sin nombre";
         }
       }
 
-      // Resolver nombre del usuario asignado.
+      // Resolver nombre del usuario asignado (también en lotes).
       const userIds = Array.from(new Set(rows.map((r) => r.id_usuario_asignado).filter(Boolean)));
       let userMap: Record<string, string> = {};
       if (userIds.length) {
-        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", userIds);
-        userMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+        const us = await fetchInChunks("usuarios", "auth_user_id, nombre", "auth_user_id", userIds);
+        userMap = Object.fromEntries(us.map((u: any) => [u.auth_user_id, u.nombre]));
       }
 
       return rows.map((r) => ({
