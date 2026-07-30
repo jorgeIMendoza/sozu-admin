@@ -263,24 +263,17 @@ function DetailPanel({ row, onClose, onEditComprador }: {
         return;
       }
 
-      // Todos los compradores cumplen — actualización optimista
-      qcPanel.setQueryData(
-        ['expedientes-dashboard', row.proyectoId],
-        (old: ExpedienteRow[] | undefined) => {
-          if (!old) return old;
-          return old.map(r =>
-            r.cuentaId === row.cuentaId
-              ? { ...r, docsCompletos: OBLIGATORIO_GRUPOS.length, estatusExpediente: 'LISTO' as EstatusExpediente }
-              : r,
-          );
-        },
-      );
-
+      // Todos los compradores cumplen. OJO: el estatus documental es DERIVADO de los 5
+      // grupos obligatorios; no existe columna donde persistir un "listo" manual. Antes
+      // aquí se hacía un setQueryData optimista y acto seguido se invalidaba esa misma
+      // query, así que el conteo subía, la recarga traía el valor real y volvía a bajar:
+      // el usuario veía "81 listos" y al rato 77, con un toast de éxito que mentía.
+      // Ahora solo se revalida contra la base y se informa el estado real.
       await Promise.all([
         qcPanel.invalidateQueries({ queryKey: ['expedientes-dashboard', row.proyectoId] }),
         qcPanel.invalidateQueries({ queryKey: ['exp-docs-cuenta', row.cuentaId] }),
       ]);
-      toast.success('Expediente marcado como listo correctamente.');
+      toast.success('Documentos revalidados: este expediente cumple los 5 obligatorios y ya cuenta como listo.');
     } catch {
       toast.error('No fue posible actualizar el expediente. Intenta nuevamente.');
     } finally {
@@ -366,19 +359,12 @@ function DetailPanel({ row, onClose, onEditComprador }: {
     panelLatestByKey
   );
 
-  // Sincroniza docsCompletos en caché de tabla cuando el panel obtiene datos frescos.
-  useEffect(() => {
-    if (loadingDocs || !checklist.length) return;
-    qcPanel.setQueryData(
-      ['expedientes-dashboard', row.proyectoId],
-      (old: ExpedienteRow[] | undefined) => {
-        if (!old) return old;
-        return old.map(r =>
-          r.cuentaId === row.cuentaId ? { ...r, docsCompletos: obligatoriosCumplidos } : r,
-        );
-      },
-    );
-  }, [obligatoriosCumplidos, loadingDocs, checklist.length, row.cuentaId, row.proyectoId, qcPanel]);
+  // Antes el panel escribía su propio `docsCompletos` en el caché del dashboard. Eso hacía
+  // que abrir un expediente pudiera mover los KPIs sin que cambiara nada en la base: el
+  // panel y el cálculo masivo leen los documentos por caminos distintos (el panel trae
+  // todos los tipos y resuelve la fecha como `fecha_creacion ?? fecha_actualizacion`; el
+  // masivo filtra por tipo y trata la fecha nula como la más reciente). El estatus lo
+  // manda una sola fuente: el cálculo masivo del dashboard.
 
   return (
     <div className="w-[360px] min-w-[360px] bg-white border-l border-slate-200 flex flex-col overflow-hidden">
@@ -512,7 +498,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
                 ? <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
                 : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
               }
-              Marcar listo
+              Revalidar documentos
             </button>
             <button
               onClick={() => toast.info('Las observaciones se registran desde el perfil del comprador. Usa el botón de edición en la sección Compradores.')}
