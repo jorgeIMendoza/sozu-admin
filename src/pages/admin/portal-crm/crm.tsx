@@ -3279,120 +3279,55 @@ export function CrmTasks() {
   const [fPriority, setFPriority] = useState("all");
   const [fAssignee, setFAssignee] = useState("all");
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE = 50;
+  // Búsqueda con debounce (no consultar en cada tecla).
+  const [dSearch, setDSearch] = useState("");
+  useEffect(() => { const id = setTimeout(() => setDSearch(search.trim()), 300); return () => clearTimeout(id); }, [search]);
+  useEffect(() => { setPage(0); }, [tab, dSearch, fType, fPriority, fAssignee]);
+  // Args para los RPC de tareas (filtros server-side).
+  const rpcArgs = {
+    p_tab: tab,
+    p_search: dSearch || null,
+    p_tipo: fType !== "all" ? fType : null,
+    p_prioridad: fPriority !== "all" ? fPriority : null,
+    p_asignado: fAssignee !== "all" && fAssignee !== "none" ? fAssignee : null,
+    p_sin_asignar: fAssignee === "none",
+  };
+  const invalidateTasks = () => ["crm-tasks-global", "crm-tasks-conteos"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
-  const { data: tasks = [], isLoading } = useQuery<GlobalTask[]>({
-    queryKey: ["crm-tasks-global"],
+  // Lista paginada vía RPC: contact_name + assigned_name resueltos server-side (una sola query).
+  const { data: list, isLoading } = useQuery({
+    queryKey: ["crm-tasks-global", rpcArgs, page],
     queryFn: async () => {
-      const res = await (supabase as any).from("crm_tareas")
-        .select("id, titulo, tipo, prioridad, estatus, descripcion, fecha_vencimiento, fecha_recordatorio, recurrencia, fecha_creacion, id_entidad_relacionada, id_usuario_asignado")
-        .eq("activo", true)
-        .order("fecha_vencimiento", { ascending: true, nullsFirst: false })
-        .limit(1000);
-      if (res.error) return [];
-      const rows: any[] = res.data ?? [];
-      if (!rows.length) return [];
-
-      // Resolver en LOTES: con muchas tareas, un solo .in() con ~1000 ids genera una URL
-      // demasiado larga y PostgREST la rechaza (el contacto salía como "—"). Chunks de 150.
-      const fetchInChunks = async (table: string, cols: string, col: string, ids: any[]) => {
-        const out: any[] = [];
-        for (let i = 0; i < ids.length; i += 150) {
-          const { data } = await (supabase as any).from(table).select(cols).in(col, ids.slice(i, i + 150));
-          if (data) out.push(...data);
-        }
-        return out;
-      };
-
-      // Resolver nombre de contacto: entidades_relacionadas → personas.
-      const entIds = Array.from(new Set(rows.map((r) => r.id_entidad_relacionada).filter(Boolean)));
-      const contactMap: Record<number, string> = {};
-      if (entIds.length) {
-        const ents = await fetchInChunks("entidades_relacionadas", "id, id_persona", "id", entIds);
-        const personaByEnt: Record<number, number> = Object.fromEntries(ents.map((e: any) => [e.id, e.id_persona]));
-        const personaIds = Array.from(new Set(Object.values(personaByEnt).filter(Boolean)));
-        if (personaIds.length) {
-          const personas = await fetchInChunks("personas", "id, nombre_legal, nombre_comercial", "id", personaIds);
-          const pName: Record<number, string> = Object.fromEntries(personas.map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
-          for (const [entId, pId] of Object.entries(personaByEnt)) contactMap[Number(entId)] = pName[pId as number] ?? "Sin nombre";
-        }
-      }
-
-      // Resolver nombre del usuario asignado (también en lotes).
-      const userIds = Array.from(new Set(rows.map((r) => r.id_usuario_asignado).filter(Boolean)));
-      let userMap: Record<string, string> = {};
-      if (userIds.length) {
-        const us = await fetchInChunks("usuarios", "auth_user_id, nombre", "auth_user_id", userIds);
-        userMap = Object.fromEntries(us.map((u: any) => [u.auth_user_id, u.nombre]));
-      }
-
-      return rows.map((r) => ({
-        id: r.id,
-        titulo: r.titulo,
-        tipo: r.tipo,
-        prioridad: r.prioridad,
-        estatus: r.estatus,
-        descripcion: r.descripcion ?? null,
-        fecha_vencimiento: r.fecha_vencimiento,
-        fecha_recordatorio: r.fecha_recordatorio ?? null,
-        recurrencia: r.recurrencia ?? null,
-        fecha_creacion: r.fecha_creacion,
-        id_entidad_relacionada: r.id_entidad_relacionada,
-        id_usuario_asignado: r.id_usuario_asignado,
-        contact_name: contactMap[r.id_entidad_relacionada] ?? null,
-        assigned_name: r.id_usuario_asignado ? (userMap[r.id_usuario_asignado] ?? null) : null,
-      }));
+      const res = await (supabase as any).rpc("get_crm_tareas", { ...rpcArgs, p_limit: PAGE, p_offset: page * PAGE });
+      if (res.error) throw res.error;
+      const rows = (res.data ?? []) as GlobalTask[];
+      const total = Number((res.data?.[0] as any)?.total_count ?? 0);
+      return { rows, total };
     },
   });
+  const tasks: GlobalTask[] = list?.rows ?? [];
+  const total = list?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE));
 
   const isDone = (t: GlobalTask) => t.estatus === "completada";
 
-  // Conteos por pestaña (siempre sobre tareas no completadas, salvo "Todo").
-  const counts = useMemo(() => {
-    const c = { all: tasks.length, today: 0, overdue: 0, upcoming: 0 };
-    for (const t of tasks) {
-      if (isDone(t) || !t.fecha_vencimiento) continue;
-      const d = parseISO(t.fecha_vencimiento);
-      if (isToday(d)) c.today++;
-      else if (isPast(d)) c.overdue++;
-      else if (isFuture(d)) c.upcoming++;
-    }
-    return c;
-  }, [tasks]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return tasks
-      .filter((t) => {
-        // Pestaña
-        if (tab !== "all") {
-          if (isDone(t)) return false;
-          if (!t.fecha_vencimiento) return false;
-          const d = parseISO(t.fecha_vencimiento);
-          if (tab === "today" && !isToday(d)) return false;
-          if (tab === "overdue" && !(isPast(d) && !isToday(d))) return false;
-          if (tab === "upcoming" && !isFuture(d)) return false;
-        }
-        if (fType !== "all" && t.tipo !== fType) return false;
-        if (fPriority !== "all" && t.prioridad !== fPriority) return false;
-        if (fAssignee !== "all") {
-          if (fAssignee === "none" && t.id_usuario_asignado) return false;
-          if (fAssignee !== "none" && t.id_usuario_asignado !== fAssignee) return false;
-        }
-        if (q && !(t.titulo?.toLowerCase().includes(q) || t.contact_name?.toLowerCase().includes(q))) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        // Ordenar por prioridad y luego por vencimiento.
-        const pa = TASK_PRIORITY_META[a.prioridad]?.order ?? 9;
-        const pb = TASK_PRIORITY_META[b.prioridad]?.order ?? 9;
-        if (pa !== pb) return pa - pb;
-        const da = a.fecha_vencimiento ?? "9999";
-        const db = b.fecha_vencimiento ?? "9999";
-        return da.localeCompare(db);
+  // Conteos por pestaña (server-side, RPC).
+  const { data: counts = { all_count: 0, today_count: 0, overdue_count: 0, upcoming_count: 0 } } = useQuery({
+    queryKey: ["crm-tasks-conteos", rpcArgs],
+    queryFn: async () => {
+      const res = await (supabase as any).rpc("get_crm_tareas_conteos", {
+        p_search: rpcArgs.p_search, p_tipo: rpcArgs.p_tipo, p_prioridad: rpcArgs.p_prioridad,
+        p_asignado: rpcArgs.p_asignado, p_sin_asignar: rpcArgs.p_sin_asignar,
       });
-  }, [tasks, tab, search, fType, fPriority, fAssignee]);
+      return res.data?.[0] ?? { all_count: 0, today_count: 0, overdue_count: 0, upcoming_count: 0 };
+    },
+  });
+
+  const filtered = tasks; // el RPC ya filtra, ordena y pagina server-side.
 
   const toggleComplete = useMutation({
     mutationFn: async (t: GlobalTask) => {
@@ -3404,7 +3339,7 @@ export function CrmTasks() {
       if (completing && t.recurrencia && t.fecha_vencimiento) await regenerateRecurringTask(t);
     },
     onSuccess: (_d, t) => {
-      qc.invalidateQueries({ queryKey: ["crm-tasks-global"] });
+      invalidateTasks();
       if (!isDone(t) && t.recurrencia) toast.success("Tarea completada · se generó la siguiente");
     },
     onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
@@ -3415,15 +3350,15 @@ export function CrmTasks() {
       const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }); toast.success("Tarea eliminada"); },
+    onSuccess: () => { invalidateTasks(); toast.success("Tarea eliminada"); },
     onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
   });
 
   const TASK_TABS = [
-    { id: "all" as const, label: "Todo", count: counts.all },
-    { id: "today" as const, label: "Vencen hoy", count: counts.today },
-    { id: "overdue" as const, label: "Atrasado", count: counts.overdue },
-    { id: "upcoming" as const, label: "Próximamente", count: counts.upcoming },
+    { id: "all" as const, label: "Todo", count: Number(counts.all_count) },
+    { id: "today" as const, label: "Vencen hoy", count: Number(counts.today_count) },
+    { id: "overdue" as const, label: "Atrasado", count: Number(counts.overdue_count) },
+    { id: "upcoming" as const, label: "Próximamente", count: Number(counts.upcoming_count) },
   ];
 
   const hasFilters = search || fType !== "all" || fPriority !== "all" || fAssignee !== "all";
@@ -3434,14 +3369,14 @@ export function CrmTasks() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Tareas</h1>
-          <p className="text-sm text-muted-foreground">{tasks.length} tarea{tasks.length === 1 ? "" : "s"} en total · {counts.overdue} atrasada{counts.overdue === 1 ? "" : "s"}</p>
+          <p className="text-sm text-muted-foreground">{total} tarea{total === 1 ? "" : "s"} en total · {Number(counts.overdue_count)} atrasada{Number(counts.overdue_count) === 1 ? "" : "s"}</p>
         </div>
         <NewGlobalTaskDialog
           open={open}
           onOpenChange={setOpen}
           owners={owners}
           defaultAssignee={user?.id ?? ""}
-          onCreated={() => qc.invalidateQueries({ queryKey: ["crm-tasks-global"] })}
+          onCreated={() => invalidateTasks()}
         />
       </div>
 
@@ -3583,6 +3518,17 @@ export function CrmTasks() {
           </table>
         )}
       </div>
+
+      {/* Paginación (server-side) */}
+      {total > PAGE && (
+        <div className="flex items-center justify-between text-sm pt-1">
+          <span className="text-muted-foreground">Página {page + 1} de {totalPages} · {total} tareas</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Anterior</Button>
+            <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
