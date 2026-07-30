@@ -203,7 +203,16 @@ export default function CollectionPayments() {
     }
   }, [projectId, projects]);
 
-  const refetchPayments = () => queryClient.invalidateQueries({ queryKey: ['relacion-pagos'] });
+  // Página y totales viven en claves distintas ('relacion-pagos' / 'relacion-pagos-totales'),
+  // así que se invalidan las dos por prefijo. El recálculo de aplicaciones corre async del
+  // lado servidor: se repite la invalidación tras 2 s para tomar el reparto nuevo.
+  const refetchPayments = () => {
+    const invalidar = () => queryClient.invalidateQueries({
+      predicate: q => String(q.queryKey[0]).startsWith('relacion-pagos'),
+    });
+    invalidar();
+    setTimeout(invalidar, 2000);
+  };
 
   // Abrir confirmación de borrado + precargar impacto.
   const openDelete = (r: PagoRecord) => {
