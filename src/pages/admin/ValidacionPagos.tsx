@@ -24,16 +24,19 @@ import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from "@/hooks/use
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
+import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
-const IN_CHUNK = 500;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface PagoRow {
   pago_id: number;
   cuenta_id: number;
+  // Folio canónico (CC-/CCP-/CM-) que ya resuelve la RPC.
+  cuenta_folio: string | null;
   proyecto: string;
   numero_propiedad: string | null;
   cliente: string;
@@ -50,7 +53,12 @@ interface PagoRow {
   motivo: string | null;
   monto_esperado: number | null;
   monto_real: number | null;
+  // Etiqueta legible (nombre del producto cuando existe).
   tipo_nombre: string;
+  // Categoría canónica, la misma que usan CC y RP.
+  tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional';
+  estado_pago: 'pagado' | 'parcial' | 'sin_aplicar' | null;
+  monto_aplicado: number;
   id_estatus_disponibilidad: number | null;
   id_propiedad: number | null;
 }
@@ -107,48 +115,20 @@ function fmtDate(s: string | null | undefined) {
   });
 }
 
-function tipoCategoria(tipoNombre: string): string {
-  if (tipoNombre === "Propiedad") return "Propiedades";
-  if (tipoNombre === "Adicional") return "Adicional";
-  const t = tipoNombre.toLowerCase();
-  if (t.includes("bodega")) return "Bodegas";
-  if (t.includes("estacionamiento") || t.includes("cajón") || t.includes("cajon")) return "Estacionamientos";
-  if (t.includes("paquete")) return "Paquetes amueblados";
-  if (t.includes("condensadora")) return "Condensadoras";
-  if (t.includes("persiana") || t.includes("cortina")) return "Persianas/Cortinas";
-  return "Otros";
-}
+// Categorías canónicas de cobranza (idénticas a CC y RP). La subclasificación por
+// nombre de producto (condensadoras, paquetes, persianas…) se dejó de usar como filtro:
+// hacía que Validación hablara un idioma distinto al de las otras dos pantallas.
+const TIPO_CATEGORIAS = ['Propiedad', 'Bodega', 'Estacionamiento', 'Producto', 'Mantenimiento', 'Adicional'] as const;
 
-function tipoBadgeClass(tipo: string): string {
-  const cat = tipoCategoria(tipo);
-  if (cat === "Propiedades") return "border-sky-200 bg-sky-50 text-sky-700";
-  if (cat === "Adicional") return "border-violet-200 bg-violet-50 text-violet-700";
-  if (cat === "Bodegas") return "border-amber-200 bg-amber-50 text-amber-700";
-  if (cat === "Estacionamientos") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (cat === "Paquetes amueblados") return "border-purple-200 bg-purple-50 text-purple-700";
-  if (cat === "Condensadoras") return "border-zinc-200 bg-zinc-100 text-zinc-600";
-  if (cat === "Persianas/Cortinas") return "border-orange-200 bg-orange-50 text-orange-700";
-  return "border-teal-200 bg-teal-50 text-teal-700";
-}
-
-/** Chunked .in() query — avoids PostgREST URL length limit with large ID sets. */
-async function inQuery(
-  table: string,
-  idCol: string,
-  ids: number[],
-  select: string,
-  filters: Record<string, unknown> = {}
-): Promise<any[]> {
-  if (!ids.length) return [];
-  const chunks = Math.ceil(ids.length / IN_CHUNK);
-  const results = await Promise.all(
-    Array.from({ length: chunks }, (_, i) => {
-      let q = (supabase as any).from(table).select(select).in(idCol, ids.slice(i * IN_CHUNK, (i + 1) * IN_CHUNK));
-      for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
-      return q;
-    })
-  );
-  return results.flatMap(r => r.data ?? []);
+function tipoBadgeClass(categoria: string): string {
+  return ({
+    Propiedad:       "border-sky-200 bg-sky-50 text-sky-700",
+    Bodega:          "border-amber-200 bg-amber-50 text-amber-700",
+    Estacionamiento: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    Producto:        "border-violet-200 bg-violet-50 text-violet-700",
+    Mantenimiento:   "border-teal-200 bg-teal-50 text-teal-700",
+    Adicional:       "border-indigo-200 bg-indigo-50 text-indigo-700",
+  } as Record<string, string>)[categoria] ?? "border-border bg-muted/40 text-muted-foreground";
 }
 
 function EstadoBadge({ estado }: { estado: PagoRow["estado_validacion"] }) {
@@ -304,9 +284,9 @@ function PagoDetalleModal({ pagoId, pagoRow, onClose }: {
         <DialogHeader className="px-5 py-3 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2 text-[14px]">
             <Receipt className="size-4 text-muted-foreground" />Detalle de pago
-            {pagoRow && <span className="text-muted-foreground font-normal ml-1">— {formatCuentaCobranzaId(pagoRow.cuenta_id)}</span>}
+            {pagoRow && <span className="text-muted-foreground font-normal ml-1">— {pagoRow.cuenta_folio ?? formatCuentaCobranzaId(pagoRow.cuenta_id)}</span>}
             {pagoRow && (
-              <Badge variant="outline" className={cn("text-[10px] ml-1", tipoBadgeClass(pagoRow.tipo_nombre))}>
+              <Badge variant="outline" className={cn("text-[10px] ml-1", tipoBadgeClass(pagoRow.tipo_categoria))}>
                 {pagoRow.tipo_nombre}
               </Badge>
             )}
@@ -547,7 +527,7 @@ function EditPagoValidacionModal({ row, onClose }: {
         </DialogHeader>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="rounded-xl border bg-muted/20 p-3 space-y-0.5">
-            <p className="text-[11px] text-muted-foreground">Cuenta: <span className="font-medium text-foreground">{row ? formatCuentaCobranzaId(row.cuenta_id) : "-"}</span></p>
+            <p className="text-[11px] text-muted-foreground">Cuenta: <span className="font-medium text-foreground">{row ? (row.cuenta_folio ?? formatCuentaCobranzaId(row.cuenta_id)) : "-"}</span></p>
             <p className="text-[11px] text-muted-foreground">Monto: <span className="font-medium text-foreground tabular-nums">{row ? fmtCurrency(row.monto) : "-"}</span></p>
             <p className="text-[11px] text-muted-foreground">Fecha: <span className="font-medium text-foreground">{row ? fmtDate(row.fecha_pago) : "-"}</span></p>
           </div>
@@ -680,7 +660,7 @@ function CargarEvidenciaModal({ row, onClose }: {
         <div className="px-5 py-4 space-y-4">
           {row && (
             <div className="rounded-xl border bg-muted/20 p-3 space-y-0.5">
-              <p className="text-[11px] text-muted-foreground">Cuenta: <span className="font-medium text-foreground">{formatCuentaCobranzaId(row.cuenta_id)}</span></p>
+              <p className="text-[11px] text-muted-foreground">Cuenta: <span className="font-medium text-foreground">{row.cuenta_folio ?? formatCuentaCobranzaId(row.cuenta_id)}</span></p>
               <p className="text-[11px] text-muted-foreground">Monto: <span className="font-medium text-foreground tabular-nums">{fmtCurrency(row.monto)}</span></p>
               <p className="text-[11px] text-muted-foreground">Fecha: <span className="font-medium text-foreground">{fmtDate(row.fecha_pago)}</span></p>
             </div>
@@ -823,247 +803,149 @@ export default function ValidacionPagos() {
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
-  const { data: queryData, isLoading, isError } = useQuery({
+  const { canView } = usePermissions();
+
+  // La RPC valida permisos por dentro (ERRCODE 42501 → HTTP 403). Se comprueba antes
+  // para no disparar una carga condenada, y un 403 no se reintenta.
+  const puedeVerValidacion = canView('/admin/validacion-pagos')
+    || canView('/admin/portal-cobranza/relacion-pagos');
+
+  const { data: queryData, isLoading, isError, error: queryError } = useQuery({
     queryKey: ["validacion-pagos-all-v2"],
+    enabled: puedeVerValidacion,
+    retry: retrySalvoSinPermiso,
     staleTime: 1000 * 60 * 5,
     queryFn: async (): Promise<{ rows: PagoRow[]; readiness: Map<number, boolean> }> => {
-      const { count: totalPagos } = await (supabase as any)
-        .from("pagos").select("*", { count: "exact", head: true }).eq("activo", true);
-
-      const numChunks = Math.max(1, Math.ceil((totalPagos ?? 0) / CHUNK));
-
-      const [pagoChunks, metodosRes] = await Promise.all([
-        Promise.all(
-          Array.from({ length: numChunks }, (_, i) =>
-            (supabase as any).from("pagos")
-              .select("id, id_cuenta_cobranza, monto, fecha_pago, id_metodos_pago, clave_rastreo, url_cep, url_recibo, descripcion, validacion_documental_efectivo")
-              .eq("activo", true)
-              .order("fecha_pago", { ascending: false })
-              .range(i * CHUNK, (i + 1) * CHUNK - 1)
-          )
-        ),
-        supabase.from("metodos_pago").select("id, nombre"),
-      ]);
-
-      const allPagos: any[] = pagoChunks.flatMap(r => r.data ?? []);
-      const metodoMap = new Map<number, string>((metodosRes.data ?? []).map((m: any) => [m.id, m.nombre]));
-
-      if (!allPagos.length) return [];
-
-      const pagoIds = allPagos.map(p => p.id as number);
-      const cuentaIds = [...new Set(allPagos.map(p => p.id_cuenta_cobranza as number).filter(Boolean))];
-
-      const [validacionesRaw, cuentas] = await Promise.all([
-        inQuery("pago_validaciones", "id_pago", pagoIds,
-          "id_pago, estado, motivo, monto_esperado, monto_real, fecha_creacion"),
-        inQuery("cuentas_cobranza", "id", cuentaIds,
-          "id, id_oferta, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true }),
-      ]);
-
-      validacionesRaw.sort((a: any, b: any) =>
-        new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime()
-      );
-      const validacionMap = new Map<number, any>();
-      for (const v of validacionesRaw) {
-        const pid = Number(v.id_pago);
-        if (!validacionMap.has(pid)) validacionMap.set(pid, v);
-      }
-
-      // Cuentas hija (bodegas/estac/adicionales) heredan proyecto+unidad de su cuenta padre
-      const cuentaParentMap = new Map<number, number>(
-        cuentas
-          .filter((c: any) => c.id_cuenta_cobranza_padre != null)
-          .map((c: any) => [c.id as number, c.id_cuenta_cobranza_padre as number])
-      );
-      const cuentaIdsSet = new Set(cuentaIds);
-      const missingParentIds = [...new Set([...cuentaParentMap.values()])].filter(id => !cuentaIdsSet.has(id));
-      const parentCuentas = missingParentIds.length
-        ? await inQuery("cuentas_cobranza", "id", missingParentIds, "id, id_oferta, id_propiedad, precio_final", { activo: true })
-        : [];
-      const allCuentas = [...cuentas, ...parentCuentas];
-
-      const cuentaOfertaMap = new Map<number, number>(
-        allCuentas.filter((c: any) => c.id_oferta != null).map((c: any) => [c.id, c.id_oferta])
-      );
-      const cuentaPropDirectMap = new Map<number, number>(
-        allCuentas.filter((c: any) => c.id_propiedad != null).map((c: any) => [c.id, c.id_propiedad])
-      );
-      const cuentaEsHijaMap = new Map<number, boolean>(
-        cuentas.map((c: any) => [c.id, c.id_cuenta_cobranza_padre != null])
-      );
-      const ofertaIds = [...new Set(allCuentas.map((c: any) => c.id_oferta as number).filter(Boolean))];
-
-      // Fetch ofertas with id_producto to determine type name
-      const [ofertas, compradoresRaw] = await Promise.all([
-        inQuery("ofertas", "id", ofertaIds, "id, id_propiedad, id_producto", { activo: true }),
-        inQuery("compradores", "id_cuenta_cobranza", cuentaIds,
-          "id_cuenta_cobranza, id_persona, porcentaje_copropiedad", { activo: true }),
-      ]);
-
-      const ofertaPropMap = new Map<number, number>(ofertas.map((o: any) => [o.id, o.id_propiedad]));
-      const ofertaProductoMap = new Map<number, number>(
-        ofertas.filter((o: any) => o.id_producto != null).map((o: any) => [o.id, o.id_producto])
-      );
-
-      // Fetch product names
-      const productoIds = [...new Set([...ofertaProductoMap.values()])];
-      const productos = productoIds.length
-        ? await inQuery("productos_servicios", "id", productoIds, "id, nombre")
-        : [];
-      const productoNombreMap = new Map<number, string>(productos.map((p: any) => [p.id, p.nombre]));
-
-      compradoresRaw.sort((a: any, b: any) => (b.porcentaje_copropiedad ?? 0) - (a.porcentaje_copropiedad ?? 0));
-      const compradorMap = new Map<number, number>();
-      for (const c of compradoresRaw) {
-        if (!compradorMap.has(c.id_cuenta_cobranza)) compradorMap.set(c.id_cuenta_cobranza, c.id_persona);
-      }
-
-      const propIds = [...new Set([
-        ...ofertas.map((o: any) => o.id_propiedad as number),
-        ...[...cuentaPropDirectMap.values()],
-      ].filter(Boolean) as number[])];
-      const personaIds = [...new Set([...compradorMap.values()])];
-
-      const [props, personas] = await Promise.all([
-        inQuery("propiedades", "id", propIds, "id, id_edificio_modelo, numero_propiedad, id_estatus_disponibilidad", { activo: true }),
-        inQuery("personas", "id", personaIds, "id, nombre_legal"),
-      ]);
-
-      const propEMMap = new Map<number, number>(props.map((p: any) => [p.id, p.id_edificio_modelo]));
-      const propNumMap = new Map<number, string>(props.map((p: any) => [p.id, p.numero_propiedad]));
-      const propEstatusMap = new Map<number, number>(props.map((p: any) => [p.id, p.id_estatus_disponibilidad]));
-      const personaMap = new Map<number, string>(personas.map((p: any) => [p.id, p.nombre_legal]));
-
-      const emIds = [...new Set(props.map((p: any) => p.id_edificio_modelo as number).filter(Boolean))];
-      const ems = await inQuery("edificios_modelos", "id", emIds, "id, id_edificio");
-      const emEdifMap = new Map<number, number>(ems.map((e: any) => [e.id, e.id_edificio]));
-
-      const edificioIds = [...new Set(ems.map((e: any) => e.id_edificio as number).filter(Boolean))];
-      const edificios = await inQuery("edificios", "id", edificioIds, "id, id_proyecto");
-      const edificioProjMap = new Map<number, number>(edificios.map((e: any) => [e.id, e.id_proyecto]));
-
-      const proyectoIds = [...new Set(edificios.map((e: any) => e.id_proyecto as number).filter(Boolean))];
-      const proyectos = await inQuery("proyectos", "id", proyectoIds, "id, nombre");
-      const proyectoMap = new Map<number, string>(proyectos.map((p: any) => [p.id, p.nombre]));
-
-      const rows: PagoRow[] = allPagos.map(p => {
-        const v = validacionMap.get(p.id);
-        const cId = p.id_cuenta_cobranza as number;
-        const parentId = cuentaParentMap.get(cId);
-        const ofertaId = cuentaOfertaMap.get(cId) ?? (parentId ? cuentaOfertaMap.get(parentId) : undefined);
-        const propId = (ofertaId ? ofertaPropMap.get(ofertaId) : undefined)
-          ?? cuentaPropDirectMap.get(cId)
-          ?? (parentId ? cuentaPropDirectMap.get(parentId) : undefined);
-        const emId = propId ? propEMMap.get(propId) : undefined;
-        const edificioId = emId ? emEdifMap.get(emId) : undefined;
-        const proyectoId = edificioId ? edificioProjMap.get(edificioId) : undefined;
-        const personaId = compradorMap.get(cId);
-        const esHija = cuentaEsHijaMap.get(cId) ?? false;
-
-        // Resolve tipo_nombre: product name > "Propiedad" > "Adicional"
-        let tipo_nombre = "Adicional";
-        if (!esHija && ofertaId) {
-          const prodId = ofertaProductoMap.get(ofertaId);
-          if (prodId) tipo_nombre = productoNombreMap.get(prodId) ?? "Producto";
-          else tipo_nombre = "Propiedad";
+      // RPC propia de esta pantalla: `get_pcobranza_validacion_pagos`. Devuelve el pago
+      // con su contexto ya resuelto (misma regla que CC y RP, ver
+      // Ejecuciones_manuales/portal-cobranza/90_contrato_canonico_pagos.md).
+      //
+      // Paginado por keyset sobre `pago_id` (llave única): sin duplicados ni huecos y sin
+      // depender de un count. El esquema anterior (count:'exact' + N `.range()` en paralelo
+      // ordenados por `fecha_pago`, que no es única) perdía filas en los empates de fecha y
+      // truncaba todo a 1000 pagos si el count fallaba.
+      const fetchAllPagos = async (): Promise<any[]> => {
+        const out: any[] = [];
+        let afterId: number | null = null;
+        for (;;) {
+          const { data, error } = await (supabase as any).rpc('get_pcobranza_validacion_pagos', {
+            p_after_id: afterId,
+            p_limit: CHUNK,
+          });
+          if (error) throw error;
+          const page: any[] = (data?.pagos ?? []) as any[];
+          if (page.length === 0) return out;
+          out.push(...page);
+          afterId = page[page.length - 1].pago_id as number;
         }
+      };
 
-        return {
-          pago_id: p.id as number,
-          cuenta_id: cId,
-          proyecto: proyectoId ? (proyectoMap.get(proyectoId) ?? "-") : "-",
-          numero_propiedad: propId ? (propNumMap.get(propId) ?? null) : null,
-          cliente: personaId ? (personaMap.get(personaId) ?? "Sin comprador") : "Sin comprador",
-          monto: safeNum(p.monto),
-          fecha_pago: p.fecha_pago as string,
-          id_metodos_pago: p.id_metodos_pago as number,
-          metodo_nombre: metodoMap.get(p.id_metodos_pago) ?? "-",
-          clave_rastreo: p.clave_rastreo ?? null,
-          url_cep: p.url_cep ?? null,
-          url_recibo: p.url_recibo ?? null,
-          descripcion: p.descripcion ?? null,
-          validacion_documental_efectivo: p.validacion_documental_efectivo ?? false,
-          estado_validacion: (v?.estado ?? null) as PagoRow["estado_validacion"],
-          motivo: v?.motivo ?? null,
-          monto_esperado: v?.monto_esperado != null ? safeNum(v.monto_esperado) : null,
-          monto_real: v?.monto_real != null ? safeNum(v.monto_real) : null,
-          tipo_nombre,
-          id_estatus_disponibilidad: propId ? (propEstatusMap.get(propId) ?? null) : null,
-          id_propiedad: propId ?? null,
-        };
-      });
+      const pagosRaw = await fetchAllPagos();
+      if (!pagosRaw.length) return { rows: [], readiness: new Map<number, boolean>() };
+
+      pagosRaw.sort((a, b) =>
+        String(b.fecha_pago ?? "").localeCompare(String(a.fecha_pago ?? "")) || (b.pago_id - a.pago_id));
+
+      const rows: PagoRow[] = pagosRaw.map(p => ({
+        pago_id: p.pago_id as number,
+        cuenta_id: p.cuenta_id as number,
+        cuenta_folio: (p.cuenta_folio as string) ?? null,
+        proyecto: (p.proyecto as string) ?? "-",
+        numero_propiedad: (p.numero_propiedad as string) ?? null,
+        cliente: (p.cliente_nombre as string) ?? "Sin comprador",
+        monto: safeNum(p.monto),
+        fecha_pago: p.fecha_pago as string,
+        id_metodos_pago: p.id_metodos_pago as number,
+        metodo_nombre: (p.metodo_pago as string) ?? "-",
+        clave_rastreo: (p.clave_rastreo as string) ?? null,
+        url_cep: (p.url_cep as string) ?? null,
+        url_recibo: (p.url_recibo as string) ?? null,
+        descripcion: (p.descripcion as string) ?? null,
+        validacion_documental_efectivo: !!p.validacion_documental_efectivo,
+        estado_validacion: (p.estado_validacion ?? null) as PagoRow["estado_validacion"],
+        motivo: (p.validacion_motivo as string) ?? null,
+        monto_esperado: p.monto_esperado != null ? safeNum(p.monto_esperado) : null,
+        monto_real: p.monto_real != null ? safeNum(p.monto_real) : null,
+        // Categoría canónica (la misma de CC y RP). `tipo_nombre` queda como etiqueta
+        // legible: nombre del producto cuando existe.
+        tipo_categoria: (p.tipo_categoria as PagoRow["tipo_categoria"]) ?? "Propiedad",
+        tipo_nombre: (p.producto_nombre as string) ?? (p.tipo_categoria as string) ?? "Propiedad",
+        id_estatus_disponibilidad: (p.id_estatus_disponibilidad as number) ?? null,
+        id_propiedad: (p.propiedad_id as number) ?? null,
+        estado_pago: (p.estado_pago as PagoRow["estado_pago"]) ?? null,
+        monto_aplicado: p.monto_aplicado != null ? safeNum(p.monto_aplicado) : 0,
+      }));
 
       // ── Readiness "lista para escriturar" por unidad (propiedad) ─────────────
-      // Una unidad está lista si TODAS sus cuentas (propiedad + bodega/estac) están
-      // liquidadas (saldo ≤ $0.01) Y todos sus pagos están validados en "coincide";
-      // o como fallback si la propiedad ya tiene estatus escrituración (7).
+      // Una unidad está lista si TODAS sus cuentas (propiedad + bodega/estac/producto)
+      // están liquidadas Y todos sus pagos están validados en "coincide"; o como
+      // fallback si la propiedad ya tiene estatus escrituración (7).
+      // `liquidada` viene de la RPC de Cuentas de Cobranza, así que incluye cuentas SIN
+      // pagos (p.ej. bodega no abonada → unidad no lista).
       const VENDIDAS = new Set([5, 7, 8, 9]);
-      const vendidasPropIds = propIds.filter(pid => VENDIDAS.has(propEstatusMap.get(pid) ?? -1));
+      const propEstatus = new Map<number, number>();
+      for (const r of rows) {
+        if (r.id_propiedad != null && r.id_estatus_disponibilidad != null) {
+          propEstatus.set(r.id_propiedad, r.id_estatus_disponibilidad);
+        }
+      }
+      const vendidasPropIds = [...propEstatus.entries()]
+        .filter(([, est]) => VENDIDAS.has(est))
+        .map(([pid]) => pid);
+
       const readiness = new Map<number, boolean>();
-
       if (vendidasPropIds.length) {
-        // Todas las cuentas de cada propiedad vendida (incluye cuentas SIN pagos:
-        // p.ej. bodega/estac no abonados → cuenta no liquidada).
-        const cuentasPrincipales = await inQuery("cuentas_cobranza", "id_propiedad", vendidasPropIds,
-          "id, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true });
-        const cuentasHijas = cuentasPrincipales.length
-          ? await inQuery("cuentas_cobranza", "id_cuenta_cobranza_padre",
-              cuentasPrincipales.map((c: any) => c.id),
-              "id, id_propiedad, id_cuenta_cobranza_padre, precio_final", { activo: true })
-          : [];
-
-        const unitCuentas = new Map<number, any>();
-        for (const c of [...cuentasPrincipales, ...cuentasHijas]) unitCuentas.set(c.id, c);
-
-        // propId de cada cuenta: directo, o heredado del padre (cuentas hija)
-        const principalPropMap = new Map<number, number>(
-          cuentasPrincipales.filter((c: any) => c.id_propiedad != null).map((c: any) => [c.id, c.id_propiedad])
-        );
-        const cuentaToProp = new Map<number, number>();
-        for (const c of unitCuentas.values()) {
-          const pid = (c.id_propiedad ?? (c.id_cuenta_cobranza_padre ? principalPropMap.get(c.id_cuenta_cobranza_padre) : null)) as number | null;
-          if (pid != null) cuentaToProp.set(c.id, pid);
+        // "liquidada" sale de la MISMA RPC que alimenta Cuentas de Cobranza, así que el
+        // número es idéntico al que ve cobranza. Incluye cuentas sin pagos (p.ej. bodega
+        // no abonada → la unidad no está lista).
+        // `p_incluir_totales: false` a propósito: esta pantalla solo necesita las filas
+        // (propiedad_id + liquidada); pedir totales dispararía el barrido de KPIs del
+        // universo, que aquí no se usa.
+        const { data: ccData, error: ccError } = await (supabase as any)
+          .rpc('get_pcobranza_cuentas_cobranza', {
+            p_limit: 5000, p_offset: 0, p_incluir_totales: false,
+          });
+        // Sin permiso en Cuentas de Cobranza (403) se pierde solo el cálculo de "listas
+        // para escriturar"; los pagos que el usuario SÍ puede ver se siguen mostrando.
+        if (ccError) {
+          if (esSinPermiso(ccError)) return { rows, readiness: new Map<number, boolean>() };
+          throw ccError;
         }
+        const vendidasSet = new Set(vendidasPropIds);
+        // "Lista para escriturar" exige que la unidad NO deba nada, así que se pide
+        // `liquidada` Y `saldo_pendiente <= 0.01`. Solo con `liquidada` entrarían las 418
+        // cuentas con `precio_final = 0` (mantenimiento en su mayoría), que salen
+        // liquidada=true aunque tengan saldo por cobrar.
+        const cuentas = ((ccData?.cuentas ?? []) as any[])
+          .filter(c => c.propiedad_id != null && vendidasSet.has(Number(c.propiedad_id)))
+          .map(c => ({
+            cuenta_id: Number(c.cuenta_id),
+            propiedad_id: Number(c.propiedad_id),
+            liquidada: c.liquidada === true && Number(c.saldo_pendiente ?? 0) <= 0.01,
+          }));
 
-        // Total aplicado al precio (es_multa=false) por cuenta, vía sus pagos
-        const unitCuentaIds = new Set([...unitCuentas.keys()]);
-        const pagosDeUnidad = allPagos.filter(p => unitCuentaIds.has(p.id_cuenta_cobranza as number));
-        const pagoCuentaMap = new Map<number, number>(pagosDeUnidad.map(p => [p.id as number, p.id_cuenta_cobranza as number]));
-        const aplicaciones = await inQuery("aplicaciones_pago", "id_pago",
-          pagosDeUnidad.map(p => p.id as number), "id_pago, monto", { activo: true, es_multa: false });
-        const aplicadoByCuenta = new Map<number, number>();
-        for (const a of aplicaciones) {
-          const cId = pagoCuentaMap.get(Number(a.id_pago));
-          if (cId != null) aplicadoByCuenta.set(cId, (aplicadoByCuenta.get(cId) ?? 0) + safeNum(a.monto));
-        }
-
-        // Cuentas agrupadas por propiedad + estado de validación de pagos por propiedad
         const cuentasByProp = new Map<number, any[]>();
-        for (const c of unitCuentas.values()) {
-          const pid = cuentaToProp.get(c.id);
-          if (pid == null) continue;
+        for (const c of cuentas) {
+          const pid = c.propiedad_id as number;
           const arr = cuentasByProp.get(pid);
           if (arr) arr.push(c); else cuentasByProp.set(pid, [c]);
         }
+
         const valByProp = new Map<number, { total: number; coincide: number }>();
-        for (const p of pagosDeUnidad) {
-          const pid = cuentaToProp.get(p.id_cuenta_cobranza as number);
-          if (pid == null) continue;
-          const est = validacionMap.get(p.id)?.estado ?? null;
-          const acc = valByProp.get(pid) ?? { total: 0, coincide: 0 };
+        for (const r of rows) {
+          if (r.id_propiedad == null) continue;
+          const acc = valByProp.get(r.id_propiedad) ?? { total: 0, coincide: 0 };
           acc.total += 1;
-          if (est === "coincide") acc.coincide += 1;
-          valByProp.set(pid, acc);
+          if (r.estado_validacion === "coincide") acc.coincide += 1;
+          valByProp.set(r.id_propiedad, acc);
         }
 
         for (const pid of vendidasPropIds) {
           // Fallback: estatus escrituración (7) ya marcado en BD
-          if ((propEstatusMap.get(pid) ?? -1) === 7) { readiness.set(pid, true); continue; }
+          if (propEstatus.get(pid) === 7) { readiness.set(pid, true); continue; }
 
-          const cuentas = cuentasByProp.get(pid) ?? [];
-          const liquidada = cuentas.length > 0 && cuentas.every((c: any) =>
-            safeNum(c.precio_final) - (aplicadoByCuenta.get(c.id) ?? 0) <= 0.01
-          );
+          const cuentasProp = cuentasByProp.get(pid) ?? [];
+          const liquidada = cuentasProp.length > 0 && cuentasProp.every((c: any) => c.liquidada === true);
           const val = valByProp.get(pid);
           const todosCoincide = !!val && val.total > 0 && val.coincide === val.total;
 
@@ -1074,6 +956,9 @@ export default function ValidacionPagos() {
       return { rows, readiness };
     },
   });
+
+  // 403 de la RPC: se distingue de una falla de carga para no mandar a reintentar.
+  const sinPermisoValidacion = !puedeVerValidacion || esSinPermiso(queryError);
 
   const allRows = queryData?.rows ?? [];
   const readiness = queryData?.readiness ?? new Map<number, boolean>();
@@ -1103,7 +988,7 @@ export default function ValidacionPagos() {
     }
     if (filtroProyecto !== "todos") rows = rows.filter(r => r.proyecto === filtroProyecto);
     if (filtroMetodos.size > 0) rows = rows.filter(r => filtroMetodos.has(r.id_metodos_pago));
-    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(tipoCategoria(r.tipo_nombre)));
+    if (filtroTipos.size > 0) rows = rows.filter(r => filtroTipos.has(r.tipo_categoria));
     if (filtroComprobante === "con_cep") rows = rows.filter(r => r.url_cep !== null);
     if (filtroComprobante === "sin_cep") rows = rows.filter(r => r.url_cep === null);
     if (filtroComprobante === "sin_cep_con_recibo") rows = rows.filter(r => r.url_cep === null && r.url_recibo !== null);
@@ -1133,13 +1018,10 @@ export default function ValidacionPagos() {
   }, [allRows]);
 
   // Categories derived from product names — project filter narrows which appear
+  // Solo las categorías presentes, en el orden canónico de TIPO_CATEGORIAS.
   const tiposOptions = useMemo(() => {
-    const cats = [...new Set(allRows.map(r => tipoCategoria(r.tipo_nombre)))];
-    return cats.sort((a, b) => {
-      if (a === "Propiedades") return -1; if (b === "Propiedades") return 1;
-      if (a === "Adicional") return 1; if (b === "Adicional") return -1;
-      return a.localeCompare(b, "es");
-    });
+    const presentes = new Set(allRows.map(r => r.tipo_categoria));
+    return TIPO_CATEGORIAS.filter(c => presentes.has(c)) as unknown as string[];
   }, [allRows]);
 
   const filteredRows = useMemo(() => {
@@ -1722,6 +1604,13 @@ export default function ValidacionPagos() {
                     </div>
                   </TableCell>
                 </TableRow>
+              ) : sinPermisoValidacion ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="h-32 text-center text-sm text-muted-foreground">
+                    No tienes permiso para ver la validación de pagos. Si lo necesitas, pídelo
+                    al administrador del sistema.
+                  </TableCell>
+                </TableRow>
               ) : isError ? (
                 <TableRow>
                   <TableCell colSpan={11} className="h-32 text-center text-sm text-destructive">Error al cargar datos.</TableCell>
@@ -1738,11 +1627,11 @@ export default function ValidacionPagos() {
                 return (
                   <TableRow key={row.pago_id} className="hover:bg-muted/30 text-sm">
                     <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                      {formatCuentaCobranzaId(row.cuenta_id)}
+                      {row.cuenta_folio ?? formatCuentaCobranzaId(row.cuenta_id)}
                     </TableCell>
                     <TableCell><div className="font-medium text-foreground">{row.proyecto}</div></TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <Badge variant="outline" className={cn("text-[10px] whitespace-nowrap", tipoBadgeClass(row.tipo_nombre))}>
+                      <Badge variant="outline" className={cn("text-[10px] whitespace-nowrap", tipoBadgeClass(row.tipo_categoria))}>
                         {row.tipo_nombre}
                       </Badge>
                     </TableCell>
@@ -1877,7 +1766,7 @@ export default function ValidacionPagos() {
         isLoading={isDeleting}
         impacto={deleteImpacto}
         encabezado={deleteRow
-          ? `pago de ${fmtCurrency(deleteRow.monto)} de ${deleteRow.cliente} (${formatCuentaCobranzaId(deleteRow.cuenta_id)})`
+          ? `pago de ${fmtCurrency(deleteRow.monto)} de ${deleteRow.cliente} (${deleteRow.cuenta_folio ?? formatCuentaCobranzaId(deleteRow.cuenta_id)})`
           : undefined}
       />
     </div>

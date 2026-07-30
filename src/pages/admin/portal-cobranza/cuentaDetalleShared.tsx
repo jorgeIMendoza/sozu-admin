@@ -78,6 +78,8 @@ export function ClaveCopyable({ value }: { value: string | null | undefined }) {
 export function EstadoBadge({ estado }: { estado: string }) {
   const cfg = {
     pagado:    { label: 'Pagado',    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    parcial:   { label: 'Parcial',   cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    sin_aplicar: { label: 'Sin aplicar', cls: 'bg-slate-50 text-slate-600 border-slate-200' },
     vencido:   { label: 'Vencido',   cls: 'bg-red-50 text-red-700 border-red-200' },
     proximo:   { label: 'Próximo',   cls: 'bg-amber-50 text-amber-700 border-amber-200' },
     pendiente: { label: 'Pendiente', cls: 'bg-muted/50 text-muted-foreground border-border' },
