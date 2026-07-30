@@ -663,22 +663,39 @@ function AsignarAbogadoModal({
         }
       }
 
-      // 3. app_juridico_asignaciones (graceful — table may not exist)
+      // 3. asignaciones_juridico — exists in DB; use canonical table name.
+      // NOTE: Two separate mutations — application-level compensation, not a DB transaction.
+      //       A partial unique index (UNIQUE id_demanda WHERE estatus='ACTIVA') is proposed
+      //       in DDL Fase 1 to prevent two simultaneous active assignments.
       if (tablesJuridicoExist && row.demandaId) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const asignadoPor = session?.user?.email ?? 'sistema';
         if (isReasign) {
-          // Close previous assignment
           await (supabase as any)
-            .from('app_juridico_asignaciones')
+            .from('asignaciones_juridico')
             .update({ estatus: 'REASIGNADA' })
             .eq('id_demanda', row.demandaId)
             .eq('estatus', 'ACTIVA');
         }
-        await (supabase as any).from('app_juridico_asignaciones').insert({
-          id_demanda: row.demandaId,
-          id_perfil_juridico: perfilId,
-          es_responsable: true,
-          estatus: 'ACTIVA',
-        });
+        try {
+          await (supabase as any).from('asignaciones_juridico').insert({
+            id_demanda:         row.demandaId,
+            id_perfil_juridico: perfilId,
+            es_responsable:     true,
+            estatus:            'ACTIVA',
+            asignado_por:       asignadoPor,
+          });
+        } catch (insertErr) {
+          // Compensación: si el INSERT falla en reasignación, restaurar asignación anterior.
+          if (isReasign) {
+            await (supabase as any)
+              .from('asignaciones_juridico')
+              .update({ estatus: 'ACTIVA' })
+              .eq('id_demanda', row.demandaId)
+              .eq('estatus', 'REASIGNADA');
+          }
+          throw insertErr;
+        }
       }
 
       // 4. Timeline event

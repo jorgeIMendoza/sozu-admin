@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { PersonForm } from '@/components/admin/PersonForm';
+import { useBitacoraCuentaCobranza, useAppendBitacoraEntry } from '@/hooks/useBitacoraCuentaCobranza';
 import { NotariaExpedienteModal } from '@/components/admin/portal-notaria/NotariaExpedienteModal';
 import { NotariaPagosModal } from '@/components/admin/portal-notaria/NotariaPagosModal';
 import { NotariaCuentaDetalleSheet } from '@/components/admin/portal-notaria/NotariaCuentaDetalleSheet';
@@ -65,6 +67,7 @@ interface NotaryRow {
   cotizacionEstatus: CotizStatus;
   cotizacionTotal:   number | null;
   urlProyectoEscrit: string | null;
+  cotizacionUrl:     string | null;
   signingDate:       string | null;
   signingTime:       string | null;
   procesoId:         number | null;
@@ -284,6 +287,14 @@ export function AppNotariaDashboard() {
   const [notarioPickerOpen, setNotarioPickerOpen] = useState(false);
   const [showRegInfo,     setShowRegInfo]     = useState(false);
   const [expedienteDesarrolloOpen, setExpedienteDesarrolloOpen] = useState(false);
+  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+  const [commentText,       setCommentText]       = useState('');
+
+  // ── Bitácora (comentarios + actividad) — tabla genérica legal_flow_bitacora,
+  // ya usada por el módulo Legal Flow. Ligada a selectedRow (fijo mientras el
+  // panel está abierto); las acciones de fila usan `logBitacora` (más abajo).
+  const { entries: bitacoraEntries } = useBitacoraCuentaCobranza(selectedRow?.cuentaId ?? null);
+  const appendBitacora = useAppendBitacoraEntry(selectedRow?.cuentaId ?? null);
 
   // ── Projects ───────────────────────────────────────────────────────────────
   const { data: proyectos = [] } = useQuery({
@@ -589,14 +600,14 @@ export function AppNotariaDashboard() {
     return map;
   }, [creditosData]);
 
-  // ── app_notaria_proceso (new table, graceful fallback) ─────────────────────
+  // ── notaria_proceso (estado del flujo — sin URLs, ver documentos abajo) ────
   const { data: procesosData = [] } = useQuery({
-    queryKey: ['app-notaria-procesos', cuentaIds],
+    queryKey: ['notaria-procesos', cuentaIds],
     enabled: cuentaIds.length > 0,
     queryFn: async () => {
       try {
         const { data } = await (supabase as any)
-          .from('app_notaria_proceso')
+          .from('notaria_proceso')
           .select('*')
           .in('id_cuenta_cobranza', cuentaIds)
           .eq('activo', true);
@@ -612,6 +623,67 @@ export function AppNotariaDashboard() {
     for (const p of procesosData) map[p.id_cuenta_cobranza] = p;
     return map;
   }, [procesosData]);
+
+  // ── tipos_documento usados por Notaría (ids resueltos por nombre, no hardcodeados) ──
+  const NOTARIA_DOC_NOMBRES = [
+    'Proyecto de escritura',
+    'Cotización notarial',
+    'Certificado de libertad de gravamen',
+    'Recibo de pago predial',
+    'Recibo de pago SIAPA',
+    'Escritura',
+    'Sello del Registro Público de la Propiedad',
+  ] as const;
+
+  const { data: tiposDocData = [] } = useQuery({
+    queryKey: ['notaria-tipos-documento'],
+    staleTime: 30 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('tipos_documento')
+        .select('id, nombre')
+        .in('nombre', NOTARIA_DOC_NOMBRES as unknown as string[]);
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const tipoDocId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of tiposDocData) map[t.nombre] = t.id;
+    return map;
+  }, [tiposDocData]);
+
+  const tipoDocIds = useMemo(() => Object.values(tipoDocId), [tipoDocId]);
+
+  // ── documentos (archivos reales — proyecto de escritura, cotización, etc.) ─
+  const { data: documentosData = [] } = useQuery({
+    queryKey: ['notaria-documentos', cuentaIds, tipoDocIds],
+    enabled: cuentaIds.length > 0 && tipoDocIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('documentos')
+        .select('id, id_cuenta_cobranza, id_tipo_documento, url, fecha_creacion')
+        .in('id_cuenta_cobranza', cuentaIds as any)
+        .in('id_tipo_documento', tipoDocIds as any)
+        .eq('activo', true)
+        .order('fecha_creacion', { ascending: false });
+      return (data ?? []) as any[];
+    },
+  });
+
+  // Mapa cuentaId → tipoDocumentoId → documento vigente (el primero es el más
+  // reciente porque la query ya viene ordenada desc; no requiere columna
+  // "es_vigente", el historial completo queda disponible por fecha).
+  const documentosMap = useMemo(() => {
+    const map: Record<number, Record<number, any>> = {};
+    for (const d of documentosData) {
+      if (!map[d.id_cuenta_cobranza]) map[d.id_cuenta_cobranza] = {};
+      if (!map[d.id_cuenta_cobranza][d.id_tipo_documento]) {
+        map[d.id_cuenta_cobranza][d.id_tipo_documento] = d;
+      }
+    }
+    return map;
+  }, [documentosData]);
 
   // ── Signing appointments ───────────────────────────────────────────────────
   const personaIds = useMemo(() =>
@@ -662,6 +734,9 @@ export function AppNotariaDashboard() {
     const credito = creditosMap[c.id];
     const proceso = procesosMap[c.id];
     const cita    = citasMap[comp?.id_persona ?? -1];
+    const docsCuenta = documentosMap[c.id] ?? {};
+    const docProyecto   = tipoDocId['Proyecto de escritura']  ? docsCuenta[tipoDocId['Proyecto de escritura']]  : null;
+    const docCotizacion = tipoDocId['Cotización notarial']    ? docsCuenta[tipoDocId['Cotización notarial']]    : null;
 
     // Usa totales por propiedad: suma de TODAS las cuentas (bodega, estac., etc.)
     const montoPagado  = pagosSumByProp[c.id_propiedad] || 0;
@@ -705,14 +780,15 @@ export function AppNotariaDashboard() {
       voboBank,
       cotizacionEstatus: (proceso?.cotizacion_estatus ?? 'SIN_COTIZACION') as CotizStatus,
       cotizacionTotal:   proceso?.cotizacion_total ?? null,
-      urlProyectoEscrit: proceso?.url_proyecto_escritura ?? null,
+      urlProyectoEscrit: docProyecto?.url ?? null,
+      cotizacionUrl:     docCotizacion?.url ?? null,
       signingDate:       cita?.fecha ?? null,
       signingTime:       cita?.hora_inicio ?? null,
       procesoId:         proceso?.id ?? null,
       creditoId:         credito?.id ?? null,
       lastUpdatedAt:     proceso?.fecha_actualizacion ?? c.fecha_actualizacion ?? null,
     } satisfies NotaryRow;
-  }), [rawCuentas, pagosSumByProp, precioFinalByProp, creditosMap, procesosMap, citasMap]);
+  }), [rawCuentas, pagosSumByProp, precioFinalByProp, creditosMap, procesosMap, citasMap, documentosMap, tipoDocId]);
 
   // DEV debug
   if (import.meta.env.DEV) {
@@ -772,12 +848,27 @@ export function AppNotariaDashboard() {
   // ── Actions ────────────────────────────────────────────────────────────────
   const procesoTableExists = async () => {
     try {
-      await (supabase as any).from('app_notaria_proceso').select('id').limit(1);
+      await (supabase as any).from('notaria_proceso').select('id').limit(1);
       return true;
     } catch (_) {
-      toast.error('Tabla app_notaria_proceso no encontrada. Ejecuta el DDL en Ejecuciones_manuales/modulo_app_notaria.md');
+      toast.error('Tabla notaria_proceso no encontrada. Ejecuta el DDL en Ejecuciones_manuales/20260729_notaria_proceso_y_documentos.md');
       return false;
     }
+  };
+
+  // Bitácora ad-hoc (fuera del hook, porque estas acciones operan sobre `row`
+  // dinámico y no sobre `selectedRow` fijo — mismo mecanismo que usa
+  // useAppendBitacoraEntry internamente, ver src/hooks/useBitacoraCuentaCobranza.ts).
+  const logBitacora = async (idCuenta: number, tipo: 'nota' | 'validacion' | 'rechazo' | 'sistema', mensaje: string, idDocumento?: number) => {
+    await supabase.from('legal_flow_bitacora').insert({
+      id_cuenta_cobranza: idCuenta,
+      tipo,
+      mensaje,
+      scope: idDocumento ? 'documento' : 'expediente',
+      id_documento: idDocumento ?? null,
+      autor_email: profile?.email ?? 'desconocido',
+      autor_nombre: profile?.nombre ?? null,
+    });
   };
 
   const handleDownloadExp = (row: NotaryRow) => handleOpenExpediente(row);
@@ -787,12 +878,13 @@ export function AppNotariaDashboard() {
     if (!(await procesoTableExists())) return;
     const upd = { vobo_desarrollador: 'PENDIENTE', estatus: 'ENVIADO_A_VOBO_DESARROLLADOR' };
     if (row.procesoId) {
-      await (supabase as any).from('app_notaria_proceso').update(upd).eq('id', row.procesoId);
+      await (supabase as any).from('notaria_proceso').update(upd).eq('id', row.procesoId);
     } else {
-      await (supabase as any).from('app_notaria_proceso').insert({ id_cuenta_cobranza: row.cuentaId, id_notario: notarioId, ...upd });
+      await (supabase as any).from('notaria_proceso').insert({ id_cuenta_cobranza: row.cuentaId, id_notario: notarioId, ...upd });
     }
+    await logBitacora(row.cuentaId, 'sistema', 'Proyecto de escritura enviado a VoBo del desarrollador');
     toast.success('Enviado a VoBo desarrollador');
-    qc.invalidateQueries({ queryKey: ['app-notaria-procesos'] });
+    qc.invalidateQueries({ queryKey: ['notaria-procesos'] });
   };
 
   const handleSendVoboBank = async (row: NotaryRow) => {
@@ -801,15 +893,16 @@ export function AppNotariaDashboard() {
     if (!(await procesoTableExists())) return;
     const upd = { vobo_banco: 'PENDIENTE', estatus: 'ENVIADO_A_VOBO_BANCO' };
     if (row.procesoId) {
-      await (supabase as any).from('app_notaria_proceso').update(upd).eq('id', row.procesoId);
+      await (supabase as any).from('notaria_proceso').update(upd).eq('id', row.procesoId);
     } else {
-      await (supabase as any).from('app_notaria_proceso').insert({ id_cuenta_cobranza: row.cuentaId, id_notario: notarioId, ...upd });
+      await (supabase as any).from('notaria_proceso').insert({ id_cuenta_cobranza: row.cuentaId, id_notario: notarioId, ...upd });
     }
     if (row.creditoId) {
       await supabase.from('creditos_hipotecarios').update({ vobo_banco: 'PENDIENTE' } as any).eq('id', row.creditoId);
     }
+    await logBitacora(row.cuentaId, 'sistema', 'Proyecto de escritura enviado a VoBo del banco hipotecario');
     toast.success('Enviado a VoBo banco');
-    qc.invalidateQueries({ queryKey: ['app-notaria-procesos', 'app-notaria-creditos'] });
+    qc.invalidateQueries({ queryKey: ['notaria-procesos', 'app-notaria-creditos'] });
   };
 
   const isLoading = loadingCuentas;
@@ -1330,12 +1423,12 @@ export function AppNotariaDashboard() {
                       {[
                         { label: 'Descargar expediente',   icon: Download,     action: () => handleDownloadExp(selectedRow) },
                         { label: 'Descargar rel. pagos',   icon: Receipt,      action: () => handleOpenPagos(selectedRow) },
-                        { label: 'Subir proy. escritura',  icon: Upload,       action: () => toast.info('Ejecuta el DDL en modulo_app_notaria.md') },
+                        { label: 'Subir proy. escritura',  icon: Upload,       action: () => setDetailTab('documentos') },
                         { label: 'Enviar VoBo dev.',        icon: Send,         action: () => handleSendVoboDev(selectedRow) },
                         { label: 'Enviar VoBo banco',       icon: Landmark,     action: () => handleSendVoboBank(selectedRow) },
-                        { label: 'Subir cotización',        icon: FileText,     action: () => toast.info('Ejecuta el DDL en modulo_app_notaria.md') },
+                        { label: 'Subir cotización',        icon: FileText,     action: () => setDetailTab('documentos') },
                         { label: 'Ver en Workflow',         icon: ChevronRight, action: () => navigate('/admin/portal-escrituracion/workflow') },
-                        { label: 'Agregar comentario',      icon: MessageSquare,action: () => toast.info('Requiere DDL app_notaria_actividad') },
+                        { label: 'Agregar comentario',      icon: MessageSquare,action: () => setCommentDialogOpen(true) },
                       ].map(({ label, icon: Icon, action }) => (
                         <button
                           key={label}
@@ -1347,6 +1440,24 @@ export function AppNotariaDashboard() {
                         </button>
                       ))}
                     </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Actividad reciente</h3>
+                    {bitacoraEntries.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Sin actividad registrada todavía.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {[...bitacoraEntries].reverse().slice(0, 8).map(entry => (
+                          <div key={entry.id} className="text-xs border-l-2 border-border pl-2">
+                            <p className="text-foreground leading-snug">{entry.titulo ?? entry.mensaje}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {entry.autorNombre ?? entry.autorEmail} · {fmtDate(entry.timestamp)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 </>
               )}
@@ -1491,8 +1602,13 @@ export function AppNotariaDashboard() {
                     {selectedRow.cotizacionTotal != null && (
                       <p className="text-sm font-semibold tabular-nums">{fmtMxn(selectedRow.cotizacionTotal)}</p>
                     )}
+                    {selectedRow.cotizacionUrl && (
+                      <a href={selectedRow.cotizacionUrl} target="_blank" rel="noreferrer" className="text-xs text-primary flex items-center gap-1 mt-1">
+                        <ExternalLink className="h-3 w-3" /> Ver documento
+                      </a>
+                    )}
                     {selectedRow.cotizacionEstatus === 'SIN_COTIZACION' && (
-                      <button onClick={() => toast.info('Ejecuta el DDL en modulo_app_notaria.md')} className="text-xs text-primary flex items-center gap-1 mt-1">
+                      <button onClick={() => setDetailTab('documentos')} className="text-xs text-primary flex items-center gap-1 mt-1">
                         <Upload className="h-3 w-3" /> Subir cotización
                       </button>
                     )}
@@ -1516,23 +1632,35 @@ export function AppNotariaDashboard() {
                         </a>
                       </div>
                     ) : null}
-                    <label className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-primary/40 text-xs text-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                    <label className={cn(
+                      'flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed text-xs transition-colors cursor-pointer',
+                      tipoDocId['Proyecto de escritura'] ? 'border-primary/40 text-primary hover:bg-primary/5' : 'border-muted-foreground/30 text-muted-foreground cursor-not-allowed',
+                    )}>
                       <Upload className="h-3.5 w-3.5" />
                       {selectedRow.urlProyectoEscrit ? 'Reemplazar proyecto de escritura' : 'Subir proyecto de escritura'}
-                      <input type="file" accept=".pdf,.docx,.doc" className="hidden" onChange={async e => {
+                      <input type="file" accept=".pdf,.docx,.doc" className="hidden" disabled={!tipoDocId['Proyecto de escritura']} onChange={async e => {
                         const file = e.target.files?.[0];
                         if (!file) return;
+                        const idTipo = tipoDocId['Proyecto de escritura'];
+                        if (!idTipo) { toast.error('Tipo de documento "Proyecto de escritura" no encontrado. Ejecuta el DDL en Ejecuciones_manuales/20260729_notaria_proceso_y_documentos.md'); return; }
                         const path = `proyectos_escritura/${selectedRow.cuentaId}/${file.name}`;
                         const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
                         if (error) { toast.error('Error al subir el archivo: ' + error.message); return; }
                         const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(path);
+                        const { data: docIns } = await supabase.from('documentos')
+                          .insert({ id_cuenta_cobranza: selectedRow.cuentaId, id_tipo_documento: idTipo, url: urlData.publicUrl })
+                          .select('id').single();
+                        const upd = { vobo_desarrollador: 'NO_ENVIADO', estatus: 'PROYECTO_EN_ELABORACION' };
                         if (selectedRow.procesoId) {
-                          await (supabase as any).from('app_notaria_proceso')
-                            .update({ url_proyecto_escritura: urlData.publicUrl, vobo_desarrollador: 'NO_ENVIADO', fecha_actualizacion: new Date().toISOString() })
-                            .eq('id', selectedRow.procesoId);
+                          await (supabase as any).from('notaria_proceso').update(upd).eq('id', selectedRow.procesoId);
+                        } else {
+                          await (supabase as any).from('notaria_proceso').insert({ id_cuenta_cobranza: selectedRow.cuentaId, id_notario: notarioId, ...upd });
                         }
+                        await logBitacora(selectedRow.cuentaId, 'nota', `Proyecto de escritura subido (${file.name})`, docIns?.id);
                         toast.success('Proyecto de escritura subido correctamente');
                         qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
+                        qc.invalidateQueries({ queryKey: ['notaria-documentos'] });
+                        qc.invalidateQueries({ queryKey: ['notaria-procesos'] });
                       }} />
                     </label>
                   </div>
@@ -1544,22 +1672,40 @@ export function AppNotariaDashboard() {
                       Estatus: <span className="font-medium">{selectedRow.cotizacionEstatus === 'SIN_COTIZACION' ? 'Sin cotización' : selectedRow.cotizacionEstatus}</span>
                       {selectedRow.cotizacionTotal ? ` · ${fmtMxn(selectedRow.cotizacionTotal)}` : ''}
                     </p>
-                    <label className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-amber-400/60 text-xs text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer">
+                    {selectedRow.cotizacionUrl && (
+                      <a href={selectedRow.cotizacionUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline">
+                        <ExternalLink className="h-3 w-3" /> Ver cotización cargada
+                      </a>
+                    )}
+                    <label className={cn(
+                      'flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed text-xs transition-colors cursor-pointer',
+                      tipoDocId['Cotización notarial'] ? 'border-amber-400/60 text-amber-700 hover:bg-amber-50' : 'border-muted-foreground/30 text-muted-foreground cursor-not-allowed',
+                    )}>
                       <Upload className="h-3.5 w-3.5" />
                       Subir cotización (PDF)
-                      <input type="file" accept=".pdf" className="hidden" onChange={async e => {
+                      <input type="file" accept=".pdf" className="hidden" disabled={!tipoDocId['Cotización notarial']} onChange={async e => {
                         const file = e.target.files?.[0];
                         if (!file) return;
+                        const idTipo = tipoDocId['Cotización notarial'];
+                        if (!idTipo) { toast.error('Tipo de documento "Cotización notarial" no encontrado. Ejecuta el DDL en Ejecuciones_manuales/20260729_notaria_proceso_y_documentos.md'); return; }
                         const path = `cotizaciones_notaria/${selectedRow.cuentaId}/${file.name}`;
                         const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
                         if (error) { toast.error('Error al subir cotización: ' + error.message); return; }
-                        toast.success('Cotización subida correctamente');
+                        const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(path);
+                        const { data: docIns } = await supabase.from('documentos')
+                          .insert({ id_cuenta_cobranza: selectedRow.cuentaId, id_tipo_documento: idTipo, url: urlData.publicUrl })
+                          .select('id').single();
+                        const upd = { cotizacion_estatus: 'ENVIADA' };
                         if (selectedRow.procesoId) {
-                          await (supabase as any).from('app_notaria_proceso')
-                            .update({ cotizacion_estatus: 'ENVIADA', fecha_actualizacion: new Date().toISOString() })
-                            .eq('id', selectedRow.procesoId);
-                          qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
+                          await (supabase as any).from('notaria_proceso').update(upd).eq('id', selectedRow.procesoId);
+                        } else {
+                          await (supabase as any).from('notaria_proceso').insert({ id_cuenta_cobranza: selectedRow.cuentaId, id_notario: notarioId, ...upd });
                         }
+                        await logBitacora(selectedRow.cuentaId, 'nota', `Cotización notarial subida (${file.name})`, docIns?.id);
+                        toast.success('Cotización subida correctamente');
+                        qc.invalidateQueries({ queryKey: ['app-notaria-cuentas'] });
+                        qc.invalidateQueries({ queryKey: ['notaria-documentos'] });
+                        qc.invalidateQueries({ queryKey: ['notaria-procesos'] });
                       }} />
                     </label>
                   </div>
@@ -1605,6 +1751,47 @@ export function AppNotariaDashboard() {
               entityType="comprador"
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Agregar comentario (bitácora: legal_flow_bitacora) ───────── */}
+      <Dialog open={commentDialogOpen} onOpenChange={open => { setCommentDialogOpen(open); if (!open) setCommentText(''); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar comentario</DialogTitle>
+            <DialogDescription>
+              Se guarda en la bitácora de {selectedRow?.cuentaCode ?? 'la cuenta'}, visible en "Actividad reciente".
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            rows={4}
+            placeholder="Escribe una nota sobre el proceso notarial..."
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCommentDialogOpen(false)} disabled={appendBitacora.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!commentText.trim() || appendBitacora.isPending}
+              onClick={() => {
+                appendBitacora.mutate(
+                  { tipo: 'nota', mensaje: commentText.trim(), referencia: { scope: 'expediente' } },
+                  {
+                    onSuccess: () => {
+                      toast.success('Comentario agregado');
+                      setCommentDialogOpen(false);
+                      setCommentText('');
+                    },
+                    onError: (err: any) => toast.error('Error al guardar el comentario: ' + err.message),
+                  },
+                );
+              }}
+            >
+              {appendBitacora.isPending ? 'Guardando...' : 'Guardar comentario'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
