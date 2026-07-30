@@ -437,6 +437,21 @@ const ClientePerfil = () => {
     2: "INE Frente", 3: "INE Reverso", 4: "Pasaporte",
     [INE_COMPLETO_TIPO_ID]: "INE (frente y reverso)",
   };
+  /* Una fila por tipo de documento, la más reciente. Al reemplazar un documento el
+     registro anterior queda `activo = true`, así que `documentos` puede tener varias
+     filas del mismo tipo para la misma persona (140 personas en prod al 2026-07-29).
+     Empata por `id` descendente cuando `fecha_creacion` es igual o nula. */
+  function ultimoPorTipo<T extends { id: number; tipoId: number; rawDate: string | null }>(docs: T[]): T[] {
+    const porTipo = new Map<number, T>();
+    for (const d of docs) {
+      const previo = porTipo.get(d.tipoId);
+      if (!previo) { porTipo.set(d.tipoId, d); continue; }
+      const fd = d.rawDate ?? '';
+      const fp = previo.rawDate ?? '';
+      if (fd > fp || (fd === fp && d.id > previo.id)) porTipo.set(d.tipoId, d);
+    }
+    return [...porTipo.values()].sort((a, b) => a.tipoId - b.tipoId);
+  }
   const ID_OPCION = {
     ine: {
       tipoId: INE_COMPLETO_TIPO_ID,
@@ -512,6 +527,9 @@ const ClientePerfil = () => {
                : d.id_estatus_verificacion === 3 ? "rejected"
                : d.id_estatus_verificacion === 4 ? "expired"
                : "review") as "verified" | "rejected" | "review" | "missing" | "expired",
+        // `date` va formateada para mostrar; `rawDate` conserva el timestamp para
+        // poder ordenar y quedarnos con la carga más reciente por tipo.
+        rawDate: (d.fecha_creacion as string | null) ?? null,
         date: d.fecha_creacion
           ? new Date(d.fecha_creacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })
           : null,
@@ -575,6 +593,7 @@ const ClientePerfil = () => {
                : d.id_estatus_verificacion === 3 ? "rejected"
                : d.id_estatus_verificacion === 4 ? "expired"
                : "review") as "verified" | "rejected" | "review" | "missing" | "expired",
+        rawDate: (d.fecha_creacion as string | null) ?? null,
         date: d.fecha_creacion
           ? new Date(d.fecha_creacion).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })
           : null,
@@ -1139,38 +1158,23 @@ const ClientePerfil = () => {
     if (uploadErr) { toast.error("Error al subir archivo: " + uploadErr.message); return false; }
     const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
 
-    // Doc activo más antiguo de este tipo → se marca expirado (referencia de auditoría).
-    // Los demás activos → se desactivan + expiran.
-    const { data: activeDocs } = await (supabase as any)
+    // Regla única: al subir uno nuevo, TODO lo anterior de ese tipo (y de los tipos
+    // que reemplaza) pasa a estatus 4 = Expirado, y el nuevo entra en 1 = Pendiente
+    // de revisión. Así siempre queda una sola versión vigente, la más reciente.
+    // Antes solo el más antiguo pasaba a 4 y el resto se desactivaba, así que en
+    // documentos quedaban varias filas activas del mismo tipo en estatus 2
+    // (92 casos en prod al 2026-07-29) y el expediente las listaba todas.
+    // Las filas viejas se conservan activas a propósito: son el histórico que ve
+    // el área de verificación. La vista se queda con la última por tipo.
+    const tiposAExpirar = [primaryTipoId, ...(alsoExpireTipoIds ?? [])];
+    const { error: expireErr } = await (supabase as any)
       .from("documentos")
-      .select("id")
+      .update({ id_estatus_verificacion: 4 })
       .eq("id_persona", personaId)
-      .eq("id_tipo_documento", primaryTipoId)
+      .in("id_tipo_documento", tiposAExpirar)
       .eq("activo", true)
-      .order("id", { ascending: true });
-
-    if (activeDocs && activeDocs.length > 0) {
-      await (supabase as any)
-        .from("documentos")
-        .update({ id_estatus_verificacion: 4 })
-        .eq("id", activeDocs[0].id);
-      const otherIds = activeDocs.slice(1).map((d: any) => d.id);
-      if (otherIds.length > 0) {
-        await (supabase as any)
-          .from("documentos")
-          .update({ activo: false, id_estatus_verificacion: 4 })
-          .in("id", otherIds);
-      }
-    }
-
-    if (alsoExpireTipoIds && alsoExpireTipoIds.length > 0) {
-      await (supabase as any)
-        .from("documentos")
-        .update({ activo: false, id_estatus_verificacion: 4 })
-        .eq("id_persona", personaId)
-        .in("id_tipo_documento", alsoExpireTipoIds)
-        .eq("activo", true);
-    }
+      .neq("id_estatus_verificacion", 4);
+    if (expireErr) console.error("[commitDoc] expirar previos:", expireErr);
 
     const { error: insertErr } = await (supabase as any).from("documentos").insert({
       id_persona: personaId,
@@ -1689,8 +1693,12 @@ const ClientePerfil = () => {
                           const personaDestino = slot.owner === 'rep' ? repLegalPersonaId : effectivePersonaId;
                           const subiendo = uploadingSlot === slot.key;
                           // Ya validados → se muestran como siempre (frente/reverso o pasaporte).
-                          const validados = slotDocs.filter(d => d.status === 'verified');
-                          const pendientes = slotDocs.filter(d => d.status !== 'verified');
+                          // Se deja UNA fila por tipo: al reemplazar la identificación el
+                          // registro anterior sigue activo en `documentos`, así que sin
+                          // deduplicar se veía "INE Frente" y "INE Reverso" repetidos, uno
+                          // por cada carga. Gana la más reciente.
+                          const validados = ultimoPorTipo(slotDocs.filter(d => d.status === 'verified'));
+                          const pendientes = ultimoPorTipo(slotDocs.filter(d => d.status !== 'verified'));
                           const bestPend = pendientes.find(d => d.status === 'review') || pendientes[0];
                           // Identidad vigente = un documento único validado (INE completo o
                           // pasaporte) o el par histórico frente + reverso ambos validados.
@@ -1786,7 +1794,11 @@ const ClientePerfil = () => {
                           );
                         }
 
-                        const best = slotDocs.find(d => d.status === 'verified') || slotDocs.find(d => d.status === 'review') || slotDocs[0];
+                        // Más reciente primero: con varias filas activas del mismo tipo, el
+                        // orden que devuelve PostgREST es arbitrario y se mostraba una fecha
+                        // vieja.
+                        const slotDocsRecientes = ultimoPorTipo(slotDocs);
+                        const best = slotDocsRecientes.find(d => d.status === 'verified') || slotDocsRecientes.find(d => d.status === 'review') || slotDocsRecientes[0];
                         const status = best?.status ?? 'missing';
                         const isUploading = uploadingSlot === slot.key;
                         const hasFile = !!best?.url;

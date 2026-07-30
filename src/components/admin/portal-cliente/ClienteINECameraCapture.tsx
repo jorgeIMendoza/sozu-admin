@@ -174,20 +174,17 @@ export function ClienteINECameraCapture({ open, onOpenChange, personaId, isDeskt
     if (upErr) { console.error("[camCapture] upload:", upErr); return false; }
     const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
 
-    const { data: activeDocs } = await (supabase as any)
+    // Regla única: todo lo anterior de este tipo pasa a estatus 4 = Expirado y el
+    // nuevo entra como vigente. Antes solo el más antiguo pasaba a 4 y el resto se
+    // desactivaba, lo que dejaba varias filas activas del mismo tipo en estatus 2.
+    const { error: expErr } = await (supabase as any)
       .from("documentos")
-      .select("id")
+      .update({ id_estatus_verificacion: 4 })
       .eq("id_persona", personaId)
       .eq("id_tipo_documento", typeId)
       .eq("activo", true)
-      .order("id", { ascending: true });
-    if (activeDocs && activeDocs.length > 0) {
-      await (supabase as any).from("documentos").update({ id_estatus_verificacion: 4 }).eq("id", activeDocs[0].id);
-      const otherIds = activeDocs.slice(1).map((d: any) => d.id);
-      if (otherIds.length > 0) {
-        await (supabase as any).from("documentos").update({ activo: false, id_estatus_verificacion: 4 }).in("id", otherIds);
-      }
-    }
+      .neq("id_estatus_verificacion", 4);
+    if (expErr) console.error("[camCapture] expirar previos:", expErr);
 
     const { error: insErr } = await (supabase as any).from("documentos").insert({
       id_persona: personaId,
