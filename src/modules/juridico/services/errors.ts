@@ -30,6 +30,9 @@ export type JuridicoErrorCode =
   | 'JUR-0027'               // Rol sin permisos para crear expedientes    P0027
   // ── Orquestador crear_expediente_y_bloquear_cobranza ───────────────────────
   | 'JUR-0028'               // Cuenta de cobranza inválida/inactiva/no principal P0028
+  // ── T4 crear_asunto ────────────────────────────────────────────────────────
+  | 'JUR-0029'               // Expediente no encontrado                      P0029
+  | 'JUR-0030'               // Expediente no está ACTIVO                     P0030
   // ── Genéricos ─────────────────────────────────────────────────────────────
   | 'JUR-CONTRACT_VIOLATION' // Envelope inválido o respuesta vacía
   | 'JUR-UNKNOWN';           // Error no catalogado
@@ -83,6 +86,9 @@ export const SQLSTATE_MAP: Record<string, JuridicoErrorCode> = {
   P0027: 'JUR-0027',
   // Orquestador
   P0028: 'JUR-0028',
+  // T4
+  P0029: 'JUR-0029',
+  P0030: 'JUR-0030',
 };
 
 // ── Normalizador ──────────────────────────────────────────────────────────────
