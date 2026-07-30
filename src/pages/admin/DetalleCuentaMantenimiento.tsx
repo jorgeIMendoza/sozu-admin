@@ -471,40 +471,27 @@ export default function DetalleCuentaMantenimiento() {
 
       const { data, error } = await supabase
         .from('multas')
-        .select('id, monto, es_pagada, id_acuerdo_pago')
+        .select('id, monto, es_pagada, id_acuerdo_pago, descripcion, id_tipo_multa')
         .in('id_acuerdo_pago', acuerdoIds)
         .eq('activo', true);
 
       if (error) throw error;
-      
-      // Get tipos de multa and descripcion via RPC for complete data
-      const multaIds = data?.map(m => m.id) || [];
-      let multasCompletas: any[] = [];
-      
-      if (multaIds.length > 0) {
-        const { data: multasData } = await supabase
-          .rpc('execute_safe_query', {
-            query_text: `SELECT id, monto, es_pagada, id_acuerdo_pago, descripcion, id_tipo_multa FROM multas WHERE id IN (${multaIds.join(',')})`,
-            max_rows: 1000
-          });
-        
-        multasCompletas = multasData as any[] || [];
-      }
-      
+
+      const multasCompletas = (data as any[]) || [];
+
       // Get tipos de multa names
       const tipoIds = [...new Set(multasCompletas.map((m: any) => m.id_tipo_multa).filter(id => id))];
       let tiposMap = new Map<number, string>();
-      
+
       if (tipoIds.length > 0) {
         const { data: tipos } = await supabase
-          .rpc('execute_safe_query', {
-            query_text: `SELECT id, nombre FROM tipos_multa WHERE id IN (${tipoIds.join(',')})`,
-            max_rows: 100
-          });
-        
+          .from('tipos_multa')
+          .select('id, nombre')
+          .in('id', tipoIds);
+
         (tipos as any)?.forEach((t: any) => tiposMap.set(t.id, t.nombre));
       }
-      
+
       return multasCompletas.map((m: any) => ({
         id: m.id,
         monto: m.monto,

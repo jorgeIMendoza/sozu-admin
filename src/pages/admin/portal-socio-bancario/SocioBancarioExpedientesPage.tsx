@@ -172,7 +172,7 @@ const ccLabel = (id: number) => `CC-${String(id).padStart(6, '0')}`;
 const OBLIGATORIO_GRUPOS = [
   { key: 'csf', ids: [6] },
   { key: 'domicilio', ids: [8] },
-  { key: 'ine', ids: [2, 59] },
+  { key: 'ine', ids: [2, 59, 63] }, // 63 = INE completo (frente y reverso en un PDF)
   { key: 'curp', ids: [5] },
   { key: 'acta', ids: [1] },
 ] as const;

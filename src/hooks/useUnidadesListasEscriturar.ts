@@ -15,7 +15,7 @@ const CEP_CUTOFF_BUSINESS_DAYS = 10;
 export const OBLIGATORIO_GRUPOS = [
   { key: 'csf',       label: 'Constancia de Situación Fiscal', ids: [6] },
   { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8] },
-  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59] },
+  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59, 63] }, // 63 = INE completo (frente y reverso en un PDF)
   { key: 'curp',      label: 'CURP',                           ids: [5] },
   { key: 'acta',      label: 'Acta de nacimiento',             ids: [1] },
 ] as const;

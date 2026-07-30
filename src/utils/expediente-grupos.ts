@@ -3,7 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 export const OBLIGATORIO_GRUPOS = [
   { key: 'csf',       label: 'Constancia de Situación Fiscal', ids: [6] },
   { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8] },
-  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59] },
+  // 63 = INE completo (frente y reverso en un solo PDF), el formato que sube el
+  // portal cliente desde 2026-07-29. 2 = frente INE (cargas históricas).
+  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59, 63] },
   { key: 'curp',      label: 'CURP',                           ids: [5] },
   { key: 'acta',      label: 'Acta de nacimiento',             ids: [1] },
 ] as const;

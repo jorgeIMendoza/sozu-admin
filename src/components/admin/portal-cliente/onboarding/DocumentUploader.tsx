@@ -1,15 +1,13 @@
 import { useState } from "react";
-import { AlertCircle, Camera, CheckCircle2, FileUp, Loader2, Pencil, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileUp, Loader2, Pencil, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "./StatusBadge";
-import { OnboardingINECapture } from "./OnboardingINECapture";
 import { DOC_HELP, DOC_LABELS, usePortal, type DocField, type DocStatus, type DocType, type UploadedDoc } from "@/lib/portal-cliente/onboarding-store";
 import { extractPdfText } from "@/utils/pdfExtractText";
 import { validateCURPPdf, validateCSFPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields } from "@/utils/pdfDocumentExtractors";
-import type { VerificationResult } from "@/components/admin/DocumentVerification";
 
 interface Props {
   type: DocType;
@@ -21,23 +19,11 @@ interface Props {
 function isPdfExtractType(type: DocType): boolean {
   return type === "curp" || type === "csf";
 }
-// Identificaciones que se capturan con la cámara del dispositivo + verificación IA.
-function isCameraType(type: DocType): boolean {
+// Identificaciones oficiales (INE / pasaporte): se sube el PDF escaneado, con
+// frente y reverso en el mismo archivo, y lo revisa una persona. Ya no se
+// captura con la cámara ni se valida biométricamente.
+function isIdType(type: DocType): boolean {
   return type === "id_oficial" || type === "id_rl";
-}
-
-/**
- * En el INE la IA suele leer el nombre como "APELLIDOS NOMBRES"; lo reordenamos a
- * "NOMBRES APELLIDOS" para mostrarlo como el resto de los documentos.
- */
-function ineDisplayName(full: string | null | undefined): string {
-  if (!full) return "";
-  const parts = full.trim().split(/\s+/);
-  if (parts.length >= 3) {
-    const [apPaterno, apMaterno, ...nombres] = parts;
-    return [...nombres, apPaterno, apMaterno].join(" ");
-  }
-  return full;
 }
 
 /**
@@ -99,9 +85,10 @@ async function extractFromPdf(
 }
 
 /**
- * Patrón documento-primero: subir/capturar → extracción → card verde
+ * Patrón documento-primero: subir → extracción → card verde
  * "Detectamos estos datos. Revísalos y confírmalos" → Corregir/Confirmar.
- * CURP/CSF: extracción real de PDF. INE/ID del RL: cámara + IA. Resto: mock (Fase C).
+ * CURP/CSF: extracción real de PDF. INE/ID del RL y resto: PDF sin extracción,
+ * se confirman y quedan para revisión manual.
  */
 export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) {
   const doc = usePortal((s) => s.onboarding.docs.find((d) => d.type === type));
@@ -111,20 +98,24 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cameraOpen, setCameraOpen] = useState(false);
 
   const isPdfExtract = isPdfExtractType(type);
-  const cameraType = isCameraType(type);
-  const isDesktop = typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+  const idType = isIdType(type);
 
   async function onFile(file: File) {
     const id = "doc-" + Math.random().toString(36).slice(2, 9);
     setBusy(true);
     setError(null);
     try {
+      if (idType) {
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        if (!isPdf) {
+          throw new Error("La identificación debe subirse en PDF. Escanea el documento (frente y reverso) y sube el archivo.");
+        }
+      }
       const res = isPdfExtract
         ? await extractFromPdf(type, file, id)
-        : // escritura/predial/acta/poder: PDF, se registra "capturado" sin datos.
+        : // identificación/escritura/predial/acta/poder: PDF, se registra "capturado" sin datos.
           // Extracción real pendiente: predial (parser regex con muestra) y escritura
           // (suele venir escaneada → OCR/IA, Fase D). No inventamos datos.
           { fields: [] as DocField[], status: "en_revision" as DocStatus, confidence: 0.9 };
@@ -149,38 +140,6 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
     } finally {
       setBusy(false);
     }
-  }
-
-  // Resultado de la cámara + IA: mapea a campos del wizard (sin persistir en BD).
-  function onIneResult(result: VerificationResult | null) {
-    const id = "doc-ine-" + Math.random().toString(36).slice(2, 9);
-    const mk = (key: string, label: string, value: string | null | undefined): DocField => ({
-      key,
-      label,
-      value: value ?? "",
-      status: "en_revision",
-      sourceDocId: id,
-    });
-    const fields: DocField[] = [];
-    if (result) {
-      fields.push(mk("nombre", "Nombre", ineDisplayName(result.full_name)));
-      fields.push(mk("curp", "CURP", result.curp));
-      fields.push(mk("fecha_nacimiento", "Fecha de nacimiento", result.fecha_nacimiento));
-      fields.push(mk("sexo", "Sexo", result.sexo));
-      if (result.vigencia) fields.push(mk("vigencia", "Vigencia", result.vigencia));
-    }
-    const newDoc: UploadedDoc = {
-      id,
-      type,
-      filename: result ? "INE / Pasaporte (cámara)" : "Identificación (cámara)",
-      status: "en_revision",
-      confidence: result?.confidence ?? 0.9,
-      fields,
-      confirmed: false,
-      createdAt: new Date().toISOString(),
-    };
-    if (doc) removeDoc(doc.id);
-    addDoc(newDoc);
   }
 
   function markManaged() {
@@ -218,48 +177,13 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         {doc && <StatusBadge status={doc.status} />}
       </div>
 
-      {/* Captura con cámara (INE / ID del RL) */}
-      {!doc && cameraType && (
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setCameraOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-4 py-6 text-sm font-semibold text-primary transition hover:bg-primary/10"
-          >
-            <Camera className="h-4 w-4" /> Tomar foto con la cámara
-          </button>
-          <label className="flex cursor-pointer items-center justify-center gap-2 text-xs text-muted-foreground transition hover:text-foreground">
-            {busy ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Procesando…
-              </>
-            ) : (
-              <>o subir archivo (PDF, JPG, PNG)</>
-            )}
-            <input
-              type="file"
-              className="hidden"
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-              disabled={busy}
-            />
-          </label>
-          <OnboardingINECapture
-            open={cameraOpen}
-            onOpenChange={setCameraOpen}
-            isDesktop={isDesktop}
-            onResult={onIneResult}
-          />
-        </div>
-      )}
-
-      {/* Subida de archivo (resto de documentos) */}
-      {!doc && !cameraType && (
+      {/* Subida de archivo (todos los documentos, identificación incluida) */}
+      {!doc && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border bg-secondary/40 px-4 py-6 text-sm text-muted-foreground transition hover:bg-secondary">
             {busy ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Extrayendo datos…
+                <Loader2 className="h-4 w-4 animate-spin" /> {isPdfExtract ? "Extrayendo datos…" : "Procesando…"}
               </>
             ) : (
               <>
@@ -294,6 +218,17 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         <p className="mt-2 text-[11px] text-muted-foreground">
           Sube el PDF oficial (no una foto ni escaneado). Leemos los datos y solo confirmas.
         </p>
+      )}
+
+      {idType && !doc && (
+        <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-950/30">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
+          <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+            Sube un solo archivo PDF: el frente y el reverso de tu INE, o la página de datos de tu
+            pasaporte. El documento debe estar escaneado, completo y legible. Si no cumple estas
+            condiciones, la revisión se rechazará y deberás cargarlo nuevamente.
+          </p>
+        </div>
       )}
 
       {doc && doc.managedBySozu && (
