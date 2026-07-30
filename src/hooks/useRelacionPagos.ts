@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { usePermissions } from '@/hooks/usePermissions';
 import { esSinPermiso, retrySalvoSinPermiso } from '@/lib/rpcErrors';
 
 export interface PagoRecord {
@@ -109,13 +108,6 @@ function useDebounced<T>(value: T, delay = 300): T {
 const arrOrNull = (a?: string[] | null) => (a && a.length > 0 ? a : null);
 
 export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosResult {
-  // La RPC valida permisos por dentro y responde 403. Se comprueba antes para no disparar
-  // dos llamadas condenadas al abrir la pantalla.
-  const { canView } = usePermissions();
-  const puedeVer = canView('/admin/portal-cobranza/relacion-pagos')
-    || canView('/admin/portal-escrituracion/relacion-pagos')
-    || canView('/admin/validacion-pagos');
-
   const clabe = useDebounced(filters.clabe || '');
   const cliente = useDebounced(filters.cliente || '');
   const unidad = useDebounced(filters.unidad || '');
@@ -174,7 +166,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
     },
     // Los KPIs del universo son iguales para todos: se cachean más tiempo.
     staleTime: 5 * 60_000,
-    enabled: filters.enabled !== false && puedeVer,
+    enabled: filters.enabled !== false,
     retry: retrySalvoSinPermiso,
     placeholderData: keepPreviousData,
   });
@@ -195,7 +187,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
       return data as unknown as { pagos: PagoRecord[] };
     },
     staleTime: 30_000,
-    enabled: filters.enabled !== false && puedeVer,
+    enabled: filters.enabled !== false,
     retry: retrySalvoSinPermiso,
     // Mantener resultados previos al cambiar filtros/página (evita parpadeo).
     placeholderData: keepPreviousData,
@@ -243,6 +235,10 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
     isLoadingTotales: loadingTotals,
     // Un 403 no es un error a mostrar como falla: la pantalla enseña "sin permiso".
     error: error && !esSinPermiso(error) ? (error as Error).message : null,
-    sinPermiso: !puedeVer || esSinPermiso(error) || esSinPermiso(errorTotales),
+    // Solo se marca cuando la RPC realmente respondió 403 (ERRCODE 42501). NO se hace un
+    // gate previo con usePermissions: su `canView` es asíncrono (devuelve Promise) y su caché
+    // se actualiza con setState en cada llamada, así que usarlo en el render rompe la
+    // pantalla (`enabled` recibía una Promise) y encadena re-renders.
+    sinPermiso: esSinPermiso(error) || esSinPermiso(errorTotales),
   };
 }
