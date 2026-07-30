@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, Fragment } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -1344,6 +1344,7 @@ function EditableContactName({ personaId, name, onSaved, canEdit = true }: { per
 
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
+  const [sp] = useSearchParams(); // pestaña inicial vía ?tab= (ej. desde el módulo de Tareas)
   const orgId = useCrmOrgId();
   const { user, profile } = useAuth();
   const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
@@ -1734,7 +1735,7 @@ export function CrmContactDetail() {
 
         {/* Center: activity tabs */}
         <section className="col-span-6 border-r border-border h-full min-h-0 overflow-hidden">
-          <Tabs defaultValue="descripcion" className="flex flex-col h-full min-h-0">
+          <Tabs defaultValue={sp.get("tab") || "descripcion"} className="flex flex-col h-full min-h-0">
             <div className="border-b border-border shrink-0">
               <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
@@ -3533,7 +3534,11 @@ export function CrmTasks() {
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
+                        {t.id_entidad_relacionada ? (
+                          <Link to={`/admin/portal-crm/ventas/contactos/${t.id_entidad_relacionada}?tab=actividades`} className={`hover:underline ${done ? "line-through text-muted-foreground" : "font-medium"}`}>{t.titulo}</Link>
+                        ) : (
+                          <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
+                        )}
                         {t.recurrencia && <RefreshCw className="h-3 w-3 text-muted-foreground shrink-0" aria-label={`Se repite: ${RECURRENCE_LABEL[t.recurrencia] ?? t.recurrencia}`} />}
                         {t.fecha_recordatorio && <Bell className="h-3 w-3 text-muted-foreground shrink-0" aria-label="Tiene recordatorio" />}
                       </div>
