@@ -25,7 +25,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
-import { usePermissions } from "@/hooks/usePermissions";
 
 const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
@@ -803,16 +802,12 @@ export default function ValidacionPagos() {
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
-  const { canView } = usePermissions();
-
-  // La RPC valida permisos por dentro (ERRCODE 42501 → HTTP 403). Se comprueba antes
-  // para no disparar una carga condenada, y un 403 no se reintenta.
-  const puedeVerValidacion = canView('/admin/validacion-pagos')
-    || canView('/admin/portal-cobranza/relacion-pagos');
-
+  // La RPC valida permisos por dentro (ERRCODE 42501 → HTTP 403): un 403 no se reintenta
+  // y se muestra como "sin permiso". Sin gate previo con usePermissions: su `canView` es
+  // asíncrono (devuelve Promise) y muta estado en cada llamada, así que en el render
+  // rompía la pantalla y encadenaba re-renders.
   const { data: queryData, isLoading, isError, error: queryError } = useQuery({
     queryKey: ["validacion-pagos-all-v2"],
-    enabled: puedeVerValidacion,
     retry: retrySalvoSinPermiso,
     staleTime: 1000 * 60 * 5,
     queryFn: async (): Promise<{ rows: PagoRow[]; readiness: Map<number, boolean> }> => {
@@ -958,7 +953,7 @@ export default function ValidacionPagos() {
   });
 
   // 403 de la RPC: se distingue de una falla de carga para no mandar a reintentar.
-  const sinPermisoValidacion = !puedeVerValidacion || esSinPermiso(queryError);
+  const sinPermisoValidacion = esSinPermiso(queryError);
 
   const allRows = queryData?.rows ?? [];
   const readiness = queryData?.readiness ?? new Map<number, boolean>();
