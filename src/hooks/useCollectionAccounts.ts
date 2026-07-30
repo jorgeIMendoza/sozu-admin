@@ -1,6 +1,5 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { usePermissions } from '@/hooks/usePermissions';
 import { esSinPermiso, retrySalvoSinPermiso } from '@/lib/rpcErrors';
 
 // Row returned by the get_pcobranza_cuentas_cobranza RPC.
@@ -100,11 +99,6 @@ const EMPTY_KPIS: CollectionAccountsKpis = { total: 0, overdue: 0, pending: 0, i
 const arrOrNull = (a?: string[]) => (a && a.length > 0 ? a : null);
 
 export function useCollectionAccounts(params: CollectionAccountsParams) {
-  // La RPC valida permisos por dentro (ERRCODE 42501 → HTTP 403). Se comprueba antes para
-  // no disparar dos llamadas condenadas.
-  const { canView } = usePermissions();
-  const puedeVer = canView('/admin/portal-cobranza/cuentas-cobranza')
-    || canView('/admin/validacion-pagos');
 
   // Igual que Relación de Pagos: los KPIs y catálogos recorren TODAS las cuentas, así que
   // se piden una sola vez por combinación de filtros; la página son 15 filas bajo demanda
@@ -152,7 +146,7 @@ export function useCollectionAccounts(params: CollectionAccountsParams) {
     },
     // KPIs del universo: mismos para todos los usuarios, se cachean más tiempo.
     staleTime: 5 * 60 * 1000,
-    enabled: params.enabled !== false && puedeVer,
+    enabled: params.enabled !== false,
     retry: retrySalvoSinPermiso,
     placeholderData: keepPreviousData,
   });
@@ -177,7 +171,7 @@ export function useCollectionAccounts(params: CollectionAccountsParams) {
       return ((data ?? {}).cuentas as CollectionAccount[]) ?? [];
     },
     staleTime: 3 * 60 * 1000,
-    enabled: params.enabled !== false && puedeVer,
+    enabled: params.enabled !== false,
     retry: retrySalvoSinPermiso,
     // Keep previous rows while refetching (filtros/página) to avoid blanking the UI.
     placeholderData: keepPreviousData,
@@ -198,7 +192,10 @@ export function useCollectionAccounts(params: CollectionAccountsParams) {
       }
     : (totalsQuery.data?.kpis ?? EMPTY_KPIS);
 
-  const sinPermiso = !puedeVer || esSinPermiso(pageQuery.error) || esSinPermiso(totalsQuery.error);
+  // Solo cuando la RPC respondió 403 (ERRCODE 42501). Sin gate previo con usePermissions:
+  // su `canView` es asíncrono y muta estado en cada llamada — usarlo en el render rompe la
+  // pantalla y encadena re-renders.
+  const sinPermiso = esSinPermiso(pageQuery.error) || esSinPermiso(totalsQuery.error);
 
   return {
     ...pageQuery,
