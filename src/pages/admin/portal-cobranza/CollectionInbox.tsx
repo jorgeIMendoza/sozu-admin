@@ -8,7 +8,7 @@ import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2, SlidersHorizontal, X } from 'lucide-react';
-import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
+import { CollectionLoading, CollectionError, CollectionSinPermiso } from '@/components/admin/portal-cobranza/CollectionStates';
 import { cn } from '@/lib/utils';
 import {
   TipoMultiSelect, type TipoCategoria,
@@ -181,7 +181,7 @@ export default function CollectionInboxPage() {
   const { data: projects } = useProyectosCobranza();
   // Todo server-side (filtros + orden + paginado + KPIs), igual que Relación de
   // Pagos. La RPC recibe cada filtro de la bandeja y devuelve solo la página.
-  const { data, isLoading, isError, refetch } = useCollectionAccounts({
+  const { data, isLoading, isLoadingTotales, isError, sinPermiso, refetch } = useCollectionAccounts({
     projectId,
     cliente: searchClient,
     unidad: searchUnit,
@@ -200,7 +200,14 @@ export default function CollectionInboxPage() {
 
   // Filas de la página actual (ya filtradas/ordenadas/paginadas por la RPC).
   const pageRows = data?.cuentas ?? [];
-  const total = data?.total ?? 0;
+  // `total` y los KPIs vienen de una segunda consulta que recorre el universo; la tabla
+  // no la espera. Mientras llega se usa el tamaño de la página para el contador.
+  const total = data?.total || pageRows.length;
+  const kpisPendientes = isLoadingTotales && !data?.total;
+  // Con proyecto elegido, las tarjetas muestran ese proyecto y el universo va de
+  // referencia. Los dos números vienen del mismo barrido (desglose por proyecto).
+  const kpisGlobal = data?.kpisGlobal;
+  const refGlobal = (valor: string) => (projectId !== null ? ` · ${valor} global` : '');
 
   // Opciones de filtro (universo del proyecto) que devuelve la RPC. Tipo usa el
   // catálogo fijo (TIPOS) del multiselect; estatus/modelos vienen del server.
@@ -255,10 +262,13 @@ export default function CollectionInboxPage() {
       return acc;
     }, []);
 
-  // Primera carga: solo el mensaje centrado (nada de KPIs/tabla). keepPreviousData
-  // evita que al cambiar de proyecto se vacíe la vista.
-  // Primera carga: solo el mensaje centrado. keepPreviousData evita vaciar la vista
-  // al cambiar de proyecto.
+  // 403 de la RPC: falta de permiso, no falla de carga (no ofrecer "reintentar").
+  if (sinPermiso) {
+    return <CollectionSinPermiso title="No tienes permiso para ver Cuentas de Cobranza" />;
+  }
+
+  // Primera carga: solo el mensaje centrado (nada de KPIs/tabla). keepPreviousData evita
+  // que al cambiar de proyecto se vacíe la vista.
   if (isLoading && !data) {
     return <CollectionLoading label="Cargando cuentas..." />;
   }
@@ -277,44 +287,52 @@ export default function CollectionInboxPage() {
             Cuentas activas
           </span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">
-            {isLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : kpis.total.toLocaleString('es-MX')}
+            {kpisPendientes ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : kpis.total.toLocaleString('es-MX')}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">en cuentas de cobranza</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            en cuentas de cobranza{refGlobal((kpisGlobal?.total ?? 0).toLocaleString('es-MX'))}
+          </p>
         </div>
 
         <div className="sozu-kpi-card overflow-hidden">
           <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3',
-            !isLoading && kpis.overdue > 0 ? 'text-danger' : 'text-muted-foreground')}>
+            !kpisPendientes && kpis.overdue > 0 ? 'text-danger' : 'text-muted-foreground')}>
             Vencido total
           </span>
           <p className={cn('text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 break-all',
-            !isLoading && kpis.overdue > 0 ? 'text-danger' : 'text-foreground')}>
-            {isLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : fmtCurrency(kpis.overdue)}
+            !kpisPendientes && kpis.overdue > 0 ? 'text-danger' : 'text-foreground')}>
+            {kpisPendientes ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : fmtCurrency(kpis.overdue)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">monto en mora</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            monto en mora{refGlobal(fmtCurrency(kpisGlobal?.overdue ?? 0))}
+          </p>
         </div>
 
         <div className="sozu-kpi-card overflow-hidden">
           <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3',
-            !isLoading && kpis.pending > 0 ? 'text-warning' : 'text-muted-foreground')}>
+            !kpisPendientes && kpis.pending > 0 ? 'text-warning' : 'text-muted-foreground')}>
             Pendiente total
           </span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all">
-            {isLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : fmtCurrency(kpis.pending)}
+            {kpisPendientes ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : fmtCurrency(kpis.pending)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">saldo por cobrar</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            saldo por cobrar{refGlobal(fmtCurrency(kpisGlobal?.pending ?? 0))}
+          </p>
         </div>
 
         <div className="sozu-kpi-card overflow-hidden">
           <span className={cn('text-[10px] font-semibold uppercase tracking-wider block mb-3',
-            !isLoading && kpis.inArrears > 0 ? 'text-danger' : 'text-muted-foreground')}>
+            !kpisPendientes && kpis.inArrears > 0 ? 'text-danger' : 'text-muted-foreground')}>
             En mora
           </span>
           <p className={cn('text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 break-all',
-            !isLoading && kpis.inArrears > 0 ? 'text-danger' : 'text-foreground')}>
-            {isLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : kpis.inArrears.toLocaleString('es-MX')}
+            !kpisPendientes && kpis.inArrears > 0 ? 'text-danger' : 'text-foreground')}>
+            {kpisPendientes ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : kpis.inArrears.toLocaleString('es-MX')}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">cuentas con parcialidades vencidas</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            cuentas con parcialidades vencidas{refGlobal((kpisGlobal?.in_arrears ?? 0).toLocaleString('es-MX'))}
+          </p>
         </div>
       </div>
 
@@ -469,8 +487,10 @@ export default function CollectionInboxPage() {
                         <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full text-[10px] font-bold tabular-nums leading-none select-none bg-muted text-muted-foreground/70 ring-1 ring-border/60 shrink-0">
                           {rowNum}
                         </span>
-                        <span className="text-[12px] font-mono font-semibold tabular-nums truncate" title={formatCuentaCobranzaId(row.cuenta_id)}>
-                          {formatCuentaCobranzaId(row.cuenta_id)}
+                        {/* Folio canónico (CC-/CCP-/CM-) que devuelve la RPC v3;
+                            fallback al util mientras no esté aplicada. */}
+                        <span className="text-[12px] font-mono font-semibold tabular-nums truncate" title={row.cuenta_folio ?? formatCuentaCobranzaId(row.cuenta_id)}>
+                          {row.cuenta_folio ?? formatCuentaCobranzaId(row.cuenta_id)}
                         </span>
                       </div>
                     </td>
@@ -532,10 +552,21 @@ export default function CollectionInboxPage() {
                       <CountCircle n={row.invalidos ?? 0} />
                     </td>
 
+                    {/* Atraso = antigüedad de la parcialidad vencida más vieja (`dias_atraso`,
+                        RPC v2). Sin parcialidades vencidas el atraso es 0: `dias_sin_pagar`
+                        solo cuenta días desde el último pago y marcaba atraso en cuentas ya
+                        liquidadas. Fallback mientras la RPC v2 no esté aplicada. */}
                     <td className="px-2 text-center">
-                      <span className={cn('text-[12px] tabular-nums', overdueStyle(row.dias_sin_pagar))}>
-                        {row.dias_sin_pagar === 0 ? '0' : `${row.dias_sin_pagar}d`}
-                      </span>
+                      {(() => {
+                        const atraso = row.parcialidades_vencidas === 0
+                          ? 0
+                          : (row.dias_atraso ?? row.dias_sin_pagar);
+                        return (
+                          <span className={cn('text-[12px] tabular-nums', overdueStyle(atraso))}>
+                            {atraso === 0 ? '0' : `${atraso}d`}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="px-2 text-center">

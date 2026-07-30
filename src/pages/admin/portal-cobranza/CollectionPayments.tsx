@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
 import { ESTATUS_VALIDACION_KEY, MetodoMultiSelect } from '@/components/admin/portal-cobranza/CobranzaFilterSelects';
@@ -22,23 +21,14 @@ import {
   FileCheck, FileWarning, FileText, DollarSign, Eye, Upload, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CollectionLoading, CollectionError } from '@/components/admin/portal-cobranza/CollectionStates';
+import { CollectionLoading, CollectionError, CollectionSinPermiso } from '@/components/admin/portal-cobranza/CollectionStates';
 import { SortHeader, toggleSortState, type SortState } from '@/components/admin/portal-cobranza/CollectionSortHeader';
 
 const PAGE_SIZE = 15;
-// Se cargan todas las filas del filtro y se pagina/filtra en cliente. Cap subido a
-// 25000 (universo ~19k) como INTERIM para "traer todos"; el fix escalable es la
-// paginación server-side real (ver Ejecuciones_manuales/P28 §D.1).
-const LOAD_LIMIT = 25000;
 
-// Columnas ordenables (client-side) y su accessor.
+// Columnas ordenables. El orden lo resuelve la RPC (p_sort_key/p_sort_dir), igual que
+// en Cuentas de Cobranza: nunca se ordena sobre una página parcial.
 type PaymentsSortKey = 'account' | 'client' | 'amount' | 'status';
-const SORT_ACCESSORS: Record<PaymentsSortKey, (r: PagoRecord) => number | string> = {
-  account:  r => r.id_cuenta_cobranza ?? 0,
-  client:   r => (r.cliente ?? '').toLowerCase(),
-  amount:   r => Number(r.monto),
-  status:   r => r.estatus,
-};
 
 function formatWithThousands(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -114,13 +104,15 @@ export default function CollectionPayments() {
   const [deletePayment, setDeletePayment] = useState<PagoRecord | null>(null);
   const [deleteImpacto, setDeleteImpacto] = useState<PagoImpacto | null>(null);
 
-  // Estatus pago = 6 estados de validación crudos (P27 §E.2), filtrado client-side por estado_validacion.
+  // Estatus pago = 6 estados de validación crudos (P27 §E.2), ahora filtrados server-side.
   const statusKeys = filterStatus.map(l => ESTATUS_VALIDACION_KEY[l]).filter(Boolean);
 
   const {
     pagos: payments, total, totalMonto: totalAmount,
     totalValidos: totalValid, totalSinValidar: totalUnverified, totalPorEstado,
-    isLoading, error,
+    metodos: metodoOptions, estatusProp: estatusPropOptions,
+    totalGlobal, totalMontoGlobal,
+    isLoading, isLoadingTotales, error, sinPermiso,
   } = useRelacionPagos({
     proyectoId: projectId,
     clabe: searchClabe,
@@ -128,57 +120,27 @@ export default function CollectionPayments() {
     unidad: searchUnit,
     cuenta: searchAccount,
     tipos: filterType,
-    estatus: [], // Estatus pago se filtra client-side por estado_validacion (6 estados).
-    page: 1,
-    pageSize: LOAD_LIMIT,
+    estadoValidacion: statusKeys,
+    metodos: filterMetodo,
+    estatusProp: filterEstatusProp,
+    sortKey: sort.key,
+    sortDir: sort.dir,
+    page,
+    pageSize: PAGE_SIZE,
   });
 
   const resetPage = () => setPage(1);
 
-  // Métodos: catálogo completo (metodos_pago), no derivado de los pagos cargados
-  // (así salen TODOS aunque el set actual no los incluya).
-  const { data: metodoOptions = [] } = useQuery({
-    queryKey: ['metodos-pago-activos'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('metodos_pago').select('nombre').eq('activo', true).order('nombre');
-      if (error) throw error;
-      return (data ?? []).map((m: { nombre: string }) => m.nombre);
-    },
-    staleTime: 60 * 60 * 1000,
-  });
-
-  // Estatus propiedad: opciones desde los pagos cargados (client-side).
-  const estatusPropOptions = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of payments) if (p.estatus_propiedad) s.add(p.estatus_propiedad);
-    return [...s].sort((a, b) => a.localeCompare(b));
-  }, [payments]);
-  const clientFiltered = useMemo(
-    () => payments.filter(p =>
-      (filterMetodo.length === 0 || filterMetodo.includes(p.metodo_pago ?? '')) &&
-      (filterEstatusProp.length === 0 || filterEstatusProp.includes(p.estatus_propiedad ?? '')) &&
-      (statusKeys.length === 0 || statusKeys.includes(p.estado_validacion ?? 'sin_validar')),
-    ),
-    [payments, filterMetodo, filterEstatusProp, statusKeys],
-  );
-
-  // Orden + paginación en cliente (fluido, sin viaje al servidor).
-  const sortedRows = useMemo(() => {
-    if (!sort.key) return clientFiltered;
-    const acc = SORT_ACCESSORS[sort.key];
-    const factor = sort.dir === 'asc' ? 1 : -1;
-    return [...clientFiltered].sort((a, b) => {
-      const av = acc(a), bv = acc(b);
-      const cmp = typeof av === 'string' && typeof bv === 'string'
-        ? av.localeCompare(bv)
-        : (av as number) - (bv as number);
-      return factor * cmp;
-    });
-  }, [clientFiltered, sort]);
-
-  const shown = sortedRows.length;
-  const pageRows = sortedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // La RPC ya devuelve la página filtrada y ordenada. `total` viene de la consulta de
+  // totales, que corre aparte: mientras llega se usa el tamaño de la página para no
+  // decir "Sin resultados" con filas en pantalla.
+  const pageRows = payments;
+  const shown = total || pageRows.length;
+  // Placeholder de las tarjetas mientras el universo se calcula.
+  const kpi = (n: number) => (isLoadingTotales && !total ? '—' : formatCompactNumber(n));
+  // Con un proyecto elegido las tarjetas muestran ese proyecto; el universo queda como
+  // referencia debajo. Ambos números salen del mismo barrido (desglose por proyecto).
+  const refGlobal = (valor: string) => (projectId !== null ? ` · ${valor} global` : '');
 
   // Cards por estado de validación (universo completo, P27 §E.3). Fallback a los
   // totales derivados (4) si la RPC aún no expone total_por_estado.
@@ -220,10 +182,16 @@ export default function CollectionPayments() {
     setFilterStatus([]); setFilterType([]); setFilterEstatusProp([]); setSearchAccount(''); setSearchClabe(''); setPage(1);
   };
 
-  const formatAccount = (id: number | null, tipo: 'propiedad' | 'producto' | null) => {
-    if (id == null) return 'Sin cuenta';
-    const padded = String(id).padStart(6, '0');
-    return tipo === 'producto' ? `CCP-${padded}` : `CC-${padded}`;
+  // El folio canónico (CC- / CCP- / CM-) lo resuelve la RPC; solo hay fallback por si
+  // la versión vieja aún no lo devuelve.
+  const formatAccount = (r: PagoRecord) => {
+    if (r.cuenta_folio) return r.cuenta_folio;
+    if (r.id_cuenta_cobranza == null) return 'Sin cuenta';
+    const padded = String(r.id_cuenta_cobranza).padStart(6, '0');
+    const tipo = String(r.tipo_cuenta ?? '').toLowerCase();
+    if (tipo === 'producto') return `CCP-${padded}`;
+    if (tipo === 'mantenimiento') return `CM-${padded}`;
+    return `CC-${padded}`;
   };
 
   const totalPages = Math.max(1, Math.ceil(shown / PAGE_SIZE));
@@ -267,6 +235,11 @@ export default function CollectionPayments() {
       return acc;
     }, []);
 
+  // 403 de la RPC: no es una falla de carga, es falta de permiso.
+  if (sinPermiso) {
+    return <CollectionSinPermiso title="No tienes permiso para ver Relación de Pagos" />;
+  }
+
   // Primera carga: solo el mensaje centrado. keepPreviousData evita parpadeo al filtrar.
   if (isLoading && payments.length === 0) {
     return <CollectionLoading label="Cargando pagos..." />;
@@ -284,35 +257,39 @@ export default function CollectionPayments() {
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Total pagos</span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all" title={total.toLocaleString()}>
-            {formatCompactNumber(total)}
+            {kpi(total)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">pagos directos del cliente</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            pagos directos del cliente{refGlobal(formatCompactNumber(totalGlobal))}
+          </p>
         </div>
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-3">Monto total</span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-foreground break-all" title={fmtCurrency(totalAmount)}>
-            {formatCompactCurrency(totalAmount)}
+            {isLoadingTotales && !total ? '—' : formatCompactCurrency(totalAmount)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-snug">suma de pagos</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            suma de pagos{refGlobal(formatCompactCurrency(totalMontoGlobal))}
+          </p>
         </div>
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-success block mb-3">Válidos</span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-success break-all" title={cardValidos.toLocaleString()}>
-            {formatCompactNumber(cardValidos)}
+            {kpi(cardValidos)}
           </p>
           <p className="text-[11px] text-muted-foreground leading-snug">coincide</p>
         </div>
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-danger block mb-3">Con observación</span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-danger break-all" title={cardConObs.toLocaleString()}>
-            {formatCompactNumber(cardConObs)}
+            {kpi(cardConObs)}
           </p>
           <p className="text-[11px] text-muted-foreground leading-snug">no coincide · error · sin evidencia · monto</p>
         </div>
         <div className="sozu-kpi-card overflow-hidden">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-warning block mb-3">Sin validar</span>
           <p className="text-[16px] sm:text-[18px] font-bold tabular-nums leading-none mb-1.5 text-warning break-all" title={cardSinValidar.toLocaleString()}>
-            {formatCompactNumber(cardSinValidar)}
+            {kpi(cardSinValidar)}
           </p>
           <p className="text-[11px] text-muted-foreground leading-snug">pendientes de validar</p>
         </div>
@@ -439,7 +416,7 @@ export default function CollectionPayments() {
               )}
               {pageRows.map((r, idx) => {
                 const rowNum = (page - 1) * PAGE_SIZE + idx + 1;
-                const accountId = formatAccount(r.id_cuenta_cobranza, r.tipo_cuenta);
+                const accountId = formatAccount(r);
                 const unit = [r.modelo, r.num_propiedad].filter(Boolean).join(' · ');
                 return (
                 <tr key={r.pago_id} className="border-b border-border/50 hover:bg-muted/20 transition-colors duration-100 h-[48px]">
@@ -463,8 +440,8 @@ export default function CollectionPayments() {
                     {r.estatus_propiedad && <p className={cn('text-[10px] truncate', propStatusTextClass(r.estatus_propiedad))} title={r.estatus_propiedad}>{r.estatus_propiedad}</p>}
                   </td>
                   <td className="px-3 text-center">
-                    {r.tipo_cuenta === 'producto'
-                      ? <span className="text-[12px] text-foreground truncate block" title={r.producto ?? undefined}>{r.producto || 'Sin nombre'}</span>
+                    {r.producto
+                      ? <span className="text-[12px] text-foreground truncate block" title={r.producto}>{r.producto}</span>
                       : <span className="text-[11px] text-muted-foreground/40">No aplica</span>}
                   </td>
                   <td className="px-3 text-left">
@@ -487,11 +464,10 @@ export default function CollectionPayments() {
                   <td className="px-2 text-center">
                     <span className="text-[12px] tabular-nums">{fmtCurrency(Number(r.monto))}</span>
                   </td>
-                  {/* Estado (acuerdo) */}
+                  {/* Estado del PAGO (cuánto de él se aplicó), no del acuerdo: un pago
+                      ya cobrado no puede salir "Vencido" porque su acuerdo siga abierto. */}
                   <td className="px-2 text-center">
-                    {r.estado_acuerdo
-                      ? <EstadoBadge estado={r.estado_acuerdo} />
-                      : <span className="text-[11px] text-muted-foreground/40">Sin registro</span>}
+                    <EstadoBadge estado={r.estado_pago ?? 'sin_aplicar'} />
                   </td>
                   {/* Validado (validación) */}
                   <td className="px-2 text-center">

@@ -608,15 +608,19 @@ export function RelacionPagos() {
   });
 
   // Only fetch when a project is selected.
-  // IMPORTANT: pass `search` to the RPC so the DB filters first, avoiding the
-  // p_limit:5000 cap cutting off pagos when a project has thousands of records.
-  // Client-side filter below further narrows to exact num_propiedad match.
+  // Pre-filtro server-side para que el cap de p_limit no recorte: número → unidad,
+  // texto → cliente. El filtro exacto por num_propiedad sigue abajo, en cliente.
+  // `tipos: ['Propiedad']` mantiene esta vista en pagos de la unidad, ahora que la RPC
+  // también devuelve productos y mantenimiento.
+  const searchTerm = search.trim();
+  const searchIsNumeric = /^\d+$/.test(searchTerm);
   const { pagos: allPagos, isLoading } = useRelacionPagos({
     proyectoId,
-    search,          // server-side pre-filter
+    unidad: searchIsNumeric ? searchTerm : undefined,
+    cliente: searchIsNumeric ? undefined : searchTerm,
+    tipos: ['Propiedad'],
     page: 1,
     pageSize: 5000,
-    tipoCuenta: 'propiedad',
     enabled: !!proyectoId,
   });
 
