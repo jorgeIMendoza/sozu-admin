@@ -142,29 +142,18 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
   // Deactivate old docs preserving the oldest as active+expired, insert new with estatus=2
   const insertDocRecord = async (url: string, typeId: number): Promise<number | null> => {
     try {
-      const { data: activeDocs } = await (supabase as any)
+      // Regla única: todo lo anterior de este tipo pasa a estatus 4 = Expirado; el
+      // nuevo queda vigente. Antes solo el más antiguo pasaba a 4 y el resto se
+      // desactivaba, lo que dejaba varias filas activas del mismo tipo en estatus 2
+      // y el expediente del cliente las listaba todas.
+      const { error: expErr } = await (supabase as any)
         .from("documentos")
-        .select("id")
+        .update({ id_estatus_verificacion: 4 })
         .eq("id_persona", personaId)
         .eq("id_tipo_documento", typeId)
         .eq("activo", true)
-        .order("id", { ascending: true });
-
-      if (activeDocs && activeDocs.length > 0) {
-        // Oldest stays active but marked expired (audit reference)
-        await (supabase as any)
-          .from("documentos")
-          .update({ id_estatus_verificacion: 4 })
-          .eq("id", activeDocs[0].id);
-        // All others → inactive + expired
-        const otherIds = activeDocs.slice(1).map((d: any) => d.id);
-        if (otherIds.length > 0) {
-          await (supabase as any)
-            .from("documentos")
-            .update({ activo: false, id_estatus_verificacion: 4 })
-            .in("id", otherIds);
-        }
-      }
+        .neq("id_estatus_verificacion", 4);
+      if (expErr) console.error("insertDocRecord: expirar previos:", expErr);
 
       const { data: ins, error } = await (supabase as any)
         .from("documentos")

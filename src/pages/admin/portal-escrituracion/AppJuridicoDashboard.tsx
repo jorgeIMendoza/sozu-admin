@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, Component } from 'react';
+import { useState, useMemo, useRef, useEffect, Component } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,7 @@ import { useAsuntosActivos } from '@/modules/juridico/queries/useAsuntosActivos'
 import { useEtapasPorTipoAsunto } from '@/modules/juridico/queries/useEtapasPorTipoAsunto';
 import { CrearExpedienteDialog } from '@/modules/juridico/components/CrearExpedienteDialog';
 import { CambiarEtapaDialog } from '@/modules/juridico/components/CambiarEtapaDialog';
+import { CrearAsuntoDialog } from '@/modules/juridico/components/CrearAsuntoDialog';
 import { useRegistrarActuacion, JURIDICO_QUERY_KEYS } from '@/modules/juridico/hooks/useRegistrarActuacion';
 import type { TipoActuacion, TipoOrigen } from '@/modules/juridico/services/registrarActuacion';
 import { JuridicoServiceError, normalizeJuridicoError } from '@/modules/juridico/services/errors';
@@ -31,6 +32,7 @@ type LegalCaseStatus =
 
 /** Datos Fase 2 (expedientes_juridicos/asuntos_juridicos) unidos por id_propiedad. */
 interface Fase2Info {
+  idExpediente:            string;
   idAsunto:                string;
   idTipoAsunto:            string;
   tipoAsuntoNombre:        string;
@@ -86,8 +88,9 @@ interface LegalRow {
   fechaSentencia:            string | null;
   resultadoProceso:          string;
   observacionesJuridicas:    string | null;
-  /** Presente si esta propiedad ya tiene un expediente jurídico ACTIVO (Fase 2). */
-  fase2: Fase2Info | null;
+  /** Asuntos Fase 2 activos de esta propiedad — puede haber más de uno (multiasunto,
+   *  ej. Queja Profeco + Demanda mercantil simultáneas). Arreglo vacío = sin expediente. */
+  fase2: Fase2Info[];
 }
 
 interface AbogadoItem {
@@ -189,6 +192,7 @@ interface ExpedienteDocItem {
 interface DocumentoRow {
   id: number;
   id_demanda: number;
+  id_asunto: number | null;
   tipo_documento: string;
   nombre_archivo: string;
   url_archivo: string;
@@ -381,11 +385,16 @@ function AppJuridicoDashboardInner() {
   const [detailTab,      setDetailTab]      = useState<'resumen' | 'documentos' | 'bitacora' | 'audiencias' | 'acuerdos' | 'proceso'>('resumen');
   const [adminAbogadoId, setAdminAbogadoId] = useState<number | null>(null);
 
-  // Fase 2 — creación de expediente / cambio de etapa (T3, T2 vía módulo jurídico)
+  // Fase 2 — creación de expediente / asunto adicional / cambio de etapa (T3/T4/T2)
   const [crearExpedienteRow, setCrearExpedienteRow] = useState<LegalRow | null>(null);
+  const [crearAsuntoCtx, setCrearAsuntoCtx] = useState<{
+    idExpediente: string; folioExpediente: string; unitCode: string; clienteName: string;
+  } | null>(null);
   const [cambiarEtapaCtx, setCambiarEtapaCtx] = useState<{
     idAsunto: string; idTipoAsunto: string; etapaActualId: string | null; etapaEsTerminal: boolean;
   } | null>(null);
+  /** Asunto elegido en el selector del panel cuando el expediente tiene >1. null = usar el primero. */
+  const [asuntoSeleccionadoId, setAsuntoSeleccionadoId] = useState<string | null>(null);
 
   // Action dialog state
   const [action, setAction] = useState<{ type: ActionType; row: LegalRow } | null>(null);
@@ -648,11 +657,15 @@ function AppJuridicoDashboardInner() {
   });
 
   // Fase 2 — expedientes/asuntos ACTIVOS, unidos por id_propiedad a las filas legacy.
+  // Una propiedad puede tener varios asuntos activos simultáneos (multiasunto, ej. Queja
+  // Profeco + Demanda mercantil) — de ahí la colección en vez de un solo Fase2Info.
   const { data: asuntosFase2 = [], isLoading: loadingFase2 } = useAsuntosActivos();
   const fase2ByPropiedad = useMemo(() => {
-    const map = new Map<number, Fase2Info>();
+    const map = new Map<number, Fase2Info[]>();
     for (const a of asuntosFase2) {
-      map.set(Number(a.idPropiedad), {
+      const propId = Number(a.idPropiedad);
+      const info: Fase2Info = {
+        idExpediente: a.idExpediente,
         idAsunto: a.idAsunto,
         idTipoAsunto: a.idTipoAsunto,
         tipoAsuntoNombre: a.tipoAsuntoNombre,
@@ -662,7 +675,10 @@ function AppJuridicoDashboardInner() {
         etapaActualNombre: a.etapaActualNombre,
         etapaEsTerminal: a.etapaEsTerminal,
         fechaLimiteContestacion: a.fechaLimiteContestacion,
-      });
+      };
+      const existentes = map.get(propId);
+      if (existentes) existentes.push(info);
+      else map.set(propId, [info]);
     }
     return map;
   }, [asuntosFase2]);
@@ -736,7 +752,7 @@ function AppJuridicoDashboardInner() {
       try {
         const { data } = await (supabase as any)
           .from('app_juridico_documentos')
-          .select('id, id_demanda, tipo_documento, nombre_archivo, url_archivo, descripcion, subido_por, fecha_creacion, mime_type, tamano_bytes')
+          .select('id, id_demanda, id_asunto, tipo_documento, nombre_archivo, url_archivo, descripcion, subido_por, fecha_creacion, mime_type, tamano_bytes')
           .in('id_demanda', demandaIds).eq('activo', true)
           .order('fecha_creacion', { ascending: false });
         return (data ?? []) as DocumentoRow[];
@@ -902,7 +918,7 @@ function AppJuridicoDashboardInner() {
         accountCode:      d.id_cuenta_cobranza ? `CC-${String(d.id_cuenta_cobranza).padStart(6, '0')}` : '—',
         idPropiedad:      d.id_propiedad ?? null,
         personaId:        personaId ?? null,
-        fase2:            d.id_propiedad != null ? (fase2ByPropiedad.get(d.id_propiedad) ?? null) : null,
+        fase2:            d.id_propiedad != null ? (fase2ByPropiedad.get(d.id_propiedad) ?? []) : [],
         proyectoId,
         proyectoNombre,
         unitCode:         prop?.numero_propiedad ?? '—',
@@ -1022,17 +1038,46 @@ function AppJuridicoDashboardInner() {
   const selectedAcuerdos   = selectedRow ? (acuerdosMap[selectedRow.demandaId] ?? []) : [];
   const selectedDocs       = selectedRow ? (docsMap[selectedRow.demandaId] ?? []) : [];
 
-  // ── Fase 2 — actuaciones_procesales del asunto seleccionado (Incrementos 2 y 3) ────
-  // Misma queryKey que ya invalidan useRegistrarActuacion/useCambiarEtapaAsunto — se
-  // refresca sola tras T1/T2, sin invalidación adicional.
+  // ── Multiasunto: mantener selectedRow sincronizado con allRows ────────────────
+  // selectedRow es un snapshot en estado local — sin esto, tras crear un asunto nuevo
+  // (invalidación de useAsuntosActivos → allRows se recalcula) el panel seguiría
+  // mostrando el arreglo `fase2` viejo hasta que el usuario reabriera la fila.
+  useEffect(() => {
+    if (!selectedRow) return;
+    const fresh = allRows.find(r => r.demandaId === selectedRow.demandaId);
+    if (fresh && fresh.fase2.length !== selectedRow.fase2.length) {
+      setSelectedRow(fresh);
+    }
+  }, [allRows, selectedRow]);
+
+  // Asunto activo dentro del panel: el elegido en el selector de asuntos, o el primero
+  // por defecto. Con un solo asunto (caso normal) equivale a lo de antes.
+  const asuntoActivo = useMemo<Fase2Info | null>(() => {
+    if (!selectedRow || selectedRow.fase2.length === 0) return null;
+    if (asuntoSeleccionadoId) {
+      return selectedRow.fase2.find(a => a.idAsunto === asuntoSeleccionadoId) ?? selectedRow.fase2[0];
+    }
+    return selectedRow.fase2[0];
+  }, [selectedRow, asuntoSeleccionadoId]);
+
+  // Documentos del panel filtrados por asunto activo cuando hay más de uno — los
+  // documentos sin id_asunto (legacy, previos a Fase 2) siempre se muestran.
+  const selectedDocsFiltered = useMemo(() => {
+    if (!selectedRow || selectedRow.fase2.length <= 1 || !asuntoActivo) return selectedDocs;
+    return selectedDocs.filter(d => d.id_asunto == null || String(d.id_asunto) === asuntoActivo.idAsunto);
+  }, [selectedDocs, selectedRow, asuntoActivo]);
+
+  // ── Fase 2 — actuaciones_procesales del asunto activo (Incrementos 2 y 3) ─────────
+  // Misma queryKey que ya invalidan useRegistrarActuacion/useCambiarEtapaAsunto/
+  // useCrearAsunto — se refresca sola tras T1/T2/T4, sin invalidación adicional.
   const { data: actuacionesFase2 = [] } = useQuery({
-    queryKey: JURIDICO_QUERY_KEYS.actuaciones(selectedRow?.fase2?.idAsunto ?? ''),
-    enabled: !!selectedRow?.fase2?.idAsunto,
+    queryKey: JURIDICO_QUERY_KEYS.actuaciones(asuntoActivo?.idAsunto ?? ''),
+    enabled: !!asuntoActivo?.idAsunto,
     queryFn: async (): Promise<ActuacionRow[]> => {
       const { data, error } = await (supabase as any)
         .from('actuaciones_procesales')
         .select('id, tipo_actuacion, origen, fecha_actuacion, descripcion, resultado, etapa_al_momento, creado_por, fecha_creacion')
-        .eq('id_asunto', selectedRow!.fase2!.idAsunto)
+        .eq('id_asunto', asuntoActivo!.idAsunto)
         .order('fecha_actuacion', { ascending: false })
         .order('id', { ascending: false });
       if (error) throw error;
@@ -1040,25 +1085,25 @@ function AppJuridicoDashboardInner() {
     },
   });
 
-  // Catálogo de etapas del tipo_asunto del asunto seleccionado — para resolver
+  // Catálogo de etapas del tipo_asunto del asunto activo — para resolver
   // etapa_al_momento (id) → nombre. Hook ya existente, ya usado por CambiarEtapaDialog.
-  const { data: etapasAsuntoSeleccionado = [] } = useEtapasPorTipoAsunto(selectedRow?.fase2?.idTipoAsunto ?? null);
+  const { data: etapasAsuntoSeleccionado = [] } = useEtapasPorTipoAsunto(asuntoActivo?.idTipoAsunto ?? null);
   const etapasNombreMap = useMemo(() => {
     const m = new Map<string, string>();
     for (const e of etapasAsuntoSeleccionado) m.set(e.id, e.nombre);
     return m;
   }, [etapasAsuntoSeleccionado]);
 
-  // Abogado responsable del asunto (asuntos_juridicos.id_abogado_responsable no está
-  // expuesta por useAsuntosActivos — waterfall de 2 pasos, solo lectura, local a este panel).
+  // Abogado responsable del asunto activo (asuntos_juridicos.id_abogado_responsable no
+  // está expuesta por useAsuntosActivos — waterfall de 2 pasos, solo lectura, local aquí).
   const { data: asuntoDetalleFase2 } = useQuery({
-    queryKey: ['app-juridico-asunto-detalle', selectedRow?.fase2?.idAsunto],
-    enabled: !!selectedRow?.fase2?.idAsunto,
+    queryKey: ['app-juridico-asunto-detalle', asuntoActivo?.idAsunto],
+    enabled: !!asuntoActivo?.idAsunto,
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('asuntos_juridicos')
         .select('id_abogado_responsable')
-        .eq('id', selectedRow!.fase2!.idAsunto)
+        .eq('id', asuntoActivo!.idAsunto)
         .maybeSingle();
       return data as { id_abogado_responsable: number | null } | null;
     },
@@ -1101,7 +1146,7 @@ function AppJuridicoDashboardInner() {
   // Historial de etapas: cadena de etapa_al_momento de cada CAMBIO_ETAPA (ascendente) +
   // etapa actual al final — 100% derivado de datos ya cargados, sin query nueva (Incremento 3).
   const historialEtapas = useMemo(() => {
-    if (!selectedRow?.fase2) return [] as string[];
+    if (!asuntoActivo) return [] as string[];
     const cambios = actuacionesFase2
       .filter(a => a.tipo_actuacion === 'CAMBIO_ETAPA')
       .slice()
@@ -1109,9 +1154,9 @@ function AppJuridicoDashboardInner() {
     const nombres = cambios
       .map(a => (a.etapa_al_momento != null ? etapasNombreMap.get(String(a.etapa_al_momento)) ?? null : null))
       .filter((n): n is string => !!n);
-    if (selectedRow.fase2.etapaActualNombre) nombres.push(selectedRow.fase2.etapaActualNombre);
+    if (asuntoActivo.etapaActualNombre) nombres.push(asuntoActivo.etapaActualNombre);
     return nombres;
-  }, [actuacionesFase2, etapasNombreMap, selectedRow]);
+  }, [actuacionesFase2, etapasNombreMap, asuntoActivo]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -1626,7 +1671,7 @@ function AppJuridicoDashboardInner() {
                 <tbody>
                   {filteredRows.map((row, idx) => (
                     <tr key={row.demandaId}
-                      onClick={() => { setSelectedRow(row); setDetailTab('resumen'); }}
+                      onClick={() => { setSelectedRow(row); setDetailTab('resumen'); setAsuntoSeleccionadoId(null); }}
                       className={cn(
                         'border-b border-border cursor-pointer transition-colors',
                         idx % 2 === 0 ? 'bg-white' : 'bg-muted/10',
@@ -1681,11 +1726,19 @@ function AppJuridicoDashboardInner() {
                       <td className="px-3 py-3 max-w-[160px]">
                         <p className="text-xs text-muted-foreground line-clamp-2">{row.observations || '—'}</p>
                       </td>
-                      {/* Etapa */}
+                      {/* Etapa (asunto primario; "+N" indica más asuntos activos) */}
                       <td className="px-3 py-3 text-center">
-                        {row.fase2 ? (
-                          <span className="text-[11px] font-medium text-primary whitespace-nowrap">
-                            {row.fase2.etapaActualNombre ?? 'Sin etapa'}
+                        {row.fase2.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                            <span className="text-[11px] font-medium text-primary">
+                              {row.fase2[0].etapaActualNombre ?? 'Sin etapa'}
+                            </span>
+                            {row.fase2.length > 1 && (
+                              <span title={row.fase2.slice(1).map(a => a.tipoAsuntoNombre).join(', ')}
+                                className="text-[10px] px-1 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                                +{row.fase2.length - 1}
+                              </span>
+                            )}
                           </span>
                         ) : hasProcesoCol ? (
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap">
@@ -1702,7 +1755,7 @@ function AppJuridicoDashboardInner() {
                       {/* Días restantes (Fase 2: fecha_limite_contestacion; legacy: regularización) */}
                       <td className="px-3 py-3 text-center tabular-nums">
                         {(() => {
-                          const fechaLimite = row.fase2?.fechaLimiteContestacion
+                          const fechaLimite = row.fase2[0]?.fechaLimiteContestacion
                             ?? (hasProcesoCol && row.estatusRegularizacion === 'EN_ESPERA' ? row.fechaLimiteRegularizacion : null);
                           const info = diasRestantesInfo(fechaLimite);
                           if (!info) return <span className="text-[11px] text-muted-foreground/40">—</span>;
@@ -1715,18 +1768,18 @@ function AppJuridicoDashboardInner() {
                       </td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {row.fase2 ? (
+                          {row.fase2.length > 0 ? (
                             <button
                               onClick={e => {
                                 e.stopPropagation();
                                 setCambiarEtapaCtx({
-                                  idAsunto: row.fase2!.idAsunto,
-                                  idTipoAsunto: row.fase2!.idTipoAsunto,
-                                  etapaActualId: row.fase2!.idEtapaActual,
-                                  etapaEsTerminal: row.fase2!.etapaEsTerminal,
+                                  idAsunto: row.fase2[0].idAsunto,
+                                  idTipoAsunto: row.fase2[0].idTipoAsunto,
+                                  etapaActualId: row.fase2[0].idEtapaActual,
+                                  etapaEsTerminal: row.fase2[0].etapaEsTerminal,
                                 });
                               }}
-                              title="Cambiar etapa"
+                              title="Cambiar etapa (asunto primario — usa el panel para elegir otro)"
                               className="h-7 px-2 flex items-center gap-1 rounded hover:bg-muted text-primary text-[11px] font-medium transition-colors"
                             >
                               <ArrowRight className="h-3.5 w-3.5" /> Etapa
@@ -1740,7 +1793,7 @@ function AppJuridicoDashboardInner() {
                               <Scale className="h-3.5 w-3.5" /> Expediente
                             </button>
                           )}
-                          <button onClick={e => { e.stopPropagation(); setSelectedRow(row); setDetailTab('resumen'); }}
+                          <button onClick={e => { e.stopPropagation(); setSelectedRow(row); setDetailTab('resumen'); setAsuntoSeleccionadoId(null); }}
                             className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors">
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
@@ -1764,12 +1817,35 @@ function AppJuridicoDashboardInner() {
                   <p className="text-xs text-muted-foreground mt-0.5">{selectedRow.proyectoNombre}</p>
                   <p className="text-[11px] text-muted-foreground/60 font-mono mt-0.5">{selectedRow.accountCode}</p>
                 </div>
-                <button onClick={() => setSelectedRow(null)} className="shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground">
+                <button onClick={() => { setSelectedRow(null); setAsuntoSeleccionadoId(null); }} className="shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground">
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="mt-2"><StatusBadge status={selectedRow.lawsuitStatus} /></div>
             </div>
+
+            {/* Selector de asuntos — solo si el expediente tiene más de uno (multiasunto) */}
+            {selectedRow.fase2.length > 1 && (
+              <div className="px-4 py-2.5 border-b border-border bg-muted/20 shrink-0">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">
+                  Asuntos jurídicos
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedRow.fase2.map(a => (
+                    <button key={a.idAsunto}
+                      onClick={() => setAsuntoSeleccionadoId(a.idAsunto)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors',
+                        asuntoActivo?.idAsunto === a.idAsunto
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-white text-foreground border-border hover:bg-muted',
+                      )}>
+                      {a.tipoAsuntoNombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex border-b border-border shrink-0 overflow-x-auto">
@@ -1796,17 +1872,18 @@ function AppJuridicoDashboardInner() {
 
               {detailTab === 'resumen' && (
                 <>
-                  {selectedRow.fase2 && (() => {
-                    const diasInfo = diasRestantesInfo(selectedRow.fase2.fechaLimiteContestacion);
+                  {asuntoActivo && (() => {
+                    const diasInfo = diasRestantesInfo(asuntoActivo.fechaLimiteContestacion);
                     return (
                       <section className="space-y-2">
                         <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Expediente jurídico</h3>
                         <dl className="space-y-1.5">
                           {[
-                            ['Folio expediente', selectedRow.fase2.folioExpediente],
-                            ['Folio asunto',      selectedRow.fase2.folioAsunto],
-                            ['Tipo de asunto',    selectedRow.fase2.tipoAsuntoNombre],
-                            ['Etapa actual',      selectedRow.fase2.etapaActualNombre ?? 'Sin etapa'],
+                            ['Folio expediente', asuntoActivo.folioExpediente],
+                            ['Folio asunto',      asuntoActivo.folioAsunto],
+                            ['Tipo de asunto',    asuntoActivo.tipoAsuntoNombre],
+                            ['Estatus',           asuntoActivo.etapaEsTerminal ? 'Cerrado' : 'Activo'],
+                            ['Etapa actual',      asuntoActivo.etapaActualNombre ?? 'Sin etapa'],
                           ].map(([l, v]) => (
                             <div key={l} className="flex justify-between gap-3">
                               <dt className="text-xs text-muted-foreground shrink-0">{l}</dt>
@@ -1910,7 +1987,7 @@ function AppJuridicoDashboardInner() {
                           label: 'Registrar actuación',
                           icon: ScrollText,
                           action: () => {
-                            if (!selectedRow.fase2) {
+                            if (!asuntoActivo) {
                               toast.info('Requiere expediente Fase 2', { description: "Crea el expediente primero con el botón 'Expediente' en la tabla." });
                               return;
                             }
@@ -1922,15 +1999,31 @@ function AppJuridicoDashboardInner() {
                           label: 'Cambiar etapa',
                           icon: ArrowRight,
                           action: () => {
-                            if (!selectedRow.fase2) {
+                            if (!asuntoActivo) {
                               toast.info('Requiere expediente Fase 2', { description: "Crea el expediente primero con el botón 'Expediente' en la tabla." });
                               return;
                             }
                             setCambiarEtapaCtx({
-                              idAsunto: selectedRow.fase2.idAsunto,
-                              idTipoAsunto: selectedRow.fase2.idTipoAsunto,
-                              etapaActualId: selectedRow.fase2.idEtapaActual,
-                              etapaEsTerminal: selectedRow.fase2.etapaEsTerminal,
+                              idAsunto: asuntoActivo.idAsunto,
+                              idTipoAsunto: asuntoActivo.idTipoAsunto,
+                              etapaActualId: asuntoActivo.idEtapaActual,
+                              etapaEsTerminal: asuntoActivo.etapaEsTerminal,
+                            });
+                          },
+                        },
+                        {
+                          label: '+ Asunto',
+                          icon: Plus,
+                          action: () => {
+                            if (!asuntoActivo) {
+                              toast.info('Requiere expediente Fase 2', { description: "Crea el expediente primero con el botón 'Expediente' en la tabla." });
+                              return;
+                            }
+                            setCrearAsuntoCtx({
+                              idExpediente: asuntoActivo.idExpediente,
+                              folioExpediente: asuntoActivo.folioExpediente,
+                              unitCode: selectedRow.unitCode,
+                              clienteName: selectedRow.clienteName,
                             });
                           },
                         },
@@ -1964,14 +2057,19 @@ function AppJuridicoDashboardInner() {
               {detailTab === 'documentos' && (
                 <section className="space-y-3">
                   <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Documentos del caso</h3>
-                  {selectedDocs.length === 0 ? (
+                  {selectedRow.fase2.length > 1 && (
+                    <p className="text-[11px] text-muted-foreground -mt-1">
+                      Mostrando documentos de "{asuntoActivo?.tipoAsuntoNombre}" + documentos sin asunto asignado.
+                    </p>
+                  )}
+                  {selectedDocsFiltered.length === 0 ? (
                     <div className="text-center py-8">
                       <FileText className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
                       <p className="text-xs text-muted-foreground">Sin documentos cargados</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {selectedDocs.map(doc => (
+                      {selectedDocsFiltered.map(doc => (
                         <button
                           key={doc.id}
                           onClick={() => handleVerDocumento(doc)}
@@ -2039,6 +2137,12 @@ function AppJuridicoDashboardInner() {
               {detailTab === 'audiencias' && (
                 <section className="space-y-3">
                   <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Audiencias</h3>
+                  {selectedRow.fase2.length > 1 && (
+                    <p className="text-[11px] text-muted-foreground -mt-1">
+                      Compartidas entre todos los asuntos de esta unidad — la tabla actual no
+                      distingue audiencias por asunto (ver limitaciones conocidas).
+                    </p>
+                  )}
                   {selectedAudiencias.length === 0 ? (
                     <div className="text-center py-8">
                       <CalendarDays className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -2067,6 +2171,12 @@ function AppJuridicoDashboardInner() {
               {detailTab === 'acuerdos' && (
                 <section className="space-y-3">
                   <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Acuerdos</h3>
+                  {selectedRow.fase2.length > 1 && (
+                    <p className="text-[11px] text-muted-foreground -mt-1">
+                      Compartidos entre todos los asuntos de esta unidad — la tabla actual no
+                      distingue acuerdos por asunto (ver limitaciones conocidas).
+                    </p>
+                  )}
                   {selectedAcuerdos.length === 0 ? (
                     <div className="text-center py-8">
                       <HeartHandshake className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -2462,7 +2572,7 @@ function AppJuridicoDashboardInner() {
                   <Button className="flex-1" disabled={!actionInput || !actionFile || uploadingDocumento}
                     onClick={() => actionFile && uploadDocumento({
                       demandaId: action.row.demandaId,
-                      idAsunto: action.row.fase2?.idAsunto ?? null,
+                      idAsunto: asuntoActivo?.idAsunto ?? null,
                       file: actionFile,
                       tipoDocumento: actionInput,
                       descripcion: actionInput2.trim(),
@@ -2513,12 +2623,12 @@ function AppJuridicoDashboardInner() {
                 <div className="flex gap-2 mt-4">
                   <Button variant="outline" className="flex-1" onClick={closeAction}>Cancelar</Button>
                   <Button className="flex-1"
-                    disabled={!actionInput || !actionInput2 || !actionInput3 || !actionInput4.trim() || registrarActuacionMutation.isPending || !action.row.fase2}
+                    disabled={!actionInput || !actionInput2 || !actionInput3 || !actionInput4.trim() || registrarActuacionMutation.isPending || !asuntoActivo}
                     onClick={async () => {
-                      if (!action.row.fase2) return;
+                      if (!asuntoActivo) return;
                       try {
                         await registrarActuacionMutation.mutateAsync({
-                          idAsunto: action.row.fase2.idAsunto,
+                          idAsunto: asuntoActivo.idAsunto,
                           tipoActuacion: actionInput as TipoActuacion,
                           origen: actionInput2 as TipoOrigen,
                           fechaActuacion: actionInput3,
@@ -2934,6 +3044,19 @@ function AppJuridicoDashboardInner() {
           idTipoAsunto={cambiarEtapaCtx.idTipoAsunto}
           etapaActualId={cambiarEtapaCtx.etapaActualId}
           etapaEsTerminal={cambiarEtapaCtx.etapaEsTerminal}
+        />
+      )}
+
+      {/* Fase 2 — agregar asunto a un expediente ACTIVO existente (T4 crear_asunto) */}
+      {crearAsuntoCtx && (
+        <CrearAsuntoDialog
+          open={!!crearAsuntoCtx}
+          onOpenChange={(open) => { if (!open) setCrearAsuntoCtx(null); }}
+          expediente={crearAsuntoCtx}
+          onCreada={(idAsunto) => {
+            setAsuntoSeleccionadoId(idAsunto);
+            setCrearAsuntoCtx(null);
+          }}
         />
       )}
     </div>
