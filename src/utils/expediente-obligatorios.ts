@@ -51,7 +51,7 @@ const TODOS_LOS_PORTALES: readonly PortalExpediente[] =
  * fusión, el perfil de cliente también la pide obligatoria.
  */
 export const GRUPOS_PF: readonly GrupoObligatorio[] = [
-  { key: 'identidad', label: 'Identificación oficial',         ids: ID_DOC_TIPO_IDS, owner: 'self', portales: TODOS_LOS_PORTALES },
+  { key: 'identidad', label: 'Identificación oficial (INE o pasaporte)',         ids: ID_DOC_TIPO_IDS, owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'curp',      label: 'CURP',                           ids: [5],             owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'csf',       label: 'Constancia de situación fiscal',  ids: [6],             owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8],             owner: 'self', portales: TODOS_LOS_PORTALES },
@@ -69,7 +69,7 @@ export const GRUPOS_PM: readonly GrupoObligatorio[] = [
   { key: 'csf_empresa',       label: 'CSF de la empresa',               ids: [6],  owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'domicilio_empresa', label: 'Domicilio fiscal de la empresa',  ids: [8],  owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'poder_notarial',    label: 'Poder notarial',                  ids: [9],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
-  { key: 'identidad_rep',     label: 'Identificación del rep. legal',   ids: ID_DOC_TIPO_IDS, owner: 'rep', portales: TODOS_LOS_PORTALES },
+  { key: 'identidad_rep',     label: 'Identificación del rep. legal (INE o pasaporte)',   ids: ID_DOC_TIPO_IDS, owner: 'rep', portales: TODOS_LOS_PORTALES },
   { key: 'curp_rep',          label: 'CURP del rep. legal',             ids: [5],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
   { key: 'csf_rep',           label: 'CSF del rep. legal',              ids: [6],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
   { key: 'domicilio_rep',     label: 'Domicilio del rep. legal',        ids: [8],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
@@ -127,13 +127,98 @@ export function buildLatestPorPersonaTipo(docs: DocParaEvaluar[]): Record<string
   return map;
 }
 
-/** Un grupo está cumplido si ALGUNO de sus tipos tiene su doc más reciente validado. */
+// ── Identificación oficial: INE completo, pasaporte, y el legacy como fallback ──
+export const INE_FRENTE_TIPO_ID = 2;
+export const INE_REVERSO_TIPO_ID = 3;
+export const PASAPORTE_TIPO_ID = 4;
+/** Frente y reverso por separado: deprecados por el INE completo (tipo 63). */
+export const INE_LEGACY_TIPO_IDS = [INE_FRENTE_TIPO_ID, INE_REVERSO_TIPO_ID];
+
+export type OrigenIdentidad = 'ine_completo' | 'pasaporte' | 'ine_legacy' | 'ninguno';
+
+export interface ResolucionIdentidad {
+  cumplida: boolean;
+  origen: OrigenIdentidad;
+  /** Tipos que mandan hoy (63; o 4; o el par 2+3). Se resaltan en la UI. */
+  tiposVigentes: number[];
+  /** Presentes en la base pero ya sin efecto: se pintan como deprecados. */
+  tiposDeprecados: number[];
+  /** El legacy caducó: el único camino es subir el INE completo en un PDF. */
+  exigeIneCompleto: boolean;
+}
+
+/**
+ * Regla de negocio 2026-07-31, alineada con el portal del cliente (que es quien la dicta):
+ *
+ *  1. **Identificación oficial = INE o pasaporte**, uno u otro.
+ *  2. El canal vigente del INE es el **completo** (frente y reverso en un PDF, tipo 63).
+ *     `Frente INE` (2) y `Reverso INE` (3) quedan **deprecados**.
+ *  3. Al subir una identificación nueva, el portal del cliente ya expira las demás
+ *     (`commitDoc(..., ID_DOC_TIPO_IDS.filter(t => t !== tipoId))`): así solo queda una
+ *     versión vigente. Aquí solo se **lee** ese resultado.
+ *  4. Mientras el legacy siga **validado**, vale como fallback — el par frente + reverso,
+ *     igual que exige el portal del cliente. Quien ya lo tenía aprobado no se rompe.
+ *  5. Si el legacy está **expirado o rechazado**, el fallback muere: solo cuenta el INE
+ *     completo. (20 personas en prod al 2026-07-31.)
+ */
+export function resolverIdentidad(
+  personaId: number | null,
+  latest: Record<string, LatestDoc>,
+): ResolucionIdentidad {
+  const vacia: ResolucionIdentidad = {
+    cumplida: false, origen: 'ninguno', tiposVigentes: [], tiposDeprecados: [], exigeIneCompleto: false,
+  };
+  if (!personaId) return vacia;
+
+  const doc = (t: number) => latest[`${personaId}__${t}`];
+  const validado = (t: number) => doc(t)?.estatusId === ESTATUS_VALIDADO;
+  const caduco = (t: number) => doc(t)?.estatusId === 4 || doc(t)?.estatusId === 3;
+  const legacyPresente = INE_LEGACY_TIPO_IDS.filter(t => !!doc(t));
+
+  // 1. INE completo subido → manda, y el legacy queda deprecado aunque siga en la base.
+  if (doc(INE_COMPLETO_TIPO_ID)) {
+    return {
+      cumplida: validado(INE_COMPLETO_TIPO_ID),
+      origen: 'ine_completo',
+      tiposVigentes: [INE_COMPLETO_TIPO_ID],
+      tiposDeprecados: legacyPresente,
+      exigeIneCompleto: false,
+    };
+  }
+
+  // 2. Pasaporte: alternativa válida por sí sola, no deprecada.
+  if (validado(PASAPORTE_TIPO_ID)) {
+    return { ...vacia, cumplida: true, origen: 'pasaporte', tiposVigentes: [PASAPORTE_TIPO_ID], tiposDeprecados: legacyPresente };
+  }
+
+  // 3. Fallback legacy: el PAR frente + reverso, y solo si ambos siguen validados.
+  if (validado(INE_FRENTE_TIPO_ID) && validado(INE_REVERSO_TIPO_ID)) {
+    return { ...vacia, cumplida: true, origen: 'ine_legacy', tiposVigentes: [...INE_LEGACY_TIPO_IDS] };
+  }
+
+  // 4. Sin identificación vigente. Si el legacy existe pero caducó (o está incompleto),
+  //    el único camino es el INE completo.
+  return {
+    ...vacia,
+    tiposDeprecados: legacyPresente,
+    exigeIneCompleto: legacyPresente.length > 0 && (legacyPresente.some(caduco) || !validado(INE_FRENTE_TIPO_ID) || !validado(INE_REVERSO_TIPO_ID)),
+  };
+}
+
+/** El grupo de identificación oficial no se evalúa por "algún tipo validado". */
+export const ES_GRUPO_IDENTIDAD = (key: string) => key === 'identidad' || key === 'identidad_rep';
+
+/**
+ * Un grupo está cumplido si su documento más reciente está validado. El grupo de
+ * identificación oficial usa `resolverIdentidad` (INE completo > pasaporte > par legacy).
+ */
 function grupoCumplido(
   personaId: number | null,
   grupo: GrupoObligatorio,
   latest: Record<string, LatestDoc>,
 ): boolean {
   if (!personaId) return false;
+  if (ES_GRUPO_IDENTIDAD(grupo.key)) return resolverIdentidad(personaId, latest).cumplida;
   return grupo.ids.some(tipoId => latest[`${personaId}__${tipoId}`]?.estatusId === ESTATUS_VALIDADO);
 }
 
