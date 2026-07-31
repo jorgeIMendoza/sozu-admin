@@ -242,7 +242,7 @@ const PropertyAcquisitionDetail = ({ investment }: Props) => {
               {tab === "pagos" && <PaymentSchedule investment={investment} />}
 
               {tab === "obra" && (
-                <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} />
+                <ConstructionProgressSection cuentaId={property.id} activeStageId={activeStage?.id} defaultExpanded />
               )}
 
               {tab === "docs" && <PropertyDocuments propertyId={property.id} />}

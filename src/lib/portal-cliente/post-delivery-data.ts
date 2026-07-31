@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveIdPropiedad } from "@/lib/portal-cliente/construction-progress-data";
 
 // ── Types ──
 
@@ -320,18 +321,13 @@ export function useWarrantyForCuenta(cuentaId: string | undefined) {
   return useQuery({
     queryKey: ["warranty", cuentaId],
     queryFn: async (): Promise<Warranty | null> => {
-      const { data: cc, error: e0 } = await supabase
-        .from("cuentas_cobranza")
-        .select("id_propiedad")
-        .eq("id", Number(cuentaId))
-        .maybeSingle();
-      if (e0) throw e0;
-      if (!cc?.id_propiedad) return null;
+      const idPropiedad = await resolveIdPropiedad(Number(cuentaId));
+      if (!idPropiedad) return null;
 
       const { data: garantia, error: e1 } = await supabase
         .from("postventa_garantias_unidad")
         .select("id, id_propiedad, fecha_inicio, fecha_vencimiento")
-        .eq("id_propiedad", cc.id_propiedad)
+        .eq("id_propiedad", idPropiedad)
         .eq("activo", true)
         .order("fecha_inicio", { ascending: false })
         .limit(1)
@@ -410,15 +406,11 @@ export function useCreateIncident(cuentaId: string) {
       description: string;
       warrantyClaimed: boolean;
     }) => {
-      const { data: cc } = await supabase
-        .from("cuentas_cobranza")
-        .select("id_propiedad")
-        .eq("id", Number(cuentaId))
-        .maybeSingle();
+      const idPropiedad = await resolveIdPropiedad(Number(cuentaId));
 
       const { error } = await supabase.from("postventa_tickets").insert({
         id_cuenta_cobranza: Number(cuentaId),
-        id_propiedad: cc?.id_propiedad ?? null,
+        id_propiedad: idPropiedad,
         id_postventa_categoria_garantia: CATEGORIA_TO_DB_ID[input.category],
         subcategoria: input.title,
         descripcion: input.description,

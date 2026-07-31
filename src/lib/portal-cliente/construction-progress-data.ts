@@ -24,6 +24,7 @@ export interface ConstructionUpdate {
   description: string;
   photos: ConstructionPhoto[];
   videoUrl?: string;
+  videoWatchUrl?: string;
   videoTitle?: string;
 }
 
@@ -36,6 +37,7 @@ export interface ConstructionProgressData {
   estimatedDelivery: string;
   milestones: ConstructionMilestone[];
   featuredVideoUrl?: string;
+  featuredVideoWatchUrl?: string;
   featuredVideoTitle?: string;
   updates: ConstructionUpdate[];
   photos: ConstructionPhoto[];
@@ -43,12 +45,37 @@ export interface ConstructionProgressData {
 
 // ── Helpers ──
 
+/**
+ * Extrae el id de video de cualquier formato de link de YouTube:
+ * watch?v=, youtu.be/, /embed/, /shorts/, /live/, con o sin params extra.
+ */
+export function youtubeVideoId(url: string): string | null {
+  if (!url) return null;
+  const clean = url.trim();
+  const patterns = [
+    /[?&]v=([A-Za-z0-9_-]{6,})/,
+    /youtu\.be\/([A-Za-z0-9_-]{6,})/,
+    /\/embed\/([A-Za-z0-9_-]{6,})/,
+    /\/shorts\/([A-Za-z0-9_-]{6,})/,
+    /\/live\/([A-Za-z0-9_-]{6,})/,
+  ];
+  for (const re of patterns) {
+    const m = clean.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 function toEmbedUrl(url: string): string {
-  if (!url) return url;
-  if (url.includes("/embed/")) return url;
-  const match = url.match(/[?&]v=([^&#]+)/);
-  if (match) return `https://www.youtube.com/embed/${match[1]}`;
-  return url;
+  const id = youtubeVideoId(url);
+  if (!id) return url;
+  // playsinline=1 → necesario para iOS/WebView del app; rel=0 evita sugeridos de otros canales
+  return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&playsinline=1`;
+}
+
+function toWatchUrl(url: string): string {
+  const id = youtubeVideoId(url);
+  return id ? `https://www.youtube.com/watch?v=${id}` : url;
 }
 
 function fmtDateFromTs(ts: string): string {
@@ -93,6 +120,35 @@ function applyProgressToMilestones(milestones: ConstructionMilestone[], pct: num
   return milestones.map((m) => ({ ...m, done: pct > m.pct }));
 }
 
+// ── Resolución de propiedad ──
+
+/**
+ * Devuelve el `id_propiedad` de una cuenta de cobranza.
+ *
+ * Muchas cuentas traen `id_propiedad` en NULL y la propiedad solo se conoce a
+ * través de la oferta (`ofertas.id_propiedad`). Mismo fallback que aplica
+ * `use-portfolio.ts`; sin él, las vistas que dependen de la propiedad quedan
+ * vacías para esas cuentas.
+ */
+export async function resolveIdPropiedad(cuentaId: number): Promise<number | null> {
+  const { data: cc, error } = await supabase
+    .from("cuentas_cobranza")
+    .select("id_propiedad, id_oferta")
+    .eq("id", cuentaId)
+    .maybeSingle();
+  if (error) throw error;
+  if (cc?.id_propiedad) return cc.id_propiedad as number;
+  if (!cc?.id_oferta) return null;
+
+  const { data: oferta, error: eo } = await supabase
+    .from("ofertas")
+    .select("id_propiedad")
+    .eq("id", cc.id_oferta)
+    .maybeSingle();
+  if (eo) throw eo;
+  return (oferta?.id_propiedad as number | null) ?? null;
+}
+
 // ── Hook ──
 
 export function useConstructionProgress(cuentaId: string | undefined) {
@@ -100,18 +156,13 @@ export function useConstructionProgress(cuentaId: string | undefined) {
     queryKey: ["construction-progress", cuentaId],
     queryFn: async (): Promise<ConstructionProgressData | null> => {
       // Step 1: resolve id_proyecto via cuenta → propiedad → edificio_modelo → edificio → proyecto
-      const { data: cc, error: e0 } = await supabase
-        .from("cuentas_cobranza")
-        .select("id_propiedad")
-        .eq("id", Number(cuentaId))
-        .maybeSingle();
-      if (e0) throw e0;
-      if (!cc?.id_propiedad) return null;
+      const idPropiedad = await resolveIdPropiedad(Number(cuentaId));
+      if (!idPropiedad) return null;
 
       const { data: prop, error: e1 } = await supabase
         .from("propiedades")
         .select("id_edificio_modelo")
-        .eq("id", cc.id_propiedad)
+        .eq("id", idPropiedad)
         .maybeSingle();
       if (e1) throw e1;
       if (!prop?.id_edificio_modelo) return null;
@@ -189,6 +240,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
 
       const latest = videoRows[0];
       const featuredVideoUrl = latest ? toEmbedUrl(latest.link) : undefined;
+      const featuredVideoWatchUrl = latest ? toWatchUrl(latest.link) : undefined;
       const featuredVideoTitle = latest?.nombre ?? "Recorrido del avance";
 
       const photos: ConstructionPhoto[] = fotoRows.map((f) => {
@@ -208,6 +260,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         // attach project photos only to the latest update
         photos: idx === 0 ? photos : [],
         videoUrl: toEmbedUrl(v.link),
+        videoWatchUrl: toWatchUrl(v.link),
         videoTitle: v.nombre,
       }));
 
@@ -228,6 +281,7 @@ export function useConstructionProgress(cuentaId: string | undefined) {
         estimatedDelivery: p.fecha_entrega ?? "",
         milestones,
         featuredVideoUrl,
+        featuredVideoWatchUrl,
         featuredVideoTitle,
         updates,
         photos,

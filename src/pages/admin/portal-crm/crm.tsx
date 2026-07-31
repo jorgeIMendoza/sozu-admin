@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, Fragment } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -1344,6 +1344,7 @@ function EditableContactName({ personaId, name, onSaved, canEdit = true }: { per
 
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
+  const [sp] = useSearchParams(); // pestaña inicial vía ?tab= (ej. desde el módulo de Tareas)
   const orgId = useCrmOrgId();
   const { user, profile } = useAuth();
   const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
@@ -1734,7 +1735,7 @@ export function CrmContactDetail() {
 
         {/* Center: activity tabs */}
         <section className="col-span-6 border-r border-border h-full min-h-0 overflow-hidden">
-          <Tabs defaultValue="descripcion" className="flex flex-col h-full min-h-0">
+          <Tabs defaultValue={sp.get("tab") || "descripcion"} className="flex flex-col h-full min-h-0">
             <div className="border-b border-border shrink-0">
               <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
@@ -3293,28 +3294,37 @@ export function CrmTasks() {
       const rows: any[] = res.data ?? [];
       if (!rows.length) return [];
 
+      // Resolver en LOTES: con muchas tareas, un solo .in() con ~1000 ids genera una URL
+      // demasiado larga y PostgREST la rechaza (el contacto salía como "—"). Chunks de 150.
+      const fetchInChunks = async (table: string, cols: string, col: string, ids: any[]) => {
+        const out: any[] = [];
+        for (let i = 0; i < ids.length; i += 150) {
+          const { data } = await (supabase as any).from(table).select(cols).in(col, ids.slice(i, i + 150));
+          if (data) out.push(...data);
+        }
+        return out;
+      };
+
       // Resolver nombre de contacto: entidades_relacionadas → personas.
       const entIds = Array.from(new Set(rows.map((r) => r.id_entidad_relacionada).filter(Boolean)));
       const contactMap: Record<number, string> = {};
       if (entIds.length) {
-        const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-          .select("id, id_persona").in("id", entIds);
-        const personaByEnt: Record<number, number> = Object.fromEntries((ents ?? []).map((e: any) => [e.id, e.id_persona]));
+        const ents = await fetchInChunks("entidades_relacionadas", "id, id_persona", "id", entIds);
+        const personaByEnt: Record<number, number> = Object.fromEntries(ents.map((e: any) => [e.id, e.id_persona]));
         const personaIds = Array.from(new Set(Object.values(personaByEnt).filter(Boolean)));
         if (personaIds.length) {
-          const { data: personas } = await (supabase as any).from("personas")
-            .select("id, nombre_legal, nombre_comercial").in("id", personaIds);
-          const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
+          const personas = await fetchInChunks("personas", "id, nombre_legal, nombre_comercial", "id", personaIds);
+          const pName: Record<number, string> = Object.fromEntries(personas.map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
           for (const [entId, pId] of Object.entries(personaByEnt)) contactMap[Number(entId)] = pName[pId as number] ?? "Sin nombre";
         }
       }
 
-      // Resolver nombre del usuario asignado.
+      // Resolver nombre del usuario asignado (también en lotes).
       const userIds = Array.from(new Set(rows.map((r) => r.id_usuario_asignado).filter(Boolean)));
       let userMap: Record<string, string> = {};
       if (userIds.length) {
-        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", userIds);
-        userMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+        const us = await fetchInChunks("usuarios", "auth_user_id, nombre", "auth_user_id", userIds);
+        userMap = Object.fromEntries(us.map((u: any) => [u.auth_user_id, u.nombre]));
       }
 
       return rows.map((r) => ({
@@ -3533,7 +3543,11 @@ export function CrmTasks() {
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
+                        {t.id_entidad_relacionada ? (
+                          <Link to={`/admin/portal-crm/ventas/contactos/${t.id_entidad_relacionada}?tab=actividades`} className={`hover:underline ${done ? "line-through text-muted-foreground" : "font-medium"}`}>{t.titulo}</Link>
+                        ) : (
+                          <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
+                        )}
                         {t.recurrencia && <RefreshCw className="h-3 w-3 text-muted-foreground shrink-0" aria-label={`Se repite: ${RECURRENCE_LABEL[t.recurrencia] ?? t.recurrencia}`} />}
                         {t.fecha_recordatorio && <Bell className="h-3 w-3 text-muted-foreground shrink-0" aria-label="Tiene recordatorio" />}
                       </div>

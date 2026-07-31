@@ -40,6 +40,7 @@ import {
   type BancoSolicitudNota,
 } from "@/hooks/usePortalBancos/useBancoSolicitudNotas";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePagePermissions } from "@/hooks/usePagePermissions";
 import {
   computeFunnel, computeWinRate, STAGE_PROBABILITY,
 } from "@/lib/portal-bancos/metrics";
@@ -834,17 +835,18 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
  * `usuarios`). Reemplaza el antiguo equipo de contacto (`bancos_agentes`).
  */
 export function BancosEquipo() {
-  const { profile } = useAuth();
   const scope = useBancoResolvedScope();
-  const { data: roles } = useBancoRoles();
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
   const crear = useCrearEjecutivoBanco();
 
-  // Acceso: Super Administrador (ve/gestiona todos los bancos) o Admin de banco
-  // (Supervisor Banco), este último SOLO su propio banco.
-  const isSuperAdmin = profile?.rol_id === 1;
-  const isSupervisorBanco =
-    roles?.supervisorRolId != null && profile?.rol_id === roles.supervisorRolId;
+  // Acceso y acciones se resuelven por los permisos del rol en BD
+  // (`submenus_permisos` de /admin/portal-bancos/equipo), no por rol_id fijo:
+  // leer = ver la vista, crear = dar de alta ejecutivos, actualizar = editar /
+  // cambiar rol / activar-desactivar. El aislamiento por banco lo sigue dando el
+  // scope (un Admin de banco queda fijo a su propio banco).
+  const {
+    canRead, canCreate, canUpdate, isLoading: cargandoPermisos,
+  } = usePagePermissions("/admin/portal-bancos/equipo");
 
   // El banco a administrar sigue al scope de "Ver como": si se está viendo como
   // un banco concreto (o el usuario es Admin de un banco), Equipo queda FIJO a
@@ -860,7 +862,15 @@ export function BancosEquipo() {
   const { data: equipo = [], isLoading } = useBancoEquipo(selectedId);
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as RolBancoPortal });
 
-  if (!isSuperAdmin && !isSupervisorBanco) return <AccessDenied />;
+  if (cargandoPermisos) {
+    return (
+      <div className="space-y-4">
+        <Header title="Equipo" subtitle="Ejecutivos por banco" />
+        <p className="text-sm text-muted-foreground">Verificando permisos…</p>
+      </div>
+    );
+  }
+  if (!canRead) return <AccessDenied />;
 
   if (!cargandoBancos && convenios.length === 0) {
     return (
@@ -915,6 +925,8 @@ export function BancosEquipo() {
         )}
       </div>
 
+      {/* Alta de ejecutivos: solo con permiso "crear" sobre esta vista. */}
+      {canCreate && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Nuevo ejecutivo</CardTitle>
@@ -936,6 +948,7 @@ export function BancosEquipo() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle className="text-base">Equipo actual{banco ? ` · ${banco.nombre}` : ""}</CardTitle></CardHeader>
@@ -945,7 +958,7 @@ export function BancosEquipo() {
           ) : equipo.length === 0 ? (
             <EmptyState icon={Building2} title="Sin ejecutivos" hint="Da de alta el primer ejecutivo de este banco." />
           ) : (
-            equipo.map((ej) => <EjecutivoRow key={ej.email} e={ej} />)
+            equipo.map((ej) => <EjecutivoRow key={ej.email} e={ej} canUpdate={canUpdate} />)
           )}
         </CardContent>
       </Card>
@@ -953,7 +966,7 @@ export function BancosEquipo() {
   );
 }
 
-function EjecutivoRow({ e }: { e: EjecutivoBanco }) {
+function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean }) {
   const cambiarRol = useCambiarRolEjecutivo();
   const setActivo = useSetActivoEjecutivo();
   const editar = useEditarEjecutivo();
@@ -1002,19 +1015,26 @@ function EjecutivoRow({ e }: { e: EjecutivoBanco }) {
           </p>
           <p className="text-xs text-muted-foreground truncate">{[e.email, e.telefono].filter(Boolean).join(" · ") || "—"}</p>
         </div>
-        <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="agente">Agente</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
-        <Button size="sm" variant={e.activo ? "outline" : "default"} onClick={onToggleActive} disabled={setActivo.isPending}>
-          {e.activo ? "Desactivar" : "Reactivar"}
-        </Button>
+        {/* Cambio de rol / edición / baja: solo con permiso "actualizar". */}
+        {canUpdate ? (
+          <>
+            <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
+              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="agente">Agente</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
+            <Button size="sm" variant={e.activo ? "outline" : "default"} onClick={onToggleActive} disabled={setActivo.isPending}>
+              {e.activo ? "Desactivar" : "Reactivar"}
+            </Button>
+          </>
+        ) : (
+          <Badge variant="outline" className="text-[10px] capitalize">{e.rolPortal === "admin" ? "Admin" : "Agente"}</Badge>
+        )}
       </div>
-      {editing && (
+      {canUpdate && editing && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
           <Input placeholder="Nombre" value={edit.nombre} onChange={(ev) => setEdit({ ...edit, nombre: ev.target.value })} />
           <Input placeholder="Email" type="email" value={edit.email} onChange={(ev) => setEdit({ ...edit, email: ev.target.value })} />
@@ -1037,11 +1057,10 @@ function Avatar2({ name }: { name: string }) {
 
 // ============================== BANCOS (convenio — real) ==============================
 export function BancosBancos() {
-  // Bancos (alta/baja de convenios): SOLO Super Administrador. Coincide con la
-  // visibilidad del menú en PortalBancosLayout (canSeeBancos = isSuperAdmin) y
-  // cierra el acceso por URL directa para Admin de banco / Agente.
-  const { profile } = useAuth();
-  const isSuperAdmin = profile?.rol_id === 1;
+  // Bancos (alta/baja de convenios): permiso de lectura en BD sobre esta vista
+  // (por defecto solo Super Administrador la tiene asignada). Coincide con el
+  // gate de PermissionRoute, que cierra el acceso por URL directa.
+  const { canRead, isLoading: cargandoPermisos } = usePagePermissions("/admin/portal-bancos/bancos");
   const { data: convenios = [], isLoading } = useBancosConvenio();
   const { data: catalogo = [] } = useBancosCatalogo();
   const agregar = useAgregarBancoConvenio();
@@ -1049,7 +1068,8 @@ export function BancosBancos() {
 
   const [nuevo, setNuevo] = useState({ id_banco: "", producto_nombre: "", tasa_desde: "", color_marca: "", orden: "" });
 
-  if (!isSuperAdmin) return <AccessDenied />;
+  if (cargandoPermisos) return null;
+  if (!canRead) return <AccessDenied />;
 
   const disponibles = catalogo.filter((c) => !convenios.some((cv) => cv.id_banco === c.id));
 
