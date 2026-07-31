@@ -64,6 +64,8 @@ type PersonaVinculable = {
   id: number;
   nombre_legal: string;
   email: string | null;
+  /** Correo del usuario que ya tiene esta persona, si esta tomada. */
+  tomadaPor?: string | null;
 };
 
 const ROLE_AGENTE_INMOBILIARIO = 3;
@@ -127,6 +129,24 @@ export function EditUserDialog({
       return;
     }
     const encontradas = (data ?? []) as PersonaVinculable[];
+
+    // Una persona no puede pertenecer a dos cuentas: bajo las reglas de dueno, la segunda
+    // cuenta obtendria acceso a los datos de la primera. Se marcan las que ya estan
+    // tomadas para que no se puedan elegir, en vez de descubrirlo despues.
+    if (encontradas.length > 0) {
+      const { data: tomadas } = await (supabase as any)
+        .from('usuarios')
+        .select('id_persona, email')
+        .in('id_persona', encontradas.map((p) => p.id));
+
+      const porPersona = new Map<number, string>(
+        (tomadas ?? [])
+          .filter((u: any) => u.id_persona != null)
+          .map((u: any) => [u.id_persona as number, u.email as string]),
+      );
+      encontradas.forEach((p) => { p.tomadaPor = porPersona.get(p.id) ?? null; });
+    }
+
     setResultadosPersona(encontradas);
     if (encontradas.length === 0) {
       toast({ title: "Sin coincidencias", description: "Ninguna persona coincide con esa busqueda." });
@@ -1092,7 +1112,9 @@ export function EditUserDialog({
                         <button
                           key={p.id}
                           type="button"
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          disabled={!!p.tomadaPor}
+                          title={p.tomadaPor ? `Ya pertenece a ${p.tomadaPor}` : undefined}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                           onClick={() => {
                             setPersonaAVincular(p);
                             setResultadosPersona([]);
@@ -1100,6 +1122,11 @@ export function EditUserDialog({
                         >
                           {p.nombre_legal}
                           {p.email ? <span className="text-muted-foreground"> · {p.email}</span> : null}
+                          {p.tomadaPor ? (
+                            <span className="block text-xs text-destructive">
+                              Ya pertenece a {p.tomadaPor}
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>
