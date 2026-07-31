@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      _bak_personas_ocupacion_20260722: {
+        Row: {
+          id: number | null
+          ocupacion: string | null
+        }
+        Insert: {
+          id?: number | null
+          ocupacion?: string | null
+        }
+        Update: {
+          id?: number | null
+          ocupacion?: string | null
+        }
+        Relationships: []
+      }
       ab_test_assignments: {
         Row: {
           ab_test_id: number
@@ -117,6 +132,73 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
+      }
+      actuaciones_procesales: {
+        Row: {
+          creado_por: string
+          descripcion: string
+          etapa_al_momento: number | null
+          fecha_actuacion: string
+          fecha_creacion: string
+          id: number
+          id_asunto: number
+          id_documento: number | null
+          origen: string
+          resultado: string | null
+          tipo_actuacion: string
+          tipo_fuente: string
+        }
+        Insert: {
+          creado_por: string
+          descripcion: string
+          etapa_al_momento?: number | null
+          fecha_actuacion: string
+          fecha_creacion?: string
+          id?: never
+          id_asunto: number
+          id_documento?: number | null
+          origen: string
+          resultado?: string | null
+          tipo_actuacion: string
+          tipo_fuente?: string
+        }
+        Update: {
+          creado_por?: string
+          descripcion?: string
+          etapa_al_momento?: number | null
+          fecha_actuacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_asunto?: number
+          id_documento?: number | null
+          origen?: string
+          resultado?: string | null
+          tipo_actuacion?: string
+          tipo_fuente?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "actuaciones_id_asunto_fk"
+            columns: ["id_asunto"]
+            isOneToOne: false
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actuaciones_procesales_etapa_al_momento_fkey"
+            columns: ["etapa_al_momento"]
+            isOneToOne: false
+            referencedRelation: "cat_etapas_procesales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actuaciones_procesales_id_documento_fkey"
+            columns: ["id_documento"]
+            isOneToOne: false
+            referencedRelation: "app_juridico_documentos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       acuerdos_pago: {
         Row: {
@@ -396,6 +478,24 @@ export type Database = {
           },
         ]
       }
+      app_cliente_config: {
+        Row: {
+          fecha_actualizacion: string
+          key: string
+          value: string
+        }
+        Insert: {
+          fecha_actualizacion?: string
+          key: string
+          value: string
+        }
+        Update: {
+          fecha_actualizacion?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       app_juridico_acuerdos: {
         Row: {
           activo: boolean
@@ -519,9 +619,13 @@ export type Database = {
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
+          id_asunto: number | null
           id_demanda: number
+          mime_type: string | null
           nombre_archivo: string
+          numero_version: number
           subido_por: string
+          tamano_bytes: number | null
           tipo_documento: string
           url_archivo: string
         }
@@ -532,9 +636,13 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: never
+          id_asunto?: number | null
           id_demanda: number
+          mime_type?: string | null
           nombre_archivo: string
+          numero_version?: number
           subido_por: string
+          tamano_bytes?: number | null
           tipo_documento?: string
           url_archivo: string
         }
@@ -545,13 +653,24 @@ export type Database = {
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: never
+          id_asunto?: number | null
           id_demanda?: number
+          mime_type?: string | null
           nombre_archivo?: string
+          numero_version?: number
           subido_por?: string
+          tamano_bytes?: number | null
           tipo_documento?: string
           url_archivo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "app_juridico_documentos_id_asunto_fk"
+            columns: ["id_asunto"]
+            isOneToOne: false
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "app_juridico_documentos_id_demanda_fkey"
             columns: ["id_demanda"]
@@ -571,6 +690,7 @@ export type Database = {
           fecha_asignacion: string
           id: number
           id_demanda: number
+          id_expediente: number | null
           id_perfil_juridico: number
           notas: string | null
         }
@@ -583,6 +703,7 @@ export type Database = {
           fecha_asignacion?: string
           id?: never
           id_demanda: number
+          id_expediente?: number | null
           id_perfil_juridico: number
           notas?: string | null
         }
@@ -595,6 +716,7 @@ export type Database = {
           fecha_asignacion?: string
           id?: never
           id_demanda?: number
+          id_expediente?: number | null
           id_perfil_juridico?: number
           notas?: string | null
         }
@@ -607,10 +729,188 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "asignaciones_juridico_id_expediente_fk"
+            columns: ["id_expediente"]
+            isOneToOne: false
+            referencedRelation: "expedientes_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "asignaciones_juridico_id_perfil_juridico_fkey"
             columns: ["id_perfil_juridico"]
             isOneToOne: false
             referencedRelation: "perfiles_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asuntos_detalle_demanda: {
+        Row: {
+          actualizado_por: string
+          creado_por: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          forma_notificacion: string | null
+          id_asunto: number
+          monto_demandado: number | null
+          motivo: string | null
+          numero_contrato: string | null
+          pretensiones: string | null
+          quien_recibio_emplazamiento: string | null
+        }
+        Insert: {
+          actualizado_por: string
+          creado_por: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          forma_notificacion?: string | null
+          id_asunto: number
+          monto_demandado?: number | null
+          motivo?: string | null
+          numero_contrato?: string | null
+          pretensiones?: string | null
+          quien_recibio_emplazamiento?: string | null
+        }
+        Update: {
+          actualizado_por?: string
+          creado_por?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          forma_notificacion?: string | null
+          id_asunto?: number
+          monto_demandado?: number | null
+          motivo?: string | null
+          numero_contrato?: string | null
+          pretensiones?: string | null
+          quien_recibio_emplazamiento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asuntos_detalle_demanda_id_asunto_fkey"
+            columns: ["id_asunto"]
+            isOneToOne: true
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asuntos_juridicos: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          autoridad: string | null
+          creado_por: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_emplazamiento: string | null
+          fecha_limite_contestacion: string | null
+          fecha_presentacion: string | null
+          folio_visible: string
+          id: number
+          id_abogado_responsable: number | null
+          id_contraparte: number | null
+          id_etapa_actual: number | null
+          id_expediente: number
+          id_nivel_riesgo_actual: number | null
+          id_tipo_asunto: number
+          monto_reclamado: number | null
+          numero_asunto_externo: string | null
+          observaciones: string | null
+          origen: string
+          posicion_sozu: string
+          resultado_esperado: string | null
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          autoridad?: string | null
+          creado_por: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_emplazamiento?: string | null
+          fecha_limite_contestacion?: string | null
+          fecha_presentacion?: string | null
+          folio_visible?: string
+          id?: never
+          id_abogado_responsable?: number | null
+          id_contraparte?: number | null
+          id_etapa_actual?: number | null
+          id_expediente: number
+          id_nivel_riesgo_actual?: number | null
+          id_tipo_asunto: number
+          monto_reclamado?: number | null
+          numero_asunto_externo?: string | null
+          observaciones?: string | null
+          origen: string
+          posicion_sozu: string
+          resultado_esperado?: string | null
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          autoridad?: string | null
+          creado_por?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_emplazamiento?: string | null
+          fecha_limite_contestacion?: string | null
+          fecha_presentacion?: string | null
+          folio_visible?: string
+          id?: never
+          id_abogado_responsable?: number | null
+          id_contraparte?: number | null
+          id_etapa_actual?: number | null
+          id_expediente?: number
+          id_nivel_riesgo_actual?: number | null
+          id_tipo_asunto?: number
+          monto_reclamado?: number | null
+          numero_asunto_externo?: string | null
+          observaciones?: string | null
+          origen?: string
+          posicion_sozu?: string
+          resultado_esperado?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asuntos_juridicos_id_abogado_responsable_fkey"
+            columns: ["id_abogado_responsable"]
+            isOneToOne: false
+            referencedRelation: "perfiles_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asuntos_juridicos_id_contraparte_fkey"
+            columns: ["id_contraparte"]
+            isOneToOne: false
+            referencedRelation: "contrapartes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asuntos_juridicos_id_etapa_actual_fkey"
+            columns: ["id_etapa_actual"]
+            isOneToOne: false
+            referencedRelation: "cat_etapas_procesales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asuntos_juridicos_id_expediente_fkey"
+            columns: ["id_expediente"]
+            isOneToOne: false
+            referencedRelation: "expedientes_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asuntos_juridicos_id_nivel_riesgo_actual_fkey"
+            columns: ["id_nivel_riesgo_actual"]
+            isOneToOne: false
+            referencedRelation: "cat_niveles_riesgo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asuntos_juridicos_id_tipo_asunto_fkey"
+            columns: ["id_tipo_asunto"]
+            isOneToOne: false
+            referencedRelation: "cat_tipos_asunto"
             referencedColumns: ["id"]
           },
         ]
@@ -649,6 +949,7 @@ export type Database = {
         Row: {
           activo: boolean
           asunto: string
+          canal: string | null
           cron_expression: string | null
           fecha_actualizacion: string
           fecha_creacion: string
@@ -667,6 +968,7 @@ export type Database = {
         Insert: {
           activo?: boolean
           asunto: string
+          canal?: string | null
           cron_expression?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -685,6 +987,7 @@ export type Database = {
         Update: {
           activo?: boolean
           asunto?: string
+          canal?: string | null
           cron_expression?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -699,6 +1002,84 @@ export type Database = {
           postmark_template_id?: number
           tipo_envio?: string
           tipos_pago_notificables?: number[]
+        }
+        Relationships: []
+      }
+      avisos_app: {
+        Row: {
+          canales: string[]
+          categoria: string
+          creado_por: string | null
+          error: string | null
+          estado: string
+          etiqueta_accion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_envio: string | null
+          id: number
+          ids_modelos: number[] | null
+          ids_niveles: number[] | null
+          ids_propiedades: number[] | null
+          ids_proyectos: number[] | null
+          mensaje: string
+          programado_para: string | null
+          tipo: string
+          titulo: string
+          total_destinatarios: number | null
+          total_email: number | null
+          total_push: number | null
+          total_wa: number | null
+          url_accion: string | null
+        }
+        Insert: {
+          canales?: string[]
+          categoria?: string
+          creado_por?: string | null
+          error?: string | null
+          estado?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_envio?: string | null
+          id?: never
+          ids_modelos?: number[] | null
+          ids_niveles?: number[] | null
+          ids_propiedades?: number[] | null
+          ids_proyectos?: number[] | null
+          mensaje: string
+          programado_para?: string | null
+          tipo?: string
+          titulo: string
+          total_destinatarios?: number | null
+          total_email?: number | null
+          total_push?: number | null
+          total_wa?: number | null
+          url_accion?: string | null
+        }
+        Update: {
+          canales?: string[]
+          categoria?: string
+          creado_por?: string | null
+          error?: string | null
+          estado?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_envio?: string | null
+          id?: never
+          ids_modelos?: number[] | null
+          ids_niveles?: number[] | null
+          ids_propiedades?: number[] | null
+          ids_proyectos?: number[] | null
+          mensaje?: string
+          programado_para?: string | null
+          tipo?: string
+          titulo?: string
+          total_destinatarios?: number | null
+          total_email?: number | null
+          total_push?: number | null
+          total_wa?: number | null
+          url_accion?: string | null
         }
         Relationships: []
       }
@@ -1020,7 +1401,7 @@ export type Database = {
           email?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: number
+          id?: never
           id_banco: number
           nombre: string
           rol?: string
@@ -1031,7 +1412,7 @@ export type Database = {
           email?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: number
+          id?: never
           id_banco?: number
           nombre?: string
           rol?: string
@@ -1050,36 +1431,57 @@ export type Database = {
       bancos_convenio: {
         Row: {
           activo: boolean
+          cat_max: number | null
+          cat_min: number | null
           color_marca: string | null
+          dias_respuesta: number | null
           fecha_actualizacion: string
           fecha_creacion: string
+          icono_url: string | null
           id: number
           id_banco: number
+          logo_url: string | null
           orden: number
           producto_nombre: string | null
           tasa_desde: number | null
+          tasa_max: number | null
+          tasa_min: number | null
         }
         Insert: {
           activo?: boolean
+          cat_max?: number | null
+          cat_min?: number | null
           color_marca?: string | null
+          dias_respuesta?: number | null
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: number
+          icono_url?: string | null
+          id?: never
           id_banco: number
+          logo_url?: string | null
           orden?: number
           producto_nombre?: string | null
           tasa_desde?: number | null
+          tasa_max?: number | null
+          tasa_min?: number | null
         }
         Update: {
           activo?: boolean
+          cat_max?: number | null
+          cat_min?: number | null
           color_marca?: string | null
+          dias_respuesta?: number | null
           fecha_actualizacion?: string
           fecha_creacion?: string
-          id?: number
+          icono_url?: string | null
+          id?: never
           id_banco?: number
+          logo_url?: string | null
           orden?: number
           producto_nombre?: string | null
           tasa_desde?: number | null
+          tasa_max?: number | null
+          tasa_min?: number | null
         }
         Relationships: [
           {
@@ -1088,6 +1490,150 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "bancos"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      bancos_solicitudes: {
+        Row: {
+          activo: boolean
+          acuerdo_aceptado_cliente: boolean
+          cat_aprobado: number | null
+          cat_estimado_max: number | null
+          cat_estimado_min: number | null
+          consentimiento_datos: boolean
+          dias_respuesta_snapshot: number | null
+          estatus: string
+          fecha_actualizacion: string
+          fecha_acuerdo: string | null
+          fecha_consentimiento: string | null
+          fecha_creacion: string
+          fecha_envio: string
+          fecha_expiracion: string | null
+          fecha_respuesta_banco: string | null
+          id: number
+          id_agente: number | null
+          id_banco: number
+          id_credito_hipotecario: number | null
+          id_cuenta_cobranza: number
+          mensualidad_aprobada: number | null
+          mensualidad_estimada_max: number | null
+          mensualidad_estimada_min: number | null
+          monto_aprobado: number | null
+          monto_financiar: number
+          motivo_cierre: string | null
+          notas_banco: string | null
+          notificado_expiracion: boolean
+          plazo_anios: number
+          plazo_aprobado_anios: number | null
+          tasa_aprobada: number | null
+          tasa_estimada_max: number | null
+          tasa_estimada_min: number | null
+        }
+        Insert: {
+          activo?: boolean
+          acuerdo_aceptado_cliente?: boolean
+          cat_aprobado?: number | null
+          cat_estimado_max?: number | null
+          cat_estimado_min?: number | null
+          consentimiento_datos?: boolean
+          dias_respuesta_snapshot?: number | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_acuerdo?: string | null
+          fecha_consentimiento?: string | null
+          fecha_creacion?: string
+          fecha_envio?: string
+          fecha_expiracion?: string | null
+          fecha_respuesta_banco?: string | null
+          id?: never
+          id_agente?: number | null
+          id_banco: number
+          id_credito_hipotecario?: number | null
+          id_cuenta_cobranza: number
+          mensualidad_aprobada?: number | null
+          mensualidad_estimada_max?: number | null
+          mensualidad_estimada_min?: number | null
+          monto_aprobado?: number | null
+          monto_financiar: number
+          motivo_cierre?: string | null
+          notas_banco?: string | null
+          notificado_expiracion?: boolean
+          plazo_anios: number
+          plazo_aprobado_anios?: number | null
+          tasa_aprobada?: number | null
+          tasa_estimada_max?: number | null
+          tasa_estimada_min?: number | null
+        }
+        Update: {
+          activo?: boolean
+          acuerdo_aceptado_cliente?: boolean
+          cat_aprobado?: number | null
+          cat_estimado_max?: number | null
+          cat_estimado_min?: number | null
+          consentimiento_datos?: boolean
+          dias_respuesta_snapshot?: number | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_acuerdo?: string | null
+          fecha_consentimiento?: string | null
+          fecha_creacion?: string
+          fecha_envio?: string
+          fecha_expiracion?: string | null
+          fecha_respuesta_banco?: string | null
+          id?: never
+          id_agente?: number | null
+          id_banco?: number
+          id_credito_hipotecario?: number | null
+          id_cuenta_cobranza?: number
+          mensualidad_aprobada?: number | null
+          mensualidad_estimada_max?: number | null
+          mensualidad_estimada_min?: number | null
+          monto_aprobado?: number | null
+          monto_financiar?: number
+          motivo_cierre?: string | null
+          notas_banco?: string | null
+          notificado_expiracion?: boolean
+          plazo_anios?: number
+          plazo_aprobado_anios?: number | null
+          tasa_aprobada?: number | null
+          tasa_estimada_max?: number | null
+          tasa_estimada_min?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bancos_solicitudes_id_agente_fkey"
+            columns: ["id_agente"]
+            isOneToOne: false
+            referencedRelation: "bancos_agentes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bancos_solicitudes_id_banco_fkey"
+            columns: ["id_banco"]
+            isOneToOne: false
+            referencedRelation: "bancos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bancos_solicitudes_id_credito_hipotecario_fkey"
+            columns: ["id_credito_hipotecario"]
+            isOneToOne: false
+            referencedRelation: "creditos_hipotecarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bancos_solicitudes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bancos_solicitudes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
           },
         ]
       }
@@ -1341,1980 +1887,6 @@ export type Database = {
         }
         Relationships: []
       }
-      borrar_acuerdos_pago_manto_stagin: {
-        Row: {
-          fecha_pago: string | null
-          id: number
-          id_concepto: number | null
-          id_cuenta_cobranza: number | null
-          m2: number | null
-          orden: number | null
-          precio_m2: number | null
-        }
-        Insert: {
-          fecha_pago?: string | null
-          id?: number
-          id_concepto?: number | null
-          id_cuenta_cobranza?: number | null
-          m2?: number | null
-          orden?: number | null
-          precio_m2?: number | null
-        }
-        Update: {
-          fecha_pago?: string | null
-          id?: number
-          id_concepto?: number | null
-          id_cuenta_cobranza?: number | null
-          m2?: number | null
-          orden?: number | null
-          precio_m2?: number | null
-        }
-        Relationships: []
-      }
-      borrar_acuerdos_pago_productos_stagin: {
-        Row: {
-          collection_id: number
-          concepto: string | null
-          fecha_pago: string | null
-          id: number
-          id_concepto: number | null
-          id_cuenta_cobranza: number | null
-          monto: number | null
-        }
-        Insert: {
-          collection_id: number
-          concepto?: string | null
-          fecha_pago?: string | null
-          id?: number
-          id_concepto?: number | null
-          id_cuenta_cobranza?: number | null
-          monto?: number | null
-        }
-        Update: {
-          collection_id?: number
-          concepto?: string | null
-          fecha_pago?: string | null
-          id?: number
-          id_concepto?: number | null
-          id_cuenta_cobranza?: number | null
-          monto?: number | null
-        }
-        Relationships: []
-      }
-      borrar_acuerdos_pago_stagin: {
-        Row: {
-          collection_id: number | null
-          concepto: string | null
-          fecha_pago: string | null
-          id: number
-          id_concepto: number | null
-          id_cuenta_cobranza: number | null
-          monto: number | null
-        }
-        Insert: {
-          collection_id?: number | null
-          concepto?: string | null
-          fecha_pago?: string | null
-          id?: number
-          id_concepto?: number | null
-          id_cuenta_cobranza?: number | null
-          monto?: number | null
-        }
-        Update: {
-          collection_id?: number | null
-          concepto?: string | null
-          fecha_pago?: string | null
-          id?: number
-          id_concepto?: number | null
-          id_cuenta_cobranza?: number | null
-          monto?: number | null
-        }
-        Relationships: []
-      }
-      borrar_amenidades_proyectos_stagin: {
-        Row: {
-          amenidad: string | null
-          id: number
-          proyecto: string | null
-        }
-        Insert: {
-          amenidad?: string | null
-          id?: number
-          proyecto?: string | null
-        }
-        Update: {
-          amenidad?: string | null
-          id?: number
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_aplicacion_pagos_migracion: {
-        Row: {
-          estatus: string
-          fecha_fin: string | null
-          fecha_inicio: string | null
-          id_cuenta_cobranza: number
-          monto_aplicado: number | null
-          pagos_aplicados: number | null
-        }
-        Insert: {
-          estatus?: string
-          fecha_fin?: string | null
-          fecha_inicio?: string | null
-          id_cuenta_cobranza: number
-          monto_aplicado?: number | null
-          pagos_aplicados?: number | null
-        }
-        Update: {
-          estatus?: string
-          fecha_fin?: string | null
-          fecha_inicio?: string | null
-          id_cuenta_cobranza?: number
-          monto_aplicado?: number | null
-          pagos_aplicados?: number | null
-        }
-        Relationships: []
-      }
-      borrar_audit_errores: {
-        Row: {
-          error_descripcion: string
-          fecha_registro: string
-          id: number
-          id_pago_origen: number | null
-          intentos: number
-          requiere_revision_humana: boolean
-          tipo_documento: string | null
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Insert: {
-          error_descripcion: string
-          fecha_registro?: string
-          id?: number
-          id_pago_origen?: number | null
-          intentos?: number
-          requiere_revision_humana?: boolean
-          tipo_documento?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Update: {
-          error_descripcion?: string
-          fecha_registro?: string
-          id?: number
-          id_pago_origen?: number | null
-          intentos?: number
-          requiere_revision_humana?: boolean
-          tipo_documento?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Relationships: []
-      }
-      borrar_audit_pagos: {
-        Row: {
-          actualizado_en: string
-          clabe_stp: string | null
-          clave_rastreo: string | null
-          coincide_prorrateo: boolean | null
-          confianza_extraccion: number | null
-          creado_en: string
-          diferencia: number | null
-          error_extraccion: string | null
-          fecha_acordada: string | null
-          fecha_analisis: string | null
-          fecha_pago_sistema: string | null
-          fecha_validacion: string | null
-          id: number
-          id_cuenta_cobranza: number | null
-          id_pago_origen: number | null
-          metadata_desglose: Json | null
-          metodo_extraccion: string | null
-          metodo_pago: string | null
-          monto_extraido: number | null
-          monto_sistema: number
-          numero_propiedad: string | null
-          padre_id: number | null
-          pago_aplicado_sistema: number | null
-          proyecto: string | null
-          status: string
-          tipo_pago: string | null
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Insert: {
-          actualizado_en?: string
-          clabe_stp?: string | null
-          clave_rastreo?: string | null
-          coincide_prorrateo?: boolean | null
-          confianza_extraccion?: number | null
-          creado_en?: string
-          diferencia?: number | null
-          error_extraccion?: string | null
-          fecha_acordada?: string | null
-          fecha_analisis?: string | null
-          fecha_pago_sistema?: string | null
-          fecha_validacion?: string | null
-          id?: number
-          id_cuenta_cobranza?: number | null
-          id_pago_origen?: number | null
-          metadata_desglose?: Json | null
-          metodo_extraccion?: string | null
-          metodo_pago?: string | null
-          monto_extraido?: number | null
-          monto_sistema: number
-          numero_propiedad?: string | null
-          padre_id?: number | null
-          pago_aplicado_sistema?: number | null
-          proyecto?: string | null
-          status?: string
-          tipo_pago?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Update: {
-          actualizado_en?: string
-          clabe_stp?: string | null
-          clave_rastreo?: string | null
-          coincide_prorrateo?: boolean | null
-          confianza_extraccion?: number | null
-          creado_en?: string
-          diferencia?: number | null
-          error_extraccion?: string | null
-          fecha_acordada?: string | null
-          fecha_analisis?: string | null
-          fecha_pago_sistema?: string | null
-          fecha_validacion?: string | null
-          id?: number
-          id_cuenta_cobranza?: number | null
-          id_pago_origen?: number | null
-          metadata_desglose?: Json | null
-          metodo_extraccion?: string | null
-          metodo_pago?: string | null
-          monto_extraido?: number | null
-          monto_sistema?: number
-          numero_propiedad?: string | null
-          padre_id?: number | null
-          pago_aplicado_sistema?: number | null
-          proyecto?: string | null
-          status?: string
-          tipo_pago?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "borrar_audit_pagos_padre_id_fkey"
-            columns: ["padre_id"]
-            isOneToOne: false
-            referencedRelation: "borrar_audit_pagos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      borrar_audit_splits: {
-        Row: {
-          coincide: boolean
-          documentos_procesados: Json
-          fecha_split: string
-          id: number
-          pago_original_id: number
-          pago_original_monto: number
-          suma_montos_hijos: number
-        }
-        Insert: {
-          coincide: boolean
-          documentos_procesados: Json
-          fecha_split?: string
-          id?: number
-          pago_original_id: number
-          pago_original_monto: number
-          suma_montos_hijos: number
-        }
-        Update: {
-          coincide?: boolean
-          documentos_procesados?: Json
-          fecha_split?: string
-          id?: number
-          pago_original_id?: number
-          pago_original_monto?: number
-          suma_montos_hijos?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "borrar_audit_splits_pago_original_id_fkey"
-            columns: ["pago_original_id"]
-            isOneToOne: false
-            referencedRelation: "borrar_audit_pagos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      borrar_bancos_banxico: {
-        Row: {
-          clave_institucion: number | null
-          nombre_banco: string | null
-        }
-        Insert: {
-          clave_institucion?: number | null
-          nombre_banco?: string | null
-        }
-        Update: {
-          clave_institucion?: number | null
-          nombre_banco?: string | null
-        }
-        Relationships: []
-      }
-      borrar_bodegas_estacionamientos_daiku_stagin: {
-        Row: {
-          id: number
-          metraje: number | null
-          nivel: string | null
-          nombre: string | null
-          num_depa: string | null
-          precio: number | null
-          tipo: string | null
-          tipo_estacionamiento: string | null
-        }
-        Insert: {
-          id?: number
-          metraje?: number | null
-          nivel?: string | null
-          nombre?: string | null
-          num_depa?: string | null
-          precio?: number | null
-          tipo?: string | null
-          tipo_estacionamiento?: string | null
-        }
-        Update: {
-          id?: number
-          metraje?: number | null
-          nivel?: string | null
-          nombre?: string | null
-          num_depa?: string | null
-          precio?: number | null
-          tipo?: string | null
-          tipo_estacionamiento?: string | null
-        }
-        Relationships: []
-      }
-      borrar_bodegas_stagin: {
-        Row: {
-          edificio: string | null
-          id: number
-          id_departamento: number | null
-          id_edificio: number | null
-          id_proyecto: number | null
-          metraje: number | null
-          nombre_bodega: string | null
-          num_depa: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          edificio?: string | null
-          id?: number
-          id_departamento?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          metraje?: number | null
-          nombre_bodega?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          edificio?: string | null
-          id?: number
-          id_departamento?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          metraje?: number | null
-          nombre_bodega?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_brochures_proyecto_stagin: {
-        Row: {
-          documento_url: string | null
-          id: number
-          id_proyecto: number | null
-          proyecto: string | null
-        }
-        Insert: {
-          documento_url?: string | null
-          id?: number
-          id_proyecto?: number | null
-          proyecto?: string | null
-        }
-        Update: {
-          documento_url?: string | null
-          id?: number
-          id_proyecto?: number | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_cuentas_bancarias_stagin: {
-        Row: {
-          comprador: string | null
-          cuenta_de_su_propiedad: string | null
-          id: number
-          id_comprador: number | null
-        }
-        Insert: {
-          comprador?: string | null
-          cuenta_de_su_propiedad?: string | null
-          id?: number
-          id_comprador?: number | null
-        }
-        Update: {
-          comprador?: string | null
-          cuenta_de_su_propiedad?: string | null
-          id?: number
-          id_comprador?: number | null
-        }
-        Relationships: []
-      }
-      borrar_cuentas_cobranza_mantenimientos_stagin: {
-        Row: {
-          clabe_stp: number | null
-          id_collection_padre: number | null
-          id_cuenta_cobranza_mantenimiento_nueva: number | null
-        }
-        Insert: {
-          clabe_stp?: number | null
-          id_collection_padre?: number | null
-          id_cuenta_cobranza_mantenimiento_nueva?: number | null
-        }
-        Update: {
-          clabe_stp?: number | null
-          id_collection_padre?: number | null
-          id_cuenta_cobranza_mantenimiento_nueva?: number | null
-        }
-        Relationships: []
-      }
-      borrar_cuentas_cobranza_productos_stagin: {
-        Row: {
-          clabe_stp: number | null
-          collection_id: number
-          comprador: string | null
-          edificio: string | null
-          fecha_compra: string | null
-          id_edificio_modelo: number | null
-          id_oferta: string | null
-          id_proyecto: number | null
-          modelo: string | null
-          numero_propiedad: number | null
-          porcentaje_comision_venta: number | null
-          precio_final: number | null
-          proyecto: string | null
-          valor_uma: number | null
-        }
-        Insert: {
-          clabe_stp?: number | null
-          collection_id: number
-          comprador?: string | null
-          edificio?: string | null
-          fecha_compra?: string | null
-          id_edificio_modelo?: number | null
-          id_oferta?: string | null
-          id_proyecto?: number | null
-          modelo?: string | null
-          numero_propiedad?: number | null
-          porcentaje_comision_venta?: number | null
-          precio_final?: number | null
-          proyecto?: string | null
-          valor_uma?: number | null
-        }
-        Update: {
-          clabe_stp?: number | null
-          collection_id?: number
-          comprador?: string | null
-          edificio?: string | null
-          fecha_compra?: string | null
-          id_edificio_modelo?: number | null
-          id_oferta?: string | null
-          id_proyecto?: number | null
-          modelo?: string | null
-          numero_propiedad?: number | null
-          porcentaje_comision_venta?: number | null
-          precio_final?: number | null
-          proyecto?: string | null
-          valor_uma?: number | null
-        }
-        Relationships: []
-      }
-      borrar_cuentas_cobranza_stagin: {
-        Row: {
-          clabe_stp: number
-          collection_id: number | null
-          comprador: string | null
-          edificio: string | null
-          fecha_compra: string | null
-          id: number
-          id_comprador: number | null
-          id_edificio_modelo: number | null
-          id_oferta: number | null
-          id_propiedad: number | null
-          id_proyecto: number | null
-          modelo: string | null
-          numero_propiedad: string | null
-          porcentaje_comision_venta: number | null
-          precio_final: number | null
-          proyecto: string | null
-          valor_uma: number | null
-        }
-        Insert: {
-          clabe_stp: number
-          collection_id?: number | null
-          comprador?: string | null
-          edificio?: string | null
-          fecha_compra?: string | null
-          id?: number
-          id_comprador?: number | null
-          id_edificio_modelo?: number | null
-          id_oferta?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          modelo?: string | null
-          numero_propiedad?: string | null
-          porcentaje_comision_venta?: number | null
-          precio_final?: number | null
-          proyecto?: string | null
-          valor_uma?: number | null
-        }
-        Update: {
-          clabe_stp?: number
-          collection_id?: number | null
-          comprador?: string | null
-          edificio?: string | null
-          fecha_compra?: string | null
-          id?: number
-          id_comprador?: number | null
-          id_edificio_modelo?: number | null
-          id_oferta?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          modelo?: string | null
-          numero_propiedad?: string | null
-          porcentaje_comision_venta?: number | null
-          precio_final?: number | null
-          proyecto?: string | null
-          valor_uma?: number | null
-        }
-        Relationships: []
-      }
-      borrar_documentos_stagin: {
-        Row: {
-          documento_url: string | null
-          edificio: string | null
-          es_verificado: boolean | null
-          id: number
-          id_edificio_modelo: number | null
-          id_persona: number | null
-          id_propiedad: number | null
-          id_proyecto: number | null
-          id_tipo_documento: number | null
-          modelo: string | null
-          num_propiedad: string | null
-          persona: string | null
-          proyecto: string | null
-          tipo_documento: string | null
-          tipo_persona: string | null
-        }
-        Insert: {
-          documento_url?: string | null
-          edificio?: string | null
-          es_verificado?: boolean | null
-          id?: number
-          id_edificio_modelo?: number | null
-          id_persona?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          id_tipo_documento?: number | null
-          modelo?: string | null
-          num_propiedad?: string | null
-          persona?: string | null
-          proyecto?: string | null
-          tipo_documento?: string | null
-          tipo_persona?: string | null
-        }
-        Update: {
-          documento_url?: string | null
-          edificio?: string | null
-          es_verificado?: boolean | null
-          id?: number
-          id_edificio_modelo?: number | null
-          id_persona?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          id_tipo_documento?: number | null
-          modelo?: string | null
-          num_propiedad?: string | null
-          persona?: string | null
-          proyecto?: string | null
-          tipo_documento?: string | null
-          tipo_persona?: string | null
-        }
-        Relationships: []
-      }
-      borrar_duenos_desarrolladoras_proyecto_stagin: {
-        Row: {
-          dueno: string | null
-          id: number
-          proyecto: string | null
-          tipo: number | null
-        }
-        Insert: {
-          dueno?: string | null
-          id?: number
-          proyecto?: string | null
-          tipo?: number | null
-        }
-        Update: {
-          dueno?: string | null
-          id?: number
-          proyecto?: string | null
-          tipo?: number | null
-        }
-        Relationships: []
-      }
-      borrar_edificios_stagin: {
-        Row: {
-          fecha_lanzamiento: string | null
-          id: number
-          nombre: string
-          numero_pisos: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          fecha_lanzamiento?: string | null
-          id?: number
-          nombre: string
-          numero_pisos?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          fecha_lanzamiento?: string | null
-          id?: number
-          nombre?: string
-          numero_pisos?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_esquemas_pago_stagin: {
-        Row: {
-          id: number
-          nombre: string
-          numero_mensualidades: string | null
-          porcentaje_descuento_aumento: string | null
-          porcentaje_enganche: string | null
-          porcentaje_entrega: string | null
-          porcentaje_mensualidades: string | null
-          proyecto: string
-        }
-        Insert: {
-          id?: number
-          nombre: string
-          numero_mensualidades?: string | null
-          porcentaje_descuento_aumento?: string | null
-          porcentaje_enganche?: string | null
-          porcentaje_entrega?: string | null
-          porcentaje_mensualidades?: string | null
-          proyecto: string
-        }
-        Update: {
-          id?: number
-          nombre?: string
-          numero_mensualidades?: string | null
-          porcentaje_descuento_aumento?: string | null
-          porcentaje_enganche?: string | null
-          porcentaje_entrega?: string | null
-          porcentaje_mensualidades?: string | null
-          proyecto?: string
-        }
-        Relationships: []
-      }
-      borrar_estacionamientos_stagin: {
-        Row: {
-          edificio: string | null
-          id: number
-          id_departamento: number | null
-          id_edificio: number | null
-          id_proyecto: number | null
-          id_tipo_estacionamiento: number | null
-          metraje: number | null
-          nombre_estacionamiento: string | null
-          num_depa: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          edificio?: string | null
-          id?: number
-          id_departamento?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          id_tipo_estacionamiento?: number | null
-          metraje?: number | null
-          nombre_estacionamiento?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          edificio?: string | null
-          id?: number
-          id_departamento?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          id_tipo_estacionamiento?: number | null
-          metraje?: number | null
-          nombre_estacionamiento?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_historico_completo: {
-        Row: {
-          clave_rastreo: string
-          cuenta_beneficiario: string | null
-          fecha_liquidacion: string | null
-          importe: string | null
-          institucion_destino: number | null
-          institucion_origen: string | null
-        }
-        Insert: {
-          clave_rastreo: string
-          cuenta_beneficiario?: string | null
-          fecha_liquidacion?: string | null
-          importe?: string | null
-          institucion_destino?: number | null
-          institucion_origen?: string | null
-        }
-        Update: {
-          clave_rastreo?: string
-          cuenta_beneficiario?: string | null
-          fecha_liquidacion?: string | null
-          importe?: string | null
-          institucion_destino?: number | null
-          institucion_origen?: string | null
-        }
-        Relationships: []
-      }
-      borrar_leads_hs_manuel_stagin: {
-        Row: {
-          clave_pais_telefono: string | null
-          email: string | null
-          id: number
-          id_persona_duena_lead: number | null
-          id_proyecto: number | null
-          nombre_completo: string | null
-          telefono: string | null
-        }
-        Insert: {
-          clave_pais_telefono?: string | null
-          email?: string | null
-          id?: number
-          id_persona_duena_lead?: number | null
-          id_proyecto?: number | null
-          nombre_completo?: string | null
-          telefono?: string | null
-        }
-        Update: {
-          clave_pais_telefono?: string | null
-          email?: string | null
-          id?: number
-          id_persona_duena_lead?: number | null
-          id_proyecto?: number | null
-          nombre_completo?: string | null
-          telefono?: string | null
-        }
-        Relationships: []
-      }
-      borrar_modelos_caracteristicas_stagin: {
-        Row: {
-          caracteristica: string | null
-          id: number
-          modelo: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          caracteristica?: string | null
-          id?: number
-          modelo?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          caracteristica?: string | null
-          id?: number
-          modelo?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_modelos_stagin: {
-        Row: {
-          descripcion: string | null
-          id: number
-          nombre: string | null
-          numero_completo_banos: string | null
-          numero_medio_bano: string | null
-          numero_recamaras: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          descripcion?: string | null
-          id?: number
-          nombre?: string | null
-          numero_completo_banos?: string | null
-          numero_medio_bano?: string | null
-          numero_recamaras?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          descripcion?: string | null
-          id?: number
-          nombre?: string | null
-          numero_completo_banos?: string | null
-          numero_medio_bano?: string | null
-          numero_recamaras?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_multimedias_modelo_stagin: {
-        Row: {
-          id: number
-          modelo: string | null
-          proyecto: string | null
-          url: string | null
-          ver_como_ubicacion_en_oferta: boolean | null
-        }
-        Insert: {
-          id?: number
-          modelo?: string | null
-          proyecto?: string | null
-          url?: string | null
-          ver_como_ubicacion_en_oferta?: boolean | null
-        }
-        Update: {
-          id?: number
-          modelo?: string | null
-          proyecto?: string | null
-          url?: string | null
-          ver_como_ubicacion_en_oferta?: boolean | null
-        }
-        Relationships: []
-      }
-      borrar_multimedias_todo_stagin: {
-        Row: {
-          id: number
-          proyecto: string | null
-          url: string | null
-        }
-        Insert: {
-          id?: number
-          proyecto?: string | null
-          url?: string | null
-        }
-        Update: {
-          id?: number
-          proyecto?: string | null
-          url?: string | null
-        }
-        Relationships: []
-      }
-      borrar_ofertas_esquemas_pago_productos_stagin: {
-        Row: {
-          collection_id: number | null
-          comprador: string | null
-          edificio: string | null
-          id: number
-          id_edificio_modelo: number | null
-          id_persona_lead: number | null
-          id_producto_servicio: number | null
-          id_propiedad: number | null
-          id_proyecto: number | null
-          insert_esquemas_pago: string | null
-          modelo: string | null
-          nombre_esquema_pago: string | null
-          numero_propiedad: string | null
-          producto: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          collection_id?: number | null
-          comprador?: string | null
-          edificio?: string | null
-          id?: number
-          id_edificio_modelo?: number | null
-          id_persona_lead?: number | null
-          id_producto_servicio?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          insert_esquemas_pago?: string | null
-          modelo?: string | null
-          nombre_esquema_pago?: string | null
-          numero_propiedad?: string | null
-          producto?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          collection_id?: number | null
-          comprador?: string | null
-          edificio?: string | null
-          id?: number
-          id_edificio_modelo?: number | null
-          id_persona_lead?: number | null
-          id_producto_servicio?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          insert_esquemas_pago?: string | null
-          modelo?: string | null
-          nombre_esquema_pago?: string | null
-          numero_propiedad?: string | null
-          producto?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_ofertas_stagin: {
-        Row: {
-          email_creador: string
-          fecha_generacion: string | null
-          id: number
-          id_esquema_pago_seleccionado: number | null
-          id_persona_lead: number | null
-          id_propiedad: number | null
-          numero_mensualidades: number | null
-          numero_propiedad: string | null
-          persona: string | null
-          porcentaje_descuento_aumento: number | null
-          porcentaje_enganche: number | null
-          porcentaje_entrega: number | null
-          porcentaje_mensualidades: number | null
-          proyecto: string | null
-        }
-        Insert: {
-          email_creador: string
-          fecha_generacion?: string | null
-          id?: number
-          id_esquema_pago_seleccionado?: number | null
-          id_persona_lead?: number | null
-          id_propiedad?: number | null
-          numero_mensualidades?: number | null
-          numero_propiedad?: string | null
-          persona?: string | null
-          porcentaje_descuento_aumento?: number | null
-          porcentaje_enganche?: number | null
-          porcentaje_entrega?: number | null
-          porcentaje_mensualidades?: number | null
-          proyecto?: string | null
-        }
-        Update: {
-          email_creador?: string
-          fecha_generacion?: string | null
-          id?: number
-          id_esquema_pago_seleccionado?: number | null
-          id_persona_lead?: number | null
-          id_propiedad?: number | null
-          numero_mensualidades?: number | null
-          numero_propiedad?: string | null
-          persona?: string | null
-          porcentaje_descuento_aumento?: number | null
-          porcentaje_enganche?: number | null
-          porcentaje_entrega?: number | null
-          porcentaje_mensualidades?: number | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_pagos_bottura: {
-        Row: {
-          clabe_stp: string | null
-          clave_rastreo: string | null
-          fecha_acordada: string | null
-          fecha_pago: string | null
-          id_cuenta_cobranza: number | null
-          metodo_pago: string | null
-          monto: number | null
-          numero_propiedad: string | null
-          pago: string | null
-          pago_aplicado: number | null
-          proyecto: string | null
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Insert: {
-          clabe_stp?: string | null
-          clave_rastreo?: string | null
-          fecha_acordada?: string | null
-          fecha_pago?: string | null
-          id_cuenta_cobranza?: number | null
-          metodo_pago?: string | null
-          monto?: number | null
-          numero_propiedad?: string | null
-          pago?: string | null
-          pago_aplicado?: number | null
-          proyecto?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Update: {
-          clabe_stp?: string | null
-          clave_rastreo?: string | null
-          fecha_acordada?: string | null
-          fecha_pago?: string | null
-          id_cuenta_cobranza?: number | null
-          metodo_pago?: string | null
-          monto?: number | null
-          numero_propiedad?: string | null
-          pago?: string | null
-          pago_aplicado?: number | null
-          proyecto?: string | null
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Relationships: []
-      }
-      borrar_pagos_duplicate2: {
-        Row: {
-          activo: boolean
-          clave_rastreo: string | null
-          descripcion: string | null
-          fecha_actualizacion: string
-          fecha_creacion: string
-          fecha_pago: string
-          id: number
-          id_cuenta_cobranza: number
-          id_metodos_pago: number
-          monto: number
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Insert: {
-          activo?: boolean
-          clave_rastreo?: string | null
-          descripcion?: string | null
-          fecha_actualizacion?: string
-          fecha_creacion?: string
-          fecha_pago: string
-          id?: number
-          id_cuenta_cobranza: number
-          id_metodos_pago: number
-          monto: number
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Update: {
-          activo?: boolean
-          clave_rastreo?: string | null
-          descripcion?: string | null
-          fecha_actualizacion?: string
-          fecha_creacion?: string
-          fecha_pago?: string
-          id?: number
-          id_cuenta_cobranza?: number
-          id_metodos_pago?: number
-          monto?: number
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pagos_duplicate2_id_cuenta_cobranza_fkey"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "cuentas_cobranza"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pagos_duplicate2_id_cuenta_cobranza_fkey"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "v_pagos_detalle"
-            referencedColumns: ["id_cuenta_cobranza"]
-          },
-          {
-            foreignKeyName: "pagos_duplicate2_id_cuenta_cobranza_fkey1"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "cuentas_cobranza"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pagos_duplicate2_id_cuenta_cobranza_fkey1"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "v_pagos_detalle"
-            referencedColumns: ["id_cuenta_cobranza"]
-          },
-          {
-            foreignKeyName: "pagos_duplicate2_id_metodos_pago_fkey"
-            columns: ["id_metodos_pago"]
-            isOneToOne: false
-            referencedRelation: "metodos_pago"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pagos_duplicate2_id_metodos_pago_fkey1"
-            columns: ["id_metodos_pago"]
-            isOneToOne: false
-            referencedRelation: "metodos_pago"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      borrar_pagos_error: {
-        Row: {
-          clave_rastreo: string | null
-          cuenta_stp: string | null
-          id: number
-          monto: number | null
-        }
-        Insert: {
-          clave_rastreo?: string | null
-          cuenta_stp?: string | null
-          id?: number
-          monto?: number | null
-        }
-        Update: {
-          clave_rastreo?: string | null
-          cuenta_stp?: string | null
-          id?: number
-          monto?: number | null
-        }
-        Relationships: []
-      }
-      borrar_pagos_error_cc: {
-        Row: {
-          cuenta_stp: string
-          id: number
-          id_cuenta_cobranza: number
-        }
-        Insert: {
-          cuenta_stp: string
-          id?: number
-          id_cuenta_cobranza: number
-        }
-        Update: {
-          cuenta_stp?: string
-          id?: number
-          id_cuenta_cobranza?: number
-        }
-        Relationships: []
-      }
-      borrar_pagos_revision_evidencias: {
-        Row: {
-          clave_rastreo: string | null
-          descripcion_falla: string | null
-          fecha_pago: string
-          fecha_pago_evidencia: string | null
-          id: number
-          id_cuenta_cobranza: number
-          metodo_pago: string | null
-          monto: number
-          monto_evidencia: string | null
-          preprosesado: boolean | null
-          procesado: boolean | null
-          texto_evidencia: string | null
-          url_evidencia: string | null
-          validacion: boolean | null
-        }
-        Insert: {
-          clave_rastreo?: string | null
-          descripcion_falla?: string | null
-          fecha_pago: string
-          fecha_pago_evidencia?: string | null
-          id?: number
-          id_cuenta_cobranza: number
-          metodo_pago?: string | null
-          monto: number
-          monto_evidencia?: string | null
-          preprosesado?: boolean | null
-          procesado?: boolean | null
-          texto_evidencia?: string | null
-          url_evidencia?: string | null
-          validacion?: boolean | null
-        }
-        Update: {
-          clave_rastreo?: string | null
-          descripcion_falla?: string | null
-          fecha_pago?: string
-          fecha_pago_evidencia?: string | null
-          id?: number
-          id_cuenta_cobranza?: number
-          metodo_pago?: string | null
-          monto?: number
-          monto_evidencia?: string | null
-          preprosesado?: boolean | null
-          procesado?: boolean | null
-          texto_evidencia?: string | null
-          url_evidencia?: string | null
-          validacion?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "borrar_pagos_revision_evidencias_id_cuenta_cobranza_fkey"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "cuentas_cobranza"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "borrar_pagos_revision_evidencias_id_cuenta_cobranza_fkey"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "v_pagos_detalle"
-            referencedColumns: ["id_cuenta_cobranza"]
-          },
-          {
-            foreignKeyName: "borrar_pagos_revision_evidencias_id_cuenta_cobranza_fkey1"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "cuentas_cobranza"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "borrar_pagos_revision_evidencias_id_cuenta_cobranza_fkey1"
-            columns: ["id_cuenta_cobranza"]
-            isOneToOne: false
-            referencedRelation: "v_pagos_detalle"
-            referencedColumns: ["id_cuenta_cobranza"]
-          },
-        ]
-      }
-      borrar_pagos_stagin: {
-        Row: {
-          clave_rastreo: string | null
-          collection_id: number | null
-          descripcion: string | null
-          estatus: string | null
-          fecha_pago: string | null
-          id: number
-          id_cuenta_cobranza: number | null
-          id_metodos_pago: number | null
-          metodo_pago: string | null
-          monto: number | null
-          tipo_pago: string
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Insert: {
-          clave_rastreo?: string | null
-          collection_id?: number | null
-          descripcion?: string | null
-          estatus?: string | null
-          fecha_pago?: string | null
-          id?: number
-          id_cuenta_cobranza?: number | null
-          id_metodos_pago?: number | null
-          metodo_pago?: string | null
-          monto?: number | null
-          tipo_pago?: string
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Update: {
-          clave_rastreo?: string | null
-          collection_id?: number | null
-          descripcion?: string | null
-          estatus?: string | null
-          fecha_pago?: string | null
-          id?: number
-          id_cuenta_cobranza?: number | null
-          id_metodos_pago?: number | null
-          metodo_pago?: string | null
-          monto?: number | null
-          tipo_pago?: string
-          url_cep?: string | null
-          url_recibo?: string | null
-        }
-        Relationships: []
-      }
-      borrar_pagos_stp_cuentas_437_y_445: {
-        Row: {
-          claveRastreo: string | null
-          conceptoPago: string | null
-          created_at: string | null
-          cuentaBeneficiario: number | null
-          cuentaBeneficiario2: string | null
-          cuentaOrdenante: number | null
-          empresa: string | null
-          fechaOperacion: number | null
-          folioCodi: string | null
-          id: number | null
-          institucionBeneficiaria: number | null
-          institucionOrdenante: number | null
-          monto: number | null
-          nombreBeneficiario: string | null
-          nombreBeneficiario2: string | null
-          nombreOrdenante: string | null
-          nueva_cuenta_cobranza: number | null
-          referenciaNumerica: number | null
-          rfcCurpBeneficiario: string | null
-          rfcCurpOrdenante: string | null
-          stp_id: number | null
-          tipoCuentaBeneficiario: number | null
-          tipoCuentaBeneficiario2: string | null
-          tipoCuentaOrdenante: number | null
-          tipoPago: number | null
-          tsLiquidacion: number | null
-          updated_at: string | null
-        }
-        Insert: {
-          claveRastreo?: string | null
-          conceptoPago?: string | null
-          created_at?: string | null
-          cuentaBeneficiario?: number | null
-          cuentaBeneficiario2?: string | null
-          cuentaOrdenante?: number | null
-          empresa?: string | null
-          fechaOperacion?: number | null
-          folioCodi?: string | null
-          id?: number | null
-          institucionBeneficiaria?: number | null
-          institucionOrdenante?: number | null
-          monto?: number | null
-          nombreBeneficiario?: string | null
-          nombreBeneficiario2?: string | null
-          nombreOrdenante?: string | null
-          nueva_cuenta_cobranza?: number | null
-          referenciaNumerica?: number | null
-          rfcCurpBeneficiario?: string | null
-          rfcCurpOrdenante?: string | null
-          stp_id?: number | null
-          tipoCuentaBeneficiario?: number | null
-          tipoCuentaBeneficiario2?: string | null
-          tipoCuentaOrdenante?: number | null
-          tipoPago?: number | null
-          tsLiquidacion?: number | null
-          updated_at?: string | null
-        }
-        Update: {
-          claveRastreo?: string | null
-          conceptoPago?: string | null
-          created_at?: string | null
-          cuentaBeneficiario?: number | null
-          cuentaBeneficiario2?: string | null
-          cuentaOrdenante?: number | null
-          empresa?: string | null
-          fechaOperacion?: number | null
-          folioCodi?: string | null
-          id?: number | null
-          institucionBeneficiaria?: number | null
-          institucionOrdenante?: number | null
-          monto?: number | null
-          nombreBeneficiario?: string | null
-          nombreBeneficiario2?: string | null
-          nombreOrdenante?: string | null
-          nueva_cuenta_cobranza?: number | null
-          referenciaNumerica?: number | null
-          rfcCurpBeneficiario?: string | null
-          rfcCurpOrdenante?: string | null
-          stp_id?: number | null
-          tipoCuentaBeneficiario?: number | null
-          tipoCuentaBeneficiario2?: string | null
-          tipoCuentaOrdenante?: number | null
-          tipoPago?: number | null
-          tsLiquidacion?: number | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      borrar_pagos_stp_raw_duplicate: {
-        Row: {
-          claverastreo: string
-          concepto_pago: string | null
-          cuenta_beneficiario: string
-          cuenta_beneficiario2: string | null
-          cuenta_ordenante: string | null
-          empresa: string | null
-          es_pago_aplicado: boolean
-          fecha_actualizacion: string
-          fecha_creacion: string
-          fecha_operacion: string | null
-          folio_codi: string | null
-          id: number
-          id_tipo_pago: number
-          institucion_beneficiaria: string | null
-          institucion_ordenante: string | null
-          monto: number
-          nombre_beneficiario: string | null
-          nombre_beneficiario2: string | null
-          nombre_ordenante: string | null
-          razon_rechazo: string | null
-          referencia_numerica: string | null
-          rfc_curp_beneficiario: string | null
-          rfc_curp_ordenante: string | null
-          stp_id: string | null
-          tipo_cuenta_beneficiario: string | null
-          tipo_cuenta_beneficiario2: string | null
-          tipo_cuenta_ordenante: string | null
-          tipo_pago: string | null
-          ts_liquidacion: string | null
-        }
-        Insert: {
-          claverastreo: string
-          concepto_pago?: string | null
-          cuenta_beneficiario: string
-          cuenta_beneficiario2?: string | null
-          cuenta_ordenante?: string | null
-          empresa?: string | null
-          es_pago_aplicado?: boolean
-          fecha_actualizacion?: string
-          fecha_creacion?: string
-          fecha_operacion?: string | null
-          folio_codi?: string | null
-          id?: number
-          id_tipo_pago?: number
-          institucion_beneficiaria?: string | null
-          institucion_ordenante?: string | null
-          monto: number
-          nombre_beneficiario?: string | null
-          nombre_beneficiario2?: string | null
-          nombre_ordenante?: string | null
-          razon_rechazo?: string | null
-          referencia_numerica?: string | null
-          rfc_curp_beneficiario?: string | null
-          rfc_curp_ordenante?: string | null
-          stp_id?: string | null
-          tipo_cuenta_beneficiario?: string | null
-          tipo_cuenta_beneficiario2?: string | null
-          tipo_cuenta_ordenante?: string | null
-          tipo_pago?: string | null
-          ts_liquidacion?: string | null
-        }
-        Update: {
-          claverastreo?: string
-          concepto_pago?: string | null
-          cuenta_beneficiario?: string
-          cuenta_beneficiario2?: string | null
-          cuenta_ordenante?: string | null
-          empresa?: string | null
-          es_pago_aplicado?: boolean
-          fecha_actualizacion?: string
-          fecha_creacion?: string
-          fecha_operacion?: string | null
-          folio_codi?: string | null
-          id?: number
-          id_tipo_pago?: number
-          institucion_beneficiaria?: string | null
-          institucion_ordenante?: string | null
-          monto?: number
-          nombre_beneficiario?: string | null
-          nombre_beneficiario2?: string | null
-          nombre_ordenante?: string | null
-          razon_rechazo?: string | null
-          referencia_numerica?: string | null
-          rfc_curp_beneficiario?: string | null
-          rfc_curp_ordenante?: string | null
-          stp_id?: string | null
-          tipo_cuenta_beneficiario?: string | null
-          tipo_cuenta_beneficiario2?: string | null
-          tipo_cuenta_ordenante?: string | null
-          tipo_pago?: string | null
-          ts_liquidacion?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "borrar_pagos_stp_raw_duplicate_id_tipo_pago_fkey"
-            columns: ["id_tipo_pago"]
-            isOneToOne: false
-            referencedRelation: "tipos_pago"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      borrar_personas_stagin: {
-        Row: {
-          clave_pais_telefono: string | null
-          conyuge: string | null
-          curp: string | null
-          direccion_calle: string | null
-          direccion_calle_sola: string | null
-          direccion_codigo_postal: string | null
-          direccion_colonia: string | null
-          direccion_estado: string | null
-          direccion_fiscal_calle: string | null
-          direccion_fiscal_codigo_postal: string | null
-          direccion_fiscal_colonia: string | null
-          direccion_fiscal_estado: string | null
-          direccion_fiscal_municipio: string | null
-          direccion_fiscal_num_ext: string | null
-          direccion_fiscal_num_int: string | null
-          direccion_fiscal_pais: string | null
-          direccion_municipio: string | null
-          direccion_num_ext: string | null
-          direccion_num_int: string | null
-          direccion_pais: string | null
-          email: string
-          estado_civil: string | null
-          estado_nacimiento: string | null
-          fecha_escritura: string | null
-          fecha_nacimiento: string | null
-          fecha_registro: string | null
-          folio_mercantil: string | null
-          id: number
-          id_entidad_relacionada_rep_leg: string | null
-          id_notario: string | null
-          identificador_funcion_persona: number | null
-          municipio_nacimiento: string | null
-          nombre_comercial: string | null
-          nombre_legal: string
-          numero_escritura: string | null
-          numero_identificacion: string | null
-          numero_libro: string | null
-          ocupacion: string | null
-          pais_nacimiento: string | null
-          regimen: string | null
-          rfc: string | null
-          sexo: string | null
-          telefono: string | null
-          tipo_identificacion: string | null
-          tipo_persona: string
-          url_logo: string | null
-          uso_cfdi: string | null
-        }
-        Insert: {
-          clave_pais_telefono?: string | null
-          conyuge?: string | null
-          curp?: string | null
-          direccion_calle?: string | null
-          direccion_calle_sola?: string | null
-          direccion_codigo_postal?: string | null
-          direccion_colonia?: string | null
-          direccion_estado?: string | null
-          direccion_fiscal_calle?: string | null
-          direccion_fiscal_codigo_postal?: string | null
-          direccion_fiscal_colonia?: string | null
-          direccion_fiscal_estado?: string | null
-          direccion_fiscal_municipio?: string | null
-          direccion_fiscal_num_ext?: string | null
-          direccion_fiscal_num_int?: string | null
-          direccion_fiscal_pais?: string | null
-          direccion_municipio?: string | null
-          direccion_num_ext?: string | null
-          direccion_num_int?: string | null
-          direccion_pais?: string | null
-          email: string
-          estado_civil?: string | null
-          estado_nacimiento?: string | null
-          fecha_escritura?: string | null
-          fecha_nacimiento?: string | null
-          fecha_registro?: string | null
-          folio_mercantil?: string | null
-          id?: number
-          id_entidad_relacionada_rep_leg?: string | null
-          id_notario?: string | null
-          identificador_funcion_persona?: number | null
-          municipio_nacimiento?: string | null
-          nombre_comercial?: string | null
-          nombre_legal: string
-          numero_escritura?: string | null
-          numero_identificacion?: string | null
-          numero_libro?: string | null
-          ocupacion?: string | null
-          pais_nacimiento?: string | null
-          regimen?: string | null
-          rfc?: string | null
-          sexo?: string | null
-          telefono?: string | null
-          tipo_identificacion?: string | null
-          tipo_persona: string
-          url_logo?: string | null
-          uso_cfdi?: string | null
-        }
-        Update: {
-          clave_pais_telefono?: string | null
-          conyuge?: string | null
-          curp?: string | null
-          direccion_calle?: string | null
-          direccion_calle_sola?: string | null
-          direccion_codigo_postal?: string | null
-          direccion_colonia?: string | null
-          direccion_estado?: string | null
-          direccion_fiscal_calle?: string | null
-          direccion_fiscal_codigo_postal?: string | null
-          direccion_fiscal_colonia?: string | null
-          direccion_fiscal_estado?: string | null
-          direccion_fiscal_municipio?: string | null
-          direccion_fiscal_num_ext?: string | null
-          direccion_fiscal_num_int?: string | null
-          direccion_fiscal_pais?: string | null
-          direccion_municipio?: string | null
-          direccion_num_ext?: string | null
-          direccion_num_int?: string | null
-          direccion_pais?: string | null
-          email?: string
-          estado_civil?: string | null
-          estado_nacimiento?: string | null
-          fecha_escritura?: string | null
-          fecha_nacimiento?: string | null
-          fecha_registro?: string | null
-          folio_mercantil?: string | null
-          id?: number
-          id_entidad_relacionada_rep_leg?: string | null
-          id_notario?: string | null
-          identificador_funcion_persona?: number | null
-          municipio_nacimiento?: string | null
-          nombre_comercial?: string | null
-          nombre_legal?: string
-          numero_escritura?: string | null
-          numero_identificacion?: string | null
-          numero_libro?: string | null
-          ocupacion?: string | null
-          pais_nacimiento?: string | null
-          regimen?: string | null
-          rfc?: string | null
-          sexo?: string | null
-          telefono?: string | null
-          tipo_identificacion?: string | null
-          tipo_persona?: string
-          url_logo?: string | null
-          uso_cfdi?: string | null
-        }
-        Relationships: []
-      }
-      borrar_propiedades_cuenta_stp_stagin: {
-        Row: {
-          clabe_stp_tmp_apartado: number | null
-          edificio: string | null
-          id: number
-          id_edificio_modelo: number | null
-          id_propiedad: number | null
-          id_proyecto: number | null
-          modelo: string | null
-          numero_propiedad: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          clabe_stp_tmp_apartado?: number | null
-          edificio?: string | null
-          id: number
-          id_edificio_modelo?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          modelo?: string | null
-          numero_propiedad?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          clabe_stp_tmp_apartado?: number | null
-          edificio?: string | null
-          id?: number
-          id_edificio_modelo?: number | null
-          id_propiedad?: number | null
-          id_proyecto?: number | null
-          modelo?: string | null
-          numero_propiedad?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_propiedades_imagenes_360_stagin: {
-        Row: {
-          edificio: string | null
-          id: number
-          id_depa: number | null
-          id_edificio: number | null
-          id_proyecto: number | null
-          imagen: string | null
-          num_depa: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          edificio?: string | null
-          id?: number
-          id_depa?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          imagen?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          edificio?: string | null
-          id?: number
-          id_depa?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          imagen?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_propiedades_imagenes_stagin: {
-        Row: {
-          edificio: string | null
-          id: number
-          id_depa: number | null
-          id_edificio: number | null
-          id_proyecto: number | null
-          imagen: string | null
-          num_depa: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          edificio?: string | null
-          id?: number
-          id_depa?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          imagen?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          edificio?: string | null
-          id?: number
-          id_depa?: number | null
-          id_edificio?: number | null
-          id_proyecto?: number | null
-          imagen?: string | null
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_propiedades_stagin: {
-        Row: {
-          clabe_stp_tmp_apartado: string | null
-          descripcion: string | null
-          disponibilidad_original: string | null
-          disponibilidad_traducida_texto: string | null
-          dueno: string | null
-          edificio: string | null
-          es_aprobado: boolean | null
-          id: number
-          id_edificio: number | null
-          id_estatus_disponibilidad_nuevo: number | null
-          id_modelo: number | null
-          id_persona_dueno: number | null
-          id_proyecto: number | null
-          m2_exteriores: number | null
-          m2_interiores: number | null
-          m2_loft: number | null
-          modelo: string | null
-          monto_apartado: string | null
-          num_depa: string | null
-          piso: string | null
-          precio_lista: string | null
-          proyecto: string | null
-          tipo_propiedad: string | null
-          tipo_transaccion: string | null
-          url_imagen_portada: string | null
-          vista: string | null
-        }
-        Insert: {
-          clabe_stp_tmp_apartado?: string | null
-          descripcion?: string | null
-          disponibilidad_original?: string | null
-          disponibilidad_traducida_texto?: string | null
-          dueno?: string | null
-          edificio?: string | null
-          es_aprobado?: boolean | null
-          id?: number
-          id_edificio?: number | null
-          id_estatus_disponibilidad_nuevo?: number | null
-          id_modelo?: number | null
-          id_persona_dueno?: number | null
-          id_proyecto?: number | null
-          m2_exteriores?: number | null
-          m2_interiores?: number | null
-          m2_loft?: number | null
-          modelo?: string | null
-          monto_apartado?: string | null
-          num_depa?: string | null
-          piso?: string | null
-          precio_lista?: string | null
-          proyecto?: string | null
-          tipo_propiedad?: string | null
-          tipo_transaccion?: string | null
-          url_imagen_portada?: string | null
-          vista?: string | null
-        }
-        Update: {
-          clabe_stp_tmp_apartado?: string | null
-          descripcion?: string | null
-          disponibilidad_original?: string | null
-          disponibilidad_traducida_texto?: string | null
-          dueno?: string | null
-          edificio?: string | null
-          es_aprobado?: boolean | null
-          id?: number
-          id_edificio?: number | null
-          id_estatus_disponibilidad_nuevo?: number | null
-          id_modelo?: number | null
-          id_persona_dueno?: number | null
-          id_proyecto?: number | null
-          m2_exteriores?: number | null
-          m2_interiores?: number | null
-          m2_loft?: number | null
-          modelo?: string | null
-          monto_apartado?: string | null
-          num_depa?: string | null
-          piso?: string | null
-          precio_lista?: string | null
-          proyecto?: string | null
-          tipo_propiedad?: string | null
-          tipo_transaccion?: string | null
-          url_imagen_portada?: string | null
-          vista?: string | null
-        }
-        Relationships: []
-      }
-      borrar_proyectos_stagin: {
-        Row: {
-          costo_mantenimiento_m2: string | null
-          descripcion: string | null
-          direccion: string | null
-          fecha_entrega: string | null
-          fecha_inicio_construccion: string | null
-          fecha_lanzamiento: string | null
-          id: number
-          id_estado: number | null
-          id_estatus_proyecto: number | null
-          id_municipio: number | null
-          id_pais: string | null
-          id_tipo_uso: number | null
-          latitud: number | null
-          longitud: number | null
-          nombre: string | null
-          nombre_estado: string | null
-          nombre_firmante_recibos: string | null
-          nombre_municipio: string | null
-          nombre_pais: string | null
-          tipo_transaccion: string | null
-          tipo_uso: string | null
-          url_firma_recibos: string | null
-          url_imagen_portada: string | null
-          url_logo: string | null
-        }
-        Insert: {
-          costo_mantenimiento_m2?: string | null
-          descripcion?: string | null
-          direccion?: string | null
-          fecha_entrega?: string | null
-          fecha_inicio_construccion?: string | null
-          fecha_lanzamiento?: string | null
-          id?: number
-          id_estado?: number | null
-          id_estatus_proyecto?: number | null
-          id_municipio?: number | null
-          id_pais?: string | null
-          id_tipo_uso?: number | null
-          latitud?: number | null
-          longitud?: number | null
-          nombre?: string | null
-          nombre_estado?: string | null
-          nombre_firmante_recibos?: string | null
-          nombre_municipio?: string | null
-          nombre_pais?: string | null
-          tipo_transaccion?: string | null
-          tipo_uso?: string | null
-          url_firma_recibos?: string | null
-          url_imagen_portada?: string | null
-          url_logo?: string | null
-        }
-        Update: {
-          costo_mantenimiento_m2?: string | null
-          descripcion?: string | null
-          direccion?: string | null
-          fecha_entrega?: string | null
-          fecha_inicio_construccion?: string | null
-          fecha_lanzamiento?: string | null
-          id?: number
-          id_estado?: number | null
-          id_estatus_proyecto?: number | null
-          id_municipio?: number | null
-          id_pais?: string | null
-          id_tipo_uso?: number | null
-          latitud?: number | null
-          longitud?: number | null
-          nombre?: string | null
-          nombre_estado?: string | null
-          nombre_firmante_recibos?: string | null
-          nombre_municipio?: string | null
-          nombre_pais?: string | null
-          tipo_transaccion?: string | null
-          tipo_uso?: string | null
-          url_firma_recibos?: string | null
-          url_imagen_portada?: string | null
-          url_logo?: string | null
-        }
-        Relationships: []
-      }
-      borrar_stp_propiedades: {
-        Row: {
-          clabe_stp_tmp_apartado: string | null
-          edificio: string | null
-          id: number
-          num_depa: string | null
-          proyecto: string | null
-        }
-        Insert: {
-          clabe_stp_tmp_apartado?: string | null
-          edificio?: string | null
-          id?: number
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Update: {
-          clabe_stp_tmp_apartado?: string | null
-          edificio?: string | null
-          id?: number
-          num_depa?: string | null
-          proyecto?: string | null
-        }
-        Relationships: []
-      }
-      borrar_videos_youtube_stagin: {
-        Row: {
-          id: number
-          link: string
-          nombre: string
-          proyecto: string
-        }
-        Insert: {
-          id?: number
-          link: string
-          nombre: string
-          proyecto: string
-        }
-        Update: {
-          id?: number
-          link?: string
-          nombre?: string
-          proyecto?: string
-        }
-        Relationships: []
-      }
-      borrar_vistas_stagin: {
-        Row: {
-          id: number
-          nombre: string | null
-          proyecto: string | null
-          url: string | null
-        }
-        Insert: {
-          id?: number
-          nombre?: string | null
-          proyecto?: string | null
-          url?: string | null
-        }
-        Update: {
-          id?: number
-          nombre?: string | null
-          proyecto?: string | null
-          url?: string | null
-        }
-        Relationships: []
-      }
       caracteristicas: {
         Row: {
           activo: boolean
@@ -3405,6 +1977,131 @@ export type Database = {
           requiere_validacion_biometrica?: boolean | null
           updated_at?: string | null
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      cat_etapas_procesales: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          codigo: string
+          creado_por: string
+          es_terminal: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_tipo_asunto: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          codigo: string
+          creado_por: string
+          es_terminal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_tipo_asunto: number
+          nombre: string
+          orden: number
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          codigo?: string
+          creado_por?: string
+          es_terminal?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_tipo_asunto?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cat_etapas_procesales_id_tipo_asunto_fkey"
+            columns: ["id_tipo_asunto"]
+            isOneToOne: false
+            referencedRelation: "cat_tipos_asunto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cat_niveles_riesgo: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          codigo: string
+          creado_por: string
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          codigo: string
+          creado_por: string
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          orden: number
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          codigo?: string
+          creado_por?: string
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      cat_tipos_asunto: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          codigo: string
+          creado_por: string
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          codigo: string
+          creado_por: string
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          codigo?: string
+          creado_por?: string
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
         }
         Relationships: []
       }
@@ -3852,11 +2549,75 @@ export type Database = {
           },
         ]
       }
+      comisiones_canales: {
+        Row: {
+          activo: boolean
+          categoria: string | null
+          codigo: string | null
+          comision_base_pct: number
+          comision_externa_pct: number
+          comision_max_pct: number
+          comision_min_pct: number
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          participa_bonos: boolean
+          participa_escalonamiento: boolean
+          participa_simuladores: boolean
+          proteccion_leads_dias: number
+          requiere_aprobacion: boolean
+          requiere_capacitacion: boolean
+          requiere_onboarding: boolean
+        }
+        Insert: {
+          activo?: boolean
+          categoria?: string | null
+          codigo?: string | null
+          comision_base_pct?: number
+          comision_externa_pct?: number
+          comision_max_pct?: number
+          comision_min_pct?: number
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          participa_bonos?: boolean
+          participa_escalonamiento?: boolean
+          participa_simuladores?: boolean
+          proteccion_leads_dias?: number
+          requiere_aprobacion?: boolean
+          requiere_capacitacion?: boolean
+          requiere_onboarding?: boolean
+        }
+        Update: {
+          activo?: boolean
+          categoria?: string | null
+          codigo?: string | null
+          comision_base_pct?: number
+          comision_externa_pct?: number
+          comision_max_pct?: number
+          comision_min_pct?: number
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          participa_bonos?: boolean
+          participa_escalonamiento?: boolean
+          participa_simuladores?: boolean
+          proteccion_leads_dias?: number
+          requiere_aprobacion?: boolean
+          requiere_capacitacion?: boolean
+          requiere_onboarding?: boolean
+        }
+        Relationships: []
+      }
       comisiones_propuestas: {
         Row: {
           activo: boolean
-          escenario_id: string
-          escenario_nombre: string | null
           estado: string
           fecha_actualizacion: string
           fecha_propuesta: string
@@ -3868,8 +2629,6 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
-          escenario_id: string
-          escenario_nombre?: string | null
           estado?: string
           fecha_actualizacion?: string
           fecha_propuesta?: string
@@ -3881,8 +2640,6 @@ export type Database = {
         }
         Update: {
           activo?: boolean
-          escenario_id?: string
-          escenario_nombre?: string | null
           estado?: string
           fecha_actualizacion?: string
           fecha_propuesta?: string
@@ -3896,6 +2653,57 @@ export type Database = {
           {
             foreignKeyName: "comisiones_propuestas_id_proyecto_fkey"
             columns: ["id_proyecto"]
+            isOneToOne: true
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comisiones_reglas: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_canal: number
+          id_proyecto: number
+          id_rol: string
+          pool: string
+          porcentaje: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal: number
+          id_proyecto: number
+          id_rol: string
+          pool?: string
+          porcentaje?: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal?: number
+          id_proyecto?: number
+          id_rol?: string
+          pool?: string
+          porcentaje?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_reglas_id_canal_fkey"
+            columns: ["id_canal"]
+            isOneToOne: false
+            referencedRelation: "comisiones_canales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_reglas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
@@ -3904,8 +2712,6 @@ export type Database = {
       }
       comisiones_validaciones: {
         Row: {
-          escenario_id: string
-          escenario_nombre: string | null
           estado: string
           fecha_validacion: string
           id: number
@@ -3916,8 +2722,6 @@ export type Database = {
           validado_por: string | null
         }
         Insert: {
-          escenario_id: string
-          escenario_nombre?: string | null
           estado: string
           fecha_validacion?: string
           id?: number
@@ -3928,8 +2732,6 @@ export type Database = {
           validado_por?: string | null
         }
         Update: {
-          escenario_id?: string
-          escenario_nombre?: string | null
           estado?: string
           fecha_validacion?: string
           id?: number
@@ -4269,6 +3071,78 @@ export type Database = {
           },
         ]
       }
+      contrapartes: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          creado_por: string
+          email: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_cliente: number | null
+          id_entidad_relacionada: number | null
+          nombre: string
+          notas: string | null
+          representante: string | null
+          rfc: string | null
+          telefono: string | null
+          tipo: string
+          tipo_persona: string
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          creado_por: string
+          email?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_cliente?: number | null
+          id_entidad_relacionada?: number | null
+          nombre: string
+          notas?: string | null
+          representante?: string | null
+          rfc?: string | null
+          telefono?: string | null
+          tipo: string
+          tipo_persona: string
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          creado_por?: string
+          email?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_cliente?: number | null
+          id_entidad_relacionada?: number | null
+          nombre?: string
+          notas?: string | null
+          representante?: string | null
+          rfc?: string | null
+          telefono?: string | null
+          tipo?: string
+          tipo_persona?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contrapartes_id_cliente_fkey"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contrapartes_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contrato_validaciones: {
         Row: {
           estado: string
@@ -4380,6 +3254,650 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+        ]
+      }
+      crm_categorias: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      crm_citas: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          enlace_reunion: string | null
+          estatus: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_fin: string | null
+          fecha_inicio: string | null
+          fecha_recordatorio: string | null
+          id: number
+          id_entidad_relacionada: number
+          id_usuario_asignado: string | null
+          recordatorio_enviado: boolean
+          resultado: string | null
+          tipo: string
+          titulo: string
+          ubicacion: string | null
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          enlace_reunion?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          fecha_recordatorio?: string | null
+          id?: number
+          id_entidad_relacionada: number
+          id_usuario_asignado?: string | null
+          recordatorio_enviado?: boolean
+          resultado?: string | null
+          tipo?: string
+          titulo: string
+          ubicacion?: string | null
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          enlace_reunion?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          fecha_recordatorio?: string | null
+          id?: number
+          id_entidad_relacionada?: number
+          id_usuario_asignado?: string | null
+          recordatorio_enviado?: boolean
+          resultado?: string | null
+          tipo?: string
+          titulo?: string
+          ubicacion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_citas_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_estados_lead: {
+        Row: {
+          activo: boolean
+          clave: string
+          color: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          clave: string
+          color?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          clave?: string
+          color?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      crm_leads_atribucion: {
+        Row: {
+          activo: boolean
+          estatus_lead: string
+          etapa_ciclo_vida: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          hubspot_id: string | null
+          id: number
+          id_entidad_relacionada: number
+          id_propietario: string | null
+          meta_ad_id: string | null
+          meta_adgroup_id: string | null
+          meta_campaign_id: string | null
+          meta_created_time: string | null
+          meta_field_data: Json
+          meta_form_id: string | null
+          meta_form_name: string | null
+          meta_leadgen_id: string | null
+          meta_page_id: string | null
+          meta_platform: string | null
+          origen: string | null
+          origen_agente: string | null
+        }
+        Insert: {
+          activo?: boolean
+          estatus_lead?: string
+          etapa_ciclo_vida?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          hubspot_id?: string | null
+          id?: number
+          id_entidad_relacionada: number
+          id_propietario?: string | null
+          meta_ad_id?: string | null
+          meta_adgroup_id?: string | null
+          meta_campaign_id?: string | null
+          meta_created_time?: string | null
+          meta_field_data?: Json
+          meta_form_id?: string | null
+          meta_form_name?: string | null
+          meta_leadgen_id?: string | null
+          meta_page_id?: string | null
+          meta_platform?: string | null
+          origen?: string | null
+          origen_agente?: string | null
+        }
+        Update: {
+          activo?: boolean
+          estatus_lead?: string
+          etapa_ciclo_vida?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          hubspot_id?: string | null
+          id?: number
+          id_entidad_relacionada?: number
+          id_propietario?: string | null
+          meta_ad_id?: string | null
+          meta_adgroup_id?: string | null
+          meta_campaign_id?: string | null
+          meta_created_time?: string | null
+          meta_field_data?: Json
+          meta_form_id?: string | null
+          meta_form_name?: string | null
+          meta_leadgen_id?: string | null
+          meta_page_id?: string | null
+          meta_platform?: string | null
+          origen?: string | null
+          origen_agente?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_leads_atribucion_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: true
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_meta_capi_eventos: {
+        Row: {
+          error: string | null
+          event_id: string
+          event_name: string
+          events_received: number | null
+          fbtrace_id: string | null
+          fecha_creacion: string
+          id: number
+          id_entidad_relacionada: number | null
+          intentos: number
+          meta_leadgen_id: string | null
+          meta_response: Json | null
+          status: string
+          test_event_code: string | null
+        }
+        Insert: {
+          error?: string | null
+          event_id: string
+          event_name: string
+          events_received?: number | null
+          fbtrace_id?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_entidad_relacionada?: number | null
+          intentos?: number
+          meta_leadgen_id?: string | null
+          meta_response?: Json | null
+          status: string
+          test_event_code?: string | null
+        }
+        Update: {
+          error?: string | null
+          event_id?: string
+          event_name?: string
+          events_received?: number | null
+          fbtrace_id?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_entidad_relacionada?: number | null
+          intentos?: number
+          meta_leadgen_id?: string | null
+          meta_response?: Json | null
+          status?: string
+          test_event_code?: string | null
+        }
+        Relationships: []
+      }
+      crm_meta_conversion_stages: {
+        Row: {
+          activo: boolean
+          etapa_ciclo_vida: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          meta_event_name: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          etapa_ciclo_vida: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          meta_event_name: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          etapa_ciclo_vida?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          meta_event_name?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      crm_negocios: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_cierre_estimada: string | null
+          fecha_creacion: string
+          hubspot_id: string | null
+          id: number
+          id_entidad_relacionada: number | null
+          id_etapa: number
+          id_pipeline: number
+          id_usuario_propietario: string | null
+          moneda: string
+          nombre: string
+          prioridad: string | null
+          tipo_negocio: string | null
+          valor: number | null
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_cierre_estimada?: string | null
+          fecha_creacion?: string
+          hubspot_id?: string | null
+          id?: number
+          id_entidad_relacionada?: number | null
+          id_etapa: number
+          id_pipeline: number
+          id_usuario_propietario?: string | null
+          moneda?: string
+          nombre: string
+          prioridad?: string | null
+          tipo_negocio?: string | null
+          valor?: number | null
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_cierre_estimada?: string | null
+          fecha_creacion?: string
+          hubspot_id?: string | null
+          id?: number
+          id_entidad_relacionada?: number | null
+          id_etapa?: number
+          id_pipeline?: number
+          id_usuario_propietario?: string | null
+          moneda?: string
+          nombre?: string
+          prioridad?: string | null
+          tipo_negocio?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_negocios_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_negocios_id_etapa_fkey"
+            columns: ["id_etapa"]
+            isOneToOne: false
+            referencedRelation: "crm_pipeline_etapas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_negocios_id_pipeline_fkey"
+            columns: ["id_pipeline"]
+            isOneToOne: false
+            referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_notas: {
+        Row: {
+          activo: boolean
+          anclado: boolean
+          contenido: string
+          fecha_actividad: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_entidad_relacionada: number
+          id_usuario: string | null
+        }
+        Insert: {
+          activo?: boolean
+          anclado?: boolean
+          contenido: string
+          fecha_actividad?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_entidad_relacionada: number
+          id_usuario?: string | null
+        }
+        Update: {
+          activo?: boolean
+          anclado?: boolean
+          contenido?: string
+          fecha_actividad?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_entidad_relacionada?: number
+          id_usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_notas_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_notas_adjuntos: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_nota: number
+          id_usuario: string | null
+          mime: string | null
+          nombre: string
+          tamano_bytes: number | null
+          tipo: string
+          url: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_nota: number
+          id_usuario?: string | null
+          mime?: string | null
+          nombre: string
+          tamano_bytes?: number | null
+          tipo: string
+          url: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_nota?: number
+          id_usuario?: string | null
+          mime?: string | null
+          nombre?: string
+          tamano_bytes?: number | null
+          tipo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_notas_adjuntos_id_nota_fkey"
+            columns: ["id_nota"]
+            isOneToOne: false
+            referencedRelation: "crm_notas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_notas_comentarios: {
+        Row: {
+          activo: boolean
+          contenido: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_nota: number
+          id_usuario: string | null
+        }
+        Insert: {
+          activo?: boolean
+          contenido: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_nota: number
+          id_usuario?: string | null
+        }
+        Update: {
+          activo?: boolean
+          contenido?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_nota?: number
+          id_usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_notas_comentarios_id_nota_fkey"
+            columns: ["id_nota"]
+            isOneToOne: false
+            referencedRelation: "crm_notas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_pipeline_etapas: {
+        Row: {
+          activo: boolean
+          es_ganado: boolean
+          es_perdido: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_pipeline: number
+          nombre: string
+          orden: number
+          probabilidad: number
+        }
+        Insert: {
+          activo?: boolean
+          es_ganado?: boolean
+          es_perdido?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_pipeline: number
+          nombre: string
+          orden?: number
+          probabilidad?: number
+        }
+        Update: {
+          activo?: boolean
+          es_ganado?: boolean
+          es_perdido?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_pipeline?: number
+          nombre?: string
+          orden?: number
+          probabilidad?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_pipeline_etapas_id_pipeline_fkey"
+            columns: ["id_pipeline"]
+            isOneToOne: false
+            referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_pipelines: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_proyecto: number | null
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_proyecto?: number | null
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_proyecto?: number | null
+          nombre?: string
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_pipelines_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_tareas: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          estatus: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_recordatorio: string | null
+          fecha_vencimiento: string | null
+          id: number
+          id_entidad_relacionada: number
+          id_usuario_asignado: string | null
+          prioridad: string
+          recordatorio_enviado: boolean
+          recurrencia: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_recordatorio?: string | null
+          fecha_vencimiento?: string | null
+          id?: number
+          id_entidad_relacionada: number
+          id_usuario_asignado?: string | null
+          prioridad?: string
+          recordatorio_enviado?: boolean
+          recurrencia?: string | null
+          tipo?: string
+          titulo: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_recordatorio?: string | null
+          fecha_vencimiento?: string | null
+          id?: number
+          id_entidad_relacionada?: number
+          id_usuario_asignado?: string | null
+          prioridad?: string
+          recordatorio_enviado?: boolean
+          recurrencia?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_tareas_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -4543,6 +4061,7 @@ export type Database = {
           numero_unidad_privativa: string | null
           porcentaje_comision_venta: number
           precio_final: number
+          tipo_financiamiento: string | null
           url_evidencia_cancelacion: string | null
           url_evidencia_reembolso: string | null
           url_factura_comision: string | null
@@ -4593,6 +4112,7 @@ export type Database = {
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
           precio_final?: number
+          tipo_financiamiento?: string | null
           url_evidencia_cancelacion?: string | null
           url_evidencia_reembolso?: string | null
           url_factura_comision?: string | null
@@ -4643,6 +4163,7 @@ export type Database = {
           numero_unidad_privativa?: string | null
           porcentaje_comision_venta?: number
           precio_final?: number
+          tipo_financiamiento?: string | null
           url_evidencia_cancelacion?: string | null
           url_evidencia_reembolso?: string | null
           url_factura_comision?: string | null
@@ -4753,7 +4274,9 @@ export type Database = {
           fecha_limite_respuesta: string | null
           fecha_proxima_audiencia: string | null
           id: number
+          id_asunto: number | null
           id_cuenta_cobranza: number
+          id_expediente: number | null
           id_perfil_juridico: number | null
           id_propiedad: number
           id_proyecto: number | null
@@ -4777,7 +4300,9 @@ export type Database = {
           fecha_limite_respuesta?: string | null
           fecha_proxima_audiencia?: string | null
           id?: never
+          id_asunto?: number | null
           id_cuenta_cobranza: number
+          id_expediente?: number | null
           id_perfil_juridico?: number | null
           id_propiedad: number
           id_proyecto?: number | null
@@ -4801,7 +4326,9 @@ export type Database = {
           fecha_limite_respuesta?: string | null
           fecha_proxima_audiencia?: string | null
           id?: never
+          id_asunto?: number | null
           id_cuenta_cobranza?: number
+          id_expediente?: number | null
           id_perfil_juridico?: number | null
           id_propiedad?: number
           id_proyecto?: number | null
@@ -4817,6 +4344,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "demandas_id_asunto_fk"
+            columns: ["id_asunto"]
+            isOneToOne: false
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "demandas_id_cuenta_cobranza_fkey"
             columns: ["id_cuenta_cobranza"]
             isOneToOne: false
@@ -4829,6 +4363,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "demandas_id_expediente_fk"
+            columns: ["id_expediente"]
+            isOneToOne: false
+            referencedRelation: "expedientes_juridicos"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "demandas_id_perfil_juridico_fkey"
@@ -5239,6 +4780,7 @@ export type Database = {
           id_entidad_relacionada_emb: number
           id_persona_asesor: number | null
           id_persona_embajador: number
+          id_proyecto_interes: number | null
           monto_comision: number
           monto_venta: number | null
           nombre_asesor: string | null
@@ -5250,6 +4792,7 @@ export type Database = {
           telefono_asesor: string | null
           tipo_interes: string
           ultima_actualizacion_asesor: string | null
+          url_factura: string | null
         }
         Insert: {
           activo?: boolean
@@ -5274,6 +4817,7 @@ export type Database = {
           id_entidad_relacionada_emb: number
           id_persona_asesor?: number | null
           id_persona_embajador: number
+          id_proyecto_interes?: number | null
           monto_comision?: number
           monto_venta?: number | null
           nombre_asesor?: string | null
@@ -5285,6 +4829,7 @@ export type Database = {
           telefono_asesor?: string | null
           tipo_interes?: string
           ultima_actualizacion_asesor?: string | null
+          url_factura?: string | null
         }
         Update: {
           activo?: boolean
@@ -5309,6 +4854,7 @@ export type Database = {
           id_entidad_relacionada_emb?: number
           id_persona_asesor?: number | null
           id_persona_embajador?: number
+          id_proyecto_interes?: number | null
           monto_comision?: number
           monto_venta?: number | null
           nombre_asesor?: string | null
@@ -5320,6 +4866,7 @@ export type Database = {
           telefono_asesor?: string | null
           tipo_interes?: string
           ultima_actualizacion_asesor?: string | null
+          url_factura?: string | null
         }
         Relationships: [
           {
@@ -5350,6 +4897,13 @@ export type Database = {
             referencedRelation: "personas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "embajadores_referidos_id_proyecto_interes_fkey"
+            columns: ["id_proyecto_interes"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
         ]
       }
       entidades_relacionadas: {
@@ -5357,6 +4911,8 @@ export type Database = {
           activo: boolean
           cuenta_madre_stp: string | null
           cuenta_stp_comisiones: string | null
+          es_supervisor_entregas: boolean
+          es_tecnico_entregas: boolean
           facturar: boolean
           facturar_comision_sozu: boolean
           fecha_actualizacion: string
@@ -5375,6 +4931,8 @@ export type Database = {
           activo?: boolean
           cuenta_madre_stp?: string | null
           cuenta_stp_comisiones?: string | null
+          es_supervisor_entregas?: boolean
+          es_tecnico_entregas?: boolean
           facturar?: boolean
           facturar_comision_sozu?: boolean
           fecha_actualizacion?: string
@@ -5393,6 +4951,8 @@ export type Database = {
           activo?: boolean
           cuenta_madre_stp?: string | null
           cuenta_stp_comisiones?: string | null
+          es_supervisor_entregas?: boolean
+          es_tecnico_entregas?: boolean
           facturar?: boolean
           facturar_comision_sozu?: boolean
           fecha_actualizacion?: string
@@ -5455,6 +5015,48 @@ export type Database = {
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entidades_relacionadas_categorias: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_categoria: number
+          id_entidad_relacionada: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_categoria: number
+          id_entidad_relacionada: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_categoria?: number
+          id_entidad_relacionada?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entidades_relacionadas_categorias_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "crm_categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entidades_relacionadas_categorias_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
             referencedColumns: ["id"]
           },
         ]
@@ -5605,6 +5207,7 @@ export type Database = {
       entregas_checklist_items: {
         Row: {
           activo: boolean
+          fecha_actualizacion: string
           fecha_compromiso: string | null
           fecha_creacion: string
           fecha_revision: string | null
@@ -5612,12 +5215,16 @@ export type Database = {
           id_categoria: number
           id_estatus_checklist: number
           id_plantilla_item: number | null
+          id_responsable_er: number | null
+          id_supervisor_er: number | null
+          id_tecnico_er: number | null
           nombre: string
           observacion: string | null
           responsable: string | null
         }
         Insert: {
           activo?: boolean
+          fecha_actualizacion?: string
           fecha_compromiso?: string | null
           fecha_creacion?: string
           fecha_revision?: string | null
@@ -5625,12 +5232,16 @@ export type Database = {
           id_categoria: number
           id_estatus_checklist?: number
           id_plantilla_item?: number | null
+          id_responsable_er?: number | null
+          id_supervisor_er?: number | null
+          id_tecnico_er?: number | null
           nombre: string
           observacion?: string | null
           responsable?: string | null
         }
         Update: {
           activo?: boolean
+          fecha_actualizacion?: string
           fecha_compromiso?: string | null
           fecha_creacion?: string
           fecha_revision?: string | null
@@ -5638,6 +5249,9 @@ export type Database = {
           id_categoria?: number
           id_estatus_checklist?: number
           id_plantilla_item?: number | null
+          id_responsable_er?: number | null
+          id_supervisor_er?: number | null
+          id_tecnico_er?: number | null
           nombre?: string
           observacion?: string | null
           responsable?: string | null
@@ -5658,10 +5272,94 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "entregas_checklist_items_id_responsable_er_fkey"
+            columns: ["id_responsable_er"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_checklist_items_id_supervisor_er_fkey"
+            columns: ["id_supervisor_er"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_checklist_items_id_tecnico_er_fkey"
+            columns: ["id_tecnico_er"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "fk_checklist_items_estatus"
             columns: ["id_estatus_checklist"]
             isOneToOne: false
             referencedRelation: "estatus_checklist"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entregas_checklist_log: {
+        Row: {
+          accion: string | null
+          activo: boolean
+          estatus_anterior: string | null
+          estatus_nuevo: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_checklist_item: number
+          id_entrega: number | null
+          metadata: Json | null
+          observaciones: string | null
+          tipo_evento: string
+          usuario: string | null
+        }
+        Insert: {
+          accion?: string | null
+          activo?: boolean
+          estatus_anterior?: string | null
+          estatus_nuevo?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_checklist_item: number
+          id_entrega?: number | null
+          metadata?: Json | null
+          observaciones?: string | null
+          tipo_evento: string
+          usuario?: string | null
+        }
+        Update: {
+          accion?: string | null
+          activo?: boolean
+          estatus_anterior?: string | null
+          estatus_nuevo?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_checklist_item?: number
+          id_entrega?: number | null
+          metadata?: Json | null
+          observaciones?: string | null
+          tipo_evento?: string
+          usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entregas_checklist_log_id_checklist_item_fkey"
+            columns: ["id_checklist_item"]
+            isOneToOne: false
+            referencedRelation: "entregas_checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_checklist_log_id_entrega_fkey"
+            columns: ["id_entrega"]
+            isOneToOne: false
+            referencedRelation: "entregas"
             referencedColumns: ["id"]
           },
         ]
@@ -5673,9 +5371,11 @@ export type Database = {
           id: number
           id_categoria: number | null
           id_entrega: number
+          id_item: number | null
           nombre: string | null
           subido_por: string | null
           tipo: string
+          tipo_evidencia: string
           url: string
         }
         Insert: {
@@ -5684,9 +5384,11 @@ export type Database = {
           id?: never
           id_categoria?: number | null
           id_entrega: number
+          id_item?: number | null
           nombre?: string | null
           subido_por?: string | null
           tipo: string
+          tipo_evidencia?: string
           url: string
         }
         Update: {
@@ -5695,9 +5397,11 @@ export type Database = {
           id?: never
           id_categoria?: number | null
           id_entrega?: number
+          id_item?: number | null
           nombre?: string | null
           subido_por?: string | null
           tipo?: string
+          tipo_evidencia?: string
           url?: string
         }
         Relationships: [
@@ -5713,6 +5417,13 @@ export type Database = {
             columns: ["id_entrega"]
             isOneToOne: false
             referencedRelation: "entregas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_evidencia_id_item_fkey"
+            columns: ["id_item"]
+            isOneToOne: false
+            referencedRelation: "entregas_checklist_items"
             referencedColumns: ["id"]
           },
         ]
@@ -6446,6 +6157,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           nombre: string
+          porcentaje_avance: number | null
         }
         Insert: {
           activo?: boolean
@@ -6453,6 +6165,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           nombre: string
+          porcentaje_avance?: number | null
         }
         Update: {
           activo?: boolean
@@ -6460,6 +6173,7 @@ export type Database = {
           fecha_creacion?: string
           id?: number
           nombre?: string
+          porcentaje_avance?: number | null
         }
         Relationships: []
       }
@@ -6537,6 +6251,128 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
+      }
+      estrategias_juridicas: {
+        Row: {
+          actualizado_por: string
+          aprobado_por: string | null
+          comentarios: string | null
+          contenido: string
+          creado_por: string
+          es_vigente: boolean
+          estado: string
+          fecha_actualizacion: string
+          fecha_aprobacion: string | null
+          fecha_creacion: string
+          id: number
+          id_asunto: number
+          numero_version: number
+        }
+        Insert: {
+          actualizado_por: string
+          aprobado_por?: string | null
+          comentarios?: string | null
+          contenido: string
+          creado_por: string
+          es_vigente?: boolean
+          estado?: string
+          fecha_actualizacion?: string
+          fecha_aprobacion?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_asunto: number
+          numero_version?: number
+        }
+        Update: {
+          actualizado_por?: string
+          aprobado_por?: string | null
+          comentarios?: string | null
+          contenido?: string
+          creado_por?: string
+          es_vigente?: boolean
+          estado?: string
+          fecha_actualizacion?: string
+          fecha_aprobacion?: string | null
+          fecha_creacion?: string
+          id?: never
+          id_asunto?: number
+          numero_version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estrategias_juridicas_id_asunto_fkey"
+            columns: ["id_asunto"]
+            isOneToOne: false
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expedientes_juridicos: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          creado_por: string
+          estado: string
+          fecha_actualizacion: string
+          fecha_apertura: string
+          fecha_cierre: string | null
+          fecha_creacion: string
+          folio_visible: string
+          id: number
+          id_propiedad: number
+          id_proyecto: number
+          observaciones_generales: string | null
+          prioridad: string
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          creado_por: string
+          estado?: string
+          fecha_actualizacion?: string
+          fecha_apertura?: string
+          fecha_cierre?: string | null
+          fecha_creacion?: string
+          folio_visible?: string
+          id?: never
+          id_propiedad: number
+          id_proyecto: number
+          observaciones_generales?: string | null
+          prioridad?: string
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          creado_por?: string
+          estado?: string
+          fecha_actualizacion?: string
+          fecha_apertura?: string
+          fecha_cierre?: string | null
+          fecha_creacion?: string
+          folio_visible?: string
+          id?: never
+          id_propiedad?: number
+          id_proyecto?: number
+          observaciones_generales?: string | null
+          prioridad?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expedientes_juridicos_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expedientes_juridicos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       facturas_mantenimientos: {
         Row: {
@@ -6665,6 +6501,106 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
+      }
+      historial_asignaciones_juridicas: {
+        Row: {
+          asignado_por: string
+          fecha_asignacion: string
+          fecha_creacion: string
+          id: number
+          id_abogado_anterior: number | null
+          id_abogado_nuevo: number
+          id_asunto: number
+          motivo: string | null
+        }
+        Insert: {
+          asignado_por: string
+          fecha_asignacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_abogado_anterior?: number | null
+          id_abogado_nuevo: number
+          id_asunto: number
+          motivo?: string | null
+        }
+        Update: {
+          asignado_por?: string
+          fecha_asignacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_abogado_anterior?: number | null
+          id_abogado_nuevo?: number
+          id_asunto?: number
+          motivo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historial_asignaciones_juridicas_id_abogado_anterior_fkey"
+            columns: ["id_abogado_anterior"]
+            isOneToOne: false
+            referencedRelation: "perfiles_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historial_asignaciones_juridicas_id_abogado_nuevo_fkey"
+            columns: ["id_abogado_nuevo"]
+            isOneToOne: false
+            referencedRelation: "perfiles_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historial_asignaciones_juridicas_id_asunto_fkey"
+            columns: ["id_asunto"]
+            isOneToOne: false
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      historial_riesgo_asunto: {
+        Row: {
+          evaluado_por: string
+          fecha_creacion: string
+          fecha_evaluacion: string
+          id: number
+          id_asunto: number
+          id_nivel_riesgo: number
+          motivo: string | null
+        }
+        Insert: {
+          evaluado_por: string
+          fecha_creacion?: string
+          fecha_evaluacion?: string
+          id?: never
+          id_asunto: number
+          id_nivel_riesgo: number
+          motivo?: string | null
+        }
+        Update: {
+          evaluado_por?: string
+          fecha_creacion?: string
+          fecha_evaluacion?: string
+          id?: never
+          id_asunto?: number
+          id_nivel_riesgo?: number
+          motivo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historial_riesgo_asunto_id_asunto_fkey"
+            columns: ["id_asunto"]
+            isOneToOne: false
+            referencedRelation: "asuntos_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historial_riesgo_asunto_id_nivel_riesgo_fkey"
+            columns: ["id_nivel_riesgo"]
+            isOneToOne: false
+            referencedRelation: "cat_niveles_riesgo"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       hvac_tipo: {
         Row: {
@@ -7200,7 +7136,6 @@ export type Database = {
           descripcion: string | null
           fecha_actualizacion: string | null
           fecha_creacion: string | null
-          highlights: Json | null
           id: number
           id_proyecto: number | null
           nombre: string
@@ -7216,7 +7151,6 @@ export type Database = {
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          highlights?: Json | null
           id?: number
           id_proyecto?: number | null
           nombre: string
@@ -7232,7 +7166,6 @@ export type Database = {
           descripcion?: string | null
           fecha_actualizacion?: string | null
           fecha_creacion?: string | null
-          highlights?: Json | null
           id?: number
           id_proyecto?: number | null
           nombre?: string
@@ -8133,13 +8066,16 @@ export type Database = {
           activo: boolean
           clave_rastreo: string | null
           descripcion: string | null
+          eliminado_por: string | null
           fecha_actualizacion: string
           fecha_creacion: string
+          fecha_eliminacion: string | null
           fecha_pago: string
           id: number
           id_cuenta_cobranza: number
           id_metodos_pago: number
           monto: number
+          motivo_eliminacion: string | null
           url_cep: string | null
           url_recibo: string | null
           validacion_documental_efectivo: boolean
@@ -8148,13 +8084,16 @@ export type Database = {
           activo?: boolean
           clave_rastreo?: string | null
           descripcion?: string | null
+          eliminado_por?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          fecha_eliminacion?: string | null
           fecha_pago: string
           id?: number
           id_cuenta_cobranza: number
           id_metodos_pago: number
           monto: number
+          motivo_eliminacion?: string | null
           url_cep?: string | null
           url_recibo?: string | null
           validacion_documental_efectivo?: boolean
@@ -8163,13 +8102,16 @@ export type Database = {
           activo?: boolean
           clave_rastreo?: string | null
           descripcion?: string | null
+          eliminado_por?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
+          fecha_eliminacion?: string | null
           fecha_pago?: string
           id?: number
           id_cuenta_cobranza?: number
           id_metodos_pago?: number
           monto?: number
+          motivo_eliminacion?: string | null
           url_cep?: string | null
           url_recibo?: string | null
           validacion_documental_efectivo?: boolean
@@ -8377,6 +8319,27 @@ export type Database = {
         }
         Relationships: []
       }
+      password_reset_intentos: {
+        Row: {
+          email: string | null
+          fecha_creacion: string
+          id: number
+          ip: string | null
+        }
+        Insert: {
+          email?: string | null
+          fecha_creacion?: string
+          id?: number
+          ip?: string | null
+        }
+        Update: {
+          email?: string | null
+          fecha_creacion?: string
+          id?: number
+          ip?: string | null
+        }
+        Relationships: []
+      }
       perfiles_juridicos: {
         Row: {
           activo: boolean
@@ -8502,6 +8465,7 @@ export type Database = {
           telefono: string | null
           tipo_persona: string
           url_logo: string | null
+          url_sitio_web: string | null
           uso_cfdi: string | null
         }
         Insert: {
@@ -8556,6 +8520,7 @@ export type Database = {
           telefono?: string | null
           tipo_persona: string
           url_logo?: string | null
+          url_sitio_web?: string | null
           uso_cfdi?: string | null
         }
         Update: {
@@ -8610,6 +8575,7 @@ export type Database = {
           telefono?: string | null
           tipo_persona?: string
           url_logo?: string | null
+          url_sitio_web?: string | null
           uso_cfdi?: string | null
         }
         Relationships: [
@@ -9400,6 +9366,74 @@ export type Database = {
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profeco_expedientes: {
+        Row: {
+          activo: boolean
+          actualizado_por: string
+          acuerdo_alcanzado: boolean | null
+          creado_por: string
+          detalle_acuerdo: string | null
+          fecha_actualizacion: string
+          fecha_audiencia_conciliatoria: string | null
+          fecha_cierre_profeco: string | null
+          fecha_creacion: string
+          fecha_notificacion_profeco: string | null
+          id: number
+          id_asunto: number
+          motivo_queja: string | null
+          numero_expediente_profeco: string | null
+          oficina_delegacion: string | null
+          propuesta_conciliacion: string | null
+          resultado_audiencia: string | null
+        }
+        Insert: {
+          activo?: boolean
+          actualizado_por: string
+          acuerdo_alcanzado?: boolean | null
+          creado_por: string
+          detalle_acuerdo?: string | null
+          fecha_actualizacion?: string
+          fecha_audiencia_conciliatoria?: string | null
+          fecha_cierre_profeco?: string | null
+          fecha_creacion?: string
+          fecha_notificacion_profeco?: string | null
+          id?: never
+          id_asunto: number
+          motivo_queja?: string | null
+          numero_expediente_profeco?: string | null
+          oficina_delegacion?: string | null
+          propuesta_conciliacion?: string | null
+          resultado_audiencia?: string | null
+        }
+        Update: {
+          activo?: boolean
+          actualizado_por?: string
+          acuerdo_alcanzado?: boolean | null
+          creado_por?: string
+          detalle_acuerdo?: string | null
+          fecha_actualizacion?: string
+          fecha_audiencia_conciliatoria?: string | null
+          fecha_cierre_profeco?: string | null
+          fecha_creacion?: string
+          fecha_notificacion_profeco?: string | null
+          id?: never
+          id_asunto?: number
+          motivo_queja?: string | null
+          numero_expediente_profeco?: string | null
+          oficina_delegacion?: string | null
+          propuesta_conciliacion?: string | null
+          resultado_audiencia?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profeco_expedientes_id_asunto_fkey"
+            columns: ["id_asunto"]
+            isOneToOne: true
+            referencedRelation: "asuntos_juridicos"
             referencedColumns: ["id"]
           },
         ]
@@ -10367,6 +10401,73 @@ export type Database = {
           },
         ]
       }
+      puestos_organizacionales: {
+        Row: {
+          activo: boolean
+          bono_fijo: number
+          email_usuario: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_inicio: string | null
+          id: number
+          id_proyecto: number | null
+          id_rol: number
+          nombre_ocupante: string | null
+          prestaciones_pct: number
+          sueldo_base: number
+        }
+        Insert: {
+          activo?: boolean
+          bono_fijo?: number
+          email_usuario?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_inicio?: string | null
+          id?: never
+          id_proyecto?: number | null
+          id_rol: number
+          nombre_ocupante?: string | null
+          prestaciones_pct?: number
+          sueldo_base?: number
+        }
+        Update: {
+          activo?: boolean
+          bono_fijo?: number
+          email_usuario?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_inicio?: string | null
+          id?: never
+          id_proyecto?: number | null
+          id_rol?: number
+          nombre_ocupante?: string | null
+          prestaciones_pct?: number
+          sueldo_base?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "puestos_organizacionales_email_usuario_fkey"
+            columns: ["email_usuario"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["email"]
+          },
+          {
+            foreignKeyName: "puestos_organizacionales_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puestos_organizacionales_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "roles_organizacionales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       puntos_interes_proyecto: {
         Row: {
           activo: boolean
@@ -10404,6 +10505,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      push_preferencias_cliente: {
+        Row: {
+          id_persona: number
+          push_activo: boolean
+          updated_at: string
+        }
+        Insert: {
+          id_persona: number
+          push_activo?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id_persona?: number
+          push_activo?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      push_tokens_cliente: {
+        Row: {
+          activo: boolean
+          email_cliente: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          plataforma: string
+          token: string
+        }
+        Insert: {
+          activo?: boolean
+          email_cliente: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          plataforma: string
+          token: string
+        }
+        Update: {
+          activo?: boolean
+          email_cliente?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          plataforma?: string
+          token?: string
+        }
+        Relationships: []
       }
       regimen: {
         Row: {
@@ -10524,6 +10673,7 @@ export type Database = {
           id_persona: number | null
           nombre: string | null
           telefono: string | null
+          token: string
         }
         Insert: {
           activo?: boolean
@@ -10539,6 +10689,7 @@ export type Database = {
           id_persona?: number | null
           nombre?: string | null
           telefono?: string | null
+          token?: string
         }
         Update: {
           activo?: boolean
@@ -10554,6 +10705,7 @@ export type Database = {
           id_persona?: number | null
           nombre?: string | null
           telefono?: string | null
+          token?: string
         }
         Relationships: [
           {
@@ -10844,6 +10996,48 @@ export type Database = {
         }
         Relationships: []
       }
+      rls_tablas_submenus: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          id: number
+          permiso_id: number
+          submenu_id: number
+          tabla: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: never
+          permiso_id: number
+          submenu_id: number
+          tabla: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: never
+          permiso_id?: number
+          submenu_id?: number
+          tabla?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rls_tablas_submenus_permiso_id_fkey"
+            columns: ["permiso_id"]
+            isOneToOne: false
+            referencedRelation: "permisos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rls_tablas_submenus_submenu_id_fkey"
+            columns: ["submenu_id"]
+            isOneToOne: false
+            referencedRelation: "submenus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       roles: {
         Row: {
           activo: boolean | null
@@ -10934,6 +11128,39 @@ export type Database = {
           },
         ]
       }
+      roles_organizacionales: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          participa_comision: boolean
+          pertenece_a: string
+          tipo: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          participa_comision?: boolean
+          pertenece_a: string
+          tipo: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          participa_comision?: boolean
+          pertenece_a?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       roles_reportes: {
         Row: {
           activo: boolean
@@ -11022,6 +11249,164 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      socio_bancario_desarrollos: {
+        Row: {
+          activo: boolean
+          creado_por: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_revocacion: string | null
+          id: number
+          id_desarrollo: number
+          id_socio_bancario: number
+          revocado_por: string | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_por?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_revocacion?: string | null
+          id?: never
+          id_desarrollo: number
+          id_socio_bancario: number
+          revocado_por?: string | null
+        }
+        Update: {
+          activo?: boolean
+          creado_por?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_revocacion?: string | null
+          id?: never
+          id_desarrollo?: number
+          id_socio_bancario?: number
+          revocado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "socio_bancario_desarrollos_id_desarrollo_fkey"
+            columns: ["id_desarrollo"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "socio_bancario_desarrollos_id_socio_bancario_fkey"
+            columns: ["id_socio_bancario"]
+            isOneToOne: false
+            referencedRelation: "socios_bancarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      socio_bancario_revisiones: {
+        Row: {
+          activo: boolean
+          correo_usuario: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_cuenta_cobranza: number | null
+          id_documento: number | null
+          id_proyecto: number
+          observacion: string | null
+          tipo: string
+        }
+        Insert: {
+          activo?: boolean
+          correo_usuario: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_cuenta_cobranza?: number | null
+          id_documento?: number | null
+          id_proyecto: number
+          observacion?: string | null
+          tipo: string
+        }
+        Update: {
+          activo?: boolean
+          correo_usuario?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_cuenta_cobranza?: number | null
+          id_documento?: number | null
+          id_proyecto?: number
+          observacion?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "socio_bancario_revisiones_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "socio_bancario_revisiones_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "socio_bancario_revisiones_id_documento_fkey"
+            columns: ["id_documento"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "socio_bancario_revisiones_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      socios_bancarios: {
+        Row: {
+          activo: boolean
+          creado_por: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_revocacion: string | null
+          id: number
+          nombre: string
+          razon_social: string | null
+          revocado_por: string | null
+          rfc: string | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_por?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_revocacion?: string | null
+          id?: never
+          nombre: string
+          razon_social?: string | null
+          revocado_por?: string | null
+          rfc?: string | null
+        }
+        Update: {
+          activo?: boolean
+          creado_por?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_revocacion?: string | null
+          id?: never
+          nombre?: string
+          razon_social?: string | null
+          revocado_por?: string | null
+          rfc?: string | null
+        }
+        Relationships: []
       }
       submenus: {
         Row: {
@@ -11946,8 +12331,10 @@ export type Database = {
           fecha_creacion: string | null
           foto_perfil_url: string | null
           frase_perfil: string | null
+          id_banco: number | null
           id_notario: number | null
           id_persona: number | null
+          id_socio_bancario: number | null
           nombre: string
           rol_id: number
           telefono: string | null
@@ -11966,8 +12353,10 @@ export type Database = {
           fecha_creacion?: string | null
           foto_perfil_url?: string | null
           frase_perfil?: string | null
+          id_banco?: number | null
           id_notario?: number | null
           id_persona?: number | null
+          id_socio_bancario?: number | null
           nombre: string
           rol_id: number
           telefono?: string | null
@@ -11986,8 +12375,10 @@ export type Database = {
           fecha_creacion?: string | null
           foto_perfil_url?: string | null
           frase_perfil?: string | null
+          id_banco?: number | null
           id_notario?: number | null
           id_persona?: number | null
+          id_socio_bancario?: number | null
           nombre?: string
           rol_id?: number
           telefono?: string | null
@@ -12004,6 +12395,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "usuarios_id_banco_fkey"
+            columns: ["id_banco"]
+            isOneToOne: false
+            referencedRelation: "bancos"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "usuarios_id_notario_fkey"
             columns: ["id_notario"]
             isOneToOne: false
@@ -12015,6 +12413,13 @@ export type Database = {
             columns: ["id_persona"]
             isOneToOne: false
             referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usuarios_id_socio_bancario_fkey"
+            columns: ["id_socio_bancario"]
+            isOneToOne: false
+            referencedRelation: "socios_bancarios"
             referencedColumns: ["id"]
           },
           {
@@ -12255,22 +12660,6 @@ export type Database = {
         }
         Relationships: []
       }
-      v_pagos_efectivo: {
-        Row: {
-          clave_rastreo: string | null
-          fecha_acordada: string | null
-          fecha_pago: string | null
-          id_cuenta_cobranza: number | null
-          metodo_pago: string | null
-          monto: number | null
-          numero_propiedad: string | null
-          pago: string | null
-          pago_aplicado: number | null
-          url_cep: string | null
-          url_recibo: string | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
       accesos_por_cta: {
@@ -12316,35 +12705,14 @@ export type Database = {
             }
             Returns: number
           }
-      borrar_sp_cargar_amenidades_proyectos_desde_stagin: {
-        Args: never
-        Returns: undefined
+      cambiar_etapa_asunto: {
+        Args: {
+          p_descripcion: string
+          p_id_asunto: number
+          p_id_etapa_nueva: number
+        }
+        Returns: Json
       }
-      borrar_sp_cargar_edificio_modelo: { Args: never; Returns: undefined }
-      borrar_sp_cargar_edificios_desde_stagin: {
-        Args: never
-        Returns: undefined
-      }
-      borrar_sp_cargar_modelos_caracteristicas_desde_stagin: {
-        Args: never
-        Returns: undefined
-      }
-      borrar_sp_cargar_modelos_desde_stagin: { Args: never; Returns: undefined }
-      borrar_sp_cargar_multimedias_modelo_desde_stagin: {
-        Args: never
-        Returns: undefined
-      }
-      borrar_sp_cargar_multimedias_proyecto: { Args: never; Returns: undefined }
-      borrar_sp_cargar_proyectos_desde_stagin: {
-        Args: never
-        Returns: undefined
-      }
-      borrar_sp_cargar_videos_youtube_proyecto: {
-        Args: never
-        Returns: undefined
-      }
-      borrar_sp_esquemas_pago_proyecto: { Args: never; Returns: undefined }
-      borrar_sp_vistas: { Args: never; Returns: undefined }
       can_access_agent_owned_lead: {
         Args: { _owner_persona_id: number }
         Returns: boolean
@@ -12360,9 +12728,92 @@ export type Database = {
         Returns: undefined
       }
       crear_activo_comercial: { Args: { payload: Json }; Returns: number }
+      crear_asunto: {
+        Args: {
+          p_id_expediente: number
+          p_id_tipo_asunto: number
+          p_origen: string
+          p_posicion_sozu: string
+        }
+        Returns: Json
+      }
+      crear_expediente: {
+        Args: {
+          p_id_propiedad: number
+          p_id_proyecto: number
+          p_id_tipo_asunto: number
+          p_origen: string
+          p_posicion_sozu: string
+        }
+        Returns: Json
+      }
+      crear_expediente_demanda:
+        | {
+            Args: {
+              p_estatus_demanda?: string
+              p_id_cuenta_cobranza: number
+              p_observaciones?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_estatus_demanda?: string
+              p_id_cuenta_cobranza: number
+              p_id_propiedad: number
+              p_observaciones?: string
+            }
+            Returns: Json
+          }
+      crear_expediente_y_bloquear_cobranza: {
+        Args: {
+          p_id_cuenta_cobranza: number
+          p_id_proyecto: number
+          p_id_tipo_asunto: number
+          p_origen: string
+          p_posicion_sozu: string
+        }
+        Returns: Json
+      }
       crear_referencia_bancaria: {
         Args: { id_er_dueno: number }
         Returns: string
+      }
+      current_es_super_admin: { Args: never; Returns: boolean }
+      current_persona_id: { Args: never; Returns: number }
+      current_puede: {
+        Args: { _permiso: string; _tabla: string }
+        Returns: boolean
+      }
+      current_puede_impersonar: { Args: never; Returns: boolean }
+      current_puede_tabla: {
+        Args: { _permiso: string; _tabla: string }
+        Returns: boolean
+      }
+      current_socio_bancario_id: { Args: never; Returns: number }
+      desglose_uso_dispositivos_portal: {
+        Args: { p_desde?: string; p_hasta?: string; p_portal: string }
+        Returns: {
+          dimension: string
+          total_sesiones: number
+          usuarios_unicos: number
+          valor: string
+        }[]
+      }
+      disparar_bancos_solicitudes_expirar: { Args: never; Returns: undefined }
+      disparar_crm_recordatorios_tareas: { Args: never; Returns: undefined }
+      dispositivos_uso_por_portal: {
+        Args: { p_desde?: string; p_hasta?: string }
+        Returns: {
+          portal: string
+          tipo_dispositivo: string
+          total_sesiones: number
+          usuarios_unicos: number
+        }[]
+      }
+      eliminar_pago: {
+        Args: { p_id_pago: number; p_motivo?: string }
+        Returns: Json
       }
       etl_bodegas: { Args: never; Returns: boolean }
       etl_estacionamientos: { Args: never; Returns: boolean }
@@ -12371,6 +12822,8 @@ export type Database = {
         Args: { max_rows?: number; query_text: string }
         Returns: Json
       }
+      gen_folio_asunto: { Args: never; Returns: string }
+      gen_folio_expediente: { Args: never; Returns: string }
       get_accessible_report_ids: {
         Args: never
         Returns: {
@@ -12378,6 +12831,18 @@ export type Database = {
         }[]
       }
       get_active_projects: { Args: never; Returns: Json }
+      get_apartado_status: {
+        Args: { p_oferta_id: number; p_token?: string }
+        Returns: {
+          clabe_stp: string
+          email_enmascarado: string
+          estatus_id: number
+          id_cuenta_cobranza: number
+          id_propiedad: number
+          pagado: boolean
+          tiene_acceso: boolean
+        }[]
+      }
       get_bandeja_operativa: {
         Args: {
           p_proyecto_id?: number
@@ -12385,6 +12850,95 @@ export type Database = {
           p_solo_vencidas?: boolean
         }
         Returns: Json
+      }
+      get_cliente_estado_oferta: {
+        Args: { p_token?: string }
+        Returns: {
+          email_enmascarado: string
+          es_cliente_existente: boolean
+          tiene_acceso: boolean
+          tiene_propiedades: boolean
+        }[]
+      }
+      get_contratos_pendientes: {
+        Args: never
+        Returns: {
+          contrato_draft: string
+          cuenta_id: number
+          dueno: string
+          edificio: string
+          modelo: string
+          numero_propiedad: string
+          oferta_id: number
+          precio_final: number
+          propiedad_id: number
+          proyecto: string
+          proyecto_id: number
+        }[]
+      }
+      get_crm_contactos_agrupados: {
+        Args: {
+          p_categoria?: number
+          p_estatus?: string
+          p_fuente?: string
+          p_limit?: number
+          p_offset?: number
+          p_owner?: string
+          p_proyecto?: number
+          p_search?: string
+          p_tipos?: number[]
+          p_unassigned?: boolean
+        }
+        Returns: {
+          id_entidad: number
+          id_persona: number
+          otros_count: number
+          total_personas: number
+        }[]
+      }
+      get_crm_tareas: {
+        Args: {
+          p_asignado?: string
+          p_limit?: number
+          p_offset?: number
+          p_prioridad?: string
+          p_search?: string
+          p_sin_asignar?: boolean
+          p_tab?: string
+          p_tipo?: string
+        }
+        Returns: {
+          assigned_name: string
+          contact_name: string
+          descripcion: string
+          estatus: string
+          fecha_creacion: string
+          fecha_recordatorio: string
+          fecha_vencimiento: string
+          id: number
+          id_entidad_relacionada: number
+          id_usuario_asignado: string
+          prioridad: string
+          recurrencia: string
+          tipo: string
+          titulo: string
+          total_count: number
+        }[]
+      }
+      get_crm_tareas_conteos: {
+        Args: {
+          p_asignado?: string
+          p_prioridad?: string
+          p_search?: string
+          p_sin_asignar?: boolean
+          p_tipo?: string
+        }
+        Returns: {
+          all_count: number
+          overdue_count: number
+          today_count: number
+          upcoming_count: number
+        }[]
       }
       get_cuentas_cobranza_export:
         | {
@@ -12715,8 +13269,10 @@ export type Database = {
         Returns: {
           activo: boolean
           administrar_app_clientes: boolean
+          banco_nombre: string
           debe_cambiar_password: boolean
           email: string
+          id_banco: number
           id_notario: number
           id_perfil_juridico: number
           id_persona: number
@@ -12731,25 +13287,6 @@ export type Database = {
         }[]
       }
       get_current_user_role: { Args: never; Returns: number }
-      get_dashboard_cobranza_kpis:
-        | { Args: { p_proyecto_id?: number }; Returns: Json }
-        | {
-            Args: {
-              p_fecha_fin?: string
-              p_fecha_inicio?: string
-              p_proyecto_id?: number
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_entidad_ids?: number[]
-              p_fecha_fin?: string
-              p_fecha_inicio?: string
-              p_proyecto_id?: number
-            }
-            Returns: Json
-          }
       get_expediente_cobranza: { Args: { p_cuenta_id: number }; Returns: Json }
       get_inventario_disponible: {
         Args: { p_accessible_project_ids?: number[] }
@@ -12788,6 +13325,7 @@ export type Database = {
         }
         Returns: Json
       }
+      get_oferta_financials: { Args: { p_oferta_id: number }; Returns: Json }
       get_offers_with_agent: {
         Args: { property_id: number }
         Returns: {
@@ -12834,16 +13372,18 @@ export type Database = {
         }
         Returns: Json
       }
-      get_payments_for_pago_validation: {
+      get_payments_for_cep_cleanup: {
         Args: {
           p_excluir_proyectos?: string[]
           p_limit?: number
+          p_metodos?: string[]
           p_proyecto?: string
         }
         Returns: Json
       }
-      get_payments_recibo_for_validation: {
+      get_payments_for_pago_validation: {
         Args: {
+          p_estado_previo?: string
           p_excluir_proyectos?: string[]
           p_limit?: number
           p_metodos?: string[]
@@ -12858,6 +13398,85 @@ export type Database = {
           p_metodo?: string
           p_proyecto?: string
         }
+        Returns: Json
+      }
+      get_pcobranza_complementos: {
+        Args: {
+          p_entidad_ids?: number[]
+          p_fecha_fin?: string
+          p_fecha_inicio?: string
+          p_proyecto_id?: number
+          p_tipo?: string
+        }
+        Returns: Json
+      }
+      get_pcobranza_cuenta_detalle: {
+        Args: { p_cuenta_id: number }
+        Returns: Json
+      }
+      get_pcobranza_cuentas_cobranza: {
+        Args: {
+          p_clabe?: string
+          p_cliente?: string
+          p_cuenta?: string
+          p_estatus?: string[]
+          p_incluir_totales?: boolean
+          p_invalid_level?: string[]
+          p_limit?: number
+          p_modelos?: string[]
+          p_offset?: number
+          p_prioridad?: string[]
+          p_proyecto_id?: number
+          p_search?: string
+          p_solo_vencidas?: boolean
+          p_sort_dir?: string
+          p_sort_key?: string
+          p_tipos?: string[]
+          p_unidad?: string
+        }
+        Returns: Json
+      }
+      get_pcobranza_inmuebles: {
+        Args: {
+          p_entidad_ids?: number[]
+          p_fecha_fin?: string
+          p_fecha_inicio?: string
+          p_proyecto_id?: number
+        }
+        Returns: Json
+      }
+      get_pcobranza_productos_mantenimiento: {
+        Args: {
+          p_entidad_ids?: number[]
+          p_proyecto_id?: number
+          p_tipo?: string
+        }
+        Returns: Json
+      }
+      get_pcobranza_relacion_pagos: {
+        Args: {
+          p_clabe?: string
+          p_cliente?: string
+          p_cuenta?: string
+          p_estado_pago?: string[]
+          p_estado_validacion?: string[]
+          p_estatus?: string[]
+          p_estatus_prop?: string[]
+          p_incluir_totales?: boolean
+          p_limit?: number
+          p_metodos?: string[]
+          p_modelos?: string[]
+          p_offset?: number
+          p_proyecto_id?: number
+          p_sort_dir?: string
+          p_sort_key?: string
+          p_tipos?: string[]
+          p_unidad?: string
+        }
+        Returns: Json
+      }
+      get_pcobranza_validacion_pagos: {
+        Args: { p_after_id?: number; p_limit?: number }
         Returns: Json
       }
       get_pending_cep_chains: {
@@ -12883,6 +13502,23 @@ export type Database = {
           p_proyecto?: string
         }
         Returns: Json
+      }
+      get_project_collection_totals: {
+        Args: { p_cuenta_ids: number[] }
+        Returns: Json
+      }
+      get_project_owner_breakdown: {
+        Args: { p_cuenta_ids: number[]; p_proyecto_id: number }
+        Returns: {
+          cuentas_count: number
+          dueno_nombre: string
+          id_entidad: number
+          id_tipo_entidad: number
+          tipo_entidad: string
+          total_cobrado: number
+          total_colocado: number
+          valor_proyecto: number
+        }[]
       }
       get_properties_with_details: {
         Args: never
@@ -12991,19 +13627,29 @@ export type Database = {
         }[]
       }
       get_proyectos_publicados: { Args: never; Returns: Json }
-      get_relacion_pagos: {
+      get_reporte_filtro_opciones: {
         Args: {
-          p_clabe?: string
-          p_cliente?: string
-          p_cuenta?: string
-          p_estatus?: string[]
-          p_limit?: number
-          p_offset?: number
-          p_proyecto_id?: number
-          p_tipos?: string[]
-          p_unidad?: string
+          p_filtro_nombre: string
+          p_filtros?: Json
+          p_reporte_id: number
         }
         Returns: Json
+      }
+      get_reservacion_publica: {
+        Args: { p_token?: string }
+        Returns: {
+          activo: boolean
+          email: string
+          estatus: string
+          fecha_activacion: string
+          fecha_expiracion: string
+          id: number
+          id_oferta: number
+          nombre: string
+          nombre_persona: string
+          telefono: string
+          telefono_persona: string
+        }[]
       }
       get_showrooms_contacto: { Args: never; Returns: Json }
       get_stats_respaldo: { Args: never; Returns: Json }
@@ -13038,7 +13684,36 @@ export type Database = {
           nombre: string
         }[]
       }
+      get_valor_por_proyecto: {
+        Args: { p_ownership_entity_ids?: number[]; p_proyecto_ids?: number[] }
+        Returns: {
+          id_proyecto: number
+          proyecto_nombre: string
+          total_propiedades: number
+          valor_total_proyecto: number
+        }[]
+      }
       get_workflow_evaluation: { Args: { p_cuenta_id: number }; Returns: Json }
+      guardar_csf_oferta: {
+        Args: {
+          p_calle?: string
+          p_colonia?: string
+          p_cp?: string
+          p_curp?: string
+          p_nombre?: string
+          p_num_ext?: string
+          p_num_int?: string
+          p_regimen?: string
+          p_rfc?: string
+          p_token?: string
+          p_url?: string
+        }
+        Returns: boolean
+      }
+      guardar_datos_reservacion: {
+        Args: { p_nombre?: string; p_telefono?: string; p_token?: string }
+        Returns: boolean
+      }
       incrementar_precio_m2_mensual: { Args: never; Returns: undefined }
       insertar_pago_stp: {
         Args: {
@@ -13073,18 +13748,18 @@ export type Database = {
       is_super_admin:
         | { Args: never; Returns: boolean }
         | { Args: { user_id: string }; Returns: boolean }
+      landing_bottura_rpc: { Args: never; Returns: Json }
+      landing_daiku_rpc: { Args: never; Returns: Json }
+      landing_margot_rpc: { Args: never; Returns: Json }
       mark_email_confirmed: { Args: never; Returns: undefined }
       mark_password_changed: { Args: never; Returns: undefined }
-      migrate_invalid_cep_to_recibo: {
-        Args: { p_ids: string[] }
-        Returns: Json
-      }
       obtener_pagos_sin_cep: {
         Args: { p_edificio?: string }
         Returns: {
           linea_banxico: string
         }[]
       }
+      procesar_avisos_app: { Args: never; Returns: undefined }
       recalcular_pago_completado_acuerdos: {
         Args: { p_id_cuenta_cobranza?: number }
         Returns: number
@@ -13096,6 +13771,19 @@ export type Database = {
       register_portal_session: {
         Args: { p_portal: string; p_user_agent?: string }
         Returns: string
+      }
+      registrar_actuacion: {
+        Args: {
+          p_descripcion: string
+          p_fecha_actuacion: string
+          p_id_asunto: number
+          p_id_documento?: number
+          p_origen: string
+          p_resultado?: string
+          p_tipo_actuacion: string
+          p_tipo_fuente?: string
+        }
+        Returns: Json
       }
       registrar_evento_portal: {
         Args: {
@@ -13110,7 +13798,10 @@ export type Database = {
         }
         Returns: number
       }
-      rescue_recibo_to_cep: { Args: { p_ids: string[] }; Returns: Json }
+      run_reporte: {
+        Args: { p_filtros?: Json; p_max_rows?: number; p_reporte_id: number }
+        Returns: Json
+      }
       save_cep_audit_results: { Args: { p_results: Json }; Returns: Json }
       save_contract_validation_results: {
         Args: { p_results: Json }
@@ -13125,6 +13816,34 @@ export type Database = {
           tabla: string
         }[]
       }
+      sesiones_activas_por_portal: {
+        Args: { p_minutos_inactividad?: number; p_portal: string }
+        Returns: {
+          email_usuario: string
+          marca_dispositivo: string
+          navegador: string
+          nombre_usuario: string
+          sesion_inicio: string
+          session_id: string
+          tecnologia: string
+          tipo_dispositivo: string
+          ultima_actividad: string
+        }[]
+      }
+      socio_desarrollos_activos: { Args: never; Returns: number[] }
+      socio_tiene_cuenta: { Args: { p_id_cuenta: number }; Returns: boolean }
+      socio_tiene_edificio: {
+        Args: { p_id_edificio: number }
+        Returns: boolean
+      }
+      socio_tiene_propiedad: {
+        Args: { p_id_propiedad: number }
+        Returns: boolean
+      }
+      socio_tiene_proyecto: {
+        Args: { p_id_proyecto: number }
+        Returns: boolean
+      }
       sync_conyuge_compradores: {
         Args: { p_id_persona: number }
         Returns: {
@@ -13136,9 +13855,16 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: undefined
       }
-      update_payment_cep_from_recibo: {
-        Args: { p_updates: Json }
-        Returns: Json
+      update_lead_datos: {
+        Args: {
+          p_curp?: string
+          p_nombre: string
+          p_oferta_id: number
+          p_rfc?: string
+          p_telefono: string
+          p_token?: string
+        }
+        Returns: boolean
       }
       user_can_access_report: {
         Args: { _reporte_id: number }
@@ -13161,8 +13887,11 @@ export type Database = {
           email_usuario: string
           esta_online: boolean
           id_usuario: string
+          marca_dispositivo: string
+          navegador: string
           nombre_usuario: string
           primera_sesion: string
+          tipo_dispositivo: string
           total_sesiones: number
           ultima_actividad: string
         }[]
@@ -13176,6 +13905,7 @@ export type Database = {
         }[]
       }
       validar_mensajes_whatsapp: { Args: { _mensajes: Json }; Returns: boolean }
+      validar_query_reporte: { Args: { p_query: string }; Returns: Json }
       visitas_historicas_por_portal: {
         Args: { p_desde?: string; p_hasta?: string }
         Returns: {
