@@ -148,7 +148,7 @@ const PROT_TONE = {
 
 export default function AmbassadorsPortalTab() {
   const {
-    ambassadors, referrals, notifications,
+    ambassadors, referrals, notifications, loading,
     setDocumentStatus, markAllRead, markNotificationRead,
   } = useAmbassadors();
 
@@ -158,7 +158,12 @@ export default function AmbassadorsPortalTab() {
   // Un embajador real solo debe ver su propio registro.
   const isAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
 
-  const [activeId, setActiveId] = useState(ambassadors[0]?.id ?? '');
+  // NUNCA arrancar en ambassadors[0]: si el usuario no se puede ligar a un embajador
+  // (p. ej. usuarios.id_persona en NULL), el portal se quedaba operando como el primero
+  // de la lista — saludaba a otra persona y, peor, registraba los referidos a su nombre,
+  // con la comisión atribuida a quien no corresponde. Arranca vacío y solo se llena tras
+  // identificar al usuario; si no se logra, el guard de más abajo bloquea la vista.
+  const [activeId, setActiveId] = useState('');
   const [section, setSection] = useState<Section>('home');
   const [showForm, setShowForm] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -265,14 +270,29 @@ export default function AmbassadorsPortalTab() {
     return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [myRefs]);
 
+  // Mientras cargan los datos no se puede saber aún si el usuario liga con un embajador:
+  // sin esto, el guard de abajo parpadearía en cada carga.
+  if (loading && !active && !globalView) {
+    return <Card className="p-8 text-center"><p className="text-muted-foreground">Cargando…</p></Card>;
+  }
+
+  // Sin embajador resuelto se bloquea la vista. Antes esto era inalcanzable porque
+  // activeId arrancaba en ambassadors[0], así que el portal operaba como otra persona
+  // en lugar de avisar.
   if (!active && !globalView) {
     return (
-      <Card className="p-8 text-center">
+      <Card className="p-8 text-center space-y-2">
         <p className="text-muted-foreground">
           {ambassadors.length === 0
             ? 'No hay embajadores registrados aún.'
             : 'Tu usuario aún no está ligado a un embajador.'}
         </p>
+        {ambassadors.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Falta vincular tu usuario con su persona y su registro de embajador.
+            Contacta al administrador para que complete el alta.
+          </p>
+        )}
       </Card>
     );
   }
