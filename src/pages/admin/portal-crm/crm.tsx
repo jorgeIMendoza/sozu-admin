@@ -11,7 +11,7 @@ import {
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
   Calendar, ChevronRight, ChevronLeft, Check, ChevronDown, Download, Settings2, Upload, Loader2,
-  MoreHorizontal, Pencil, Trash2, Video, MapPin, Building2, Store, ExternalLink, Clock, Users,
+  MoreHorizontal, Pencil, Trash2, Video, MapPin, Building2, Network, Store, ExternalLink, Clock, Users,
   Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid, GripVertical,
   Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
@@ -295,6 +295,20 @@ function saveContactsSearch(uid: string, s: string) {
   if (typeof window === "undefined" || !uid) return;
   try { window.sessionStorage.setItem(`${CONTACTS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
 }
+// Página actual de Contactos, POR USUARIO (sessionStorage: sobrevive el back-nav a la ficha, se reinicia en sesión nueva).
+const CONTACTS_PAGE_KEY = "sozu:contacts:page:v1";
+function loadContactsPage(uid: string): number {
+  if (typeof window === "undefined" || !uid) return 0;
+  try {
+    const raw = window.sessionStorage.getItem(`${CONTACTS_PAGE_KEY}:${uid}`);
+    const n = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch { return 0; }
+}
+function saveContactsPage(uid: string, p: number) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.sessionStorage.setItem(`${CONTACTS_PAGE_KEY}:${uid}`, String(p)); } catch { /* ignore */ }
+}
 
 // Fila expandible: muestra los OTROS contactos (entidades) de la misma persona,
 // con contexto (proyecto, propietario, si ya tiene negocio) para entender cuál usar.
@@ -474,6 +488,7 @@ export function CrmContacts() {
     if (f.filterSource) setFilterSource(f.filterSource);
     if (f.filterCategoria) setFilterCategoria(f.filterCategoria);
     setSearch(loadContactsSearch(uid));
+    setPage(loadContactsPage(uid));
     hydratedContacts.current = true;
   }, [uid]);
   // …y persistir al cambiar (solo tras hidratar, para no pisar lo guardado con los defaults).
@@ -485,6 +500,11 @@ export function CrmContacts() {
     if (!hydratedContacts.current || !uid) return;
     saveContactsSearch(uid, search);
   }, [uid, search]);
+  // Persistir la página al cambiar (tras hidratar). Los cambios de filtro/búsqueda ya hacen setPage(0) → se guarda 0.
+  useEffect(() => {
+    if (!hydratedContacts.current || !uid) return;
+    saveContactsPage(uid, page);
+  }, [uid, page]);
 
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
@@ -497,6 +517,15 @@ export function CrmContacts() {
       const { data } = await (supabase as any).from("proyectos")
         .select("id,nombre").in("id", ids).eq("activo", true).eq("publicar", true).order("nombre");
       return (data ?? []).map((p: any) => ({ id: String(p.id), name: p.nombre }));
+    },
+  });
+
+  // Mapa id_proyecto → nombre (TODOS los proyectos activos) para pintar el proyecto bajo el nombre del contacto.
+  const { data: proyectosNombreMap = {} } = useQuery<Record<string, string>>({
+    queryKey: ["proyectos-nombres-all"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("proyectos").select("id, nombre").eq("activo", true);
+      return Object.fromEntries((data ?? []).map((p: any) => [String(p.id), p.nombre]));
     },
   });
 
@@ -808,26 +837,39 @@ export function CrmContacts() {
                     </td>
                     {visibleColumns.map((col) => {
                       switch (col.id) {
-                        case "name":
+                        case "name": {
+                          const projName = c.development_id ? proyectosNombreMap[c.development_id] : null;
                           return (
-                            <td key={col.id} className="p-3 font-medium whitespace-nowrap"
+                            <td key={col.id} className="p-3 font-medium"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2 max-w-[320px]">
+                              <span className="flex items-center gap-2 max-w-[340px]">
+                                {/* Slot chevron de ancho fijo (mismo footprint con o sin chevron) → filas alineadas. */}
                                 {c.otros_count ? (
                                   <button type="button" aria-label="Ver otros contactos de esta persona"
                                     onClick={(e) => { e.stopPropagation(); setExpanded((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; }); }}
-                                    className="shrink-0 text-muted-foreground hover:text-primary">
+                                    className="w-4 h-4 shrink-0 flex items-center justify-center text-muted-foreground hover:text-primary">
                                     {expanded.has(c.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                   </button>
-                                ) : <span className="w-4 shrink-0" />}
+                                ) : <span className="w-4 shrink-0" aria-hidden="true" />}
                                 <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
-                                <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
-                                {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
+                                <span className="flex flex-col min-w-0">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
+                                    {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
+                                  </span>
+                                  {projName ? (
+                                    <span className="flex items-center gap-1 text-[11px] leading-tight text-muted-foreground mt-0.5" title={`Proyecto: ${projName}`}>
+                                      <Network className="h-3 w-3 shrink-0 opacity-70" />
+                                      <span className="truncate">{projName}</span>
+                                    </span>
+                                  ) : null}
+                                </span>
                               </span>
                             </td>
                           );
+                        }
                         case "categoria":
                           return (
                             <td key={col.id} className="p-3">
