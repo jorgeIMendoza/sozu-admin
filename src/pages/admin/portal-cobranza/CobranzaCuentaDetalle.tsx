@@ -1233,7 +1233,14 @@ export default function CobranzaCuentaDetalle() {
           url_recibo: pagoEvidenciaModal.url_recibo ?? null,
         } as PagoRecord) : null}
         onClose={() => setPagoEvidenciaModal(null)}
-        onSaved={() => queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] })}
+        onSaved={() => {
+          // Si se editó el monto, el diálogo dispara `recalcular-aplicaciones`, que corre
+          // async del lado servidor: se repite la invalidación tras 2 s para tomar el
+          // reparto nuevo (mismo criterio que el botón "Recalcular dispersión").
+          const invalidar = () => queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+          invalidar();
+          setTimeout(invalidar, 2000);
+        }}
       />
 
       {editCuentaDialog && (
