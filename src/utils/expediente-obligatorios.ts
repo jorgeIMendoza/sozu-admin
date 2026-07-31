@@ -191,9 +191,15 @@ export function resolverIdentidad(
     return { ...vacia, cumplida: true, origen: 'pasaporte', tiposVigentes: [PASAPORTE_TIPO_ID], tiposDeprecados: legacyPresente };
   }
 
-  // 3. Fallback legacy: el PAR frente + reverso, y solo si ambos siguen validados.
-  if (validado(INE_FRENTE_TIPO_ID) && validado(INE_REVERSO_TIPO_ID)) {
-    return { ...vacia, cumplida: true, origen: 'ine_legacy', tiposVigentes: [...INE_LEGACY_TIPO_IDS] };
+  // 3. Fallback legacy: basta el FRENTE validado. Muchas cargas históricas subieron un
+  //    solo PDF con ambos lados bajo el tipo "Frente INE" (780 frentes contra 174 reversos
+  //    en prod), así que exigir el reverso castigaría a quien ya cumplió. El reverso, si
+  //    existe y está validado, suma pero no bloquea.
+  if (validado(INE_FRENTE_TIPO_ID)) {
+    return {
+      ...vacia, cumplida: true, origen: 'ine_legacy',
+      tiposVigentes: INE_LEGACY_TIPO_IDS.filter(validado),
+    };
   }
 
   // 4. Sin identificación vigente. Si el legacy existe pero caducó (o está incompleto),
@@ -201,7 +207,9 @@ export function resolverIdentidad(
   return {
     ...vacia,
     tiposDeprecados: legacyPresente,
-    exigeIneCompleto: legacyPresente.length > 0 && (legacyPresente.some(caduco) || !validado(INE_FRENTE_TIPO_ID) || !validado(INE_REVERSO_TIPO_ID)),
+    // El frente no está validado (expirado, rechazado o en revisión): el único camino
+    // vigente es el INE completo.
+    exigeIneCompleto: legacyPresente.length > 0,
   };
 }
 
