@@ -117,8 +117,22 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
         .eq('email', emailNorm)
         .maybeSingle();
 
+      // Si ya existe una cuenta con ese correo y está ligada a una persona, esa manda:
+      // buscar solo por correo creaba una SEGUNDA persona para el mismo humano cuando el
+      // correo de su persona no coincidía con el de la cuenta. El registro de embajador
+      // quedaba apuntando a una persona distinta de la del usuario, y como las policies
+      // comparan `id_persona_duena_lead` contra `get_current_user_persona_id()`, el
+      // embajador no podía releer el referido que acababa de crear: 403 al guardar.
+      const { data: usuarioExistente } = await (supabase as any)
+        .from('usuarios')
+        .select('id_persona')
+        .eq('email', emailNorm)
+        .maybeSingle();
+
       let personaId: number;
-      if (personaActual) {
+      if (usuarioExistente?.id_persona) {
+        personaId = usuarioExistente.id_persona as number;
+      } else if (personaActual) {
         personaId = personaActual.id;
       } else {
         const { data: persona, error: personaError } = await supabase
@@ -179,7 +193,11 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
       createdConfig = true;
 
       // 6. Usuario/rol (ruta A: create-user / ruta B: user_roles secundario)
-      if (personaActual) {
+      // Se decide por la existencia de la CUENTA, no de la persona. Antes se usaba
+      // `personaActual` como proxy: si la persona existía pero la cuenta no —caso normal
+      // al convertir en embajador a un cliente o a un contacto ya registrado— se saltaba
+      // create-user y la persona se quedaba sin acceso, con rol asignado y sin poder entrar.
+      if (usuarioExistente) {
         const { data: rolExistente } = await (supabase as any)
           .from('user_roles')
           .select('id')
