@@ -192,6 +192,18 @@ export default function NuevoEmbajadorDialog({ open, onOpenChange, onCreated }: 
             .insert({ email: emailNorm, rol_id: ROLE_EMBAJADOR_ID, es_principal: false, activo: true, creado_por: 'admin' });
           if (roleError) throw roleError;
         }
+
+        // Vincular la cuenta existente con su persona. Sin esto el usuario queda con rol de
+        // embajador pero usuarios.id_persona en NULL, y el portal no lo puede ligar a su
+        // registro: antes caía en el primer embajador de la lista y le atribuía los
+        // referidos a otro. Solo se escribe si está vacío, para no pisar un vínculo válido.
+        const { error: linkError } = await (supabase as any)
+          .from('usuarios')
+          .update({ id_persona: personaId })
+          .eq('email', emailNorm)
+          .is('id_persona', null);
+        if (linkError) throw linkError;
+
         toast.success(`Rol de embajador añadido a ${form.email}.`);
       } else {
         const { error: createUserError } = await supabase.functions.invoke('create-user', {
