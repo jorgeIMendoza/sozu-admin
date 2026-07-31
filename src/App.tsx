@@ -215,6 +215,25 @@ const PPCarteraPage = lazyRetry(() => import("./pages/admin/portal-productos/Car
 const PPDetalleCuentaPage = lazyRetry(() => import("./pages/admin/portal-productos/DetalleCuentaPage"));
 const PPAnalisisPage = lazyRetry(() => import("./pages/admin/portal-productos/AnalisisCobranzaPage"));
 const PPHistoricoPage = lazyRetry(() => import("./pages/admin/portal-productos/HistoricoVentasPage"));
+const PTTodosPage = lazyRetry(() => import("./pages/admin/portal-tickets/TicketsTodosPage"));
+const PTMisTicketsPage = lazyRetry(() => import("./pages/admin/portal-tickets/MisTicketsPage"));
+const PTSinAsignarPage = lazyRetry(() => import("./pages/admin/portal-tickets/SinAsignarPage"));
+const PTPipelinePage = lazyRetry(() => import("./pages/admin/portal-tickets/PipelinePage"));
+const PTPipelinesConfig = lazyRetry(() =>
+  import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.PipelinesConfigPage })),
+);
+const PTEtapasConfig = lazyRetry(() =>
+  import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.EtapasConfigPage })),
+);
+const PTCategoriasConfig = lazyRetry(() =>
+  import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.CategoriasConfigPage })),
+);
+const PTPrioridadesConfig = lazyRetry(() =>
+  import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.PrioridadesConfigPage })),
+);
+const PTEquipoConfig = lazyRetry(() =>
+  import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.EquipoConfigPage })),
+);
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
@@ -935,6 +954,19 @@ const App = () => (
                   <Route path="portal-productos/cartera/:cuentaId" element={<PPDetalleCuentaPage />} />
                   <Route path="portal-productos/analisis" element={<PPAnalisisPage />} />
                   <Route path="portal-productos/historico" element={<PPHistoricoPage />} />
+
+                  {/* Portal Tickets de Seguimiento */}
+                  <Route path="portal-tickets" element={<Navigate to="/admin/portal-tickets/todos" replace />} />
+                  <Route path="portal-tickets/todos" element={<PTTodosPage />} />
+                  <Route path="portal-tickets/mis-tickets" element={<PTMisTicketsPage />} />
+                  <Route path="portal-tickets/sin-asignar" element={<PTSinAsignarPage />} />
+                  <Route path="portal-tickets/pipeline" element={<PTPipelinePage />} />
+                  <Route path="portal-tickets/configuracion" element={<Navigate to="/admin/portal-tickets/configuracion/pipelines" replace />} />
+                  <Route path="portal-tickets/configuracion/pipelines" element={<PTPipelinesConfig />} />
+                  <Route path="portal-tickets/configuracion/etapas" element={<PTEtapasConfig />} />
+                  <Route path="portal-tickets/configuracion/categorias" element={<PTCategoriasConfig />} />
+                  <Route path="portal-tickets/configuracion/prioridades" element={<PTPrioridadesConfig />} />
+                  <Route path="portal-tickets/configuracion/equipo" element={<PTEquipoConfig />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
