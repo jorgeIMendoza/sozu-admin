@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 const CONCEPTOS_CANCELACION = [7, 9];
+// Listas .in() más grandes se truncan/fallan silenciosamente contra PostgREST
+// (URL demasiado larga) — mismo tamaño de lote que PldDashboard.tsx.
+const BATCH = 30;
 
 export interface AccesorioSummary {
   precioFinal: number;
@@ -10,27 +13,38 @@ export interface AccesorioSummary {
   saldoPendiente: number;
 }
 
-async function fetchFinancialsByCuentaIds(cuentaIds: number[]): Promise<AccesorioSummary> {
+export async function fetchFinancialsByCuentaIds(cuentaIds: number[]): Promise<AccesorioSummary> {
   if (!cuentaIds.length) return { precioFinal: 0, totalPagadoAplicaciones: 0, totalPagadoReal: 0, saldoPendiente: 0 };
 
-  const [{ data: cuentas }, { data: pagos }, { data: acuerdos }] = await Promise.all([
-    supabase.from('cuentas_cobranza').select('precio_final').in('id', cuentaIds).eq('activo', true),
-    supabase.from('pagos').select('monto').in('id_cuenta_cobranza', cuentaIds).eq('activo', true),
-    supabase.from('acuerdos_pago').select('id, id_concepto').in('id_cuenta_cobranza', cuentaIds).eq('activo', true),
-  ]);
+  const cuentas: { precio_final: number | null }[] = [];
+  const pagos: { monto: number | null }[] = [];
+  const acuerdos: { id: number; id_concepto: number | null }[] = [];
+  for (let i = 0; i < cuentaIds.length; i += BATCH) {
+    const slice = cuentaIds.slice(i, i + BATCH);
+    const [{ data: cuentasSlice }, { data: pagosSlice }, { data: acuerdosSlice }] = await Promise.all([
+      supabase.from('cuentas_cobranza').select('precio_final').in('id', slice).eq('activo', true),
+      supabase.from('pagos').select('monto').in('id_cuenta_cobranza', slice).eq('activo', true),
+      supabase.from('acuerdos_pago').select('id, id_concepto').in('id_cuenta_cobranza', slice).eq('activo', true),
+    ]);
+    cuentas.push(...(cuentasSlice ?? []));
+    pagos.push(...(pagosSlice ?? []));
+    acuerdos.push(...(acuerdosSlice ?? []));
+  }
 
-  const precioFinal = (cuentas ?? []).reduce((s, c) => s + Number(c.precio_final ?? 0), 0);
-  const totalPagadoReal = (pagos ?? []).reduce((s, p) => s + Number(p.monto ?? 0), 0);
+  const precioFinal = cuentas.reduce((s, c) => s + Number(c.precio_final ?? 0), 0);
+  const totalPagadoReal = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
 
-  const acuerdosValidos = (acuerdos ?? []).filter(a => !CONCEPTOS_CANCELACION.includes(a.id_concepto));
+  const acuerdosValidos = acuerdos.filter(a => !CONCEPTOS_CANCELACION.includes(a.id_concepto as number));
   let totalPagadoAplicaciones = 0;
-  if (acuerdosValidos.length) {
+  const acuerdoIds = acuerdosValidos.map(a => a.id);
+  for (let i = 0; i < acuerdoIds.length; i += BATCH) {
+    const slice = acuerdoIds.slice(i, i + BATCH);
     const { data: aplicaciones } = await supabase
       .from('aplicaciones_pago')
       .select('monto')
-      .in('id_acuerdo_pago', acuerdosValidos.map(a => a.id))
+      .in('id_acuerdo_pago', slice)
       .eq('activo', true);
-    totalPagadoAplicaciones = (aplicaciones ?? []).reduce((s, a) => s + Number(a.monto ?? 0), 0);
+    totalPagadoAplicaciones += (aplicaciones ?? []).reduce((s, a) => s + Number(a.monto ?? 0), 0);
   }
 
   return { precioFinal, totalPagadoAplicaciones, totalPagadoReal, saldoPendiente: precioFinal - totalPagadoReal };
