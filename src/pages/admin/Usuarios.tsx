@@ -24,6 +24,7 @@ import { UserProjectAccessDialog } from "@/components/admin/UserProjectAccessDia
 import { ChangeUserRoleDialog } from "@/components/admin/ChangeUserRoleDialog";
 import { EditUserDialog } from "@/components/admin/EditUserDialog";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { rolRequierePersona, mensajeFaltaPersona } from "@/lib/usuarios/roles-requieren-persona";
 
 type Usuario = {
   email: string;
@@ -1114,6 +1115,14 @@ export default function Usuarios() {
       
       if (inmobiliariaWithEmail && rolId !== ROLE_INMOBILIARIA) {
         throw new Error(`El email ${emailLower} pertenece a la inmobiliaria "${(inmobiliariaWithEmail as any).personas.nombre_legal}". No puedes crear un usuario con otro rol usando este email.`);
+      }
+
+      // Los roles que operan bajo RLS por "dueño del registro" no pueden quedar sin persona:
+      // sin ella la rama de dueño siempre da falso y el portal del rol falla o, peor, opera
+      // con los datos de otro. Antes el campo era opcional y no avisaba nada.
+      const nombreRolSeleccionado = (roles as any[]).find((r) => r.id === rolId)?.nombre;
+      if (rolRequierePersona(nombreRolSeleccionado) && !newUserForm.id_persona) {
+        throw new Error(mensajeFaltaPersona(nombreRolSeleccionado));
       }
 
       const response = await supabase.functions.invoke('create-user', {

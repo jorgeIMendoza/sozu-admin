@@ -163,11 +163,45 @@ export function useCrearEjecutivoBanco() {
           "No se encontraron los roles de banco (Operador/Supervisor Banco) en el sistema.",
         );
       }
+      // Los roles de banco operan bajo RLS por "dueño del registro", así que la cuenta no
+      // puede quedar sin persona: sin ella `current_persona_id()` es NULL y esa rama de las
+      // policies siempre da falso. Antes este flujo creaba el usuario sin vincular nada.
+      // Se reutiliza la persona si ya existe con ese correo; si no, se crea con los mismos
+      // datos del formulario (mismo patrón que el alta de embajadores).
+      const emailNorm = input.email.toLowerCase().trim();
+      const { data: personasCoincidentes } = await supabase
+        .from("personas")
+        .select("id")
+        .eq("email", emailNorm)
+        .order("id")
+        .limit(1);
+
+      let idPersona: number | null = personasCoincidentes?.[0]?.id ?? null;
+      if (!idPersona) {
+        const { data: nuevaPersona, error: personaError } = await supabase
+          .from("personas")
+          .insert({
+            nombre_legal: input.nombre.trim(),
+            email: emailNorm,
+            telefono: input.telefono?.trim() || null,
+            clave_pais_telefono: "MX",
+            tipo_persona: "pf",
+            activo: true,
+          })
+          .select("id")
+          .single();
+        if (personaError || !nuevaPersona) {
+          throw personaError ?? new Error("No se pudo crear la persona del ejecutivo.");
+        }
+        idPersona = nuevaPersona.id;
+      }
+
       const response = await supabase.functions.invoke("create-user", {
         body: {
-          email: input.email.toLowerCase().trim(),
+          email: emailNorm,
           nombre: input.nombre.trim(),
           rol_id: rolId,
+          id_persona: idPersona,
           id_banco: input.id_banco,
           telefono: input.telefono?.trim() || undefined,
         },
