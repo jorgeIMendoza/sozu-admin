@@ -36,8 +36,14 @@ const pct = (num: number, denom: number) =>
   denom > 0 ? ((num / denom) * 100).toFixed(1) + '%' : '0%';
 
 // Only display Propiedad / Bodega / Cajón; everything else → null ("—")
-function normProducto(tipo_cuenta: string | null, producto: string | null): string | null {
-  if (tipo_cuenta === 'propiedad') return 'Propiedad';
+// tipo_categoria (RPC v3) manda cuando viene; tipo_cuenta/producto quedan como fallback
+// para las filas sintéticas de isRpMode, que no traen tipo_categoria.
+function normProducto(tipo_cuenta: string | null, producto: string | null, tipo_categoria?: string | null): string | null {
+  const categoria = (tipo_categoria ?? '').toLowerCase();
+  if (categoria === 'propiedad') return 'Propiedad';
+  if (categoria === 'bodega') return 'Bodega';
+  if (categoria === 'estacionamiento') return 'Cajón';
+  if ((tipo_cuenta ?? '').toLowerCase() === 'propiedad') return 'Propiedad';
   const name = (producto ?? '').toLowerCase();
   if (name.includes('bodega')) return 'Bodega';
   if (name.includes('cajón') || name.includes('cajon') || name.includes('estacionamiento')) return 'Cajón';
@@ -475,7 +481,7 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldM
                       </td>
                       <td className="px-4 py-3.5 text-sm text-slate-700 whitespace-nowrap max-w-[200px] truncate">{p.cliente ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap">{p.num_propiedad ?? '—'}</td>
-                      <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{normProducto(p.tipo_cuenta, p.producto) ?? '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{normProducto(p.tipo_cuenta, p.producto, p.tipo_categoria) ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{p.fecha_pago ? fmtDate(p.fecha_pago) : '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-slate-600 max-w-[180px] truncate">{normConcepto(p.aplicaciones_detalle ?? [], p.descripcion) ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap tabular-nums">{fmtMxn(p.monto)}</td>
@@ -650,14 +656,13 @@ export function RelacionPagos() {
   }, [filteredPagos]);
 
   // ── Cuenta PRINCIPAL de propiedad ────────────────────────────────────────────
-  // La RPC clasifica como tipo_cuenta='propiedad' tanto la cuenta de departamento
-  // como bodegas/estacionamientos (si tienen cc.id_propiedad set). La distinción
-  // es que los accesorios tienen p.producto != null (nombre del producto asociado).
-  // Solo usamos la cuenta con producto=null como fuente de verdad financiera.
+  // tipo_categoria (RPC v3) distingue Propiedad de Bodega/Estacionamiento/Producto/
+  // Mantenimiento/Adicional directamente. Comparación case-insensitive porque la RPC
+  // puede regresarlo capitalizado ("Propiedad") o no, según la versión.
   const primaryCuentaId = useMemo(() => {
     const mainIds = [...new Set(
       filteredPagos
-        .filter(p => p.tipo_cuenta === 'propiedad' && p.producto === null)
+        .filter(p => (p.tipo_categoria ?? '').toLowerCase() === 'propiedad')
         .map(p => p.id_cuenta_cobranza)
         .filter((id): id is number => id != null),
     )];
@@ -1434,7 +1439,7 @@ export function RelacionPagos() {
       estatus: 'Activa',
       comprador: p.cliente ?? '—',
       depto: p.num_propiedad ?? '—',
-      producto: normProducto(p.tipo_cuenta, p.producto) ?? '—',
+      producto: normProducto(p.tipo_cuenta, p.producto, p.tipo_categoria) ?? '—',
       fecha_pago: p.fecha_pago ? fmtDate(p.fecha_pago) : '—',
       concepto: normConcepto(p.aplicaciones_detalle ?? [], p.descripcion) ?? '—',
       pago: p.monto,
