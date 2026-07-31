@@ -634,6 +634,9 @@ export function RelacionPagos() {
     return allPagos.filter((p) => p.cliente?.toLowerCase().includes(lower));
   }, [allPagos, search]);
 
+  // Con término de búsqueda las tarjetas deben reflejar el filtro, no el proyecto.
+  const hayFiltroBusqueda = search.trim() !== '';
+
   // Generic KPI totals
   const total = filteredPagos.length;
   const totalMonto = useMemo(() => filteredPagos.reduce((s, p) => s + (p.monto ?? 0), 0), [filteredPagos]);
@@ -1527,13 +1530,30 @@ export function RelacionPagos() {
             </>
           ) : (
             <>
-              <KpiCard label="Total pagos" value={(isRpMode ? (rpPagosCuenta?.length ?? 0) : (proyectoFinancials?.total_pagos ?? 0)).toLocaleString('es-MX')} />
+              {/* Con búsqueda activa las tarjetas siguen al filtro (se calculan sobre
+                  filteredPagos); sin búsqueda son del proyecto completo. Antes siempre
+                  mostraban el proyecto, así que al filtrar por depto la tabla enseñaba
+                  una unidad y las tarjetas el global. */}
               <KpiCard
-                label="Total pagado"
-                value={fmtMxn(isRpMode ? rpTotalMonto : (proyectoFinancials?.total_pagado_todas_cuentas ?? 0))}
+                label={hayFiltroBusqueda ? 'Total pagos · filtro' : 'Total pagos'}
+                value={(isRpMode ? (rpPagosCuenta?.length ?? 0)
+                  : hayFiltroBusqueda ? total
+                  : (proyectoFinancials?.total_pagos ?? 0)).toLocaleString('es-MX')}
+              />
+              <KpiCard
+                label={hayFiltroBusqueda ? 'Total pagado · filtro' : 'Total pagado'}
+                value={fmtMxn(isRpMode ? rpTotalMonto
+                  : hayFiltroBusqueda ? totalMonto
+                  : (proyectoFinancials?.total_pagado_todas_cuentas ?? 0))}
                 valueClass="text-emerald-600"
               />
-              <KpiCard label="Con comprobante" value={(isRpMode ? rpConComprobante : (proyectoFinancials?.total_con_comprobante ?? 0)).toLocaleString('es-MX')} colSpan />
+              <KpiCard
+                label={hayFiltroBusqueda ? 'Con comprobante · filtro' : 'Con comprobante'}
+                value={(isRpMode ? rpConComprobante
+                  : hayFiltroBusqueda ? totalConCep
+                  : (proyectoFinancials?.total_con_comprobante ?? 0)).toLocaleString('es-MX')}
+                colSpan
+              />
             </>
           )}
         </div>
@@ -1544,6 +1564,17 @@ export function RelacionPagos() {
         <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           No se pudo cargar el resumen financiero del proyecto. Reintenta o recarga la página.
+        </div>
+      )}
+
+      {/* Estos cards son del proyecto completo mientras no se elija una cuenta: el filtro
+          de búsqueda no los recorta (precio final, saldo y valor de escrituración se
+          calculan por cuenta, no por pago). Se avisa para que no se lean como filtrados. */}
+      {hasResults && !isRpMode && hayFiltroBusqueda && (
+        <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-4">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+          Las cifras de abajo son del proyecto completo. Abre una cuenta de la tabla para ver
+          precio final, saldo y valor de escrituración de esa unidad.
         </div>
       )}
 

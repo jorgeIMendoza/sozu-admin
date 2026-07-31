@@ -74,10 +74,19 @@ export function PaymentDetailDialog({
       const { data: vals } = await (supabase as any).from('pago_validaciones')
         .select('estado, monto_esperado, monto_real').eq('id_pago', pid)
         .order('fecha_creacion', { ascending: false }).limit(1);
-      const { data: pg } = await (supabase as any).from('pagos').select('id_metodos_pago').eq('id', pid).maybeSingle();
+      const { data: pg } = await (supabase as any).from('pagos')
+        .select('id_metodos_pago, monto, id_cuenta_cobranza').eq('id', pid).maybeSingle();
+      // Suma de TODAS las aplicaciones activas del pago (multas incluidas: también lo
+      // consumen), para poder avisar cuando el reparto no cuadra con el monto cobrado.
+      const { data: aplTodas } = await (supabase as any).from('aplicaciones_pago')
+        .select('monto').eq('id_pago', pid).eq('activo', true);
+      const totalAplicado = (aplTodas ?? []).reduce((acc: number, a: any) => acc + Number(a.monto ?? 0), 0);
       return {
         aplId: apl?.id ?? null,
         montoAplicado: apl?.monto ?? null,
+        montoPago: pg?.monto != null ? Number(pg.monto) : null,
+        cuentaId: pg?.id_cuenta_cobranza ?? null,
+        totalAplicado,
         concepto, fechaLimite,
         validacion: vals?.[0] ?? null,
         idMetodo: pg?.id_metodos_pago ?? null,
@@ -93,19 +102,25 @@ export function PaymentDetailDialog({
       fecha: payment?.fecha_pago ?? '',
       metodo: detail?.idMetodo != null ? String(detail.idMetodo) : '',
       estado: val?.estado ?? '',
-      monto: detail?.montoAplicado != null ? String(detail.montoAplicado) : '',
+      monto: detail?.montoPago != null ? String(detail.montoPago) : '',
       clave: payment?.clave_rastreo ?? '',
     });
-  }, [payment?.pago_id, detail?.idMetodo, val?.estado, payment?.fecha_pago, detail?.montoAplicado, payment?.clave_rastreo]);
+  }, [payment?.pago_id, detail?.idMetodo, val?.estado, payment?.fecha_pago, detail?.montoPago, payment?.clave_rastreo]);
 
   if (!payment) return null;
   const url = payment.url_cep || payment.url_recibo || null;
   const conceptoLabel = detail?.concepto?.toLowerCase().includes('contra entrega') ? 'Pago Final' : (detail?.concepto ?? 'Sin registro');
-  const montoAplicado = detail?.montoAplicado;
+  const descuadrado = detail?.montoPago != null && detail?.totalAplicado != null
+    && Math.abs(Number(detail.montoPago) - Number(detail.totalAplicado)) > 0.01;
 
   const fechaChanged = !!form.fecha && form.fecha !== payment.fecha_pago;
   const metodoChanged = !!form.metodo && Number(form.metodo) !== detail?.idMetodo;
-  const montoChanged = form.monto !== '' && detail?.aplId != null && Number(form.monto) !== Number(detail?.montoAplicado);
+  // El monto editable es el del PAGO (lo que entró al banco). Antes este campo escribía
+  // sobre `aplicaciones_pago.monto`: `pagos.monto` se quedaba con el valor viejo, la tabla
+  // seguía mostrando el anterior y "Recalcular dispersión" —que reparte FIFO a partir de
+  // `pagos.monto`— borraba el ajuste. De ahí el "no se guarda".
+  const montoChanged = form.monto !== '' && detail?.montoPago != null
+    && Number(form.monto) !== Number(detail.montoPago);
   const estadoChanged = !!form.estado && form.estado !== (val?.estado ?? '');
   const claveChanged = form.clave.trim() !== (payment.clave_rastreo ?? '');
   const dirty = fechaChanged || metodoChanged || montoChanged || estadoChanged || claveChanged;
@@ -118,13 +133,24 @@ export function PaymentDetailDialog({
       if (fechaChanged) patchPago.fecha_pago = form.fecha;
       if (metodoChanged) patchPago.id_metodos_pago = Number(form.metodo);
       if (claveChanged) patchPago.clave_rastreo = form.clave.trim() || null;
+      if (montoChanged) patchPago.monto = Number(form.monto);
       if (Object.keys(patchPago).length) {
         const { error } = await (supabase as any).from('pagos').update(patchPago).eq('id', payment.pago_id);
         if (error) throw error;
       }
-      if (montoChanged) {
-        const { error } = await (supabase as any).from('aplicaciones_pago').update({ monto: Number(form.monto) }).eq('id', detail!.aplId);
-        if (error) throw error;
+      // Cambiar el monto (o la fecha, que define el orden FIFO) invalida el reparto en
+      // aplicaciones_pago: se redistribuye con la misma edge function del botón
+      // "Recalcular dispersión", así las dos vistas quedan consistentes de inmediato.
+      if (montoChanged || fechaChanged) {
+        const cuentaId = detail?.cuentaId ?? payment.id_cuenta_cobranza;
+        if (cuentaId != null) {
+          const { error: recalcError } = await supabase.functions.invoke('recalcular-aplicaciones', {
+            body: { id_cuenta_cobranza: cuentaId },
+          });
+          if (recalcError) {
+            toast.error('El monto se guardó, pero la dispersión no se pudo recalcular. Usa "Recalcular dispersión" en el detalle de la cuenta.');
+          }
+        }
       }
       if (estadoChanged) {
         const patchVal: Record<string, unknown> = form.estado === 'coincide'
@@ -174,12 +200,25 @@ export function PaymentDetailDialog({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-              {/* Card: monto aplicado */}
+              {/* Card: monto cobrado vs repartido. Son dos cosas distintas y confundirlas
+                  fue el origen del bug: el campo editable escribía sobre la aplicación. */}
               <div className="rounded-xl border px-4 py-4 text-center">
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Monto aplicado</span>
-                {montoAplicado != null
-                  ? <p className="text-[22px] font-bold tabular-nums leading-none text-foreground">{fmtCurrency(Number(montoAplicado))}</p>
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Monto del pago</span>
+                {detail?.montoPago != null
+                  ? <p className="text-[22px] font-bold tabular-nums leading-none text-foreground">{fmtCurrency(Number(detail.montoPago))}</p>
                   : <p className="text-[13px] text-muted-foreground/60">Sin registro</p>}
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Aplicado a acuerdos:{' '}
+                  <span className="tabular-nums font-medium text-foreground">
+                    {detail?.totalAplicado != null ? fmtCurrency(Number(detail.totalAplicado)) : '—'}
+                  </span>
+                </p>
+                {descuadrado && (
+                  <p className="text-[11px] text-amber-600 mt-1.5">
+                    El reparto no cuadra con el monto cobrado. Guarda el monto correcto o usa
+                    "Recalcular dispersión" en el detalle de la cuenta.
+                  </p>
+                )}
               </div>
 
               {/* Detalle del pago (read-only) */}
@@ -225,10 +264,9 @@ export function PaymentDetailDialog({
                     className="h-9 w-full block appearance-none [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
                   />
                 </Field>
-                <Field label="Monto">
-                  {detail?.aplId != null
-                    ? <Input type="number" step="0.01" min="0" value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} className="h-9 w-full" />
-                    : <p className="text-[12px] text-muted-foreground/60 h-9 flex items-center">Sin aplicación registrada</p>}
+                <Field label="Monto del pago">
+                  <Input type="number" step="0.01" min="0" value={form.monto}
+                    onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} className="h-9 w-full" />
                 </Field>
                 <div className="sm:col-span-2">
                   <Field label="Clave de rastreo">
