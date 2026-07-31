@@ -37,6 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface EditUserDialogProps {
   open: boolean;
@@ -57,6 +58,12 @@ interface EditUserDialogProps {
 type InmobiliariaOption = {
   id: number;
   nombre: string;
+};
+
+type PersonaVinculable = {
+  id: number;
+  nombre_legal: string;
+  email: string | null;
 };
 
 const ROLE_AGENTE_INMOBILIARIO = 3;
@@ -92,6 +99,40 @@ export function EditUserDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registrarActualizacion } = useActivityLogger();
+
+  const { profile } = useAuth();
+  // Vincular una persona otorga acceso a sus datos bajo las reglas de dueno, asi que
+  // queda restringido a Super Admin.
+  const esSuperAdmin = profile?.rol_id === 1;
+
+  const [busquedaPersona, setBusquedaPersona] = useState("");
+  const [resultadosPersona, setResultadosPersona] = useState<PersonaVinculable[]>([]);
+  const [personaAVincular, setPersonaAVincular] = useState<PersonaVinculable | null>(null);
+
+  const buscarPersonas = async () => {
+    const q = busquedaPersona.trim();
+    if (q.length < 3) {
+      toast({ title: "Busqueda muy corta", description: "Escribe al menos 3 caracteres.", variant: "destructive" });
+      return;
+    }
+    const { data, error } = await supabase
+      .from('personas')
+      .select('id, nombre_legal, email')
+      .or(`nombre_legal.ilike.%${q}%,email.ilike.%${q}%`)
+      .eq('activo', true)
+      .order('nombre_legal')
+      .limit(10);
+    if (error) {
+      toast({ title: "Error", description: "No se pudo buscar personas.", variant: "destructive" });
+      return;
+    }
+    const encontradas = (data ?? []) as PersonaVinculable[];
+    setResultadosPersona(encontradas);
+    if (encontradas.length === 0) {
+      toast({ title: "Sin coincidencias", description: "Ninguna persona coincide con esa busqueda." });
+    }
+  };
+
 
   const isAgentRole = userRoleId === ROLE_AGENTE_INMOBILIARIO || userRoleId === ROLE_AGENTE_INTERNO;
   const isInmobiliariaRole = userRoleId === ROLE_INMOBILIARIA;
@@ -380,6 +421,7 @@ export function EditUserDialog({
       newInmobiliariaId,
       newBancoId,
       personaId,
+      personaAVincularId,
       newTelefono,
       newClavePais,
     }: {
@@ -389,6 +431,7 @@ export function EditUserDialog({
       newInmobiliariaId?: number;
       newBancoId?: number;
       personaId?: number;
+      personaAVincularId?: number;
       newTelefono?: string;
       newClavePais?: string;
     }) => {
@@ -406,6 +449,18 @@ export function EditUserDialog({
         .eq('email', oldEmail);
 
       if (nombreError) throw nombreError;
+
+      // Vincular la persona elegida. El `.is('id_persona', null)` es la garantía dura de
+      // que esto solo LLENA y nunca reasigna: aunque el estado del diálogo estuviera
+      // desfasado, la base rechaza sobrescribir un vínculo existente.
+      if (personaAVincularId) {
+        const { error: vinculoError } = await (supabase as any)
+          .from('usuarios')
+          .update({ id_persona: personaAVincularId, fecha_actualizacion: new Date().toISOString() })
+          .eq('email', oldEmail)
+          .is('id_persona', null);
+        if (vinculoError) throw vinculoError;
+      }
 
       // Sync phone to personas if linked
       if (personaId) {
@@ -690,6 +745,7 @@ export function EditUserDialog({
       newInmobiliariaId: needsInmobiliaria && selectedInmobiliariaId ? parseInt(selectedInmobiliariaId) : undefined,
       newBancoId: isBancoRole && selectedBancoId ? parseInt(selectedBancoId) : undefined,
       personaId: userPersonaId,
+      personaAVincularId: personaAVincular?.id,
       newTelefono: telefono.trim() || undefined,
       newClavePais: telefono.trim() ? clavePaisTelefono : undefined,
     });
@@ -973,6 +1029,82 @@ export function EditUserDialog({
                     Al cambiar el banco, el usuario verá las solicitudes del nuevo banco en el Portal Bancos.
                   </AlertDescription>
                 </Alert>
+              )}
+            </div>
+          )}
+
+          {/* ── Persona vinculada ──────────────────────────────────────────────
+              usuarios.id_persona es lo que ata la cuenta con su registro de negocio.
+              Sin él, las policies de RLS por "dueño del registro" siempre dan falso y el
+              portal del rol falla o —como paso con embajadores— opera con los datos de
+              otro. Hasta ahora no habia forma de asignarlo a un usuario ya creado.
+
+              Solo se puede LLENAR cuando esta vacio, nunca reasignar: apuntar la cuenta a
+              otra persona le daria acceso a los datos de esa persona. Y solo Super Admin,
+              porque es un campo que otorga acceso. */}
+          {!onlyPhone && (
+            <div className="space-y-2 border-t pt-4">
+              <Label className="flex items-center gap-2">
+                Persona vinculada
+                {!userPersonaId && (
+                  <span className="text-xs font-normal text-destructive">Sin vincular</span>
+                )}
+              </Label>
+
+              {userPersonaId ? (
+                <p className="text-sm text-muted-foreground">
+                  Vinculado a la persona #{userPersonaId}. Para cambiarlo, contacta a
+                  sistemas: reasignar la persona cambia a qué datos accede la cuenta.
+                </p>
+              ) : !esSuperAdmin ? (
+                <p className="text-sm text-muted-foreground">
+                  Esta cuenta no está ligada a ninguna persona. Solo un Super Administrador
+                  puede vincularla.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Buscar persona por nombre o correo"
+                      value={busquedaPersona}
+                      onChange={(e) => setBusquedaPersona(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); void buscarPersonas(); }
+                      }}
+                    />
+                    <Button type="button" variant="outline" onClick={() => void buscarPersonas()}>
+                      Buscar
+                    </Button>
+                  </div>
+
+                  {personaAVincular && (
+                    <Alert>
+                      <AlertDescription className="text-xs">
+                        Se vinculará a <strong>{personaAVincular.nombre_legal}</strong>
+                        {personaAVincular.email ? ` (${personaAVincular.email})` : ''} al guardar.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {resultadosPersona.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto rounded-md border divide-y">
+                      {resultadosPersona.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => {
+                            setPersonaAVincular(p);
+                            setResultadosPersona([]);
+                          }}
+                        >
+                          {p.nombre_legal}
+                          {p.email ? <span className="text-muted-foreground"> · {p.email}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
