@@ -704,7 +704,10 @@ const ClientePerfil = () => {
   // Persona física (comportamiento actual, sin cambios). owner siempre 'self'.
   const PF_SLOTS: DocSlot[] = [
     { key: "identidad",       label: "Identificación oficial",         tipoIds: ID_DOC_TIPO_IDS, primaryTipoId: INE_COMPLETO_TIPO_ID, required: true, cat: "personal", owner: "self", identity: true },
-    { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],  primaryTipoId: 1,  required: false, cat: "personal",   owner: "self" },
+    // Obligatoria por la regla de fusión (2026-07-30): escrituración la exige para dar el
+    // expediente por listo, así que el cliente la sube como obligatoria. Ver
+    // src/utils/expediente-obligatorios.ts.
+    { key: "acta_nacimiento", label: "Acta de nacimiento",             tipoIds: [1],  primaryTipoId: 1,  required: true,  cat: "personal",   owner: "self" },
     { key: "curp",            label: "CURP",                           tipoIds: [5],  primaryTipoId: 5,  required: true,  cat: "personal",   owner: "self" },
     { key: "csf",             label: "Constancia de situación fiscal", tipoIds: [6],  primaryTipoId: 6,  required: true,  cat: "financiero", owner: "self" },
     { key: "domicilio",       label: "Comprobante de domicilio",       tipoIds: [8],  primaryTipoId: 8,  required: true,  cat: "personal",   owner: "self" },

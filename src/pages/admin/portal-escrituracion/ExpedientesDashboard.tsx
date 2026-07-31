@@ -1,3 +1,11 @@
+import {
+  normalizarTipoPersona,
+  gruposObligatorios,
+  buildLatestPorPersonaTipo,
+  evaluarCuenta,
+  fetchDocsObligatorios,
+  type EvaluacionExpediente,
+} from '@/utils/expediente-obligatorios';
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,13 +20,7 @@ import {
 import { toast } from 'sonner';
 import { type TipoComprador, deriveTipoComprador } from '@/utils/tipo-persona';
 import {
-  OBLIGATORIO_GRUPOS,
-  ALL_OBLIGATORIO_IDS,
   ID_TO_GROUP_KEY,
-  buildLatestDocByKey,
-  countValidatedGroups,
-  calcCuentaDocStats,
-  fetchObligatoriosDocs,
 } from '@/utils/expediente-grupos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,6 +47,10 @@ interface ExpedienteRow {
   estatusExpediente: EstatusExpediente;
   docsCompletos: number;
   docsTotal: number;
+  /** Grupos que faltan o cuyo doc más reciente no está validado. */
+  docsFaltantes: string[];
+  /** PM sin representante legal ligado: el expediente no puede completarse. */
+  faltaRepLegal: boolean;
   precioFinal: number;
   estatusDisponibilidadId: number;
   fechaActualizacion: string;
@@ -103,8 +109,10 @@ function normTipoDoc(s: string): string {
 // NO influye en este cálculo. Son conceptos separados:
 //   estatusExpediente      → estado DOCUMENTAL (¿están los 5 docs validados?)
 //   id_estatus_disponibilidad → estado OPERATIVO/COMERCIAL/LEGAL de la unidad
-function deriveEstatusExpediente(docsCompletos: number): EstatusExpediente {
-  if (docsCompletos >= OBLIGATORIO_GRUPOS.length) return 'LISTO';
+// El total ya no es fijo: 5 grupos para persona física, 9 para persona moral (empresa +
+// representante legal). Ver src/utils/expediente-obligatorios.ts.
+function deriveEstatusExpediente(docsCompletos: number, docsTotal: number): EstatusExpediente {
+  if (docsTotal > 0 && docsCompletos >= docsTotal) return 'LISTO';
   return 'PENDIENTE';
 }
 
@@ -221,61 +229,38 @@ function DetailPanel({ row, onClose, onEditComprador }: {
   const qcPanel = useQueryClient();
   const [markingListo, setMarkingListo] = useState(false);
 
+  // "Revalidar documentos": el estatus documental es DERIVADO (no hay dónde persistir un
+  // "listo" manual). Refresca contra la base y reporta el estado real usando la MISMA
+  // evaluación que la tabla — PF/PM y representante legal incluidos.
   async function handleMarcarListo() {
-    const compradores = row.compradores;
-    if (!compradores.length) {
+    if (!row.compradores.length) {
       toast.error('No se encontraron compradores activos para este expediente.');
       return;
     }
     setMarkingListo(true);
     try {
-      // Revalida docs reales de TODOS los compradores (misma lógica que la tabla)
-      const allPersonaIds = compradores.map(c => c.id_persona);
-      const rawDocs = await fetchObligatoriosDocs(allPersonaIds);
-      const latestByKey = buildLatestDocByKey(rawDocs);
-
-      const ESTATUS_LABEL: Record<number, string> = { 1: 'Pendiente', 3: 'Rechazado', 4: 'Expirado' };
-      const problemasPorComprador: string[] = [];
-
-      for (const comp of compradores) {
-        const faltantes: string[] = [];
-        const noValidados: string[] = [];
-        for (const grupo of OBLIGATORIO_GRUPOS) {
-          const latest = latestByKey[`${comp.id_persona}__${grupo.key}`];
-          if (!latest) {
-            faltantes.push(grupo.label);
-          } else if (latest.estatusId !== 2) {
-            noValidados.push(`${grupo.label} (${ESTATUS_LABEL[latest.estatusId] ?? 'no validado'})`);
-          }
-        }
-        if (faltantes.length > 0 || noValidados.length > 0) {
-          const partes: string[] = [];
-          if (faltantes.length > 0) partes.push(`Sin documento: ${faltantes.join(', ')}`);
-          if (noValidados.length > 0) partes.push(`Versión reciente no validada: ${noValidados.join(', ')}`);
-          problemasPorComprador.push(
-            compradores.length > 1 ? `${comp.nombre}: ${partes.join('. ')}` : partes.join('. ')
-          );
-        }
-      }
-
-      if (problemasPorComprador.length > 0) {
-        toast.error(`No se puede marcar como listo. ${problemasPorComprador.join(' | ')}.`);
-        return;
-      }
-
-      // Todos los compradores cumplen. OJO: el estatus documental es DERIVADO de los 5
-      // grupos obligatorios; no existe columna donde persistir un "listo" manual. Antes
-      // aquí se hacía un setQueryData optimista y acto seguido se invalidaba esa misma
-      // query, así que el conteo subía, la recarga traía el valor real y volvía a bajar:
-      // el usuario veía "81 listos" y al rato 77, con un toast de éxito que mentía.
-      // Ahora solo se revalida contra la base y se informa el estado real.
       await Promise.all([
         qcPanel.invalidateQueries({ queryKey: ['expedientes-dashboard', row.proyectoId] }),
         qcPanel.invalidateQueries({ queryKey: ['exp-docs-cuenta', row.cuentaId] }),
       ]);
-      toast.success('Documentos revalidados: este expediente cumple los 5 obligatorios y ya cuenta como listo.');
+
+      if (row.faltaRepLegal) {
+        toast.error(
+          'Falta ligar el representante legal de la empresa. Sin él no se pueden validar ' +
+          'sus documentos (poder notarial, identificación, CURP, CSF y domicilio).',
+        );
+        return;
+      }
+      if (row.docsCompletos < row.docsTotal) {
+        const faltan = row.docsFaltantes.length
+          ? row.docsFaltantes.join(', ')
+          : `${row.docsTotal - row.docsCompletos} grupo(s)`;
+        toast.error(`Expediente incompleto (${row.docsCompletos}/${row.docsTotal}). Falta: ${faltan}.`);
+        return;
+      }
+      toast.success(`Documentos revalidados: ${row.docsCompletos}/${row.docsTotal} obligatorios. El expediente cuenta como listo.`);
     } catch {
-      toast.error('No fue posible actualizar el expediente. Intenta nuevamente.');
+      toast.error('No fue posible revalidar el expediente. Intenta nuevamente.');
     } finally {
       setMarkingListo(false);
     }
@@ -345,7 +330,9 @@ function DetailPanel({ row, onClose, onEditComprador }: {
 
   // Reutiliza la misma función centralizada que la tabla — mínimo entre todos los compradores
   // (null ?? 0 convierte estatus nulo a 0, que no es un ID válido → tratado como no validado)
-  const panelLatestByKey = buildLatestDocByKey(
+  // El panel evalúa EXACTAMENTE igual que la tabla (mismo módulo, PF/PM, rep legal).
+  // Antes usaba los 5 grupos fijos y podía mostrar un x/5 distinto al del dashboard.
+  const panelLatest = buildLatestPorPersonaTipo(
     checklist.map(d => ({
       id: d.id,
       id_persona: d.personaId,
@@ -354,10 +341,19 @@ function DetailPanel({ row, onClose, onEditComprador }: {
       fecha_creacion: d.fecha,
     }))
   );
-  const { completos: obligatoriosCumplidos } = calcCuentaDocStats(
-    row.compradores.map(c => c.id_persona),
-    panelLatestByKey
+  const evaluacionPanel = evaluarCuenta(
+    row.compradores.map(c => ({
+      personaId: c.id_persona,
+      tipoPersona: normalizarTipoPersona(c.tipo_persona),
+      // El panel no resuelve el rep legal: para PM se usa el total de la fila, que sí lo
+      // consideró en la carga masiva.
+      repPersonaId: null,
+    })),
+    panelLatest,
+    'escrituracion',
   );
+  const obligatoriosCumplidos = row.docsCompletos;
+  const obligatoriosTotal = row.docsTotal || evaluacionPanel.total;
 
   // Antes el panel escribía su propio `docsCompletos` en el caché del dashboard. Eso hacía
   // que abrir un expediente pudiera mover los KPIs sin que cambiara nada en la base: el
@@ -426,10 +422,16 @@ function DetailPanel({ row, onClose, onEditComprador }: {
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Documentos adjuntos</p>
             {checklist.length > 0 && (
               <span className="text-xs text-slate-500">
-                <span className={obligatoriosCumplidos >= OBLIGATORIO_GRUPOS.length ? 'text-emerald-600 font-semibold' : ''}>
-                  {obligatoriosCumplidos}/{OBLIGATORIO_GRUPOS.length}
+                <span className={obligatoriosTotal > 0 && obligatoriosCumplidos >= obligatoriosTotal ? 'text-emerald-600 font-semibold' : ''}>
+                  {obligatoriosCumplidos}/{obligatoriosTotal}
                 </span>
                 {' '}obligatorios
+                {row.faltaRepLegal && (
+                  <span className="block mt-1 text-[11px] text-amber-600">
+                    Falta ligar el representante legal de la empresa: sin él no se pueden
+                    validar sus documentos (poder, identificación, CURP, CSF y domicilio).
+                  </span>
+                )}
               </span>
             )}
           </div>
@@ -740,22 +742,52 @@ export function ExpedientesDashboard() {
         Object.values(comprsByCuenta).flat().map(c => c.id_persona)
       )];
 
-      const rawDocs = await fetchObligatoriosDocs(allPersonaIds);
-      const latestDocByKey = buildLatestDocByKey(rawDocs);
-
-      const docsByCuenta: Record<number, { total: number; completos: number }> = {};
-      cuentaIds.forEach(cuentaId => {
-        const compradores = (comprsByCuenta[cuentaId] || []).map(c => c.id_persona);
-        docsByCuenta[cuentaId] = calcCuentaDocStats(compradores, latestDocByKey);
-
-        if (process.env.NODE_ENV !== 'production') {
-          console.debug('[Expedientes] stats por cuenta', {
-            cuentaId,
-            compradores,
-            ...docsByCuenta[cuentaId],
-            estatus: docsByCuenta[cuentaId].completos >= OBLIGATORIO_GRUPOS.length ? 'LISTO' : 'PENDIENTE',
-          });
+      // Persona moral: el expediente incluye documentos del representante legal, que es
+      // OTRA persona (personas.id_entidad_relacionada_rep_leg → entidades_relacionadas
+      // .id_persona). Sin esta resolución, a una PM se le pedían CURP y acta de nacimiento
+      // y nunca podía estar lista.
+      const repPersonaPorPersona: Record<number, number | null> = {};
+      const pmPersonaIds = allPersonaIds.filter(
+        pid => normalizarTipoPersona(personaMap[pid]?.tipo_persona) === 'pm',
+      );
+      if (pmPersonaIds.length) {
+        const { data: pmRows } = await supabase
+          .from('personas')
+          .select('id, id_entidad_relacionada_rep_leg')
+          .in('id', pmPersonaIds);
+        const erIds = [...new Set((pmRows || [])
+          .map(r => r.id_entidad_relacionada_rep_leg)
+          .filter((v): v is number => v != null))];
+        const erPersona: Record<number, number | null> = {};
+        if (erIds.length) {
+          const { data: ers } = await supabase
+            .from('entidades_relacionadas').select('id, id_persona').in('id', erIds);
+          (ers || []).forEach(e => { erPersona[e.id] = e.id_persona ?? null; });
         }
+        (pmRows || []).forEach(r => {
+          const er = r.id_entidad_relacionada_rep_leg;
+          repPersonaPorPersona[r.id] = er != null ? (erPersona[er] ?? null) : null;
+        });
+      }
+
+      // Los documentos del representante legal viven bajo SU persona: hay que traerlos.
+      const repPersonaIds = Object.values(repPersonaPorPersona).filter((v): v is number => v != null);
+      const personaIdsParaDocs = [...new Set([...allPersonaIds, ...repPersonaIds])];
+
+      const rawDocs = await fetchDocsObligatorios(personaIdsParaDocs, supabase);
+      const latestPorPersonaTipo = buildLatestPorPersonaTipo(rawDocs);
+
+      const docsByCuenta: Record<number, EvaluacionExpediente> = {};
+      cuentaIds.forEach(cuentaId => {
+        const compradores = (comprsByCuenta[cuentaId] || []).map(c => {
+          const tipoPersona = normalizarTipoPersona(personaMap[c.id_persona]?.tipo_persona);
+          return {
+            personaId: c.id_persona,
+            tipoPersona,
+            repPersonaId: tipoPersona === 'pm' ? (repPersonaPorPersona[c.id_persona] ?? null) : null,
+          };
+        });
+        docsByCuenta[cuentaId] = evaluarCuenta(compradores, latestPorPersonaTipo, 'escrituracion');
       });
 
       // Paso 5: Construir filas
@@ -765,8 +797,9 @@ export function ExpedientesDashboard() {
           const cuenta = cuentaByProp[p.id];
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
-          const docStats = docsByCuenta[cuenta.id] || { total: OBLIGATORIO_GRUPOS.length, completos: 0 };
-          const estatusExpediente = deriveEstatusExpediente(docStats.completos);
+          const docStats = docsByCuenta[cuenta.id]
+            ?? { total: gruposObligatorios('pf', 'escrituracion').length, completos: 0, faltantes: [], faltaRepLegal: false };
+          const estatusExpediente = deriveEstatusExpediente(docStats.completos, docStats.total);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {
             cuentaId: cuenta.id,
@@ -780,6 +813,8 @@ export function ExpedientesDashboard() {
             estatusExpediente,
             docsCompletos: docStats.completos,
             docsTotal: docStats.total,
+            docsFaltantes: docStats.faltantes,
+            faltaRepLegal: docStats.faltaRepLegal,
             precioFinal: cuenta.precio_final ?? 0,
             estatusDisponibilidadId: p.id_estatus_disponibilidad,
             fechaActualizacion: cuenta.fecha_actualizacion || p.fecha_actualizacion,
