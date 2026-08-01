@@ -11,7 +11,7 @@ import {
   Filter as FilterIcon, RefreshCw, Copy, CheckCircle2, UserPlus,
   Bell, Sparkles, MessageSquare, X, ShieldAlert, PlayCircle, Pause,
   Calendar, ChevronRight, ChevronLeft, Check, ChevronDown, Download, Settings2, Upload, Loader2,
-  MoreHorizontal, Pencil, Trash2, Video, MapPin, Building2, Network, Store, ExternalLink, Clock, Users,
+  MoreHorizontal, Pencil, Trash2, Video, MapPin, Building2, Store, ExternalLink, Clock, Users,
   Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, LayoutGrid, GripVertical,
   Image as ImageIcon, Link as LinkIcon, Paperclip, Mic, FileText, Square,
 } from "lucide-react";
@@ -175,6 +175,7 @@ type ContactRow = {
   email: string | null;
   phone: string | null;
   development_id: string | null;
+  development_name: string | null;
   lead_status: string;
   lifecycle_stage: string;
   source_platform: string | null;
@@ -520,15 +521,6 @@ export function CrmContacts() {
     },
   });
 
-  // Mapa id_proyecto → nombre (TODOS los proyectos activos) para pintar el proyecto bajo el nombre del contacto.
-  const { data: proyectosNombreMap = {} } = useQuery<Record<string, string>>({
-    queryKey: ["proyectos-nombres-all"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("proyectos").select("id, nombre").eq("activo", true);
-      return Object.fromEntries((data ?? []).map((p: any) => [String(p.id), p.nombre]));
-    },
-  });
-
   const { data: categoriasCatalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
   const catNameMap = useMemo<Record<number, string>>(
     () => Object.fromEntries((categoriasCatalog as any[]).map((c: any) => [c.id, c.nombre])),
@@ -569,6 +561,13 @@ export function CrmContacts() {
         const catAllRes = await (supabase as any).from("entidades_relacionadas_categorias")
           .select("id_entidad_relacionada, id_categoria").in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
         if (!catAllRes.error) for (const r of (catAllRes.data ?? [])) (catByEr[r.id_entidad_relacionada] ??= []).push(r.id_categoria);
+        // Nombres de proyecto POR ID (igual que el collapse ContactExpansion: por id, sin filtro activo → pasa RLS).
+        const proyIds = Array.from(new Set(list.map((e: any) => e.id_proyecto).filter(Boolean)));
+        let proyMap: Record<number, string> = {};
+        if (proyIds.length) {
+          const { data: ps } = await (supabase as any).from("proyectos").select("id, nombre").in("id", proyIds);
+          proyMap = Object.fromEntries((ps ?? []).map((p: any) => [p.id, p.nombre]));
+        }
         return list.filter((e: any) => pMap[e.id_persona]).map((e: any) => {
           const p = pMap[e.id_persona]; const a = atrMap[e.id] ?? null;
           return {
@@ -576,6 +575,7 @@ export function CrmContacts() {
             full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
             email: p.email ?? null, phone: p.telefono ?? null,
             development_id: e.id_proyecto ? String(e.id_proyecto) : null,
+            development_name: e.id_proyecto ? (proyMap[e.id_proyecto] ?? null) : null,
             lead_status: a?.estatus_lead ?? "nuevo",
             lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
             source_platform: a?.meta_platform ?? null, source_name: a?.meta_form_name ?? null,
@@ -838,7 +838,7 @@ export function CrmContacts() {
                     {visibleColumns.map((col) => {
                       switch (col.id) {
                         case "name": {
-                          const projName = c.development_id ? proyectosNombreMap[c.development_id] : null;
+                          const projName = c.development_name;
                           return (
                             <td key={col.id} className="p-3 font-medium"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
@@ -861,7 +861,7 @@ export function CrmContacts() {
                                   </span>
                                   {projName ? (
                                     <span className="flex items-center gap-1 text-[11px] leading-tight text-muted-foreground mt-0.5" title={`Proyecto: ${projName}`}>
-                                      <Network className="h-3 w-3 shrink-0 opacity-70" />
+                                      <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                       <span className="truncate">{projName}</span>
                                     </span>
                                   ) : null}
