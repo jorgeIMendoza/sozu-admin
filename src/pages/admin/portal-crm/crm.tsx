@@ -112,6 +112,7 @@ import { TextStyle as TextStyleExt } from "@tiptap/extension-text-style";
 type ColumnId =
   | "name"
   | "categoria"
+  | "proyecto"
   | "email"
   | "phone"
   | "lead_status"
@@ -132,7 +133,8 @@ type ColumnConfig = { id: ColumnId; label: string; visible: boolean };
 const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "name", label: "Nombre", visible: true },
   { id: "categoria", label: "Categoría", visible: true },
-  { id: "email", label: "Correo", visible: true },
+  { id: "proyecto", label: "Proyecto", visible: true },
+  { id: "email", label: "Correo", visible: false },
   { id: "phone", label: "Número teléfono", visible: true },
   { id: "lead_status", label: "Estado lead", visible: true },
   { id: "lifecycle", label: "Etapa ciclo de vida", visible: true },
@@ -148,7 +150,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "meta_field_data", label: "Respuestas del formulario", visible: false },
 ];
 
-const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
+const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v5";
 
 
 
@@ -377,12 +379,12 @@ function ContactExpansion({ personaId, principalId, colSpan }: { personaId: numb
             <div className="space-y-1.5">
               {others.map((o: any) => (
                 <div key={o.id} className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-md px-2.5 py-1.5">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${o.etapa === "customer" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
-                    {o.etapa === "customer" ? "Cliente" : "Lead"}
-                  </span>
                   <span className="text-sm font-medium text-foreground inline-flex items-center gap-1">
                     <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     {o.proyecto ?? "Sin proyecto"}
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${o.etapa === "customer" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                    {o.etapa === "customer" ? "Cliente" : "Lead"}
                   </span>
                   <span className="text-xs text-muted-foreground">· {leadStatusLabel[o.estado] ?? o.estado}</span>
                   {o.owner && <span className="text-xs text-muted-foreground">· {o.owner}</span>}
@@ -837,8 +839,7 @@ export function CrmContacts() {
                     </td>
                     {visibleColumns.map((col) => {
                       switch (col.id) {
-                        case "name": {
-                          const projName = c.development_name;
+                        case "name":
                           return (
                             <td key={col.id} className="p-3 font-medium"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
@@ -859,17 +860,13 @@ export function CrmContacts() {
                                     <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
                                     {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
                                   </span>
-                                  {projName ? (
-                                    <span className="flex items-center gap-1 text-[11px] leading-tight text-muted-foreground mt-0.5" title={`Proyecto: ${projName}`}>
-                                      <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                      <span className="truncate">{projName}</span>
-                                    </span>
+                                  {c.email ? (
+                                    <span className="truncate text-[11px] leading-tight text-muted-foreground mt-0.5">{c.email}</span>
                                   ) : null}
                                 </span>
                               </span>
                             </td>
                           );
-                        }
                         case "categoria":
                           return (
                             <td key={col.id} className="p-3">
@@ -882,6 +879,19 @@ export function CrmContacts() {
                                   ))}
                                 </span>
                               ) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          );
+                        case "proyecto":
+                          return (
+                            <td key={col.id} className="p-3">
+                              {c.development_name ? (
+                                <span className="inline-flex items-center gap-1.5 text-sm text-foreground whitespace-nowrap">
+                                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="max-w-[180px] truncate">{c.development_name}</span>
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Sin proyecto</span>
+                              )}
                             </td>
                           );
                         case "email":
@@ -923,28 +933,21 @@ export function CrmContacts() {
                           const cls = st?.color ? "" : (statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200");
                           return (
                             <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`} style={badgeStyle}>{metaLabel}</span>
-                            </td>
-                          );
-                        }
-                        case "lifecycle": {
-                          const lcColor: Record<string, string> = {
-                            lead: "bg-sky-50 text-sky-700 border-sky-200",
-                            mql: "bg-amber-50 text-amber-700 border-amber-200",
-                            sql: "bg-orange-50 text-orange-700 border-orange-200",
-                            opportunity: "bg-violet-50 text-violet-700 border-violet-200",
-                            customer: "bg-primary/5 text-primary border-primary/20",
-                            evangelist: "bg-emerald-50 text-emerald-700 border-emerald-200",
-                          };
-                          const lcCls = lcColor[c.lifecycle_stage] ?? "bg-slate-50 text-slate-500 border-slate-200";
-                          return (
-                            <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${lcCls}`}>
-                                {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${cls}`} style={badgeStyle}>
+                                <span className="h-1.5 w-1.5 rounded-full bg-current shrink-0" aria-hidden="true" />
+                                {metaLabel}
                               </span>
                             </td>
                           );
                         }
+                        case "lifecycle":
+                          return (
+                            <td key={col.id} className="p-3">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-muted/70 text-muted-foreground">
+                                {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
+                              </span>
+                            </td>
+                          );
                         case "owner":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.owner_name ?? "Sin asignar"}</td>;
                         case "created":
