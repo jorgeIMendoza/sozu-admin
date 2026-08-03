@@ -91,6 +91,7 @@ import {
   NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
+import { TicketsCard } from "./crm-tickets";
 import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
 } from "@/lib/crm-lead-scoring";
@@ -1834,14 +1835,7 @@ export function CrmContactDetail() {
 
             <DealsCard contactId={contactId!} deals={contactDeals ?? []} onSaved={invalidateAll} />
 
-            <AccordionItem value="tickets" className="border-b-0">
-              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Tickets <span className="text-xs text-muted-foreground font-normal">0</span></span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <p className="text-xs text-muted-foreground py-2">Sin tickets asociados</p>
-              </AccordionContent>
-            </AccordionItem>
+            <TicketsCard contactId={contactId!} contactName={contact?.full_name} onSaved={invalidateAll} />
           </Accordion>
         </aside>
       </div>
