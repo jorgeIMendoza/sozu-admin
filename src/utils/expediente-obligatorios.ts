@@ -31,7 +31,7 @@ export type TipoPersona = 'pf' | 'pm';
 /** De quién es el documento: de la persona del expediente o de su representante legal. */
 export type DocOwner = 'self' | 'rep';
 /** Portales que validan expedientes. Cada uno declara qué grupos le bloquean. */
-export type PortalExpediente = 'escrituracion' | 'juridico' | 'socio_bancario' | 'notaria';
+export type PortalExpediente = 'escrituracion' | 'juridico' | 'socio_bancario' | 'notaria' | 'cobranza';
 
 export interface GrupoObligatorio {
   key: string;
@@ -44,7 +44,7 @@ export interface GrupoObligatorio {
 }
 
 const TODOS_LOS_PORTALES: readonly PortalExpediente[] =
-  ['escrituracion', 'juridico', 'socio_bancario', 'notaria'];
+  ['escrituracion', 'juridico', 'socio_bancario', 'notaria', 'cobranza'];
 
 /**
  * Persona física. `acta` está obligatoria porque escrituración la exige; por la regla de
@@ -55,7 +55,8 @@ export const GRUPOS_PF: readonly GrupoObligatorio[] = [
   { key: 'curp',      label: 'CURP',                           ids: [5],             owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'csf',       label: 'Constancia de situación fiscal',  ids: [6],             owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8],             owner: 'self', portales: TODOS_LOS_PORTALES },
-  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1],             owner: 'self', portales: ['escrituracion', 'juridico', 'notaria'] },
+  // Cobranza muestra la lista canónica completa del perfil de cliente, acta incluida.
+  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1],             owner: 'self', portales: ['escrituracion', 'juridico', 'notaria', 'cobranza'] },
 ];
 
 /**
@@ -216,18 +217,50 @@ export function resolverIdentidad(
 /** El grupo de identificación oficial no se evalúa por "algún tipo validado". */
 export const ES_GRUPO_IDENTIDAD = (key: string) => key === 'identidad' || key === 'identidad_rep';
 
+export interface ResolucionGrupo {
+  /** Documento vigente del grupo (el más reciente entre sus tipos que mandan). */
+  doc: LatestDoc | null;
+  cumplido: boolean;
+}
+
 /**
- * Un grupo está cumplido si su documento más reciente está validado. El grupo de
- * identificación oficial usa `resolverIdentidad` (INE completo > pasaporte > par legacy).
+ * Documento vigente y cumplimiento de un grupo, con el mismo criterio en todas las
+ * pantallas. El grupo de identificación oficial usa `resolverIdentidad` (INE completo >
+ * pasaporte > par legacy) y su vigente sale de los tipos que mandan, no del más nuevo
+ * a secas: un frente rechazado no tapa un pasaporte validado.
  */
+export function resolverGrupo(
+  personaId: number | null,
+  grupo: GrupoObligatorio,
+  latest: Record<string, LatestDoc>,
+): ResolucionGrupo {
+  if (!personaId) return { doc: null, cumplido: false };
+
+  const masReciente = (tipos: readonly number[]): LatestDoc | null => {
+    let mejor: LatestDoc | null = null;
+    for (const t of tipos) {
+      const d = latest[`${personaId}__${t}`];
+      if (d && (!mejor || d.fecha > mejor.fecha || (d.fecha === mejor.fecha && d.id > mejor.id))) mejor = d;
+    }
+    return mejor;
+  };
+
+  if (ES_GRUPO_IDENTIDAD(grupo.key)) {
+    const res = resolverIdentidad(personaId, latest);
+    const doc = res.tiposVigentes.length ? masReciente(res.tiposVigentes) : masReciente(grupo.ids);
+    return { doc, cumplido: res.cumplida };
+  }
+
+  const doc = masReciente(grupo.ids);
+  return { doc, cumplido: doc?.estatusId === ESTATUS_VALIDADO };
+}
+
 function grupoCumplido(
   personaId: number | null,
   grupo: GrupoObligatorio,
   latest: Record<string, LatestDoc>,
 ): boolean {
-  if (!personaId) return false;
-  if (ES_GRUPO_IDENTIDAD(grupo.key)) return resolverIdentidad(personaId, latest).cumplida;
-  return grupo.ids.some(tipoId => latest[`${personaId}__${tipoId}`]?.estatusId === ESTATUS_VALIDADO);
+  return resolverGrupo(personaId, grupo, latest).cumplido;
 }
 
 export interface EvaluacionExpediente {
@@ -356,4 +389,104 @@ export function personasDelExpediente(
   // Dedup por si el cónyuge también figura como comprador de la misma cuenta.
   const vistos = new Set<number>();
   return salida.filter(p => (vistos.has(p.personaId) ? false : (vistos.add(p.personaId), true)));
+}
+
+// ── Personas del expediente resueltas desde la base ──────────────────────────
+export interface PersonaExpedienteResuelta {
+  personaId: number;
+  nombre: string;
+  tipoPersona: TipoPersona;
+  repPersonaId: number | null;
+  /** Presente cuando la persona entra al expediente como cónyuge de ese comprador. */
+  esConyugeDe?: number;
+  /** Nombre del comprador titular (solo cuando esConyugeDe está presente). */
+  nombreTitular?: string;
+}
+
+/**
+ * Resuelve las personas que componen un expediente: compradores de la cuenta (o los
+ * `personaIds` dados), su representante legal cuando son PM
+ * (`id_entidad_relacionada_rep_leg` → `entidades_relacionadas.id_persona`) y su cónyuge
+ * cuando `personas.id_conyuge` está presente. Es el ÚNICO lugar que arma esa lista:
+ * cualquier pantalla que la necesite parte de aquí.
+ */
+export async function fetchPersonasExpediente(
+  args: { cuentaId?: number | null; personaIds?: number[] },
+  cliente: { from: (t: string) => any },
+): Promise<PersonaExpedienteResuelta[]> {
+  let ids = [...new Set(args.personaIds ?? [])];
+  if (!ids.length && args.cuentaId) {
+    const { data } = await cliente
+      .from('compradores')
+      .select('id_persona')
+      .eq('id_cuenta_cobranza', args.cuentaId)
+      .eq('activo', true);
+    ids = [...new Set((data ?? []).map((c: any) => c.id_persona as number).filter(Boolean))];
+  }
+  if (!ids.length) return [];
+
+  type PersonaRow = {
+    id: number; nombre_legal: string | null; nombre_comercial: string | null;
+    tipo_persona: string | null; id_conyuge: number | null;
+    id_entidad_relacionada_rep_leg: number | null;
+  };
+  const { data: personas } = await cliente
+    .from('personas')
+    .select('id, nombre_legal, nombre_comercial, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg')
+    .in('id', ids);
+  const rows = (personas ?? []) as PersonaRow[];
+
+  // Representante legal: entidad relacionada → persona.
+  const repEntidadIds = [...new Set(rows.map(r => r.id_entidad_relacionada_rep_leg).filter((v): v is number => v != null))];
+  const repPersonaPorEntidad: Record<number, number> = {};
+  if (repEntidadIds.length) {
+    const { data: reps } = await cliente
+      .from('entidades_relacionadas')
+      .select('id, id_persona')
+      .in('id', repEntidadIds);
+    for (const r of (reps ?? []) as Array<{ id: number; id_persona: number | null }>) {
+      if (r.id_persona) repPersonaPorEntidad[r.id] = r.id_persona;
+    }
+  }
+
+  const nombreDe = (r: PersonaRow) => r.nombre_legal || r.nombre_comercial || `Persona ${r.id}`;
+  const porId = new Map(rows.map(r => [r.id, r]));
+
+  const base = ids
+    .map(id => porId.get(id))
+    .filter((r): r is PersonaRow => !!r)
+    .map(r => ({
+      personaId: r.id,
+      nombre: nombreDe(r),
+      tipoPersona: normalizarTipoPersona(r.tipo_persona),
+      repPersonaId: r.id_entidad_relacionada_rep_leg != null
+        ? repPersonaPorEntidad[r.id_entidad_relacionada_rep_leg] ?? null
+        : null,
+      conyugePersonaId: r.id_conyuge ?? null,
+    }));
+
+  const expandidas = personasDelExpediente(base);
+
+  // Nombres de los cónyuges que no venían en la lista original.
+  const faltanNombre = expandidas.filter(p => p.esConyugeDe && !porId.has(p.personaId)).map(p => p.personaId);
+  const nombreConyuge: Record<number, string> = {};
+  if (faltanNombre.length) {
+    const { data: cs } = await cliente
+      .from('personas')
+      .select('id, nombre_legal, nombre_comercial')
+      .in('id', faltanNombre);
+    for (const c of (cs ?? []) as Array<{ id: number; nombre_legal: string | null; nombre_comercial: string | null }>) {
+      nombreConyuge[c.id] = c.nombre_legal || c.nombre_comercial || `Persona ${c.id}`;
+    }
+  }
+
+  const nombrePorId = new Map(base.map(b => [b.personaId, b.nombre]));
+  return expandidas.map(p => ({
+    personaId: p.personaId,
+    nombre: p.nombre ?? nombreConyuge[p.personaId] ?? nombrePorId.get(p.personaId) ?? `Persona ${p.personaId}`,
+    tipoPersona: p.tipoPersona,
+    repPersonaId: p.repPersonaId ?? null,
+    esConyugeDe: p.esConyugeDe,
+    nombreTitular: p.esConyugeDe ? nombrePorId.get(p.esConyugeDe) : undefined,
+  }));
 }
