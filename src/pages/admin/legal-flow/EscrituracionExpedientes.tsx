@@ -15,6 +15,13 @@ import { useExportToExcel } from '@/hooks/useExportToExcel';
 import { CompradorDetalleSheet } from '@/components/admin/legal-flow/CompradorDetalleSheet';
 import { ExpedienteDocumentos } from '@/components/admin/legal-flow/ExpedienteDocumentos';
 import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
+import {
+  ALL_TIPO_IDS_OBLIGATORIOS,
+  buildLatestPorPersonaTipo,
+  evaluarCuenta,
+  normalizarTipoPersona,
+  personasDelExpediente,
+} from '@/utils/expediente-obligatorios';
 import { cn } from '@/lib/utils';
 
 type Person = { id: number; nombre_legal: string | null; rfc: string | null };
@@ -152,52 +159,9 @@ const fmtFechaHora = (value: string) =>
 const ccLabel = (id: number) => `CC-${String(id).padStart(6, '0')}`;
 
 // ── Documentos obligatorios ───────────────────────────────────────────────
-// Misma definición que el Dashboard de Expedientes del Portal Escrituración:
-// 5 grupos fijos; un grupo cuenta como cumplido si el documento más reciente
-// de la persona en ese grupo está Validado (id_estatus_verificacion = 2).
-const OBLIGATORIO_GRUPOS = [
-  { key: 'csf', ids: [6] },
-  { key: 'domicilio', ids: [8] },
-  { key: 'ine', ids: [2, 59, 63] }, // 63 = INE completo (frente y reverso en un PDF)
-  { key: 'curp', ids: [5] },
-  { key: 'acta', ids: [1] },
-] as const;
-const ALL_OBLIGATORIO_IDS = OBLIGATORIO_GRUPOS.flatMap((g) => g.ids);
-const ID_TO_GROUP_KEY: Record<number, string> = {};
-OBLIGATORIO_GRUPOS.forEach((g) => g.ids.forEach((id) => { ID_TO_GROUP_KEY[id] = g.key; }));
-const DOC_VALIDADO = 2;
-
-type LatestDoc = { id: number; estatusId: number; fecha: string };
-function buildLatestDocByPersona(
-  docs: Array<{ id: number; id_persona: number | null; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }>,
-): Record<string, LatestDoc> {
-  const map: Record<string, LatestDoc> = {};
-  for (const d of docs) {
-    if (!d.id_persona) continue;
-    const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
-    if (!groupKey) continue;
-    const key = `${d.id_persona}__${groupKey}`;
-    const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
-    const ex = map[key];
-    if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
-      map[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
-    }
-  }
-  return map;
-}
-function countValidatedGroups(personaId: number, latest: Record<string, LatestDoc>): number {
-  let count = 0;
-  for (const g of OBLIGATORIO_GRUPOS) {
-    const l = latest[`${personaId}__${g.key}`];
-    if (l && l.estatusId === DOC_VALIDADO) count++;
-  }
-  return count;
-}
-function calcDocStats(personaIds: number[], latest: Record<string, LatestDoc>): { completos: number; total: number } {
-  const total = OBLIGATORIO_GRUPOS.length;
-  if (!personaIds.length) return { completos: 0, total };
-  return { completos: Math.min(...personaIds.map((pid) => countValidatedGroups(pid, latest))), total };
-}
+// Fuente única: src/utils/expediente-obligatorios.ts (grupos PF/PM, rep legal,
+// cónyuge vía id_conyuge, doc más reciente por categoría). Este portal valida
+// su subconjunto con portal='juridico'.
 
 // ── Completitud del comprador (Básica / Dirección / Fiscal) ────────────────
 // Marca una sección como incompleta si falta cualquiera de sus campos clave.
@@ -1121,7 +1085,10 @@ export default function LegalFlowEscrituracionExpedientes() {
       if (condensadoraFilter === 'without' && row.tieneCondensadora) return false;
       if (compradorFilter === 'completo' && (row.compradores.length === 0 || row.compradorFaltante.incompleto)) return false;
       if (compradorFilter === 'incompleto' && !row.compradorFaltante.incompleto) return false;
-      if (docsFilter !== ALL_VALUE && row.docsObligatorios.completos !== Number(docsFilter)) return false;
+      if (docsFilter !== ALL_VALUE) {
+        const docsCompletos = row.docsObligatorios.completos >= row.docsObligatorios.total;
+        if (docsFilter === 'completo' ? !docsCompletos : docsCompletos) return false;
+      }
       if (!q) return true;
       return [
         row.cuentaLabel,
@@ -1234,12 +1201,9 @@ export default function LegalFlowEscrituracionExpedientes() {
           <SelectTrigger className="h-[38px] w-[200px] rounded-lg bg-card text-[13px]"><SelectValue placeholder="Docs obligatorios" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_VALUE}>Docs obligatorios: todos</SelectItem>
-            <SelectItem value="0">0 / 5 obligatorios</SelectItem>
-            <SelectItem value="1">1 / 5 obligatorios</SelectItem>
-            <SelectItem value="2">2 / 5 obligatorios</SelectItem>
-            <SelectItem value="3">3 / 5 obligatorios</SelectItem>
-            <SelectItem value="4">4 / 5 obligatorios</SelectItem>
-            <SelectItem value="5">5 / 5 (completos)</SelectItem>
+            {/* El total ya no es fijo (PF=5, PM=9, cónyuge suma otro juego). */}
+            <SelectItem value="completo">Expediente completo</SelectItem>
+            <SelectItem value="incompleto">Expediente incompleto</SelectItem>
           </SelectContent>
         </Select>
         <Button
@@ -1570,21 +1534,43 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
 
   // Detalle fiscal/dirección de los compradores (para completitud) + documentos
   // obligatorios por persona (para el semáforo de docs).
-  const [buyerDetailRows, docsObligatoriosRows] = await Promise.all([
-    fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select(
-      'id, nombre_legal, rfc, curp, email, telefono, ' +
-      'direccion_calle, direccion_num_ext, direccion_codigo_postal, direccion_colonia, direccion_id_estado, direccion_id_municipio, ' +
-      'direccion_fiscal_calle, direccion_fiscal_num_ext, direccion_fiscal_codigo_postal, direccion_fiscal_colonia, direccion_fiscal_id_pais, direccion_fiscal_id_estado, direccion_fiscal_id_municipio, ' +
-      'regimen, uso_cfdi, fecha_nacimiento, id_pais_nacimiento',
-    ).in('id', b as number[])),
-    fetchInBatchesPaged<any>(buyerPersonIds, (b, from, to) => (supabase as any).from('documentos')
-      .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
-      .eq('activo', true).eq('es_draft', false)
-      .in('id_persona', b as number[]).in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
-      .order('id').range(from, to)),
-  ]);
+  const buyerDetailRows = await fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select(
+    'id, nombre_legal, rfc, curp, email, telefono, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg, ' +
+    'direccion_calle, direccion_num_ext, direccion_codigo_postal, direccion_colonia, direccion_id_estado, direccion_id_municipio, ' +
+    'direccion_fiscal_calle, direccion_fiscal_num_ext, direccion_fiscal_codigo_postal, direccion_fiscal_colonia, direccion_fiscal_id_pais, direccion_fiscal_id_estado, direccion_fiscal_id_municipio, ' +
+    'regimen, uso_cfdi, fecha_nacimiento, id_pais_nacimiento',
+  ).in('id', b as number[]));
   const buyerDetailById = new Map<number, CompradorDetalle>(buyerDetailRows.map((r: any) => [r.id, r as CompradorDetalle]));
-  const latestObligatorioByKey = buildLatestDocByPersona(docsObligatoriosRows);
+
+  // Rep legal (PM): entidad relacionada → persona. Cónyuge: personas.id_conyuge.
+  const repEntidadIds = [...new Set(buyerDetailRows.map((r: any) => r.id_entidad_relacionada_rep_leg).filter(Boolean))] as number[];
+  const repRows = repEntidadIds.length
+    ? await fetchInBatches<any>(repEntidadIds, (b) => (supabase as any).from('entidades_relacionadas').select('id, id_persona').in('id', b as number[]))
+    : [];
+  const repPersonaPorEntidad = new Map<number, number>(repRows.filter((r: any) => r.id_persona).map((r: any) => [r.id, r.id_persona]));
+  const conyugeIds = [...new Set(buyerDetailRows.map((r: any) => r.id_conyuge).filter(Boolean))] as number[];
+
+  // Miembros del expediente por comprador (comprador + rep + cónyuge).
+  const expedienteInfoById = new Map<number, { personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null }>(
+    buyerDetailRows.map((r: any) => [r.id, {
+      personaId: r.id,
+      tipoPersona: normalizarTipoPersona(r.tipo_persona),
+      repPersonaId: r.id_entidad_relacionada_rep_leg ? repPersonaPorEntidad.get(r.id_entidad_relacionada_rep_leg) ?? null : null,
+      conyugePersonaId: r.id_conyuge ?? null,
+    }]),
+  );
+
+  const docPersonIds = [...new Set([
+    ...buyerPersonIds,
+    ...conyugeIds,
+    ...repRows.map((r: any) => r.id_persona).filter(Boolean),
+  ])] as number[];
+  const docsObligatoriosRows = await fetchInBatchesPaged<any>(docPersonIds, (b, from, to) => (supabase as any).from('documentos')
+    .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
+    .eq('activo', true).eq('es_draft', false)
+    .in('id_persona', b as number[]).in('id_tipo_documento', ALL_TIPO_IDS_OBLIGATORIOS)
+    .order('id').range(from, to));
+  const latestObligatorioByKey = buildLatestPorPersonaTipo(docsObligatoriosRows);
 
   // Mapas de apoyo.
   const linkById = new Map<number, any>(linkRows.map((row: any) => [row.id, row]));
@@ -1728,7 +1714,10 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
       const m2Exteriores = Number(property.m2_exteriores || 0);
       // Documentos obligatorios + completitud de datos de los compradores.
       const buyerPids = (buyersByAccount.get(account.id) || []).map((bp) => bp.id);
-      const docsObligatorios = calcDocStats(buyerPids, latestObligatorioByKey);
+      const miembrosExpediente = personasDelExpediente(
+        buyerPids.map((pid) => expedienteInfoById.get(pid)).filter(Boolean) as Array<{ personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null }>,
+      );
+      const docsObligatorios = evaluarCuenta(miembrosExpediente, latestObligatorioByKey, 'juridico');
       const seccionesFaltantes = [...new Set(buyerPids.flatMap((pid) => {
         const det = buyerDetailById.get(pid);
         return det ? seccionesIncompletas(det) : [];

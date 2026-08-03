@@ -4,6 +4,7 @@ import {
   buildLatestPorPersonaTipo,
   evaluarCuenta,
   fetchDocsObligatorios,
+  personasDelExpediente,
   type EvaluacionExpediente,
 } from '@/utils/expediente-obligatorios';
 import { useState, useMemo, useEffect } from 'react';
@@ -19,9 +20,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { type TipoComprador, deriveTipoComprador } from '@/utils/tipo-persona';
-import {
-  ID_TO_GROUP_KEY,
-} from '@/utils/expediente-grupos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EstatusExpediente = 'LISTO' | 'PENDIENTE' | 'EN_REVISION' | 'CON_OBSERVACIONES' | 'VENCIDO';
@@ -703,12 +701,12 @@ export function ExpedientesDashboard() {
         .order('id_persona', { ascending: true });
 
       const personaIds = [...new Set((comprsList || []).map(c => c.id_persona))];
-      const personaMap: Record<number, { nombre_legal: string; rfc: string | null; tipo_persona: string; id_pais_nacimiento: string | null }> = {};
+      const personaMap: Record<number, { nombre_legal: string; rfc: string | null; tipo_persona: string; id_pais_nacimiento: string | null; id_conyuge: number | null }> = {};
 
       if (personaIds.length) {
         const { data: personas } = await supabase
           .from('personas')
-          .select('id, nombre_legal, rfc, tipo_persona, id_pais_nacimiento')
+          .select('id, nombre_legal, rfc, tipo_persona, id_pais_nacimiento, id_conyuge')
           .in('id', personaIds);
         (personas || []).forEach(p => {
           personaMap[p.id] = {
@@ -716,6 +714,7 @@ export function ExpedientesDashboard() {
             rfc: p.rfc,
             tipo_persona: p.tipo_persona,
             id_pais_nacimiento: p.id_pais_nacimiento,
+            id_conyuge: (p as { id_conyuge?: number | null }).id_conyuge ?? null,
           };
         });
       }
@@ -774,9 +773,13 @@ export function ExpedientesDashboard() {
         });
       }
 
-      // Los documentos del representante legal viven bajo SU persona: hay que traerlos.
+      // Los documentos del representante legal y del cónyuge viven bajo SU persona:
+      // hay que traerlos. Cónyuge: personas.id_conyuge presente → entra al expediente.
       const repPersonaIds = Object.values(repPersonaPorPersona).filter((v): v is number => v != null);
-      const personaIdsParaDocs = [...new Set([...allPersonaIds, ...repPersonaIds])];
+      const conyugePersonaIds = allPersonaIds
+        .map(pid => personaMap[pid]?.id_conyuge)
+        .filter((v): v is number => v != null);
+      const personaIdsParaDocs = [...new Set([...allPersonaIds, ...repPersonaIds, ...conyugePersonaIds])];
 
       const rawDocs = await fetchDocsObligatorios(personaIdsParaDocs, supabase);
       const latestPorPersonaTipo = buildLatestPorPersonaTipo(rawDocs);
@@ -789,9 +792,10 @@ export function ExpedientesDashboard() {
             personaId: c.id_persona,
             tipoPersona,
             repPersonaId: tipoPersona === 'pm' ? (repPersonaPorPersona[c.id_persona] ?? null) : null,
+            conyugePersonaId: personaMap[c.id_persona]?.id_conyuge ?? null,
           };
         });
-        docsByCuenta[cuentaId] = evaluarCuenta(compradores, latestPorPersonaTipo, 'escrituracion');
+        docsByCuenta[cuentaId] = evaluarCuenta(personasDelExpediente(compradores), latestPorPersonaTipo, 'escrituracion');
       });
 
       // Paso 5: Construir filas

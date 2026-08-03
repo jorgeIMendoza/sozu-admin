@@ -7,14 +7,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Loader2, FileText, Eye, ChevronDown, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  normalizarTipoPersona,
   gruposObligatorios,
   buildLatestPorPersonaTipo,
   evaluarPersona,
   fetchDocsObligatorios,
+  fetchPersonasExpediente,
+  resolverGrupo,
   ESTATUS_VALIDADO,
+  type PersonaExpedienteResuelta,
   type PortalExpediente,
-  type TipoPersona,
 } from '@/utils/expediente-obligatorios';
 
 /**
@@ -24,6 +25,11 @@ import {
  * React). Este archivo solo pinta. Cualquier pantalla que muestre "documentos del
  * expediente" —CC en admin panel, portal de cobranza, jurídico, socio bancario, notaría,
  * inmobiliarias, embajadores— debe usar este componente en vez de armar su propia lista.
+ *
+ * Se monta con `cuentaId` (resuelve solo los compradores de la cuenta) o con
+ * `personaIds`. En ambos casos el componente resuelve por su cuenta el tipo de persona,
+ * el representante legal (PM) y el cónyuge (`personas.id_conyuge` presente → entra como
+ * segunda entidad con su juego completo de documentos).
  *
  * Reglas que garantiza, iguales en todas partes:
  *   · Solo los grupos OBLIGATORIOS del portal que lo monta (`portal`).
@@ -44,14 +50,6 @@ type DocumentoRow = {
   fecha_creacion: string | null;
   url: string | null;
 };
-
-export interface PersonaExpediente {
-  id: number;
-  nombre: string;
-  tipoPersona?: string | null;
-  /** Persona del representante legal (solo aplica a persona moral). */
-  repPersonaId?: number | null;
-}
 
 const ESTATUS_CFG: Record<number, { label: string; cls: string }> = {
   2: { label: 'Verificado', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -86,23 +84,39 @@ const fmtFecha = (s: string | null) =>
   s ? new Date(s).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 export function DocumentosObligatorios({
-  personas,
+  cuentaId,
+  personaIds,
   portal = 'escrituracion',
   titulo = 'Documentos obligatorios del expediente',
   className,
 }: {
-  personas: PersonaExpediente[];
+  /** Cuenta de cobranza: el componente resuelve sus compradores activos. */
+  cuentaId?: number | null;
+  /** Alternativa: personas explícitas (compradores); rep legal y cónyuge se resuelven aquí. */
+  personaIds?: number[];
   portal?: PortalExpediente;
   titulo?: string;
   className?: string;
 }) {
   const [historicoAbierto, setHistoricoAbierto] = useState<Record<string, boolean>>({});
 
-  const personaIds = personas.map(p => p.id).filter(Boolean);
-  const repIds = personas.map(p => p.repPersonaId).filter((v): v is number => v != null);
-  const todosIds = [...new Set([...personaIds, ...repIds])];
+  const idsKey = [...(personaIds ?? [])].sort((a, b) => a - b).join(',');
+  const habilitado = !!cuentaId || (personaIds?.length ?? 0) > 0;
 
-  const { data: docs = [], isLoading } = useQuery({
+  const { data: personas = [], isLoading: cargandoPersonas } = useQuery({
+    queryKey: ['expediente-personas', cuentaId ?? null, idsKey],
+    enabled: habilitado,
+    staleTime: 60_000,
+    queryFn: (): Promise<PersonaExpedienteResuelta[]> =>
+      fetchPersonasExpediente({ cuentaId, personaIds }, supabase as never),
+  });
+
+  const todosIds = [...new Set([
+    ...personas.map(p => p.personaId),
+    ...personas.map(p => p.repPersonaId).filter((v): v is number => v != null),
+  ])];
+
+  const { data: docs = [], isLoading: cargandoDocs } = useQuery({
     queryKey: ['expediente-obligatorios', todosIds.slice().sort((a, b) => a - b), portal],
     enabled: todosIds.length > 0,
     staleTime: 60_000,
@@ -123,7 +137,7 @@ export function DocumentosObligatorios({
     },
   });
 
-  if (!todosIds.length) {
+  if (!habilitado || (!cargandoPersonas && personas.length === 0)) {
     return (
       <div className={cn('rounded-xl border p-6 text-center', className)}>
         <FileText className="size-8 text-muted-foreground/25 mx-auto mb-2" />
@@ -132,7 +146,7 @@ export function DocumentosObligatorios({
     );
   }
 
-  if (isLoading) {
+  if (cargandoPersonas || cargandoDocs) {
     return (
       <div className={cn('rounded-xl border p-8 flex items-center justify-center gap-2', className)}>
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -148,22 +162,22 @@ export function DocumentosObligatorios({
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{titulo}</p>
 
       {personas.map(persona => {
-        const tipoPersona: TipoPersona = normalizarTipoPersona(persona.tipoPersona);
-        const grupos = gruposObligatorios(tipoPersona, portal);
+        const grupos = gruposObligatorios(persona.tipoPersona, portal);
         const evaluacion = evaluarPersona(
-          { personaId: persona.id, tipoPersona, repPersonaId: persona.repPersonaId ?? null, portal },
+          { personaId: persona.personaId, tipoPersona: persona.tipoPersona, repPersonaId: persona.repPersonaId, portal },
           latest,
         );
         const completo = evaluacion.total > 0 && evaluacion.completos >= evaluacion.total;
+        const subtitulo = persona.esConyugeDe
+          ? `Cónyuge de ${persona.nombreTitular ?? 'comprador'}`
+          : persona.tipoPersona === 'pm' ? 'Persona moral' : 'Persona física';
 
         return (
-          <div key={persona.id} className="rounded-xl border overflow-hidden">
+          <div key={persona.personaId} className="rounded-xl border overflow-hidden">
             <div className="px-4 py-3 border-b bg-muted/20 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold truncate">{persona.nombre}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {tipoPersona === 'pm' ? 'Persona moral' : 'Persona física'}
-                </p>
+                <p className="text-[11px] text-muted-foreground">{subtitulo}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={cn('text-[12px] font-semibold tabular-nums',
@@ -190,23 +204,16 @@ export function DocumentosObligatorios({
 
             <div className="divide-y">
               {grupos.map(grupo => {
-                const dueñoId = grupo.owner === 'rep' ? (persona.repPersonaId ?? null) : persona.id;
-                // Documento vigente del grupo: el más reciente entre sus tipos.
-                const vigente = dueñoId
-                  ? grupo.ids
-                      .map(t => ({ tipo: t, doc: latest[`${dueñoId}__${t}`] }))
-                      .filter(x => x.doc)
-                      .sort((a, b) => (a.doc!.fecha > b.doc!.fecha ? -1 : 1))[0]
-                  : undefined;
-                const docVigente = vigente ? docs.find(d => d.id === vigente.doc!.id) : undefined;
-                const cumplido = !!vigente && vigente.doc!.estatusId === ESTATUS_VALIDADO;
+                const dueñoId = grupo.owner === 'rep' ? persona.repPersonaId : persona.personaId;
+                const { doc: vigente, cumplido } = resolverGrupo(dueñoId, grupo, latest);
+                const docVigente = vigente ? docs.find(d => d.id === vigente.id) : undefined;
 
                 // Histórico: versiones anteriores del mismo grupo (solo consulta).
-                const histKey = `${persona.id}__${grupo.key}`;
+                const histKey = `${persona.personaId}__${grupo.key}`;
                 const historico = dueñoId
                   ? docs
                       .filter(d => d.id_persona === dueñoId && grupo.ids.includes(d.id_tipo_documento))
-                      .filter(d => d.id !== vigente?.doc?.id)
+                      .filter(d => d.id !== vigente?.id)
                       .sort((a, b) => String(b.fecha_creacion ?? '').localeCompare(String(a.fecha_creacion ?? '')))
                   : [];
 
@@ -221,7 +228,7 @@ export function DocumentosObligatorios({
                           {vigente ? `Vigente · ${fmtFecha(docVigente?.fecha_creacion ?? null)}` : 'Sin documento'}
                         </p>
                       </div>
-                      <EstatusDocBadge estatusId={vigente?.doc?.estatusId ?? null} />
+                      <EstatusDocBadge estatusId={cumplido ? ESTATUS_VALIDADO : vigente?.estatusId ?? null} />
                       {docVigente?.url && (
                         <a href={fixUrl(docVigente.url) ?? '#'} target="_blank" rel="noreferrer"
                           className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
