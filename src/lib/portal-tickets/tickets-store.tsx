@@ -1,23 +1,28 @@
+// Store del Portal Tickets de Seguimiento conectado a Supabase (tablas tickets_*).
+// Mantiene el MISMO contrato que consumía la UI con datos mock (useTickets()), pero por
+// debajo lee/escribe con React Query. Los ids se exponen como string al front y se
+// convierten a integer al escribir en BD. La asignación (propietarioId) usa auth_user_id.
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
-import {
-  AGENTES_SEED,
-  CATEGORIAS_SEED,
-  ETAPAS_SEED,
-  PIPELINES_SEED,
-  generarTickets,
-  type Agente,
-  type Categoria,
-  type Etapa,
-  type Pipeline,
-  type Ticket,
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import type {
+  Agente,
+  Categoria,
+  Etapa,
+  Pipeline,
+  Ticket,
 } from "./tickets-data";
+
+// Las tablas tickets_* no están en los tipos generados de Supabase → cast puntual.
+const sb = supabase as any;
 
 type NuevoTicket = {
   nombre: string;
@@ -31,6 +36,8 @@ type NuevoTicket = {
   descripcion: string;
   fuente?: string;
   fechaCreacion?: string;
+  entidadRelacionadaId?: string | null;
+  propiedadId?: string | null;
 };
 
 type Store = {
@@ -40,7 +47,8 @@ type Store = {
   categorias: Categoria[];
   agentes: Agente[];
   autor: string;
-  crearTicket: (t: NuevoTicket) => Ticket;
+  cargando: boolean;
+  crearTicket: (t: NuevoTicket) => void;
   actualizarTicket: (id: string, cambios: Partial<Ticket>, nota?: string) => void;
   moverEtapa: (id: string, etapaId: string) => void;
   eliminarTickets: (ids: string[]) => void;
@@ -57,102 +65,348 @@ type Store = {
 
 const TicketsContext = createContext<Store | null>(null);
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+// ─── Fetchers ─────────────────────────────────────────────────────────────────
+async function fetchPipelines(): Promise<Pipeline[]> {
+  const { data } = await sb
+    .from("tickets_pipelines")
+    .select("id, nombre, descripcion, orden")
+    .eq("activo", true)
+    .order("orden");
+  return (data ?? []).map((r: any) => ({
+    id: String(r.id),
+    nombre: r.nombre,
+    descripcion: r.descripcion ?? "",
+  }));
+}
 
-export function TicketsProvider({
-  children,
-  autor = "Sistema",
-}: {
-  children: ReactNode;
-  autor?: string;
-}) {
-  const [tickets, setTickets] = useState<Ticket[]>(() => generarTickets());
-  const [pipelines, setPipelines] = useState<Pipeline[]>(PIPELINES_SEED);
-  const [etapas, setEtapas] = useState<Etapa[]>(ETAPAS_SEED);
-  const [categorias, setCategorias] = useState<Categoria[]>(CATEGORIAS_SEED);
-  const [agentes, setAgentes] = useState<Agente[]>(AGENTES_SEED);
+async function fetchEtapas(): Promise<Etapa[]> {
+  const { data } = await sb
+    .from("tickets_etapas")
+    .select("id, id_pipeline, nombre, orden, cerrada")
+    .eq("activo", true)
+    .order("id_pipeline")
+    .order("orden");
+  return (data ?? []).map((r: any) => ({
+    id: String(r.id),
+    pipelineId: String(r.id_pipeline),
+    nombre: r.nombre,
+    orden: r.orden,
+    cerrada: r.cerrada,
+  }));
+}
 
-  const registrar = useCallback(
-    (t: Ticket, texto: string): Ticket => ({
-      ...t,
-      actividad: [
-        ...t.actividad,
-        { id: uid(), fecha: new Date().toISOString(), autor, texto },
-      ],
-    }),
-    [autor],
+async function fetchCategorias(): Promise<Categoria[]> {
+  const { data } = await sb
+    .from("tickets_categorias")
+    .select("id, nombre, orden")
+    .eq("activo", true)
+    .order("orden");
+  return (data ?? []).map((r: any) => ({ id: String(r.id), nombre: r.nombre }));
+}
+
+// Pool de asignables = usuarios activos cuyo rol tiene acceso a alguna ruta del portal
+// de tickets (mismo criterio que fetchCrmOwners; se deriva de BD para no hardcodear roles).
+// Exportada para reusarla en el selector "Ver como" (impersonación).
+export async function fetchAgentes(): Promise<Agente[]> {
+  let rolIds: number[] = [];
+  const { data: subs } = await sb
+    .from("submenus")
+    .select("id")
+    .like("vista_front_end", "/admin/portal-tickets/%");
+  const submenuIds = (subs ?? []).map((s: any) => s.id);
+  if (submenuIds.length) {
+    const { data: perms } = await sb
+      .from("submenus_permisos")
+      .select("rol_id")
+      .in("submenu_id", submenuIds)
+      .eq("activo", true);
+    rolIds = Array.from(new Set((perms ?? []).map((p: any) => p.rol_id)));
+  }
+  if (!rolIds.length) rolIds = [1]; // fallback: Super Admin
+
+  const [{ data: us }, { data: roles }] = await Promise.all([
+    sb.from("usuarios").select("auth_user_id, nombre, email, rol_id").eq("activo", true).in("rol_id", rolIds),
+    sb.from("roles").select("id, nombre"),
+  ]);
+  const rolMap = new Map((roles ?? []).map((r: any) => [r.id, r.nombre]));
+  return (us ?? [])
+    .filter((u: any) => u.auth_user_id)
+    .map((u: any) => ({
+      id: u.auth_user_id,
+      nombre: u.nombre,
+      email: u.email,
+      rol: rolMap.get(u.rol_id) ?? "",
+    }))
+    .sort((a: Agente, b: Agente) => (a.nombre ?? "").localeCompare(b.nombre ?? ""));
+}
+
+async function fetchTickets(): Promise<Ticket[]> {
+  const { data } = await sb
+    .from("tickets")
+    .select(
+      "id, numero, nombre, id_pipeline, id_etapa, prioridad, id_categoria, id_usuario_propietario, id_entidad_relacionada, id_propiedad, solicitante, inmueble, descripcion, fuente, fecha_creacion, fecha_cierre, tickets_actividad(id, texto, id_usuario_autor, fecha_creacion)",
+    )
+    .eq("activo", true)
+    .order("fecha_creacion", { ascending: false });
+  const rows = data ?? [];
+
+  // Resolver nombres de autores de actividad (uuid → nombre) en un solo fetch.
+  const uuids = new Set<string>();
+  for (const r of rows) {
+    for (const a of r.tickets_actividad ?? []) if (a.id_usuario_autor) uuids.add(a.id_usuario_autor);
+  }
+  let nameMap: Record<string, string> = {};
+  if (uuids.size) {
+    const { data: us } = await sb
+      .from("usuarios")
+      .select("auth_user_id, nombre")
+      .in("auth_user_id", Array.from(uuids));
+    nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+  }
+
+  return rows.map((r: any) => ({
+    id: String(r.id),
+    numero: r.numero,
+    nombre: r.nombre,
+    pipelineId: String(r.id_pipeline),
+    etapaId: String(r.id_etapa),
+    prioridad: r.prioridad,
+    categoriaId: r.id_categoria != null ? String(r.id_categoria) : "",
+    propietarioId: r.id_usuario_propietario ?? null,
+    solicitante: r.solicitante ?? "",
+    inmueble: r.inmueble ?? "",
+    descripcion: r.descripcion ?? "",
+    fechaCreacion: r.fecha_creacion,
+    fechaCierre: r.fecha_cierre ?? null,
+    fuente: r.fuente ?? "Portal",
+    entidadRelacionadaId: r.id_entidad_relacionada != null ? String(r.id_entidad_relacionada) : null,
+    propiedadId: r.id_propiedad != null ? String(r.id_propiedad) : null,
+    actividad: (r.tickets_actividad ?? [])
+      .map((a: any) => ({
+        id: String(a.id),
+        fecha: a.fecha_creacion,
+        autor: a.id_usuario_autor ? nameMap[a.id_usuario_autor] ?? "Usuario" : "Sistema",
+        texto: a.texto,
+      }))
+      .sort((x: any, y: any) => new Date(x.fecha).getTime() - new Date(y.fecha).getTime()),
+  }));
+}
+
+export function TicketsProvider({ children }: { children: ReactNode; autor?: string }) {
+  const { user, profile } = useAuth();
+  const qc = useQueryClient();
+  const uid: string | null = user?.id ?? null;
+  const autor = (profile as any)?.nombre || user?.email || "Sistema";
+
+  const pipelinesQ = useQuery({ queryKey: ["tickets-pipelines"], queryFn: fetchPipelines });
+  const etapasQ = useQuery({ queryKey: ["tickets-etapas"], queryFn: fetchEtapas });
+  const categoriasQ = useQuery({ queryKey: ["tickets-categorias"], queryFn: fetchCategorias });
+  const agentesQ = useQuery({ queryKey: ["tickets-agentes"], queryFn: fetchAgentes });
+  const ticketsQ = useQuery({ queryKey: ["tickets-list"], queryFn: fetchTickets });
+
+  const pipelines = pipelinesQ.data ?? [];
+  const etapas = etapasQ.data ?? [];
+  const categorias = categoriasQ.data ?? [];
+  const agentes = agentesQ.data ?? [];
+  const tickets = ticketsQ.data ?? [];
+
+  const invalidate = useCallback(
+    (key: string) => qc.invalidateQueries({ queryKey: [key] }),
+    [qc],
+  );
+
+  const registrarActividad = useCallback(
+    async (idTicket: string, texto: string, tipo = "sistema") => {
+      await sb.from("tickets_actividad").insert({
+        id_ticket: Number(idTicket),
+        texto,
+        tipo,
+        id_usuario_autor: uid,
+      });
+    },
+    [uid],
   );
 
   const crearTicket = useCallback(
-    (data: NuevoTicket) => {
-      const numero = Math.floor(2000 + Math.random() * 7000);
-      const nuevo: Ticket = {
-        ...data,
-        id: `t-${uid()}`,
-        numero,
-        nombre: data.nombre.trim(),
-        fechaCreacion: data.fechaCreacion ?? new Date().toISOString(),
-        fechaCierre: null,
-        fuente: data.fuente ?? "Portal",
-        actividad: [
-          {
-            id: uid(),
-            fecha: new Date().toISOString(),
-            autor,
-            texto: "Ticket creado desde el Portal Tickets de Seguimiento.",
-          },
-        ],
-      };
-      setTickets((prev) => [nuevo, ...prev]);
-      return nuevo;
+    async (data: NuevoTicket) => {
+      const { data: ins, error } = await sb
+        .from("tickets")
+        .insert({
+          nombre: data.nombre.trim(),
+          id_pipeline: Number(data.pipelineId),
+          id_etapa: Number(data.etapaId),
+          prioridad: data.prioridad,
+          id_categoria: data.categoriaId ? Number(data.categoriaId) : null,
+          id_usuario_propietario: data.propietarioId || null,
+          id_usuario_creador: uid,
+          id_entidad_relacionada: data.entidadRelacionadaId ? Number(data.entidadRelacionadaId) : null,
+          id_propiedad: data.propiedadId ? Number(data.propiedadId) : null,
+          solicitante: data.solicitante?.trim() || null,
+          inmueble: data.inmueble?.trim() || null,
+          descripcion: data.descripcion?.trim() || null,
+          fuente: data.fuente || "Portal",
+          fecha_creacion: data.fechaCreacion ?? undefined,
+        })
+        .select("id")
+        .single();
+      if (error) {
+        toast.error(`No se pudo crear el ticket: ${error.message}`);
+        return;
+      }
+      if (ins?.id) {
+        await registrarActividad(String(ins.id), "Ticket creado desde el Portal Tickets de Seguimiento.");
+      }
+      invalidate("tickets-list");
     },
-    [autor],
+    [uid, registrarActividad, invalidate],
   );
 
   const actualizarTicket = useCallback(
-    (id: string, cambios: Partial<Ticket>, nota?: string) => {
-      setTickets((prev) =>
-        prev.map((t) => {
-          if (t.id !== id) return t;
-          const actualizado = { ...t, ...cambios };
-          return nota ? registrar(actualizado, nota) : actualizado;
-        }),
-      );
+    async (id: string, cambios: Partial<Ticket>, nota?: string) => {
+      const patch: Record<string, unknown> = {};
+      if ("prioridad" in cambios) patch.prioridad = cambios.prioridad;
+      if ("propietarioId" in cambios) patch.id_usuario_propietario = cambios.propietarioId || null;
+      if ("categoriaId" in cambios) patch.id_categoria = cambios.categoriaId ? Number(cambios.categoriaId) : null;
+      if ("solicitante" in cambios) patch.solicitante = cambios.solicitante || null;
+      if ("inmueble" in cambios) patch.inmueble = cambios.inmueble || null;
+      if ("descripcion" in cambios) patch.descripcion = cambios.descripcion || null;
+      if ("entidadRelacionadaId" in cambios)
+        patch.id_entidad_relacionada = cambios.entidadRelacionadaId ? Number(cambios.entidadRelacionadaId) : null;
+      if ("propiedadId" in cambios)
+        patch.id_propiedad = cambios.propiedadId ? Number(cambios.propiedadId) : null;
+
+      if (Object.keys(patch).length) {
+        const { error } = await sb.from("tickets").update(patch).eq("id", Number(id));
+        if (error) {
+          toast.error(`No se pudo actualizar: ${error.message}`);
+          return;
+        }
+      }
+      if (nota) await registrarActividad(id, nota, "cambio_estado");
+      invalidate("tickets-list");
     },
-    [registrar],
+    [registrarActividad, invalidate],
   );
 
   const moverEtapa = useCallback(
-    (id: string, etapaId: string) => {
+    async (id: string, etapaId: string) => {
       const etapa = etapas.find((e) => e.id === etapaId);
       if (!etapa) return;
-      setTickets((prev) =>
-        prev.map((t) => {
-          if (t.id !== id || t.etapaId === etapaId) return t;
-          return registrar(
-            {
-              ...t,
-              etapaId,
-              pipelineId: etapa.pipelineId,
-              fechaCierre: etapa.cerrada ? new Date().toISOString() : null,
-            },
-            `Etapa actualizada a "${etapa.nombre}".`,
-          );
-        }),
-      );
+      const { error } = await sb
+        .from("tickets")
+        .update({
+          id_etapa: Number(etapaId),
+          id_pipeline: Number(etapa.pipelineId),
+          fecha_cierre: etapa.cerrada ? new Date().toISOString() : null,
+        })
+        .eq("id", Number(id));
+      if (error) {
+        toast.error(`No se pudo mover el ticket: ${error.message}`);
+        return;
+      }
+      await registrarActividad(id, `Etapa actualizada a "${etapa.nombre}".`, "cambio_estado");
+      invalidate("tickets-list");
     },
-    [etapas, registrar],
+    [etapas, registrarActividad, invalidate],
   );
 
-  const eliminarTickets = useCallback((ids: string[]) => {
-    setTickets((prev) => prev.filter((t) => !ids.includes(t.id)));
-  }, []);
+  const eliminarTickets = useCallback(
+    async (ids: string[]) => {
+      const { error } = await sb
+        .from("tickets")
+        .update({ activo: false })
+        .in("id", ids.map((i) => Number(i)));
+      if (error) {
+        toast.error(`No se pudo eliminar: ${error.message}`);
+        return;
+      }
+      invalidate("tickets-list");
+    },
+    [invalidate],
+  );
 
   const agregarNota = useCallback(
-    (id: string, texto: string) => {
-      setTickets((prev) => prev.map((t) => (t.id === id ? registrar(t, texto) : t)));
+    async (id: string, texto: string) => {
+      await registrarActividad(id, texto, "nota");
+      invalidate("tickets-list");
     },
-    [registrar],
+    [registrarActividad, invalidate],
+  );
+
+  // ─── Catálogos (upsert por id vacío = insert / id existente = update) ─────────
+  const guardarPipeline = useCallback(
+    async (p: Pipeline) => {
+      const payload = { nombre: p.nombre.trim(), descripcion: p.descripcion?.trim() || null };
+      const { error } = p.id
+        ? await sb.from("tickets_pipelines").update(payload).eq("id", Number(p.id))
+        : await sb.from("tickets_pipelines").insert(payload);
+      if (error) return toast.error(error.message);
+      invalidate("tickets-pipelines");
+    },
+    [invalidate],
+  );
+
+  const eliminarPipeline = useCallback(
+    async (id: string) => {
+      const { error } = await sb.from("tickets_pipelines").update({ activo: false }).eq("id", Number(id));
+      if (error) return toast.error(error.message);
+      invalidate("tickets-pipelines");
+      invalidate("tickets-etapas");
+    },
+    [invalidate],
+  );
+
+  const guardarEtapa = useCallback(
+    async (e: Etapa) => {
+      const payload = {
+        id_pipeline: Number(e.pipelineId),
+        nombre: e.nombre.trim(),
+        orden: Number(e.orden) || 100,
+        cerrada: !!e.cerrada,
+      };
+      const { error } = e.id
+        ? await sb.from("tickets_etapas").update(payload).eq("id", Number(e.id))
+        : await sb.from("tickets_etapas").insert(payload);
+      if (error) return toast.error(error.message);
+      invalidate("tickets-etapas");
+    },
+    [invalidate],
+  );
+
+  const eliminarEtapa = useCallback(
+    async (id: string) => {
+      const { error } = await sb.from("tickets_etapas").update({ activo: false }).eq("id", Number(id));
+      if (error) return toast.error(error.message);
+      invalidate("tickets-etapas");
+    },
+    [invalidate],
+  );
+
+  const guardarCategoria = useCallback(
+    async (c: Categoria) => {
+      const payload = { nombre: c.nombre.trim() };
+      const { error } = c.id
+        ? await sb.from("tickets_categorias").update(payload).eq("id", Number(c.id))
+        : await sb.from("tickets_categorias").insert(payload);
+      if (error) return toast.error(error.message);
+      invalidate("tickets-categorias");
+    },
+    [invalidate],
+  );
+
+  const eliminarCategoria = useCallback(
+    async (id: string) => {
+      const { error } = await sb.from("tickets_categorias").update({ activo: false }).eq("id", Number(id));
+      if (error) return toast.error(error.message);
+      invalidate("tickets-categorias");
+    },
+    [invalidate],
+  );
+
+  // El "Equipo" son usuarios reales de la plataforma: no se crean/eliminan desde aquí.
+  const avisoUsuarios = useCallback(
+    () => toast.info("El equipo se administra desde el módulo de Usuarios de la plataforma."),
+    [],
   );
 
   const value = useMemo<Store>(
@@ -163,34 +417,21 @@ export function TicketsProvider({
       categorias,
       agentes,
       autor,
+      cargando:
+        pipelinesQ.isLoading || etapasQ.isLoading || categoriasQ.isLoading || ticketsQ.isLoading,
       crearTicket,
       actualizarTicket,
       moverEtapa,
       eliminarTickets,
       agregarNota,
-      guardarPipeline: (p) =>
-        setPipelines((prev) =>
-          prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [...prev, p],
-        ),
-      eliminarPipeline: (id) => {
-        setPipelines((prev) => prev.filter((p) => p.id !== id));
-        setEtapas((prev) => prev.filter((e) => e.pipelineId !== id));
-      },
-      guardarEtapa: (e) =>
-        setEtapas((prev) =>
-          prev.some((x) => x.id === e.id) ? prev.map((x) => (x.id === e.id ? e : x)) : [...prev, e],
-        ),
-      eliminarEtapa: (id) => setEtapas((prev) => prev.filter((e) => e.id !== id)),
-      guardarCategoria: (c) =>
-        setCategorias((prev) =>
-          prev.some((x) => x.id === c.id) ? prev.map((x) => (x.id === c.id ? c : x)) : [...prev, c],
-        ),
-      eliminarCategoria: (id) => setCategorias((prev) => prev.filter((c) => c.id !== id)),
-      guardarAgente: (a) =>
-        setAgentes((prev) =>
-          prev.some((x) => x.id === a.id) ? prev.map((x) => (x.id === a.id ? a : x)) : [...prev, a],
-        ),
-      eliminarAgente: (id) => setAgentes((prev) => prev.filter((a) => a.id !== id)),
+      guardarPipeline,
+      eliminarPipeline,
+      guardarEtapa,
+      eliminarEtapa,
+      guardarCategoria,
+      eliminarCategoria,
+      guardarAgente: avisoUsuarios,
+      eliminarAgente: avisoUsuarios,
     }),
     [
       tickets,
@@ -199,11 +440,22 @@ export function TicketsProvider({
       categorias,
       agentes,
       autor,
+      pipelinesQ.isLoading,
+      etapasQ.isLoading,
+      categoriasQ.isLoading,
+      ticketsQ.isLoading,
       crearTicket,
       actualizarTicket,
       moverEtapa,
       eliminarTickets,
       agregarNota,
+      guardarPipeline,
+      eliminarPipeline,
+      guardarEtapa,
+      eliminarEtapa,
+      guardarCategoria,
+      eliminarCategoria,
+      avisoUsuarios,
     ],
   );
 
@@ -215,5 +467,3 @@ export function useTickets() {
   if (!ctx) throw new Error("useTickets debe usarse dentro de TicketsProvider");
   return ctx;
 }
-
-export const nuevoId = uid;
