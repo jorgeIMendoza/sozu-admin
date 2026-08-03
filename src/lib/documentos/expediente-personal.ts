@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { ID_DOC_TIPO_IDS } from '@/utils/expediente-obligatorios';
 
 /**
  * Regla del expediente personal del cliente: una sola versión vigente.
@@ -20,13 +21,13 @@ export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
 
 /**
  * Grupo identidad: una vigente por GRUPO, no por tipo. Son formatos alternativos
- * del mismo documento.
- *   2/3 = frente y reverso por separado (legacy; el frente solo también cuenta,
- *         473 personas en prod no tienen reverso)
- *   4   = pasaporte
- *   63  = INE completo (frente y reverso en un solo PDF)
+ * del mismo documento — frente/reverso legacy (el frente solo también cuenta: 473
+ * personas en prod no tienen reverso), pasaporte, o INE completo en un PDF.
+ *
+ * Se reutiliza `ID_DOC_TIPO_IDS` de `expediente-obligatorios` para no volver a
+ * declarar el grupo: ese archivo es la fuente única de los obligatorios.
  */
-export const TIPOS_IDENTIDAD = [2, 3, 4, 63] as const;
+export const TIPOS_IDENTIDAD: readonly number[] = ID_DOC_TIPO_IDS;
 
 export const TIPOS_PERSONALES = [
   ...TIPOS_PERSONALES_SIMPLES,
@@ -54,7 +55,7 @@ export async function expirarPreviosPersonales(
 ): Promise<number | null> {
   if (!idPersona || !esTipoPersonal(tipoId)) return 0;
 
-  const tiposAExpirar = (TIPOS_IDENTIDAD as readonly number[]).includes(tipoId)
+  const tiposAExpirar = TIPOS_IDENTIDAD.includes(tipoId)
     ? [...TIPOS_IDENTIDAD]
     : [tipoId];
 
@@ -89,7 +90,7 @@ export async function esVersionVigente(
 ): Promise<boolean> {
   if (!idPersona || !esTipoPersonal(tipoId)) return true;
 
-  const tiposDelGrupo = (TIPOS_IDENTIDAD as readonly number[]).includes(tipoId)
+  const tiposDelGrupo = TIPOS_IDENTIDAD.includes(tipoId)
     ? [...TIPOS_IDENTIDAD]
     : [tipoId];
 
