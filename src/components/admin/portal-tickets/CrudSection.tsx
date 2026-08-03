@@ -118,20 +118,27 @@ export function CrudSection<T extends Registro>({
                 ))}
                 {!soloLectura && (
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => setEditando({ ...item })}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive"
-                      onClick={() => {
-                        onEliminar(item.id);
-                        toast.success("Registro eliminado");
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setEditando({ ...item })}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => {
+                          onEliminar(item.id);
+                          toast.success("Registro eliminado");
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 )}
               </TableRow>

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   usePortalTicketsImpersonation,
   type ProjectAdminUser,
 } from "@/contexts/PortalTicketsImpersonationContext";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAgentes } from "@/lib/portal-tickets/tickets-store";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -21,41 +22,29 @@ import { cn } from "@/lib/utils";
 /**
  * Selector "Ver como" del Portal Tickets de Seguimiento.
  * Visible solo para usuarios con permiso de impersonación (Super Admin).
- * Lista usuarios con rol Administrador de Proyectos (rol_id = 2).
+ * Lista el mismo pool de usuarios asignables del portal (propietarios posibles de ticket),
+ * usando auth_user_id como identificador para que "Mis tickets" filtre correctamente.
  */
 export function PortalTicketsImpersonationSelector() {
   const { profile } = useAuth();
   const { impersonatedUser, setImpersonatedUser, clearImpersonation, isImpersonating } =
     usePortalTicketsImpersonation();
   const [open, setOpen] = useState(false);
-  const [users, setUsers] = useState<ProjectAdminUser[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const canImpersonate = profile?.puede_impersonar === true;
 
-  useEffect(() => {
-    if (!canImpersonate) return;
-    setLoading(true);
-    (async () => {
-      const { data } = await supabase
-        .from("usuarios")
-        .select("id, nombre, email, rol_id")
-        .eq("rol_id", 2)
-        .eq("activo", true)
-        .order("nombre");
-      if (data) {
-        setUsers(
-          data.map((u: any) => ({
-            id: String(u.id),
-            nombre: u.nombre || u.email,
-            email: u.email,
-            rol_nombre: "Administrador de Proyectos",
-          })),
-        );
-      }
-      setLoading(false);
-    })();
-  }, [canImpersonate]);
+  const { data: agentes = [], isLoading: loading } = useQuery({
+    queryKey: ["tickets-agentes"],
+    queryFn: fetchAgentes,
+    enabled: canImpersonate,
+  });
+
+  const users: ProjectAdminUser[] = agentes.map((a) => ({
+    id: a.id,
+    nombre: a.nombre || a.email,
+    email: a.email,
+    rol_nombre: a.rol || "Usuario",
+  }));
 
   if (!canImpersonate) return null;
 
@@ -74,7 +63,7 @@ export function PortalTicketsImpersonationSelector() {
         </PopoverTrigger>
         <PopoverContent className="w-[320px] p-0" align="end">
           <Command>
-            <CommandInput placeholder="Buscar Administrador de Proyectos..." />
+            <CommandInput placeholder="Buscar usuario del portal..." />
             <CommandList>
               <CommandEmpty>{loading ? "Cargando..." : "Sin usuarios."}</CommandEmpty>
               <CommandGroup>

@@ -4,8 +4,9 @@ export default function TicketsTodosPage() {
   return (
     <TicketsWorkspace
       scope="todos"
-      titulo="Todos los tickets"
+      titulo="Todos"
       descripcion="Seguimiento completo de solicitudes registradas en el portal."
+      vistaInicial="kanban"
       rutaActiva="/admin/portal-tickets/todos"
     />
   );
