@@ -328,3 +328,32 @@ export async function fetchDocsObligatorios(
   }
   return out;
 }
+
+// ── Cónyuge (propiedad mancomunada) ───────────────────────────────────────────
+/**
+ * Criterio autorizado por Eduardo (2026-08-03): **si `personas.id_conyuge` está presente,
+ * el expediente incluye también los documentos del cónyuge.**
+ *
+ * No existe campo de régimen matrimonial en la base (`personas.regimen` guarda el régimen
+ * FISCAL del SAT: 601, 603, 605…), así que no se puede distinguir mancomunado de separación
+ * de bienes. Con el vínculo presente se asume que aplica. En prod hay 126 personas con
+ * cónyuge ligado y 315 filas de compradores que lo tienen.
+ *
+ * El cónyuge se evalúa con los MISMOS grupos que un comprador persona física: son dos
+ * entidades distintas, cada una con su juego completo de documentos.
+ */
+export function personasDelExpediente(
+  compradores: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; conyugePersonaId?: number | null }>,
+): Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number }> {
+  const salida: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number }> = [];
+  for (const c of compradores) {
+    salida.push({ personaId: c.personaId, nombre: c.nombre, tipoPersona: c.tipoPersona, repPersonaId: c.repPersonaId ?? null });
+    // Solo persona física puede tener cónyuge; una PM no.
+    if (c.tipoPersona === 'pf' && c.conyugePersonaId) {
+      salida.push({ personaId: c.conyugePersonaId, tipoPersona: 'pf', esConyugeDe: c.personaId });
+    }
+  }
+  // Dedup por si el cónyuge también figura como comprador de la misma cuenta.
+  const vistos = new Set<number>();
+  return salida.filter(p => (vistos.has(p.personaId) ? false : (vistos.add(p.personaId), true)));
+}
