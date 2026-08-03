@@ -256,54 +256,18 @@ export default function Pagos() {
   const { data: valorProyectosData, isLoading: isLoadingValorProyectos } = useQuery({
     queryKey: ["valor-proyectos", accessibleProjectIds, hasUnrestrictedAccess, ownershipEntityIds, isRepresentanteEmpresaDuena],
     queryFn: async () => {
-      console.log('🏗️ Running valor proyectos query...');
-      // Build WHERE clause based on access
-      let projectFilter = '';
-      if (!hasUnrestrictedAccess) {
-        if (accessibleProjectIds.length === 0) {
-          return {};
-        }
-        projectFilter = `AND p.id IN (${accessibleProjectIds.join(',')})`;
+      // Sin acceso a ningún proyecto no hay nada que sumar.
+      if (!hasUnrestrictedAccess && accessibleProjectIds.length === 0) {
+        return {};
       }
 
-      let ownerFilter = '';
-      if (isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0) {
-        ownerFilter = `AND prop.id_entidad_relacionada_dueno IN (${ownershipEntityIds.join(',')})`;
-      }
-
-      // Query without CTEs - use subquery in FROM clause
-      const query = `
-        SELECT 
-          pv.id_proyecto,
-          pv.proyecto_nombre,
-          COUNT(DISTINCT pv.prop_id) as total_propiedades,
-          SUM(pv.valor_propiedad) as valor_total_proyecto
-        FROM (
-          SELECT DISTINCT ON (prop.id)
-            p.id as id_proyecto,
-            p.nombre as proyecto_nombre,
-            prop.id as prop_id,
-            CASE 
-              WHEN cc.id IS NOT NULL AND cc.activo = true THEN cc.precio_final 
-              ELSE COALESCE(prop.precio_lista, 0) 
-            END as valor_propiedad
-          FROM proyectos p
-          JOIN entidades_relacionadas er ON er.id_proyecto = p.id AND er.activo = true AND er.id_tipo_entidad IN (4, 15)
-          JOIN propiedades prop ON prop.id_entidad_relacionada_dueno = er.id AND prop.activo = true
-          LEFT JOIN ofertas o ON o.id_propiedad = prop.id AND o.activo = true AND o.id_producto IS NULL
-          LEFT JOIN cuentas_cobranza cc ON cc.id_oferta = o.id AND cc.id_cuenta_cobranza_padre IS NULL AND cc.activo = true
-          WHERE p.activo = true ${projectFilter} ${ownerFilter}
-          ORDER BY prop.id, cc.id DESC NULLS LAST
-        ) pv
-        GROUP BY pv.id_proyecto, pv.proyecto_nombre
-        ORDER BY valor_total_proyecto DESC
-      `;
-
-      console.log('Valor proyectos query:', query);
-
-      const { data, error } = await supabase.rpc('execute_safe_query', {
-        query_text: query,
-        max_rows: 1000
+      // La query vive en la RPC (SECURITY DEFINER, gate por permiso del submenú
+      // /admin/cuentas-cobranza). Antes se armaba el SQL aquí y se mandaba por
+      // execute_safe_query, que ya no tiene EXECUTE para authenticated.
+      const { data, error } = await (supabase as any).rpc('get_valor_por_proyecto', {
+        p_proyecto_ids: hasUnrestrictedAccess ? null : accessibleProjectIds,
+        p_ownership_entity_ids:
+          isRepresentanteEmpresaDuena && ownershipEntityIds.length > 0 ? ownershipEntityIds : null,
       });
 
       if (error) {
