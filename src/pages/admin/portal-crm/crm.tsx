@@ -112,6 +112,7 @@ import { TextStyle as TextStyleExt } from "@tiptap/extension-text-style";
 type ColumnId =
   | "name"
   | "categoria"
+  | "proyecto"
   | "email"
   | "phone"
   | "lead_status"
@@ -132,7 +133,8 @@ type ColumnConfig = { id: ColumnId; label: string; visible: boolean };
 const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "name", label: "Nombre", visible: true },
   { id: "categoria", label: "Categoría", visible: true },
-  { id: "email", label: "Correo", visible: true },
+  { id: "proyecto", label: "Proyecto", visible: true },
+  { id: "email", label: "Correo", visible: false },
   { id: "phone", label: "Número teléfono", visible: true },
   { id: "lead_status", label: "Estado lead", visible: true },
   { id: "lifecycle", label: "Etapa ciclo de vida", visible: true },
@@ -148,7 +150,7 @@ const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
   { id: "meta_field_data", label: "Respuestas del formulario", visible: false },
 ];
 
-const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v4";
+const CONTACT_COLUMNS_KEY = "sozu:contacts:columns:v5";
 
 
 
@@ -175,6 +177,7 @@ type ContactRow = {
   email: string | null;
   phone: string | null;
   development_id: string | null;
+  development_name: string | null;
   lead_status: string;
   lifecycle_stage: string;
   source_platform: string | null;
@@ -295,6 +298,20 @@ function saveContactsSearch(uid: string, s: string) {
   if (typeof window === "undefined" || !uid) return;
   try { window.sessionStorage.setItem(`${CONTACTS_SEARCH_KEY}:${uid}`, s); } catch { /* ignore */ }
 }
+// Página actual de Contactos, POR USUARIO (sessionStorage: sobrevive el back-nav a la ficha, se reinicia en sesión nueva).
+const CONTACTS_PAGE_KEY = "sozu:contacts:page:v1";
+function loadContactsPage(uid: string): number {
+  if (typeof window === "undefined" || !uid) return 0;
+  try {
+    const raw = window.sessionStorage.getItem(`${CONTACTS_PAGE_KEY}:${uid}`);
+    const n = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch { return 0; }
+}
+function saveContactsPage(uid: string, p: number) {
+  if (typeof window === "undefined" || !uid) return;
+  try { window.sessionStorage.setItem(`${CONTACTS_PAGE_KEY}:${uid}`, String(p)); } catch { /* ignore */ }
+}
 
 // Fila expandible: muestra los OTROS contactos (entidades) de la misma persona,
 // con contexto (proyecto, propietario, si ya tiene negocio) para entender cuál usar.
@@ -362,12 +379,12 @@ function ContactExpansion({ personaId, principalId, colSpan }: { personaId: numb
             <div className="space-y-1.5">
               {others.map((o: any) => (
                 <div key={o.id} className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-md px-2.5 py-1.5">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${o.etapa === "customer" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
-                    {o.etapa === "customer" ? "Cliente" : "Lead"}
-                  </span>
                   <span className="text-sm font-medium text-foreground inline-flex items-center gap-1">
                     <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     {o.proyecto ?? "Sin proyecto"}
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${o.etapa === "customer" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                    {o.etapa === "customer" ? "Cliente" : "Lead"}
                   </span>
                   <span className="text-xs text-muted-foreground">· {leadStatusLabel[o.estado] ?? o.estado}</span>
                   {o.owner && <span className="text-xs text-muted-foreground">· {o.owner}</span>}
@@ -474,6 +491,7 @@ export function CrmContacts() {
     if (f.filterSource) setFilterSource(f.filterSource);
     if (f.filterCategoria) setFilterCategoria(f.filterCategoria);
     setSearch(loadContactsSearch(uid));
+    setPage(loadContactsPage(uid));
     hydratedContacts.current = true;
   }, [uid]);
   // …y persistir al cambiar (solo tras hidratar, para no pisar lo guardado con los defaults).
@@ -485,6 +503,11 @@ export function CrmContacts() {
     if (!hydratedContacts.current || !uid) return;
     saveContactsSearch(uid, search);
   }, [uid, search]);
+  // Persistir la página al cambiar (tras hidratar). Los cambios de filtro/búsqueda ya hacen setPage(0) → se guarda 0.
+  useEffect(() => {
+    if (!hydratedContacts.current || !uid) return;
+    saveContactsPage(uid, page);
+  }, [uid, page]);
 
   const { data: developments } = useQuery({
     queryKey: ["proyectos-list"],
@@ -540,6 +563,13 @@ export function CrmContacts() {
         const catAllRes = await (supabase as any).from("entidades_relacionadas_categorias")
           .select("id_entidad_relacionada, id_categoria").in("id_entidad_relacionada", list.map((e: any) => e.id)).eq("activo", true);
         if (!catAllRes.error) for (const r of (catAllRes.data ?? [])) (catByEr[r.id_entidad_relacionada] ??= []).push(r.id_categoria);
+        // Nombres de proyecto POR ID (igual que el collapse ContactExpansion: por id, sin filtro activo → pasa RLS).
+        const proyIds = Array.from(new Set(list.map((e: any) => e.id_proyecto).filter(Boolean)));
+        let proyMap: Record<number, string> = {};
+        if (proyIds.length) {
+          const { data: ps } = await (supabase as any).from("proyectos").select("id, nombre").in("id", proyIds);
+          proyMap = Object.fromEntries((ps ?? []).map((p: any) => [p.id, p.nombre]));
+        }
         return list.filter((e: any) => pMap[e.id_persona]).map((e: any) => {
           const p = pMap[e.id_persona]; const a = atrMap[e.id] ?? null;
           return {
@@ -547,6 +577,7 @@ export function CrmContacts() {
             full_name: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
             email: p.email ?? null, phone: p.telefono ?? null,
             development_id: e.id_proyecto ? String(e.id_proyecto) : null,
+            development_name: e.id_proyecto ? (proyMap[e.id_proyecto] ?? null) : null,
             lead_status: a?.estatus_lead ?? "nuevo",
             lifecycle_stage: a?.etapa_ciclo_vida ?? (e.id_tipo_entidad === 2 ? "customer" : "lead"),
             source_platform: a?.meta_platform ?? null, source_name: a?.meta_form_name ?? null,
@@ -810,21 +841,29 @@ export function CrmContacts() {
                       switch (col.id) {
                         case "name":
                           return (
-                            <td key={col.id} className="p-3 font-medium whitespace-nowrap"
+                            <td key={col.id} className="p-3 font-medium"
                               onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
-                              <span className="inline-flex items-center gap-2 max-w-[320px]">
+                              <span className="flex items-center gap-2 max-w-[340px]">
+                                {/* Slot chevron de ancho fijo (mismo footprint con o sin chevron) → filas alineadas. */}
                                 {c.otros_count ? (
                                   <button type="button" aria-label="Ver otros contactos de esta persona"
                                     onClick={(e) => { e.stopPropagation(); setExpanded((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; }); }}
-                                    className="shrink-0 text-muted-foreground hover:text-primary">
+                                    className="w-4 h-4 shrink-0 flex items-center justify-center text-muted-foreground hover:text-primary">
                                     {expanded.has(c.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                   </button>
-                                ) : <span className="w-4 shrink-0" />}
+                                ) : <span className="w-4 shrink-0" aria-hidden="true" />}
                                 <span className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0 ring-1 ring-primary/15">
                                   {c.full_name.charAt(0).toUpperCase()}
                                 </span>
-                                <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
-                                {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
+                                <span className="flex flex-col min-w-0">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="truncate text-foreground group-hover:text-primary transition-colors">{c.full_name}</span>
+                                    {c.otros_count ? <span className="text-[10px] font-medium text-muted-foreground shrink-0">+{c.otros_count}</span> : null}
+                                  </span>
+                                  {c.email ? (
+                                    <span className="truncate text-[11px] leading-tight text-muted-foreground mt-0.5">{c.email}</span>
+                                  ) : null}
+                                </span>
                               </span>
                             </td>
                           );
@@ -840,6 +879,19 @@ export function CrmContacts() {
                                   ))}
                                 </span>
                               ) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          );
+                        case "proyecto":
+                          return (
+                            <td key={col.id} className="p-3">
+                              {c.development_name ? (
+                                <span className="inline-flex items-center gap-1.5 text-sm text-foreground whitespace-nowrap">
+                                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="max-w-[180px] truncate">{c.development_name}</span>
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Sin proyecto</span>
+                              )}
                             </td>
                           );
                         case "email":
@@ -881,28 +933,21 @@ export function CrmContacts() {
                           const cls = st?.color ? "" : (statusColor[c.lead_status] ?? "bg-slate-50 text-slate-500 border-slate-200");
                           return (
                             <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`} style={badgeStyle}>{metaLabel}</span>
-                            </td>
-                          );
-                        }
-                        case "lifecycle": {
-                          const lcColor: Record<string, string> = {
-                            lead: "bg-sky-50 text-sky-700 border-sky-200",
-                            mql: "bg-amber-50 text-amber-700 border-amber-200",
-                            sql: "bg-orange-50 text-orange-700 border-orange-200",
-                            opportunity: "bg-violet-50 text-violet-700 border-violet-200",
-                            customer: "bg-primary/5 text-primary border-primary/20",
-                            evangelist: "bg-emerald-50 text-emerald-700 border-emerald-200",
-                          };
-                          const lcCls = lcColor[c.lifecycle_stage] ?? "bg-slate-50 text-slate-500 border-slate-200";
-                          return (
-                            <td key={col.id} className="p-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${lcCls}`}>
-                                {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${cls}`} style={badgeStyle}>
+                                <span className="h-1.5 w-1.5 rounded-full bg-current shrink-0" aria-hidden="true" />
+                                {metaLabel}
                               </span>
                             </td>
                           );
                         }
+                        case "lifecycle":
+                          return (
+                            <td key={col.id} className="p-3">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-muted/70 text-muted-foreground">
+                                {lifecycleLabel[c.lifecycle_stage] ?? c.lifecycle_stage}
+                              </span>
+                            </td>
+                          );
                         case "owner":
                           return <td key={col.id} className="p-3 text-muted-foreground whitespace-nowrap">{c.owner_name ?? "Sin asignar"}</td>;
                         case "created":

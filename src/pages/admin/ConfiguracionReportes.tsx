@@ -228,9 +228,12 @@ export default function ConfiguracionReportes() {
         cleanQuery = cleanQuery.replace(/;?\s*$/, '') + ' LIMIT 1';
       }
 
-      const { data, error } = await supabase.rpc('execute_safe_query', {
-        query_text: cleanQuery,
-        max_rows: 1
+      // Editor de SQL del admin: es el único lugar que sigue mandando SQL desde el
+      // navegador, por definición. La RPC lo gatea a rol_id = 1 (Super Administrador)
+      // más permiso `actualizar` en /admin/configuracion-reportes, y solo ejecuta con
+      // LIMIT 1. execute_safe_query queda cerrada.
+      const { data, error } = await (supabase as any).rpc('validar_query_reporte', {
+        p_query: cleanQuery,
       });
 
       if (error) {

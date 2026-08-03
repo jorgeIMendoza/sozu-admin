@@ -64,66 +64,11 @@ export function ProjectCollectionSummaryDialog({
     queryFn: async () => {
       if (!cuentaIds.length) return [];
 
-      // Query without CTEs - use subqueries in FROM clause
-      const { data, error } = await supabase.rpc('execute_safe_query', {
-        query_text: `
-          SELECT 
-            oa.id_entidad,
-            oa.dueno_nombre,
-            oa.tipo_entidad,
-            oa.id_tipo_entidad,
-            COUNT(oa.cuenta_id) as cuentas_count,
-            SUM(oa.precio_final) as total_colocado,
-            SUM(oa.total_pagado) as total_cobrado,
-            COALESCE(oap.valor_proyecto, 0) as valor_proyecto
-          FROM (
-            SELECT 
-              er.id as id_entidad,
-              p.nombre_legal as dueno_nombre,
-              te.nombre as tipo_entidad,
-              er.id_tipo_entidad,
-              cc.id as cuenta_id,
-              cc.precio_final,
-              COALESCE(pagos.total_pagado, 0) as total_pagado
-            FROM cuentas_cobranza cc
-            JOIN ofertas o ON cc.id_oferta = o.id
-            JOIN propiedades prop ON o.id_propiedad = prop.id
-            JOIN entidades_relacionadas er ON prop.id_entidad_relacionada_dueno = er.id
-            JOIN personas p ON er.id_persona = p.id
-            JOIN tipos_entidad te ON er.id_tipo_entidad = te.id
-            LEFT JOIN (
-              SELECT 
-                ap2.id_cuenta_cobranza,
-                SUM(apl2.monto) as total_pagado
-              FROM aplicaciones_pago apl2
-              JOIN acuerdos_pago ap2 ON apl2.id_acuerdo_pago = ap2.id
-              WHERE apl2.activo = true AND apl2.es_multa = false AND ap2.activo = true
-              GROUP BY ap2.id_cuenta_cobranza
-            ) pagos ON pagos.id_cuenta_cobranza = cc.id
-            WHERE cc.id IN (${cuentaIds.join(',')})
-              AND cc.activo = true
-              AND o.id_producto IS NULL
-          ) oa
-          LEFT JOIN (
-            SELECT 
-              er2.id as id_entidad,
-              SUM(CASE 
-                WHEN cc2.id IS NOT NULL AND cc2.activo = true THEN cc2.precio_final 
-                ELSE COALESCE(prop2.precio_lista, 0) 
-              END) as valor_proyecto
-            FROM entidades_relacionadas er2
-            JOIN propiedades prop2 ON prop2.id_entidad_relacionada_dueno = er2.id AND prop2.activo = true
-            LEFT JOIN ofertas o2 ON o2.id_propiedad = prop2.id AND o2.activo = true AND o2.id_producto IS NULL
-            LEFT JOIN cuentas_cobranza cc2 ON cc2.id_oferta = o2.id AND cc2.id_cuenta_cobranza_padre IS NULL
-            WHERE er2.id_proyecto = ${projectId}
-              AND er2.activo = true
-              AND er2.id_tipo_entidad IN (4, 15)
-            GROUP BY er2.id
-          ) oap ON oa.id_entidad = oap.id_entidad
-          GROUP BY oa.id_entidad, oa.dueno_nombre, oa.tipo_entidad, oa.id_tipo_entidad, oap.valor_proyecto
-          ORDER BY total_colocado DESC
-        `,
-        max_rows: 100
+      // La query vive en la RPC (gate por permiso del submenú /admin/cuentas-cobranza).
+      // Los ids van como bigint[] tipado, ya no interpolados en el SQL.
+      const { data, error } = await (supabase as any).rpc('get_project_owner_breakdown', {
+        p_cuenta_ids: cuentaIds,
+        p_proyecto_id: projectId,
       });
 
       if (error) {
@@ -149,54 +94,14 @@ export function ProjectCollectionSummaryDialog({
     queryFn: async () => {
       if (!cuentaIds.length) return null;
 
-      // Query aggregated totals directly from the database using SQL
-      const { data: acuerdosTotals, error: acuerdosError } = await supabase
-        .rpc('execute_safe_query', {
-          query_text: `
-            SELECT 
-              CASE 
-                WHEN id_concepto IN (1, 2, 4, 5, 6) THEN 'durante_obra'
-                WHEN id_concepto = 3 THEN 'contraentrega'
-                ELSE 'otro'
-              END as categoria,
-              SUM(monto) as total_monto
-            FROM acuerdos_pago
-            WHERE id_cuenta_cobranza IN (${cuentaIds.join(',')})
-              AND activo = true
-            GROUP BY categoria
-          `,
-          max_rows: 10
-        });
+      // Una sola RPC devuelve los dos bloques: acuerdos y aplicaciones por categoría.
+      const { data: totales, error: totalesError } = await (supabase as any)
+        .rpc('get_project_collection_totals', { p_cuenta_ids: cuentaIds });
 
-      if (acuerdosError) throw acuerdosError;
+      if (totalesError) throw totalesError;
 
-      // Query aggregated paid amounts
-      const { data: pagadoTotals, error: pagadoError } = await supabase
-        .rpc('execute_safe_query', {
-          query_text: `
-            SELECT 
-              CASE 
-                WHEN ap.id_concepto IN (1, 2, 4, 5, 6) THEN 'durante_obra'
-                WHEN ap.id_concepto = 3 THEN 'contraentrega'
-                ELSE 'otro'
-              END as categoria,
-              SUM(apl.monto) as total_pagado
-            FROM aplicaciones_pago apl
-            JOIN acuerdos_pago ap ON apl.id_acuerdo_pago = ap.id
-            WHERE ap.id_cuenta_cobranza IN (${cuentaIds.join(',')})
-              AND apl.activo = true
-              AND apl.es_multa = false
-              AND ap.activo = true
-            GROUP BY categoria
-          `,
-          max_rows: 10
-        });
-
-      if (pagadoError) throw pagadoError;
-
-      // Parse results
-      const acuerdosArray = acuerdosTotals as Array<{ categoria: string; total_monto: number }> || [];
-      const pagadoArray = pagadoTotals as Array<{ categoria: string; total_pagado: number }> || [];
+      const acuerdosArray = (totales?.acuerdos ?? []) as Array<{ categoria: string; total_monto: number }>;
+      const pagadoArray = (totales?.pagado ?? []) as Array<{ categoria: string; total_pagado: number }>;
 
       let totalDuranteObra = 0;
       let totalContraentrega = 0;

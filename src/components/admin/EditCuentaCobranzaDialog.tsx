@@ -126,37 +126,43 @@ function SortableItem({ id, children, disabled = false }: SortableItemProps) {
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ 
+    isDragging,
+  } = useSortable({
     id,
-    disabled 
+    disabled
   });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: disabled ? 0.6 : 1,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative' as const,
+    zIndex: isDragging ? 1 : undefined,
   };
 
-  // Create modified listeners that prevent event propagation on edit elements
-  const modifiedListeners = !disabled ? {
-    ...listeners,
-    onPointerDown: (e: any) => {
-      // Don't start drag if clicking on buttons or inputs
-      if (e.target.closest('button') || e.target.closest('input')) {
-        return;
-      }
-      listeners?.onPointerDown?.(e);
-    }
-  } : {};
-
+  // El arrastre se activa solo desde el handle: la fila contiene inputs de fecha
+  // y monto que quedarían inutilizables si toda la fila fuera draggable.
   return (
-    <TableRow 
-      ref={setNodeRef} 
-      style={style} 
-      {...attributes} 
-      {...modifiedListeners}
-      className={disabled ? 'cursor-not-allowed' : 'cursor-grab'}
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      className="border-b border-border/50 hover:bg-muted/20 transition-colors"
     >
+      <TableCell className="px-1 py-2 w-8">
+        {disabled ? (
+          <span className="block size-3.5 mx-auto" />
+        ) : (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            title="Arrastrar para reordenar"
+            className="mx-auto block p-1 rounded text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors cursor-grab active:cursor-grabbing touch-none"
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        )}
+      </TableCell>
       {children}
     </TableRow>
   );
@@ -4654,9 +4660,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                 )}
 
                 {acuerdos && acuerdos.length > 0 ? (
+                   <DndContext
+                     sensors={sensors}
+                     collisionDetection={closestCenter}
+                     onDragEnd={handleDragEnd}
+                   >
                      <Table>
                        <TableHeader>
                            <TableRow className="sozu-thead hover:bg-transparent border-b border-border">
+                             <TableHead className="px-1 py-2.5 w-8"></TableHead>
                              <TableHead className="px-3 py-2.5 text-[10px] text-center">Concepto</TableHead>
                              <TableHead className="px-3 py-2.5 text-[10px] text-center">Fecha límite</TableHead>
                              <TableHead className="px-3 py-2.5 text-[10px] text-center">Monto</TableHead>
@@ -4667,13 +4679,19 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                            </TableRow>
                         </TableHeader>
                       <TableBody>
+                        <SortableContext
+                          items={acuerdos.map((a) => a.id.toString())}
+                          strategy={verticalListSortingStrategy}
+                        >
                            {acuerdos.map((acuerdo) => {
                              const editable = !acuerdo.pago_completado && !isReadOnly;
+                             // Solo se reordenan los acuerdos Pendientes sin monto aplicado.
+                             const sortDisabled = acuerdo.pago_completado || (acuerdo.monto_pagado || 0) > 0 || isReadOnly;
                              const draftFecha = acuerdoDraft[acuerdo.id]?.fecha ?? (acuerdo.fecha_pago || '');
                              const draftMonto = acuerdoDraft[acuerdo.id]?.monto ?? String(acuerdo.monto);
                              const montoNum = parseFloat(draftMonto) || 0;
                              return (
-                               <TableRow key={acuerdo.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                               <SortableItem key={acuerdo.id} id={acuerdo.id.toString()} disabled={sortDisabled}>
                                 <TableCell className="px-3 py-2 text-center text-[12px] font-medium">{acuerdo.concepto_nombre}</TableCell>
                                 <TableCell className="px-3 py-2 text-center">
                                   {editable ? (
@@ -4727,11 +4745,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                                       <Trash2 className="size-3.5" />
                                     </button>
                                  </TableCell>
-                             </TableRow>
+                             </SortableItem>
                              );
                            })}
+                        </SortableContext>
                       </TableBody>
                     </Table>
+                   </DndContext>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-muted-foreground">No hay acuerdo de pago configurado</p>
