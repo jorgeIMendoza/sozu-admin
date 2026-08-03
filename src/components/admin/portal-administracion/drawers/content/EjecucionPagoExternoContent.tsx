@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Section, KV } from "./_shared";
+import { CuentaBancariaAgenteSection } from "./CuentaBancariaAgenteSection";
 
 export type EjecucionPagoExternoEntity = {
   folio: string;
@@ -141,6 +142,9 @@ export function EjecucionPagoExternoContent({
           />
         </div>
       </Section>
+
+      {/* ─── Cuenta bancaria del agente ─── */}
+      <CuentaBancariaAgenteSection email={entity.email_usuario} />
 
       <Section title="Confirmar ejecución SPEI">
         <div className="space-y-3">

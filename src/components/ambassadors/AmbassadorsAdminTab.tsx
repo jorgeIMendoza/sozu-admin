@@ -160,6 +160,20 @@ function AmbassadorEditSheet({
         })
         .eq('email', ambassador.email.toLowerCase());
 
+      // 3b. Reparar el vínculo usuario ↔ persona si quedó suelto. Hay cuentas con rol de
+      // embajador y usuarios.id_persona en NULL: el portal no las puede ligar a su registro
+      // y antes terminaba operando como el primer embajador de la lista, atribuyéndole los
+      // referidos a otro. Guardar al embajador desde aquí deja el vínculo correcto.
+      // Solo escribe si está vacío, para no pisar un vínculo válido.
+      if (ambassador.idPersona) {
+        const { error: linkError } = await supabase
+          .from('usuarios')
+          .update({ id_persona: ambassador.idPersona })
+          .eq('email', ambassador.email.toLowerCase())
+          .is('id_persona', null);
+        if (linkError) throw linkError;
+      }
+
       // 4. Si cambió el email → edge function update-user-email + personas.email
       if (newEmail !== ambassador.email.toLowerCase()) {
         const { data: updateResult, error: emailErr } = await supabase.functions.invoke('update-user-email', {

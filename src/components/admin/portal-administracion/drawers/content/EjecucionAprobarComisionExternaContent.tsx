@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Section, KV } from "./_shared";
 import { ComprobantesPagoClienteList } from "@/components/admin/drawers-shared/ComprobantesPagoClienteList";
+import { CuentaBancariaAgenteSection } from "./CuentaBancariaAgenteSection";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { useAprobarComisionExterna } from "@/hooks/useAprobarComisionExterna";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
@@ -305,6 +306,9 @@ export function EjecucionAprobarComisionExternaContent({
           <KV icon={Receipt} label="RFC" value={SOZU_RECEPTOR.rfc} mono />
         </div>
       </Section>
+
+      {/* ─── Cuenta bancaria del agente ─── */}
+      <CuentaBancariaAgenteSection email={entity.email_usuario} />
 
       {/* ─── Notas (opcional) ─── */}
       <Section title="Notas (opcional)">

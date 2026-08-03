@@ -100,6 +100,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   }
 
   // Allow portal-embajador routes para el rol Embajador, Super Admin / Admin, y usuarios con rol dual
+  // Portal Tickets de Seguimiento: Super Admin (1) y Administrador de Proyectos (2),
+  // o cualquier rol con permiso explícito en la BD.
+  if (location.pathname.startsWith('/admin/portal-tickets')) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+      return <>{children}</>;
+    }
+    let tieneAccesoTk = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-tickets')) {
+        tieneAccesoTk = true;
+        break;
+      }
+    }
+    return tieneAccesoTk
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
       return <>{children}</>;

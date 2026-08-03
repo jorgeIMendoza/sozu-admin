@@ -12,6 +12,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCuentaCobranzaFinancials } from '@/hooks/useCuentaCobranzaFinancials';
 import { useProyectoFinancials } from '@/hooks/useProyectoFinancials';
 import { useAccesoriosFinancials } from '@/hooks/useAccesoriosFinancials';
+import { useProyectoAccesoriosFinancials } from '@/hooks/useProyectoAccesoriosFinancials';
+import { usePropietariosProyecto } from '@/hooks/usePropietariosProyecto';
+import { usePropietarioFinancials } from '@/hooks/usePropietarioFinancials';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { usePldForCuenta, type PldPaymentFlagInfo } from '@/hooks/usePldForCuenta';
 import { toast } from 'sonner';
@@ -36,8 +39,14 @@ const pct = (num: number, denom: number) =>
   denom > 0 ? ((num / denom) * 100).toFixed(1) + '%' : '0%';
 
 // Only display Propiedad / Bodega / Cajón; everything else → null ("—")
-function normProducto(tipo_cuenta: string | null, producto: string | null): string | null {
-  if (tipo_cuenta === 'propiedad') return 'Propiedad';
+// tipo_categoria (RPC v3) manda cuando viene; tipo_cuenta/producto quedan como fallback
+// para las filas sintéticas de isRpMode, que no traen tipo_categoria.
+function normProducto(tipo_cuenta: string | null, producto: string | null, tipo_categoria?: string | null): string | null {
+  const categoria = (tipo_categoria ?? '').toLowerCase();
+  if (categoria === 'propiedad') return 'Propiedad';
+  if (categoria === 'bodega') return 'Bodega';
+  if (categoria === 'estacionamiento') return 'Cajón';
+  if ((tipo_cuenta ?? '').toLowerCase() === 'propiedad') return 'Propiedad';
   const name = (producto ?? '').toLowerCase();
   if (name.includes('bodega')) return 'Bodega';
   if (name.includes('cajón') || name.includes('cajon') || name.includes('estacionamiento')) return 'Cajón';
@@ -363,9 +372,16 @@ interface FilterBarProps {
   metodoPagoFilter: string;
   metodoPagoOptions: string[];
   onMetodoPagoChange: (v: string) => void;
+  propietarioFilter: number | null;
+  propietarioOptions: { id: number; nombre: string }[];
+  onPropietarioChange: (id: number | null) => void;
 }
 
-function FilterBar({ proyectoId, proyectos, searchInput, onProyectoChange, onSearchChange, metodoPagoFilter, metodoPagoOptions, onMetodoPagoChange }: FilterBarProps) {
+function FilterBar({
+  proyectoId, proyectos, searchInput, onProyectoChange, onSearchChange,
+  metodoPagoFilter, metodoPagoOptions, onMetodoPagoChange,
+  propietarioFilter, propietarioOptions, onPropietarioChange,
+}: FilterBarProps) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm mb-6 flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2 shrink-0">
@@ -384,6 +400,25 @@ function FilterBar({ proyectoId, proyectos, searchInput, onProyectoChange, onSea
           <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         </div>
       </div>
+
+      {propietarioOptions.length > 0 && (
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-medium text-slate-500">Propietario</span>
+          <div className="relative">
+            <select
+              value={propietarioFilter ?? ''}
+              onChange={(e) => onPropietarioChange(e.target.value ? Number(e.target.value) : null)}
+              className="appearance-none bg-white border border-slate-200 text-sm rounded-lg py-1.5 pl-3 pr-8 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
+            >
+              <option value="">Todos los propietarios</option>
+              {propietarioOptions.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          </div>
+        </div>
+      )}
 
       {metodoPagoOptions.length > 0 && (
         <div className="flex items-center gap-2 shrink-0">
@@ -475,7 +510,7 @@ function PaymentsTable({ pagos, isLoading, onViewComprobante, flagsPorPago, pldM
                       </td>
                       <td className="px-4 py-3.5 text-sm text-slate-700 whitespace-nowrap max-w-[200px] truncate">{p.cliente ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap">{p.num_propiedad ?? '—'}</td>
-                      <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{normProducto(p.tipo_cuenta, p.producto) ?? '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{normProducto(p.tipo_cuenta, p.producto, p.tipo_categoria) ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-slate-600 whitespace-nowrap">{p.fecha_pago ? fmtDate(p.fecha_pago) : '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-slate-600 max-w-[180px] truncate">{normConcepto(p.aplicaciones_detalle ?? [], p.descripcion) ?? '—'}</td>
                       <td className="px-4 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap tabular-nums">{fmtMxn(p.monto)}</td>
@@ -563,6 +598,7 @@ export function RelacionPagos() {
   const [search, setSearch] = useState(wfNum || wfCuenta ? `CC-${wfCuenta.padStart(6,'0')}` : '');
   const [page, setPage] = useState(1);
   const [metodoPagoFilter, setMetodoPagoFilter] = useState('todos');
+  const [propietarioFilter, setPropietarioFilter] = useState<number | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [validandoPagoId, setValidandoPagoId] = useState<number | null>(null);
   const autoValidadosRef = useRef<Set<number>>(new Set());
@@ -576,14 +612,19 @@ export function RelacionPagos() {
   }, [searchInput]);
 
   useEffect(() => { setPage(1); }, [metodoPagoFilter]);
+  useEffect(() => { setPage(1); }, [propietarioFilter]);
 
   // Reset when project changes
   const handleProyectoChange = useCallback((id: number | null) => {
     setProyectoId(id);
     setSearchInput('');
     setSearch('');
+    setPropietarioFilter(null);
     setPage(1);
   }, []);
+
+  // Propietarios (entidades_relacionadas) distintos del proyecto seleccionado, para el filtro.
+  const { data: propietarios = [] } = usePropietariosProyecto(proyectoId);
 
   // Proyectos SOZU publicados
   const { data: proyectos = [] } = useQuery({
@@ -624,18 +665,36 @@ export function RelacionPagos() {
     enabled: !!proyectoId,
   });
 
+  // Financials agregados del propietario seleccionado (solo corre con filtro activo);
+  // numerosPropiedad se usa abajo para acotar la tabla a las unidades de ese dueño.
+  const { data: propietarioFinancials, isLoading: propietarioFinancialsLoading } =
+    usePropietarioFinancials(proyectoId, propietarioFilter);
+
   // Client-side exact filter on top of the server pre-filter:
   //   numeric → exact unit match  |  text → substring on client name
+  //   propietario → num_propiedad debe estar entre las unidades de ese dueño
   const filteredPagos = useMemo(() => {
     const term = search.trim();
-    if (!term) return allPagos;
-    if (/^\d+$/.test(term)) return allPagos.filter((p) => p.num_propiedad === term);
-    const lower = term.toLowerCase();
-    return allPagos.filter((p) => p.cliente?.toLowerCase().includes(lower));
-  }, [allPagos, search]);
+    let rows = allPagos;
+    if (term) {
+      rows = /^\d+$/.test(term)
+        ? rows.filter((p) => p.num_propiedad === term)
+        : rows.filter((p) => p.cliente?.toLowerCase().includes(term.toLowerCase()));
+    }
+    if (propietarioFilter != null) {
+      const numeros = propietarioFinancials?.numerosPropiedad;
+      rows = numeros ? rows.filter((p) => p.num_propiedad != null && numeros.has(p.num_propiedad)) : [];
+    }
+    return rows;
+  }, [allPagos, search, propietarioFilter, propietarioFinancials]);
 
-  // Con término de búsqueda las tarjetas deben reflejar el filtro, no el proyecto.
+  // hayFiltroBusqueda: solo búsqueda de texto — el aviso de "cifras del proyecto
+  // completo" aplica aquí porque la búsqueda NO acota las cards financieras.
+  // hayFiltroActivo: búsqueda O propietario — controla las 3 KPI superiores
+  // (Total pagos/pagado/con comprobante), que sí pueden calcularse sobre
+  // filteredPagos en ambos casos.
   const hayFiltroBusqueda = search.trim() !== '';
+  const hayFiltroActivo = hayFiltroBusqueda || propietarioFilter != null;
 
   // Generic KPI totals
   const total = filteredPagos.length;
@@ -650,14 +709,13 @@ export function RelacionPagos() {
   }, [filteredPagos]);
 
   // ── Cuenta PRINCIPAL de propiedad ────────────────────────────────────────────
-  // La RPC clasifica como tipo_cuenta='propiedad' tanto la cuenta de departamento
-  // como bodegas/estacionamientos (si tienen cc.id_propiedad set). La distinción
-  // es que los accesorios tienen p.producto != null (nombre del producto asociado).
-  // Solo usamos la cuenta con producto=null como fuente de verdad financiera.
+  // tipo_categoria (RPC v3) distingue Propiedad de Bodega/Estacionamiento/Producto/
+  // Mantenimiento/Adicional directamente. Comparación case-insensitive porque la RPC
+  // puede regresarlo capitalizado ("Propiedad") o no, según la versión.
   const primaryCuentaId = useMemo(() => {
     const mainIds = [...new Set(
       filteredPagos
-        .filter(p => p.tipo_cuenta === 'propiedad' && p.producto === null)
+        .filter(p => (p.tipo_categoria ?? '').toLowerCase() === 'propiedad')
         .map(p => p.id_cuenta_cobranza)
         .filter((id): id is number => id != null),
     )];
@@ -672,8 +730,18 @@ export function RelacionPagos() {
   // Hook financiero exacto — usa primaryCuentaId (cuenta de propiedad, sin bodegas)
   const { data: financials, isLoading: financialsLoading } = useCuentaCobranzaFinancials(primaryCuentaId);
 
-  // Financials de accesorios (bodega + cajón) — depende de idPropiedad del hook principal
-  const { data: accesorios, isLoading: accesoriosLoading } = useAccesoriosFinancials(financials?.idPropiedad ?? null);
+  // Financials de accesorios (bodega + cajón):
+  //  · cuenta identificada (rpMode) → useAccesoriosFinancials, scopeado a esa propiedad
+  //  · sin cuenta (modo proyecto)   → useProyectoAccesoriosFinancials, agregado a todo el proyecto
+  const { data: accesoriosUnidad, isLoading: accesoriosUnidadLoading } = useAccesoriosFinancials(
+    primaryCuentaId ? (financials?.idPropiedad ?? null) : null,
+  );
+  const { data: accesoriosProyecto, isLoading: accesoriosProyectoLoading } = useProyectoAccesoriosFinancials(
+    primaryCuentaId ? null : proyectoId,
+    propietarioFilter,
+  );
+  const accesorios = primaryCuentaId ? accesoriosUnidad : accesoriosProyecto;
+  const accesoriosLoading = primaryCuentaId ? accesoriosUnidadLoading : accesoriosProyectoLoading;
 
   // ── Queries directas — fuente idéntica a "Pagos Aplicados" en DetalleCuentaCobranza ──
   // Reemplazan el RPC como fuente de la tabla cuando hay cuenta principal identificada.
@@ -764,13 +832,13 @@ export function RelacionPagos() {
   // isRpMode: activo cuando hay cuenta principal identificada — usa queries directas en tabla
   const isRpMode = !!primaryCuentaId;
 
-  // Financials de proyecto — solo en modo global (sin cuenta principal identificada).
-  // Disabled en rpMode: para ese caso useCuentaCobranzaFinancials es la fuente.
+  // Financials de proyecto — solo en modo global sin propietario filtrado (con
+  // propietario, propietarioFinancials + useProyectoAccesoriosFinancials son la fuente).
   const {
     data: proyectoFinancials,
     isLoading: proyectoFinancialsLoading,
     isError: proyectoFinancialsError,
-  } = useProyectoFinancials(isRpMode ? null : proyectoId);
+  } = useProyectoFinancials(isRpMode || propietarioFilter != null ? null : proyectoId);
 
   // Transforma pagos directos en PagoRecord[] para reutilizar PaymentsTable sin modificarla
   const rpTableRows = useMemo((): PagoRecord[] => {
@@ -1212,20 +1280,25 @@ export function RelacionPagos() {
   });
 
   // ── Derived card values ─────────────────────────────────────────────────────
-  // Switch: rpMode (cuenta individual) → financials + cuentaResumen (sin cambios)
-  //         global (proyecto completo) → proyectoFinancials RPC (datos reales)
+  // Switch de 3 vías:
+  //  · rpMode (cuenta individual)                → financials + cuentaResumen (sin cambios)
+  //  · propietario seleccionado (sin cuenta única) → propietarioFinancials (cliente, filtrado)
+  //  · proyecto completo (sin filtros)             → proyectoFinancials RPC (datos reales)
+  const hayPropietarioFiltro = !isRpMode && propietarioFilter != null;
+  const proyectoModoData = hayPropietarioFiltro ? propietarioFinancials : proyectoFinancials;
+
   const precioFinal = isRpMode
     ? (financials?.precioFinal ?? (cuentaResumen?.precioFinal ?? 0))
-    : (proyectoFinancials?.precio_final ?? 0);
+    : (hayPropietarioFiltro ? (propietarioFinancials?.precioFinal ?? 0) : (proyectoFinancials?.precio_final ?? 0));
 
   const totalPagadoCuenta = isRpMode
     ? (financials?.totalPagadoAplicaciones ?? (cuentaResumen?.totalPagadoCuenta ?? totalMonto))
-    : (proyectoFinancials?.total_pagado ?? 0);
+    : (hayPropietarioFiltro ? (propietarioFinancials?.totalPagadoAplicaciones ?? 0) : (proyectoFinancials?.total_pagado ?? 0));
 
   const haySobrepago   = isRpMode ? (financials?.haySobrepago ?? false) : false;
   const totalPendiente = isRpMode
     ? (financials?.saldoPendiente ?? Math.max(0, precioFinal - totalPagadoCuenta))
-    : (proyectoFinancials?.saldo_pendiente ?? 0);
+    : (hayPropietarioFiltro ? (propietarioFinancials?.saldoPendiente ?? 0) : (proyectoFinancials?.saldo_pendiente ?? 0));
   const montoSobrepago = isRpMode ? (financials?.montoSobrepago ?? 0) : 0;
   const esPagadoCompleto = isRpMode
     ? (!!financials && precioFinal > 0 && !financials.haySobrepago && financials.saldoPendiente === 0)
@@ -1233,21 +1306,27 @@ export function RelacionPagos() {
 
   const limiteEfectivo = isRpMode
     ? (financials?.limiteEfectivo ?? (((cuentaResumen?.valorUma ?? 0) || 0) * 8025))
-    : (proyectoFinancials?.limite_efectivo ?? 0);
+    : (hayPropietarioFiltro ? (propietarioFinancials?.limiteEfectivo ?? 0) : (proyectoFinancials?.limite_efectivo ?? 0));
   const pagadoEfectivo = isRpMode
     ? (financials?.pagadoEfectivo ?? 0)
-    : (proyectoFinancials?.efectivo_pagado ?? 0);
+    : (hayPropietarioFiltro ? (propietarioFinancials?.pagadoEfectivo ?? 0) : (proyectoFinancials?.efectivo_pagado ?? 0));
   const aunPermitidoEfectivo = isRpMode
     ? (financials?.aunPermitidoEfectivo ?? (limiteEfectivo - pagadoEfectivo))
-    : (proyectoFinancials?.efectivo_aun_permitido ?? 0);
+    : (hayPropietarioFiltro ? (propietarioFinancials?.aunPermitidoEfectivo ?? 0) : (proyectoFinancials?.efectivo_aun_permitido ?? 0));
 
+  // Modo proyecto/propietario: se recalcula en cliente con los accesorios agregados
+  // que alimentan las cards de Bodega/Cajón (la RPC de proyecto no contempla
+  // estacionamientos), para que Valor de escrituración = Propiedades + Bodegas +
+  // Estacionamientos, tanto para el proyecto completo como para un propietario.
   const valorEscrituracion = isRpMode
     ? (financials?.valorEscrituracion ?? cuentaResumen?.escrituracion)
-    : (proyectoFinancials?.valor_escrituracion ?? null);
+    : (proyectoModoData
+        ? precioFinal + (accesoriosProyecto?.bodega?.precioFinal ?? 0) + (accesoriosProyecto?.cajon?.precioFinal ?? 0)
+        : null);
 
   const isLoadingCards = isRpMode
     ? (isLoadingResumen || financialsLoading)
-    : proyectoFinancialsLoading;
+    : (hayPropietarioFiltro ? propietarioFinancialsLoading : proyectoFinancialsLoading);
 
   // ── PLD — hook acotado a la cuenta principal ────────────────────────────────
   // Llamado aquí porque depende de precioFinal y cuentaResumen?.valorUma.
@@ -1434,7 +1513,7 @@ export function RelacionPagos() {
       estatus: 'Activa',
       comprador: p.cliente ?? '—',
       depto: p.num_propiedad ?? '—',
-      producto: normProducto(p.tipo_cuenta, p.producto) ?? '—',
+      producto: normProducto(p.tipo_cuenta, p.producto, p.tipo_categoria) ?? '—',
       fecha_pago: p.fecha_pago ? fmtDate(p.fecha_pago) : '—',
       concepto: normConcepto(p.aplicaciones_detalle ?? [], p.descripcion) ?? '—',
       pago: p.monto,
@@ -1508,6 +1587,9 @@ export function RelacionPagos() {
         metodoPagoFilter={metodoPagoFilter}
         metodoPagoOptions={metodoPagoOptions}
         onMetodoPagoChange={setMetodoPagoFilter}
+        propietarioFilter={propietarioFilter}
+        propietarioOptions={propietarios}
+        onPropietarioChange={setPropietarioFilter}
       />
 
       {/* ── Sin proyecto seleccionado ─────────────────────────────────────── */}
@@ -1530,27 +1612,25 @@ export function RelacionPagos() {
             </>
           ) : (
             <>
-              {/* Con búsqueda activa las tarjetas siguen al filtro (se calculan sobre
-                  filteredPagos); sin búsqueda son del proyecto completo. Antes siempre
-                  mostraban el proyecto, así que al filtrar por depto la tabla enseñaba
-                  una unidad y las tarjetas el global. */}
+              {/* Con búsqueda o propietario activos las tarjetas siguen al filtro (se
+                  calculan sobre filteredPagos); sin filtro son del proyecto completo. */}
               <KpiCard
-                label={hayFiltroBusqueda ? 'Total pagos · filtro' : 'Total pagos'}
+                label={hayFiltroActivo ? 'Total pagos · filtro' : 'Total pagos'}
                 value={(isRpMode ? (rpPagosCuenta?.length ?? 0)
-                  : hayFiltroBusqueda ? total
+                  : hayFiltroActivo ? total
                   : (proyectoFinancials?.total_pagos ?? 0)).toLocaleString('es-MX')}
               />
               <KpiCard
-                label={hayFiltroBusqueda ? 'Total pagado · filtro' : 'Total pagado'}
+                label={hayFiltroActivo ? 'Total pagado · filtro' : 'Total pagado'}
                 value={fmtMxn(isRpMode ? rpTotalMonto
-                  : hayFiltroBusqueda ? totalMonto
+                  : hayFiltroActivo ? totalMonto
                   : (proyectoFinancials?.total_pagado_todas_cuentas ?? 0))}
                 valueClass="text-emerald-600"
               />
               <KpiCard
-                label={hayFiltroBusqueda ? 'Con comprobante · filtro' : 'Con comprobante'}
+                label={hayFiltroActivo ? 'Con comprobante · filtro' : 'Con comprobante'}
                 value={(isRpMode ? rpConComprobante
-                  : hayFiltroBusqueda ? totalConCep
+                  : hayFiltroActivo ? totalConCep
                   : (proyectoFinancials?.total_con_comprobante ?? 0)).toLocaleString('es-MX')}
                 colSpan
               />
@@ -1567,19 +1647,21 @@ export function RelacionPagos() {
         </div>
       )}
 
-      {/* Estos cards son del proyecto completo mientras no se elija una cuenta: el filtro
-          de búsqueda no los recorta (precio final, saldo y valor de escrituración se
-          calculan por cuenta, no por pago). Se avisa para que no se lean como filtrados. */}
+      {/* Estos cards son del proyecto completo (o del propietario, si hay uno elegido)
+          mientras no se elija una cuenta: la búsqueda de texto no los recorta más allá
+          de eso (precio final, saldo y valor de escrituración se calculan por cuenta,
+          no por pago). Se avisa para que no se lean como filtrados por esa búsqueda. */}
       {hasResults && !isRpMode && hayFiltroBusqueda && (
         <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-4">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-          Las cifras de abajo son del proyecto completo. Abre una cuenta de la tabla para ver
-          precio final, saldo y valor de escrituración de esa unidad.
+          Las cifras de abajo son {hayPropietarioFiltro ? 'del propietario seleccionado' : 'del proyecto completo'},
+          no de la búsqueda. Abre una cuenta de la tabla para ver precio final, saldo y valor de
+          escrituración de esa unidad.
         </div>
       )}
 
       {/* ── Cards financieros — siempre visibles cuando hay resultados ─────── */}
-      {hasResults && (isLoadingCards || (isRpMode ? (!!cuentaResumen || !!financials) : !!proyectoFinancials)) && (
+      {hasResults && (isLoadingCards || (isRpMode ? (!!cuentaResumen || !!financials) : !!proyectoModoData)) && (
         <div className="space-y-4 mb-6">
           {/* Fila 1: 4 cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1666,8 +1748,9 @@ export function RelacionPagos() {
           {/* Fila 2: Valor de escrituración + Bodega + Cajón */}
           {(isLoadingCards || accesoriosLoading || valorEscrituracion != null || accesorios?.bodega || accesorios?.cajon) && (
             <div className="flex flex-wrap gap-4">
-              {/* Escrituración */}
-              {isLoadingCards ? (
+              {/* Escrituración — en modo proyecto espera también a accesoriosLoading,
+                  porque el total incluye bodegas/estacionamientos agregados aparte. */}
+              {(isLoadingCards || (!isRpMode && accesoriosLoading)) ? (
                 <div className="md:w-72"><DetailCardSkeleton /></div>
               ) : valorEscrituracion != null && (
                 <div className="md:w-72"><EscrituracionCard value={valorEscrituracion} /></div>

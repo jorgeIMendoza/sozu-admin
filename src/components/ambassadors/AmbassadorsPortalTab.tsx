@@ -148,7 +148,7 @@ const PROT_TONE = {
 
 export default function AmbassadorsPortalTab() {
   const {
-    ambassadors, referrals, notifications,
+    ambassadors, referrals, notifications, loading,
     setDocumentStatus, markAllRead, markNotificationRead,
   } = useAmbassadors();
 
@@ -158,7 +158,12 @@ export default function AmbassadorsPortalTab() {
   // Un embajador real solo debe ver su propio registro.
   const isAdmin = profile?.rol_id === 1 || profile?.rol_id === 2;
 
-  const [activeId, setActiveId] = useState(ambassadors[0]?.id ?? '');
+  // NUNCA arrancar en ambassadors[0]: si el usuario no se puede ligar a un embajador
+  // (p. ej. usuarios.id_persona en NULL), el portal se quedaba operando como el primero
+  // de la lista — saludaba a otra persona y, peor, registraba los referidos a su nombre,
+  // con la comisión atribuida a quien no corresponde. Arranca vacío y solo se llena tras
+  // identificar al usuario; si no se logra, el guard de más abajo bloquea la vista.
+  const [activeId, setActiveId] = useState('');
   const [section, setSection] = useState<Section>('home');
   const [showForm, setShowForm] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -167,16 +172,20 @@ export default function AmbassadorsPortalTab() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ReferralStatus>('all');
 
-  // Embajador real (no admin): fijar su propio registro por email / id_persona.
+  // Embajador real (no admin): fijar su propio registro por id_persona.
+  //
+  // Se resuelve SOLO por id_persona, no por correo. El match por correo enmascaraba la
+  // falta de `usuarios.id_persona`: el portal saludaba bien y todo parecía correcto, pero
+  // al guardar un referido las policies comparan `id_persona_duena_lead` contra
+  // `get_current_user_persona_id()` —que lee ese campo— y el insert moría con un 403 que
+  // no apuntaba a la causa. Exigiendo id_persona, el bloqueo aparece al entrar y con el
+  // motivo correcto.
   useEffect(() => {
     if (isAdmin || ambassadors.length === 0) return;
-    const own = ambassadors.find(
-      (a) =>
-        (profile?.email && a.email?.toLowerCase() === profile.email.toLowerCase()) ||
-        (profile?.id_persona != null && a.idPersona === profile.id_persona),
-    );
+    if (profile?.id_persona == null) return;
+    const own = ambassadors.find((a) => a.idPersona === profile.id_persona);
     if (own && own.id !== activeId) setActiveId(own.id);
-  }, [isAdmin, ambassadors, profile?.email, profile?.id_persona, activeId]);
+  }, [isAdmin, ambassadors, profile?.id_persona, activeId]);
 
   // Admin: el embajador activo es SIEMPRE el que está impersonando en el header.
   // Sin esta sincronización, el form de registro y la tabla usaban un activeId local
@@ -265,14 +274,36 @@ export default function AmbassadorsPortalTab() {
     return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [myRefs]);
 
+  // Mientras cargan los datos no se puede saber aún si el usuario liga con un embajador:
+  // sin esto, el guard de abajo parpadearía en cada carga.
+  if (loading && !active && !globalView) {
+    return <Card className="p-8 text-center"><p className="text-muted-foreground">Cargando…</p></Card>;
+  }
+
+  // Sin embajador resuelto se bloquea la vista. Antes esto era inalcanzable porque
+  // activeId arrancaba en ambassadors[0], así que el portal operaba como otra persona
+  // en lugar de avisar.
   if (!active && !globalView) {
+    // Se distingue la causa: sin persona vinculada el problema está en la cuenta; con
+    // persona pero sin coincidencia, falta el registro de embajador o apunta a otra
+    // persona. Antes ambos casos daban el mismo texto y no orientaban a nadie.
+    const sinPersona = !isAdmin && profile?.id_persona == null;
     return (
-      <Card className="p-8 text-center">
+      <Card className="p-8 text-center space-y-2">
         <p className="text-muted-foreground">
           {ambassadors.length === 0
             ? 'No hay embajadores registrados aún.'
-            : 'Tu usuario aún no está ligado a un embajador.'}
+            : sinPersona
+              ? 'Tu cuenta no está vinculada a una persona.'
+              : 'Tu usuario aún no está ligado a un embajador.'}
         </p>
+        {ambassadors.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {sinPersona
+              ? 'Sin esa vinculación no se puede identificar tu registro de embajador. Contacta al administrador para que la complete.'
+              : 'Tu cuenta está vinculada a una persona, pero no coincide con ningún registro de embajador activo. Contacta al administrador para revisar el alta.'}
+          </p>
+        )}
       </Card>
     );
   }
