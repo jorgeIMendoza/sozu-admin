@@ -31,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { DocumentosObligatorios } from '@/components/admin/expediente/DocumentosObligatorios';
 
 /** Tipos de documento que se permiten SUBIR/ACTUALIZAR desde el expediente. */
 const UPLOAD_DOC_TYPES = [
@@ -260,6 +261,9 @@ export function ExpedienteDocumentos({
 
   return (
     <div className="mt-4 space-y-5">
+      {/* ── Obligatorios del expediente — fuente única (PF/PM, rep legal, cónyuge) ── */}
+      <DocumentosObligatorios cuentaId={cuentaId} portal="socio_bancario" />
+
       {/* ── Botones de subida (solo 2 tipos permitidos) — ocultos para el banco ── */}
       {!readOnly && (
         <div className="flex flex-wrap gap-2">

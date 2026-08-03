@@ -8,15 +8,16 @@
  * Toda la lógica vive en:
  *   - useNotariaExpediente.ts  (datos, completitud, descarga, auditoría)
  *   - notaria-download.service.ts  (ZIP, resolución de URLs)
- *   - expediente-grupos.ts  (grupos, buildLatestDocByKey)
+ *   - expediente-obligatorios.ts  (grupos PF/PM, rep legal, cónyuge, doc vigente)
  */
 
 import { useState } from 'react';
-import { CheckCircle2, XCircle, Clock, Download, Loader2, User, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useNotariaExpediente } from '@/hooks/useNotariaExpediente';
+import { DocumentosObligatorios } from '@/components/admin/expediente/DocumentosObligatorios';
 import { CompradorDetalleSheet } from '@/components/admin/legal-flow/CompradorDetalleSheet';
 import type { CompradorResumen } from '@/components/admin/legal-flow/CompradorDetalleSheet';
 
@@ -31,24 +32,6 @@ interface NotariaExpedienteModalProps {
   unidad: string;
   cuentaCode: string;
   usuarioEmail: string | null;
-}
-
-// ─── Helpers de presentación ──────────────────────────────────────────────────
-
-function EstatusIcon({ estatusId, hasDoc }: { estatusId: number | null; hasDoc: boolean }) {
-  if (!hasDoc || estatusId === null) {
-    return <Clock className="h-4 w-4 text-muted-foreground/40" />;
-  }
-  if (estatusId === 2) return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-  if (estatusId === 3) return <XCircle className="h-4 w-4 text-destructive" />;
-  return <Clock className="h-4 w-4 text-amber-500" />;
-}
-
-function EstatusLabel({ estatusId, hasDoc }: { estatusId: number | null; hasDoc: boolean }) {
-  if (!hasDoc || estatusId === null) return <span className="text-muted-foreground/50">Sin documento</span>;
-  if (estatusId === 2) return <span className="text-emerald-600 font-medium">Validado</span>;
-  if (estatusId === 3) return <span className="text-destructive">Rechazado</span>;
-  return <span className="text-amber-600">Pendiente</span>;
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────────────────
@@ -161,47 +144,22 @@ export function NotariaExpedienteModal({
 
             {!isLoading && compradores.length > 0 && (
               <div className="space-y-3">
-                {compradores.map((comprador) => (
-                  <div key={comprador.idPersona} className="rounded-xl border bg-muted/20 overflow-hidden">
-                    {/* Comprador header */}
-                    <div className="flex items-center justify-between px-3 py-2.5 border-b bg-background">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          <User className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-semibold truncate">{comprador.nombre}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {comprador.folderIndex === 1 ? 'Titular' : 'Copropietario'}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-foreground shrink-0"
-                        onClick={() => handleVerComprador(comprador.idPersona)}
-                      >
-                        Ver detalle
-                      </Button>
-                    </div>
+                {/* Fuente única del expediente (PF/PM, rep legal, cónyuge, histórico). */}
+                <DocumentosObligatorios cuentaId={idCuentaCobranza} portal="notaria" titulo="Documentos del expediente" />
 
-                    {/* Document groups grid */}
-                    <div className="divide-y">
-                      {comprador.grupos.map((grupo) => (
-                        <div key={grupo.grupoKey} className="flex items-center justify-between px-3 py-2">
-                          <span className="text-[12px] text-foreground/80">{grupo.grupoLabel}</span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <EstatusIcon estatusId={grupo.estatusId} hasDoc={grupo.hasDoc} />
-                            <span className="text-[11px]">
-                              <EstatusLabel estatusId={grupo.estatusId} hasDoc={grupo.hasDoc} />
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                <div className="flex flex-wrap gap-1.5">
+                  {compradores.map((comprador) => (
+                    <Button
+                      key={comprador.idPersona}
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={() => handleVerComprador(comprador.idPersona)}
+                    >
+                      Ver detalle · {comprador.nombre}
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
 
