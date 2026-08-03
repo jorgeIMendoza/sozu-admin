@@ -288,7 +288,24 @@ export function DocumentsTab({
           return new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime();
         });
       
-      setDocumentos(docs);
+      // Una fila por categoría: se conserva el documento MÁS RECIENTE de cada
+      // (persona, tipo). El histórico completo sigue accesible en el botón de historial de
+      // cada fila. Antes se listaba todo lo activo, así que el mismo comprador mostraba dos
+      // "Constancia de situación fiscal" —una expirada y una válida— y no quedaba claro
+      // cuál cuenta. Regla única del proyecto: manda el más reciente
+      // (src/utils/expediente-obligatorios.ts).
+      const vigentePorCategoria = new Map<string, typeof docs[number]>();
+      for (const d of docs) {
+        const clave = `${d.id_persona ?? 'sin_persona'}__${d.id_tipo_documento}`;
+        const previo = vigentePorCategoria.get(clave);
+        const fecha = (x: typeof d) => new Date(x.fecha_creacion ?? 0).getTime();
+        if (!previo || fecha(d) > fecha(previo) || (fecha(d) === fecha(previo) && d.id > previo.id)) {
+          vigentePorCategoria.set(clave, d);
+        }
+      }
+      setDocumentos([...vigentePorCategoria.values()].sort((a, b) =>
+        (a.tipo_documento_nombre || '').localeCompare(b.tipo_documento_nombre || '', 'es', { sensitivity: 'base' })
+      ));
     } catch (error) {
       console.error('Error loading documents:', error);
     } finally {

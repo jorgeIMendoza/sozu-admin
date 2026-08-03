@@ -445,7 +445,11 @@ function DetailPanel({ row, onClose, onEditComprador }: {
             </div>
           ) : (
             <div className="space-y-1.5">
-              {checklist.map(doc => {
+              {/* Una fila por categoría: solo el documento vigente de cada tipo. Antes se
+                  pintaba el histórico completo (con los viejos en opacidad), así que se
+                  veían dos "Constancia de situación fiscal" y un expirado junto al válido.
+                  El histórico sigue disponible en el botón de historial de cada documento. */}
+              {checklist.filter(d => d.isLatest).map(doc => {
                 const validated = doc.estatusId === 2;
                 return (
                   <div key={doc.id} className={`rounded-xl px-3 py-2 border ${doc.isLatest ? 'bg-white border-slate-200' : 'bg-slate-50/50 border-transparent opacity-60'}`}>

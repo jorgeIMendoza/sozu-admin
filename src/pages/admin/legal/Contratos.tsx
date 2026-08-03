@@ -86,80 +86,14 @@ export default function Contratos() {
   const { data: contratos = [], isLoading } = useQuery({
     queryKey: ['contratos-pendientes'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('execute_safe_query', {
-        query_text: `
-          SELECT DISTINCT
-            cc.id as cuenta_id,
-            cc.precio_final,
-            cc.contrato_draft,
-            o.id as oferta_id,
-            p.id as propiedad_id,
-            p.numero_propiedad,
-            ed.nombre as edificio,
-            m.nombre as modelo,
-            proy.id as proyecto_id,
-            proy.nombre as proyecto,
-            per_dueno.nombre_legal as dueno
-          FROM cuentas_cobranza cc
-          JOIN ofertas o ON cc.id_oferta = o.id
-          JOIN propiedades p ON o.id_propiedad = p.id
-          JOIN estatus_disponibilidad est ON p.id_estatus_disponibilidad = est.id
-          JOIN edificios_modelos em ON p.id_edificio_modelo = em.id
-          JOIN edificios ed ON em.id_edificio = ed.id
-          JOIN modelos m ON em.id_modelo = m.id
-          JOIN entidades_relacionadas er_dueno ON p.id_entidad_relacionada_dueno = er_dueno.id
-          JOIN proyectos proy ON er_dueno.id_proyecto = proy.id
-          JOIN personas per_dueno ON er_dueno.id_persona = per_dueno.id
-          WHERE cc.activo = true
-            AND o.activo = true
-            AND p.activo = true
-            AND o.id_propiedad IS NOT NULL
-            AND est.id IN (4, 5)
-            AND NOT EXISTS (
-              SELECT 1 FROM documentos doc
-              WHERE doc.id_cuenta_cobranza = cc.id
-                AND doc.id_tipo_documento = 18
-                AND doc.activo = true
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM compradores comp
-              WHERE comp.id_cuenta_cobranza = cc.id
-                AND comp.activo = true
-                AND comp.id_persona IS NOT NULL
-                AND (
-                  EXISTS (
-                    SELECT 1 FROM documentos doc_no_verificado
-                    WHERE doc_no_verificado.id_persona = comp.id_persona
-                      AND doc_no_verificado.id_estatus_verificacion != 2
-                      AND doc_no_verificado.activo = true
-                      AND doc_no_verificado.id_cuenta_cobranza IS NULL
-                  )
-                  OR NOT EXISTS (
-                    SELECT 1 FROM documentos doc_verificado
-                    WHERE doc_verificado.id_persona = comp.id_persona
-                      AND doc_verificado.id_estatus_verificacion = 2
-                      AND doc_verificado.activo = true
-                      AND doc_verificado.id_cuenta_cobranza IS NULL
-                  )
-                )
-            )
-            AND EXISTS (
-              SELECT 1 FROM compradores comp2
-              WHERE comp2.id_cuenta_cobranza = cc.id
-                AND comp2.activo = true
-            )
-          ORDER BY cuenta_id DESC
-        `,
-        max_rows: 1000
-      });
+      // La query vive en la RPC. Gate: current_puede_impersonar() o permiso leer en
+      // /admin/legal/contratos — ese submenú (31) está inactivo en prod, así que hoy
+      // solo entran los roles con puede_impersonar.
+      const { data, error } = await (supabase as any).rpc('get_contratos_pendientes');
 
       if (error) throw error;
-      
-      // Parse JSONB response
-      if (Array.isArray(data)) {
-        return data as unknown as Contrato[];
-      }
-      return [];
+
+      return (data ?? []) as unknown as Contrato[];
     },
   });
 

@@ -51,82 +51,9 @@ interface Reporte {
   query_sql: string;
 }
 
-// Apply filters to query - supports both single values and comma-separated multiple values (for IN clauses)
-// List of filters that require string quoting (non-numeric values)
-const STRING_FILTERS = ['tipo', 'fecha_desde', 'fecha_hasta'];
-
-function applyFiltersToQuery(querySql: string, filtros: Record<string, string>): string {
-  let processedQuery = querySql;
-
-  // FIRST: Remove SQL comments (-- until end of line) BEFORE normalizing whitespace
-  processedQuery = processedQuery.replace(/--.*$/gm, '');
-
-  // Find all placeholders in format {{AND condition}}
-  const placeholderRegex = /\{\{([^}]+)\}\}/g;
-  let match;
-  const matches: { fullMatch: string; condition: string }[] = [];
-
-  while ((match = placeholderRegex.exec(querySql)) !== null) {
-    matches.push({ fullMatch: match[0], condition: match[1] });
-  }
-
-  for (const { fullMatch, condition } of matches) {
-    // Extract the filter name from the condition (e.g., :id_proyecto)
-    const filterNameMatch = condition.match(/:(\w+)/);
-    if (filterNameMatch) {
-      const filterName = filterNameMatch[1];
-      const filterValue = filtros[filterName];
-
-      if (filterValue !== undefined && filterValue !== null && filterValue !== '') {
-        // Check if this filter requires string quoting
-        const needsQuotes = STRING_FILTERS.includes(filterName);
-        
-        // Check if this is a multi-value (comma-separated) for IN clause
-        if (filterValue.includes(',')) {
-          // Convert "1,2,3" to "(1,2,3)" for IN clause
-          const inValues = filterValue.split(',').map(v => {
-            const trimmed = v.trim();
-            return needsQuotes ? `'${trimmed}'` : trimmed;
-          }).join(',');
-          // Replace = :param with IN (values)
-          let replacedCondition = condition.replace(`= :${filterName}`, `IN (${inValues})`);
-          // Also handle cases without space before =
-          replacedCondition = replacedCondition.replace(`=:${filterName}`, `IN (${inValues})`);
-          processedQuery = processedQuery.replace(fullMatch, replacedCondition);
-        } else {
-          // Single value - wrap in quotes if needed
-          const quotedValue = needsQuotes ? `'${filterValue}'` : String(filterValue);
-          const replacedCondition = condition.replace(`:${filterName}`, quotedValue);
-          processedQuery = processedQuery.replace(fullMatch, replacedCondition);
-        }
-      } else {
-        // Remove the placeholder entirely if no filter value
-        processedQuery = processedQuery.replace(fullMatch, '');
-      }
-    }
-  }
-
-  // Normalize all whitespace (including newlines) to single spaces
-  processedQuery = processedQuery.replace(/\s+/g, ' ').trim();
-
-  // THEN: Clean up SQL syntax after removing placeholders
-  processedQuery = processedQuery.replace(/WHERE\s+AND/gi, 'WHERE');
-  processedQuery = processedQuery.replace(/WHERE\s+OR/gi, 'WHERE');
-  processedQuery = processedQuery.replace(/AND\s+AND/gi, 'AND');
-  processedQuery = processedQuery.replace(/OR\s+OR/gi, 'OR');
-  processedQuery = processedQuery.replace(/AND\s+ORDER/gi, 'ORDER');
-  processedQuery = processedQuery.replace(/AND\s+GROUP/gi, 'GROUP');
-  processedQuery = processedQuery.replace(/AND\s+LIMIT/gi, 'LIMIT');
-  processedQuery = processedQuery.replace(/WHERE\s+ORDER/gi, 'ORDER');
-  processedQuery = processedQuery.replace(/WHERE\s+GROUP/gi, 'GROUP');
-  processedQuery = processedQuery.replace(/WHERE\s+LIMIT/gi, 'LIMIT');
-  processedQuery = processedQuery.replace(/\s+AND\s*$/gi, '');
-  processedQuery = processedQuery.replace(/\s+OR\s*$/gi, '');
-  processedQuery = processedQuery.replace(/\s+WHERE\s*$/gi, '');
-  processedQuery = processedQuery.trim();
-
-  return processedQuery;
-}
+// La sustitución de filtros y la ejecución de reportes viven en las RPC
+// run_reporte / get_reporte_filtro_opciones: el navegador ya no arma SQL.
+// Se eliminó applyFiltersToQuery, que interpolaba los valores por concatenación.
 
 // Format currency with proper symbol position and comma separators: $1,453.92 M
 function formatCurrencyCompact(value: number): string {
@@ -335,15 +262,16 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
         effectiveFiltros['fecha_hasta'] = format(new Date(toMonth.getFullYear(), toMonth.getMonth() + 1, 0), 'yyyy-MM-dd');
       }
 
-      const processedQuery = applyFiltersToQuery(reporte.query_sql, effectiveFiltros);
-      
-      // Debug log to verify filters are being applied correctly
-      console.log('[ReporteViewer] Executing query with filters:', JSON.stringify(effectiveFiltros));
-      console.log('[ReporteViewer] Processed query (first 500 chars):', processedQuery.substring(0, 500));
+      // La plantilla SQL y la sustitución de filtros viven en la RPC: el navegador ya
+      // no manda SQL. Gate: user_can_access_report (roles_reportes). Los valores se
+      // interpolan server-side con quote_literal, lo que cierra la inyección que tenía
+      // applyFiltersToQuery al concatenar con comillas a mano.
+      console.log('[ReporteViewer] Executing report with filters:', JSON.stringify(effectiveFiltros));
 
-      const { data, error } = await supabase.rpc('execute_safe_query', {
-        query_text: processedQuery,
-        max_rows: 50000 // Higher limit for full data
+      const { data, error } = await (supabase as any).rpc('run_reporte', {
+        p_reporte_id: Number(id),
+        p_filtros: effectiveFiltros,
+        p_max_rows: 50000,
       });
 
       if (error) throw error;
@@ -380,15 +308,14 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
     queryFn: async () => {
       if (!reporte?.query_sql) return [];
       
-      // Execute the query without project filter to get all projects in the report
-      const baseQuery = applyFiltersToQuery(reporte.query_sql, {});
-      
+      // Sin filtros, para saber qué proyectos aparecen en el reporte completo.
       try {
-        const { data, error } = await supabase.rpc('execute_safe_query', {
-          query_text: baseQuery,
-          max_rows: 50000
+        const { data, error } = await (supabase as any).rpc('run_reporte', {
+          p_reporte_id: Number(id),
+          p_filtros: {},
+          p_max_rows: 50000,
         });
-        
+
         if (error) throw error;
         
         // Extract unique project names from results
@@ -441,38 +368,14 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
 
         // Handle query_opciones - works with or without depende_de
         if ((filtro.tipo === 'select' || filtro.tipo === 'multiselect') && filtro.query_opciones) {
-          let query = filtro.query_opciones;
-          
-          // Replace any filter placeholders in the query (e.g., :id_proyecto)
-          // This allows dynamic filtering of options based on other selected filters
-          for (const [filterName, filterValue] of Object.entries(filtros)) {
-            if (filterValue && query.includes(`:${filterName}`)) {
-              // Replace ALL occurrences of the placeholder using a global regex
-              const placeholderRegex = new RegExp(`:${filterName}\\b`, 'g');
-              
-              // Handle multi-value (comma-separated) for IN clause
-              if (filterValue.includes(',')) {
-                const inValues = filterValue.split(',').map(v => v.trim()).join(',');
-                query = query.replace(placeholderRegex, `(${inValues})`);
-              } else {
-                query = query.replace(placeholderRegex, filterValue);
-              }
-            }
-          }
-          
-          console.log('[FilterOptions] Final query for', filtro.nombre, ':', query);
-          
-          // If query still has unreplaced placeholders, skip execution (would fail)
-          // Match :word that is NOT preceded by another colon (to avoid ::type casts)
-          const unreplacedMatches = query.match(/(?<![:])(:\w+)/g);
-          const hasUnreplacedPlaceholders = unreplacedMatches && unreplacedMatches.some(m => !m.startsWith('::'));
-          if (hasUnreplacedPlaceholders) {
-            console.log('[FilterOptions] Skipping query due to unreplaced placeholders:', unreplacedMatches);
-            options[filtro.nombre] = [];
-            continue;
-          }
-          
-          const { data } = await supabase.rpc('execute_safe_query', { query_text: query });
+          // El `query_opciones` sale de reportes.filtros_configuracion en el servidor y
+          // los :placeholders se sustituyen ahí con quote_literal. Si queda alguno sin
+          // resolver, la RPC devuelve [] igual que hacía el chequeo del cliente.
+          const { data } = await (supabase as any).rpc('get_reporte_filtro_opciones', {
+            p_reporte_id: Number(id),
+            p_filtro_nombre: filtro.nombre,
+            p_filtros: filtros,
+          });
           let fetchedOptions = ((data as unknown as Record<string, unknown>[]) || [])
             .filter((item) => item.id != null)
             .map((item) => ({
