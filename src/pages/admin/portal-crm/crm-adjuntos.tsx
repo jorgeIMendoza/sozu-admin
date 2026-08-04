@@ -106,3 +106,38 @@ export async function fetchNoteAttachments(noteIds: number[]): Promise<Record<nu
   }
   return byNote;
 }
+
+// ─── Adjuntos de COMENTARIOS (espejo de las notas; tabla crm_notas_comentarios_adjuntos) ───
+
+// Sube y registra los adjuntos de un comentario. Best-effort: si la tabla aún no existe
+// (migración no aplicada), no rompe el guardado del comentario.
+export async function saveCommentAttachments(comentarioId: number, userId: string | undefined, pend: PendingAttachment[]): Promise<void> {
+  for (const a of pend) {
+    const up = await uploadCrmNoteFile(a.file);
+    if (!up) continue; // uploadCrmNoteFile ya mostró el motivo exacto del fallo
+    const { error } = await (supabase as any).from("crm_notas_comentarios_adjuntos").insert({
+      id_comentario: comentarioId, tipo: a.tipo, url: up.url, nombre: up.nombre,
+      mime: up.mime, tamano_bytes: up.tamano, id_usuario: userId ?? null,
+    });
+    if (error) {
+      console.warn("crm_notas_comentarios_adjuntos insert:", error.message);
+      toast.error(`Se subió "${up.nombre}" pero no se registró: ${error.message}`);
+    }
+  }
+}
+
+// Carga los adjuntos de un conjunto de comentarios → Record<id_comentario, NoteAttachment[]>.
+// Best-effort: si la tabla no existe en el ambiente, devuelve {} sin romper.
+export async function fetchCommentAttachments(comentarioIds: number[]): Promise<Record<number, NoteAttachment[]>> {
+  if (!comentarioIds.length) return {};
+  const res = await (supabase as any).from("crm_notas_comentarios_adjuntos")
+    .select("id, id_comentario, url, tipo, nombre, mime")
+    .in("id_comentario", comentarioIds).eq("activo", true)
+    .order("id", { ascending: true });
+  if (res.error) return {};
+  const byComment: Record<number, NoteAttachment[]> = {};
+  for (const r of (res.data ?? [])) {
+    (byComment[r.id_comentario] ??= []).push({ id: r.id, url: r.url, tipo: r.tipo, nombre: r.nombre, mime: r.mime ?? null });
+  }
+  return byComment;
+}
