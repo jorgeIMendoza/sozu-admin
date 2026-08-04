@@ -306,6 +306,7 @@ type CapiEvento = {
   events_received: number | null;
   fbtrace_id: string | null;
   intentos: number;
+  match_keys: string | null;
   test_event_code: string | null;
   error: string | null;
   fecha_creacion: string;
@@ -328,7 +329,7 @@ function RegistroPanel() {
     queryFn: async (): Promise<CapiEvento[]> => {
       const { data, error } = await (supabase as any)
         .from("crm_meta_capi_eventos")
-        .select("id, id_entidad_relacionada, event_name, event_id, status, events_received, fbtrace_id, intentos, test_event_code, error, fecha_creacion")
+        .select("id, id_entidad_relacionada, event_name, event_id, status, events_received, fbtrace_id, intentos, match_keys, test_event_code, error, fecha_creacion")
         .order("fecha_creacion", { ascending: false })
         .limit(100);
       if (error) { setMissing(true); return []; }
@@ -375,15 +376,16 @@ function RegistroPanel() {
             <TableHead className="text-center">Estado</TableHead>
             <TableHead className="text-center">Recibidos</TableHead>
             <TableHead className="text-center">Intentos</TableHead>
+            <TableHead>Datos de match</TableHead>
             <TableHead>fbtrace_id / error</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-5 w-full" /></TableCell></TableRow>
+                <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-5 w-full" /></TableCell></TableRow>
               ))
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground text-sm">
+              <TableRow><TableCell colSpan={8} className="py-10 text-center text-muted-foreground text-sm">
                 Aún no se han enviado eventos a Meta. Cuando un lead avance de etapa (ej. a MQL), aparecerá aquí.
               </TableCell></TableRow>
             ) : rows.map((r) => (
@@ -403,6 +405,15 @@ function RegistroPanel() {
                 <TableCell className="text-center"><CapiStatusBadge status={r.status} /></TableCell>
                 <TableCell className="text-center tabular-nums">{r.events_received ?? "—"}</TableCell>
                 <TableCell className="text-center tabular-nums">{r.intentos}</TableCell>
+                <TableCell>
+                  {r.match_keys ? (
+                    <div className="flex flex-wrap gap-1">
+                      {r.match_keys.split(",").map((k) => (
+                        <Badge key={k} variant="secondary" className="text-[10px] font-mono">{k}</Badge>
+                      ))}
+                    </div>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={r.status === "error" ? (r.error ?? "") : (r.fbtrace_id ?? "")}>
                   {r.status === "error" ? (r.error ?? "—") : (r.fbtrace_id ?? "—")}
                 </TableCell>
