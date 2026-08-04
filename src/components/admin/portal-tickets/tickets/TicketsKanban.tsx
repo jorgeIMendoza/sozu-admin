@@ -58,7 +58,10 @@ export function TicketsKanban({
                 </p>
               )}
               {items.map((t) => {
-                const owner = agentes.find((a) => a.id === t.propietarioId);
+                const ownerLabel = t.propietarios
+                  .map((id) => agentes.find((a) => a.id === id)?.nombre)
+                  .filter(Boolean)
+                  .join(", ");
                 const cat = categorias.find((c) => c.id === t.categoriaId);
                 return (
                   <article
@@ -75,7 +78,8 @@ export function TicketsKanban({
                     <h4 className="font-semibold text-primary">{t.nombre}</h4>
                     <p className="mt-1 text-xs text-muted-foreground">{antiguedad(t.fechaCreacion)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Propietario: {owner?.nombre ?? "Sin asignar"}
+                      {t.propietarios.length > 1 ? "Propietarios" : "Propietario"}:{" "}
+                      {ownerLabel || "Sin asignar"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Fecha de creación: {fechaCorta(t.fechaCreacion)}

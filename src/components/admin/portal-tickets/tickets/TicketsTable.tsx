@@ -80,7 +80,10 @@ export function TicketsTable({
           {tickets.map((t) => {
             const etapa = etapas.find((e) => e.id === t.etapaId);
             const pipeline = pipelines.find((p) => p.id === t.pipelineId);
-            const owner = agentes.find((a) => a.id === t.propietarioId);
+            const ownerLabel = t.propietarios
+              .map((id) => agentes.find((a) => a.id === id)?.nombre)
+              .filter(Boolean)
+              .join(", ");
             return (
               <TableRow key={t.id} className="hover:bg-muted/40">
                 <TableCell>
@@ -110,7 +113,7 @@ export function TicketsTable({
                   <PriorityDot prioridad={t.prioridad} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm">
-                  {owner?.nombre ?? <span className="text-muted-foreground">Sin asignar</span>}
+                  {ownerLabel || <span className="text-muted-foreground">Sin asignar</span>}
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                   {categorias.find((c) => c.id === t.categoriaId)?.nombre}
