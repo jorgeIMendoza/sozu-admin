@@ -17,21 +17,11 @@ const sb = supabase as any;
 const SIN = "__sin__";
 
 async function fetchProyectosSozu(): Promise<{ id: string; nombre: string }[]> {
-  const { data: rels } = await sb
-    .from("entidades_relacionadas")
-    .select("id_proyecto")
-    .eq("id_tipo_entidad", 5)
-    .eq("activo", true)
-    .not("id_proyecto", "is", null);
-  const ids = Array.from(new Set((rels ?? []).map((r: any) => r.id_proyecto)));
-  if (!ids.length) return [];
-  const { data } = await sb
-    .from("proyectos")
-    .select("id, nombre")
-    .in("id", ids)
-    .eq("activo", true)
-    .eq("publicar", true)
-    .order("nombre");
+  // Usa la RPC SECURITY DEFINER get_tickets_proyectos (migración 20260803150000): devuelve los
+  // proyectos SOZU publicados saltándose el RLS de socio bancario, restringida a roles con
+  // acceso al portal de tickets. Así un admin que además es socio/cliente ve todos los proyectos.
+  const { data, error } = await sb.rpc("get_tickets_proyectos");
+  if (error) return [];
   return (data ?? []).map((p: any) => ({ id: String(p.id), nombre: p.nombre }));
 }
 

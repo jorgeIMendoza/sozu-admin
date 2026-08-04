@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchAgentes } from "@/lib/portal-tickets/tickets-store";
 import { PRIORIDADES } from "@/lib/portal-tickets/tickets-data";
+import { ProyectoSelect } from "@/components/admin/portal-tickets/tickets/ProyectoSelect";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ const EMPTY = {
   prioridad: "sin",
   id_categoria: "",
   id_propietario: "",
+  proyecto: "",
   descripcion: "",
 };
 
@@ -98,10 +100,10 @@ function CreateTicketFromContactDialog({
     queryFn: async () => {
       const { data } = await sb
         .from("tickets_categorias")
-        .select("id, nombre")
+        .select("id, nombre, id_pipeline")
         .eq("activo", true)
         .order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
+      return (data ?? []) as { id: number; nombre: string; id_pipeline: number | null }[];
     },
   });
   const { data: agentes = [] } = useQuery({
@@ -127,6 +129,7 @@ function CreateTicketFromContactDialog({
         id_usuario_creador: user?.id ?? null,
         id_entidad_relacionada: Number(contactId),
         solicitante: contactName || null,
+        inmueble: form.proyecto || null,
         descripcion: form.descripcion.trim() || null,
         fuente: "Portal",
       })
@@ -172,7 +175,7 @@ function CreateTicketFromContactDialog({
             <Label>Pipeline *</Label>
             <Select
               value={form.id_pipeline}
-              onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "" })}
+              onValueChange={(v) => setForm({ ...form, id_pipeline: v, id_etapa: "", id_categoria: "" })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona un pipeline" />
@@ -228,11 +231,13 @@ function CreateTicketFromContactDialog({
                   <SelectValue placeholder="Selecciona" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(categorias ?? []).map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
+                  {(categorias ?? [])
+                    .filter((c) => String(c.id_pipeline) === form.id_pipeline)
+                    .map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nombre}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -252,6 +257,7 @@ function CreateTicketFromContactDialog({
               </SelectContent>
             </Select>
           </div>
+          <ProyectoSelect value={form.proyecto} onChange={(v) => setForm({ ...form, proyecto: v })} />
           <div className="grid gap-1.5">
             <Label>Descripción</Label>
             <Textarea

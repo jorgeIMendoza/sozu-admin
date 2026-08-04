@@ -52,8 +52,15 @@ export function CreateTicketDialog({
   useEffect(() => {
     if (!open) return;
     setPipelineId((prev) => (pipelines.some((x) => x.id === prev) ? prev : pipelines[0]?.id ?? ""));
-    setCategoriaId((prev) => (categorias.some((x) => x.id === prev) ? prev : categorias[0]?.id ?? ""));
-  }, [open, pipelines, categorias]);
+  }, [open, pipelines]);
+
+  // Categoría por defecto válida para el pipeline (las categorías son por pipeline).
+  useEffect(() => {
+    setCategoriaId((prev) => {
+      const validas = categorias.filter((c) => c.pipelineId === pipelineId);
+      return validas.some((c) => c.id === prev) ? prev : validas[0]?.id ?? "";
+    });
+  }, [pipelineId, categorias]);
 
   useEffect(() => {
     setEtapaId((prev) => {
@@ -68,6 +75,7 @@ export function CreateTicketDialog({
   }, [open]);
 
   const etapasPipeline = etapas.filter((e) => e.pipelineId === pipelineId);
+  const categoriasDelPipeline = categorias.filter((c) => c.pipelineId === pipelineId);
 
   const reset = () => {
     setNombre("");
@@ -232,7 +240,7 @@ export function CreateTicketDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {categorias.map((c) => (
+                {categoriasDelPipeline.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.nombre}
                   </SelectItem>
