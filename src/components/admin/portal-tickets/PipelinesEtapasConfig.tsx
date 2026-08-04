@@ -315,6 +315,205 @@ function PipelineDialog({
   );
 }
 
+// Alta/edición de una categoría del pipeline (tickets_categorias.id_pipeline).
+function CategoriaDialog({
+  pipelineId,
+  cat,
+  onClose,
+  onSaved,
+}: {
+  pipelineId: number;
+  cat: { id: number; nombre: string } | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!cat;
+  const [nombre, setNombre] = useState(cat?.nombre ?? "");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!nombre.trim()) return;
+    setSaving(true);
+    const res = isEdit
+      ? await sb.from("tickets_categorias").update({ nombre: nombre.trim() }).eq("id", cat!.id)
+      : await sb.from("tickets_categorias").insert({ nombre: nombre.trim(), id_pipeline: pipelineId, activo: true });
+    setSaving(false);
+    if (res.error) {
+      toast.error(res.error.message);
+      return;
+    }
+    toast.success(isEdit ? "Categoría actualizada" : "Categoría creada");
+    onSaved();
+  };
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar categoría" : "Nueva categoría"}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-1.5">
+          <Label>Nombre</Label>
+          <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={saving || !nombre.trim()}>
+            {isEdit ? "Guardar" : "Crear"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Editor de categorías de un pipeline (chips + CRUD). Las categorías son siempre por pipeline.
+function CategoriasEditor({ pipelineId, soloLectura }: { pipelineId: number | null; soloLectura: boolean }) {
+  const qc = useQueryClient();
+  const [dlg, setDlg] = useState<{ open: boolean; cat: { id: number; nombre: string } | null }>({ open: false, cat: null });
+  const { data: cats, isLoading } = useQuery({
+    queryKey: ["tickets-cfg-categorias", pipelineId],
+    enabled: !!pipelineId,
+    queryFn: async () => {
+      const { data } = await sb
+        .from("tickets_categorias")
+        .select("id, nombre")
+        .eq("id_pipeline", pipelineId)
+        .eq("activo", true)
+        .order("orden");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["tickets-cfg-categorias", pipelineId] });
+  const list = cats ?? [];
+  const remove = async (id: number) => {
+    const res = await sb.from("tickets_categorias").update({ activo: false }).eq("id", id);
+    if (res.error) {
+      toast.error(res.error.message);
+      return;
+    }
+    toast.success("Categoría eliminada");
+    invalidate();
+  };
+  if (!pipelineId) return null;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">Categorías de este pipeline ({list.length})</p>
+        {!soloLectura && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => setDlg({ open: true, cat: null })}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Agregar categoría
+          </Button>
+        )}
+      </div>
+      {isLoading ? (
+        <Skeleton className="h-12 w-full" />
+      ) : list.length === 0 ? (
+        <p className="py-1 text-xs text-muted-foreground">
+          Sin categorías. Agrega la primera para este pipeline.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {list.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center gap-1 rounded-full border bg-muted/20 py-1 pl-3 pr-1.5 text-sm"
+            >
+              <span className="truncate">{c.nombre}</span>
+              {!soloLectura && (
+                <>
+                  <button
+                    onClick={() => setDlg({ open: true, cat: c })}
+                    className="ml-1 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={() => remove(c.id)}
+                    className="text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {dlg.open && pipelineId && (
+        <CategoriaDialog
+          pipelineId={pipelineId}
+          cat={dlg.cat}
+          onClose={() => setDlg({ open: false, cat: null })}
+          onSaved={() => {
+            invalidate();
+            setDlg({ open: false, cat: null });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Pantalla de Categorías con el mismo diseño master-detail que Pipelines, pero SOLO para
+// gestionar las categorías de cada pipeline: eliges un pipeline a la izquierda y editas sus
+// categorías a la derecha. Reutiliza usePipelines + CategoriasEditor.
+export function CategoriasPorPipelineConfig({ soloLectura = false }: { soloLectura?: boolean }) {
+  const { data: pipelines, isLoading } = usePipelines();
+  const [sel, setSel] = useState<number | null>(null);
+  const list = pipelines ?? [];
+  const selId = sel ?? (list[0]?.id ?? null);
+  const active = list.find((p) => p.id === selId) ?? null;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Categorías</h1>
+        <p className="text-sm text-muted-foreground">
+          Cada pipeline tiene sus propias categorías. Elige un pipeline para ver y editar las suyas.
+        </p>
+      </div>
+      {isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : list.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Aún no hay pipelines. Crea uno primero en Pipelines.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="space-y-1">
+            {list.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSel(p.id)}
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  selId === p.id ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted"
+                }`}
+              >
+                {p.nombre}
+              </button>
+            ))}
+          </div>
+          <div className="md:col-span-3">
+            {!active ? (
+              <p className="text-sm text-muted-foreground">Selecciona un pipeline.</p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold">{active.nombre}</p>
+                <CategoriasEditor pipelineId={active.id} soloLectura={soloLectura} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PipelinesEtapasConfig({ soloLectura = false }: { soloLectura?: boolean }) {
   const qc = useQueryClient();
   const { data: pipelines, isLoading } = usePipelines();

@@ -1,5 +1,8 @@
 import { CrudSection } from "@/components/admin/portal-tickets/CrudSection";
-import { PipelinesEtapasConfig } from "@/components/admin/portal-tickets/PipelinesEtapasConfig";
+import {
+  PipelinesEtapasConfig,
+  CategoriasPorPipelineConfig,
+} from "@/components/admin/portal-tickets/PipelinesEtapasConfig";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { PRIORIDADES } from "@/lib/portal-tickets/tickets-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,21 +61,10 @@ export function EtapasConfigPage() {
   );
 }
 
+// Categorías por pipeline, con el mismo diseño master-detail que Pipelines.
 export function CategoriasConfigPage() {
-  const { categorias, guardarCategoria, eliminarCategoria } = useTickets();
   const { canUpdate, canCreate } = usePagePermissions("/admin/portal-tickets/configuracion/categorias");
-  return (
-    <CrudSection
-      titulo="Categorías"
-      descripcion="Tipos de incidencia disponibles al crear un ticket."
-      campos={[{ key: "nombre", label: "Nombre", tipo: "text" }]}
-      items={categorias}
-      nuevo={() => ({ id: "", nombre: "" })}
-      onGuardar={guardarCategoria}
-      onEliminar={eliminarCategoria}
-      soloLectura={!canUpdate && !canCreate}
-    />
-  );
+  return <CategoriasPorPipelineConfig soloLectura={!canUpdate && !canCreate} />;
 }
 
 export function EquipoConfigPage() {
