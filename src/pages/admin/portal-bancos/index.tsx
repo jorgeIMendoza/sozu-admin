@@ -1030,6 +1030,14 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
   };
 
   const onToggleActive = () => {
+    if (esYo && e.activo) {
+      toast({
+        title: "No puedes desactivar tu propia cuenta",
+        description: "Pide a otro supervisor del banco que lo haga.",
+        variant: "destructive",
+      });
+      return;
+    }
     setActivo.mutate(
       { email: e.email, activo: !e.activo },
       {
@@ -1066,7 +1074,15 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
-            <Button size="sm" variant={e.activo ? "outline" : "default"} onClick={onToggleActive} disabled={setActivo.isPending}>
+            {/* Nadie se da de baja a sí mismo: perdería el acceso al portal en el acto
+                y quedaría sin quién lo reactive si es el único supervisor. */}
+            <Button
+              size="sm"
+              variant={e.activo ? "outline" : "default"}
+              onClick={onToggleActive}
+              disabled={setActivo.isPending || (esYo && e.activo)}
+              title={esYo && e.activo ? "No puedes desactivar tu propia cuenta" : undefined}
+            >
               {e.activo ? "Desactivar" : "Reactivar"}
             </Button>
           </>
