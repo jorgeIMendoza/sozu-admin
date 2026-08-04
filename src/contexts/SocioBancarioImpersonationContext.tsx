@@ -1,37 +1,41 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 
 /**
- * Impersonación del Portal Socio Bancario.
- * Un Super Admin (roles.puede_impersonar) puede ver el portal como un
- * usuario con rol Administrador de Proyecto (rol_id = 2): el sidebar se
- * filtra por los permisos del rol impersonado, no por los del usuario real.
+ * Impersonación del Portal Socio Bancario ("Ver como").
+ *
+ * Un Super Admin (roles.puede_impersonar) puede ver el portal TAL COMO lo ve un
+ * usuario de banco (rol 'Socio Bancario'): el scope de desarrollos se resuelve
+ * por el banco (id_socio_bancario) del usuario impersonado, no por el del usuario
+ * real. Sirve para validar exactamente qué ve cada usuario dado de alta.
+ *
+ * Solo afecta el scope de datos del portal (useSocioProyecto). No cambia
+ * permisos de menú ni la sesión real; es una vista de validación en cliente.
  */
 
-export const SOCIO_BANCARIO_IMPERSONATED_ROL_ID = 2;
-
-export interface SocioBancarioImpersonatedUser {
-  id: string;
-  nombre: string;
+export interface ImpersonatedSocioUser {
+  /** Identificador del usuario de banco (email; usuarios no tiene PK numérica). */
   email: string;
-  rol_id: number;
-  rol_nombre: string;
+  nombre: string;
+  /** Banco al que pertenece el usuario — define el scope de desarrollos. */
+  idSocioBancario: number;
+  bancoNombre: string | null;
 }
 
 interface Ctx {
-  impersonatedUser: SocioBancarioImpersonatedUser | null;
-  setImpersonatedUser: (u: SocioBancarioImpersonatedUser | null) => void;
+  impersonatedUser: ImpersonatedSocioUser | null;
+  setImpersonatedUser: (u: ImpersonatedSocioUser | null) => void;
   clearImpersonation: () => void;
   isImpersonating: boolean;
 }
 
 const SocioBancarioImpersonationContext = createContext<Ctx | null>(null);
-const STORAGE_KEY = "sozu-sb-impersonated-project-admin";
+const STORAGE_KEY = "sozu-sb-impersonated-user";
 
 export function SocioBancarioImpersonationProvider({ children }: { children: ReactNode }) {
-  const [impersonatedUser, setImpersonatedUserState] = useState<SocioBancarioImpersonatedUser | null>(() => {
+  const [impersonatedUser, setImpersonatedUserState] = useState<ImpersonatedSocioUser | null>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
+      return raw ? (JSON.parse(raw) as ImpersonatedSocioUser) : null;
     } catch {
       return null;
     }
@@ -43,7 +47,7 @@ export function SocioBancarioImpersonationProvider({ children }: { children: Rea
   }, [impersonatedUser]);
 
   const setImpersonatedUser = useCallback(
-    (u: SocioBancarioImpersonatedUser | null) => setImpersonatedUserState(u),
+    (u: ImpersonatedSocioUser | null) => setImpersonatedUserState(u),
     [],
   );
   const clearImpersonation = useCallback(() => setImpersonatedUserState(null), []);
@@ -62,7 +66,7 @@ export function SocioBancarioImpersonationProvider({ children }: { children: Rea
   );
 }
 
-export function useSocioBancarioImpersonation() {
+export function useSocioBancarioImpersonation(): Ctx {
   const ctx = useContext(SocioBancarioImpersonationContext);
   if (!ctx) {
     throw new Error(
@@ -70,4 +74,19 @@ export function useSocioBancarioImpersonation() {
     );
   }
   return ctx;
+}
+
+/**
+ * Accesor no-lanzante para hooks que pueden renderizarse antes de que el
+ * provider monte (o fuera del portal). Devuelve "sin impersonación".
+ */
+export function useSocioBancarioImpersonationOptional(): Ctx {
+  return (
+    useContext(SocioBancarioImpersonationContext) ?? {
+      impersonatedUser: null,
+      setImpersonatedUser: () => {},
+      clearImpersonation: () => {},
+      isImpersonating: false,
+    }
+  );
 }
