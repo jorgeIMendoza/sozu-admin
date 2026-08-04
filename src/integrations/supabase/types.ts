@@ -11042,6 +11042,7 @@ export type Database = {
         Row: {
           activo: boolean | null
           administrar_app_clientes: boolean
+          apps: Json
           configurar_citas: boolean
           es_rol_interno: boolean
           fecha_actualizacion: string | null
@@ -11057,6 +11058,7 @@ export type Database = {
         Insert: {
           activo?: boolean | null
           administrar_app_clientes?: boolean
+          apps?: Json
           configurar_citas?: boolean
           es_rol_interno?: boolean
           fecha_actualizacion?: string | null
@@ -11072,6 +11074,7 @@ export type Database = {
         Update: {
           activo?: boolean | null
           administrar_app_clientes?: boolean
+          apps?: Json
           configurar_citas?: boolean
           es_rol_interno?: boolean
           fecha_actualizacion?: string | null
@@ -13269,6 +13272,7 @@ export type Database = {
         Returns: {
           activo: boolean
           administrar_app_clientes: boolean
+          apps: Json
           banco_nombre: string
           debe_cambiar_password: boolean
           email: string
