@@ -7,7 +7,7 @@ import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchAgentes } from "@/lib/portal-tickets/tickets-store";
+import { fetchAgentes, enviarCorreoAsignacion } from "@/lib/portal-tickets/tickets-store";
 import { PRIORIDADES } from "@/lib/portal-tickets/tickets-data";
 import { ProyectoSelect } from "@/components/admin/portal-tickets/tickets/ProyectoSelect";
 import { PropietariosPicker } from "@/components/admin/portal-tickets/tickets/PropietariosPicker";
@@ -65,7 +65,7 @@ function CreateTicketFromContactDialog({
   onSaved: () => void;
   trigger: ReactNode;
 }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
   const [saving, setSaving] = useState(false);
@@ -134,13 +134,18 @@ function CreateTicketFromContactDialog({
         descripcion: form.descripcion.trim() || null,
         fuente: "Portal",
       })
-      .select("id")
+      .select("id, numero")
       .single();
     if (!error && ins?.id) {
       if (form.propietarios.length) {
         await sb
           .from("tickets_propietarios")
           .insert(form.propietarios.map((u) => ({ id_ticket: ins.id, id_usuario: u })));
+        const destinatarios = form.propietarios
+          .map((id) => agentes.find((a) => a.id === id))
+          .filter((a): a is NonNullable<typeof a> => !!a?.email);
+        const asignadoPor = (profile as any)?.nombre || user?.email || "Equipo SOZU";
+        enviarCorreoAsignacion(destinatarios, ins.numero, form.nombre.trim(), asignadoPor);
       }
       await sb.from("tickets_actividad").insert({
         id_ticket: ins.id,
