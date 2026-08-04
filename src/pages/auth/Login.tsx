@@ -44,9 +44,10 @@ const PORTAL_LABELS: Record<string, { label: string; color: string }> = {
   clientes: { label: 'Portal Clientes', color: 'hsl(210 80% 45%)' },
   embajadores: { label: 'Portal Embajadores', color: 'hsl(280 60% 45%)' },
   propietarios: { label: 'Portal Propietarios', color: 'hsl(210 80% 45%)' },
+  bancos: { label: 'Portal Bancos', color: 'hsl(222 47% 40%)' },
 };
 
-export default function Login({ portalContext }: { portalContext?: 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | null }) {
+export default function Login({ portalContext }: { portalContext?: 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | 'bancos' | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -70,6 +71,7 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
     if (portalContext === 'inmobiliarias') return '/admin/portal-inmobiliaria/dashboard';
     if (portalContext === 'clientes') return '/admin/portal-cliente/inicio';
     if (portalContext === 'embajadores') return '/admin/portal-embajador/inicio';
+    if (portalContext === 'bancos') return '/admin/portal-bancos/bandeja';
     return '/admin';
   };
 
@@ -211,6 +213,8 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
         navigate('/admin/portal-inmobiliaria/dashboard', { replace: true });
       } else if (portalContext === 'embajadores') {
         navigate('/admin/portal-embajador/inicio', { replace: true });
+      } else if (portalContext === 'bancos') {
+        navigate('/admin/portal-bancos/bandeja', { replace: true });
       } else {
         navigate('/admin', { replace: true });
       }
