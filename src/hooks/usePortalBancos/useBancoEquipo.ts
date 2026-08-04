@@ -24,6 +24,8 @@ export interface EjecutivoBanco {
   rolPortal: RolBancoPortal;
   activo: boolean;
   telefono: string | null;
+  /** false = nunca pulsó "Confirmar mi Email", así que aún no tiene credenciales. */
+  emailConfirmado: boolean;
 }
 
 export interface BancoRoles {
@@ -111,7 +113,7 @@ export function useBancoEquipo(idBanco?: number | null) {
       // cast a any igual que en EditUserDialog para poder filtrar por banco.
       const { data, error } = await (supabase as any)
         .from("usuarios")
-        .select("email, nombre, rol_id, activo, telefono")
+        .select("email, nombre, rol_id, activo, telefono, email_confirmado")
         .eq("id_banco", idBanco)
         .eq("activo", true) // Ejecutivos inactivos no se muestran ni tienen acceso al portal
         .in("rol_id", rolIds)
@@ -124,6 +126,7 @@ export function useBancoEquipo(idBanco?: number | null) {
         rolPortal: (u.rol_id === supervisorRolId ? "admin" : "agente") as RolBancoPortal,
         activo: !!u.activo,
         telefono: u.telefono ?? null,
+        emailConfirmado: u.email_confirmado !== false,
       }));
     },
   });
@@ -249,6 +252,28 @@ export function useSetActivoEjecutivo() {
         if (response.error) throw new Error(await extractInvokeError(response.error));
         if (response.data?.error) throw new Error(response.data.error);
       }
+    },
+    onSuccess: () => invalidateEquipo(qc),
+  });
+}
+
+/**
+ * Reenvía el correo con el botón "Confirmar mi Email". Necesario cuando el envío
+ * del alta falló: sin esto no había forma de reintentar desde el portal y el
+ * ejecutivo se quedaba sin credenciales (las manda el trigger al confirmar).
+ */
+export function useReenviarConfirmacionEjecutivo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const response = await supabase.functions.invoke("reenviar-confirmacion-email", {
+        body: { email: email.toLowerCase().trim() },
+      });
+      if (response.error) throw new Error(await extractInvokeError(response.error));
+      if (response.data && response.data.success === false) {
+        throw new Error(response.data.message || "No se pudo reenviar el correo");
+      }
+      return response.data;
     },
     onSuccess: () => invalidateEquipo(qc),
   });
