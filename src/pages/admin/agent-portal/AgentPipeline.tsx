@@ -11,7 +11,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Lock, Mail, Search, EyeOff, Plus, ExternalLink } from "lucide-react";
+import { Loader2, Lock, Mail, Search, EyeOff, Plus, ExternalLink, HelpCircle, MessageSquareWarning } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ActionButton } from "@/components/ui/action-button";
 import { toast } from "@/hooks/use-toast";
@@ -21,7 +21,9 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { PipelineOfferDetailDialog } from "@/components/admin/agent-portal/PipelineOfferDetailDialog";
+import { OfertaNoAvanceDialog } from "@/components/admin/agent-portal/OfertaNoAvanceDialog";
 import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
+import { fetchNoAvancePorOferta } from "@/hooks/useMotivosNoAvance";
 
 const STAGES = [
   { key: 'all', label: 'Todas', color: 'bg-gray-100 text-gray-800', borderColor: 'border-gray-400' },
@@ -81,6 +83,7 @@ const AgentPipeline = () => {
   const [searchProspecto, setSearchProspecto] = useState<string>('');
   const [selectedOferta, setSelectedOferta] = useState<any>(null);
   const [shareOferta, setShareOferta] = useState<any>(null);
+  const [noAvanceOferta, setNoAvanceOferta] = useState<any>(null);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
   const { permissions } = useAgentPortalPermissions();
   const pipelinePerms = permissions['/admin/agent/pipeline'];
@@ -253,6 +256,10 @@ const AgentPipeline = () => {
       const cuentaByOferta = new Map<number, any>();
       (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaByOferta.set(c.id_oferta, c); });
 
+      // Razón de no avance ya capturada (solo aplica a las expiradas). Silencioso
+      // mientras el DDL de `ofertas_no_avance` no esté ejecutado en el ambiente.
+      const noAvanceMap = await fetchNoAvancePorOferta(ofertaIds);
+
       return ofertasData.map((o: any) => {
         const prop = propMap.get(o.id_propiedad);
         const producto = o.id_producto ? productoMap.get(o.id_producto) : null;
@@ -279,6 +286,7 @@ const AgentPipeline = () => {
           contrato_draft: cuenta?.contrato_draft,
           tiene_contrato_firmado: cuenta ? signedSet.has(cuenta.id) : false,
           is_producto: isProducto,
+          no_avance: noAvanceMap.get(o.id) || null,
         };
         enriched.stage = classifyOffer(enriched);
         return enriched;
@@ -298,6 +306,12 @@ const AgentPipeline = () => {
   }, [ofertas]);
 
   const nonExpiredOfertas = useMemo(() => ofertas.filter((o: any) => o.stage !== 'expiradas'), [ofertas]);
+
+  // Expiradas a las que todavía nadie les capturó la razón de no avance.
+  const expiradasSinRazon = useMemo(
+    () => (grouped['expiradas'] || []).filter((o: any) => !o.no_avance),
+    [grouped],
+  );
 
   const displayOfertas = useMemo(() => {
     let result = activeStage === 'all' ? ofertas : (grouped[activeStage] || []);
@@ -401,6 +415,32 @@ const AgentPipeline = () => {
         </div>
       )}
 
+      {/* Aviso: ofertas expiradas sin razón capturada */}
+      {!isLoading && expiradasSinRazon.length > 0 && (
+        <div className="mx-auto mb-2 max-w-[1040px]">
+          <div className="flex flex-wrap items-center gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5">
+            <MessageSquareWarning className="h-4 w-4 shrink-0 text-amber-700" />
+            <span className="text-xs font-semibold text-amber-800">
+              {expiradasSinRazon.length === 1
+                ? '1 oferta expirada sin razón registrada.'
+                : `${expiradasSinRazon.length} ofertas expiradas sin razón registrada.`}
+              {' '}Cuéntanos por qué no avanzaron para mejorar precio, esquemas y producto.
+            </span>
+            {activeStage !== 'expiradas' && (
+              <button
+                onClick={() => {
+                  track({ page: 'agent_pipeline', elementId: 'btn_ver_expiradas_sin_razon', elementLabel: 'Ver expiradas' });
+                  setActiveStage('expiradas');
+                }}
+                className="ml-auto shrink-0 rounded-md border border-amber-400 bg-card px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Ver expiradas
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Offer Cards */}
       <div className="mx-auto max-w-[1040px] space-y-2.5">
         {isLoading ? (
@@ -420,6 +460,15 @@ const AgentPipeline = () => {
               getStageInfo={getStageInfo}
               onClick={() => setSelectedOferta(oferta)}
               onShare={() => setShareOferta(oferta)}
+              onRegistrarNoAvance={() => {
+                track({
+                  page: 'agent_pipeline',
+                  elementId: 'btn_motivo_no_avance',
+                  elementLabel: oferta.no_avance ? 'Editar razón' : '¿Por qué no avanzó?',
+                  metadata: { id_oferta: oferta.id },
+                });
+                setNoAvanceOferta(oferta);
+              }}
             />
           ))
         )}
@@ -452,18 +501,35 @@ const AgentPipeline = () => {
           oferta={selectedOferta}
           formatCurrency={formatCurrency}
           stageInfo={getStageInfo(selectedOferta.stage)}
+          canUpdate={pipelinePerms.canUpdate}
+          onRegistrarNoAvance={() => {
+            setNoAvanceOferta(selectedOferta);
+            setSelectedOferta(null);
+          }}
+        />
+      )}
+
+      {/* Razón por la que la oferta expirada no avanzó de etapa */}
+      {noAvanceOferta && (
+        <OfertaNoAvanceDialog
+          open={!!noAvanceOferta}
+          onOpenChange={(v) => { if (!v) setNoAvanceOferta(null); }}
+          oferta={noAvanceOferta}
+          registradoPor={agentEmail}
+          canUpdate={pipelinePerms.canUpdate}
         />
       )}
     </div>
   );
 };
 
-function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick, onShare }: {
+function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick, onShare, onRegistrarNoAvance }: {
   oferta: any;
   formatCurrency: (v: number) => string;
   getStageInfo: (s: string) => { key: string; label: string; color: string; borderColor: string };
   onClick?: () => void;
   onShare?: () => void;
+  onRegistrarNoAvance?: () => void;
 }) {
   const { mask } = useAgentPresentation();
   const stageInfo = getStageInfo(oferta.stage);
@@ -499,6 +565,10 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick, onShare }: 
     e.stopPropagation();
     onShare?.();
   };
+
+  // Toda oferta expirada pide la razón por la que no avanzó de etapa.
+  const esExpirada = oferta.stage === 'expiradas';
+  const razon = oferta.no_avance;
 
   return (
     <div
@@ -550,6 +620,43 @@ function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick, onShare }: 
           Generada: {format(genDate, 'dd MMM yyyy', { locale: es })}
           {venceDate && `  ·  Vence: ${format(venceDate, 'dd MMM yyyy', { locale: es })}`}
         </p>
+      )}
+
+      {/* Rótulo de no avance: exclusivo de las ofertas expiradas */}
+      {esExpirada && (
+        razon ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRegistrarNoAvance?.(); }}
+            title="Editar la razón registrada"
+            className="mt-2.5 flex w-full items-start gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-left hover:border-muted-foreground/30"
+          >
+            <MessageSquareWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-semibold text-foreground">
+                No avanzó: {razon.motivo_nombre}
+              </span>
+              {razon.comentario && (
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {razon.comentario}
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-primary">Editar</span>
+          </button>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRegistrarNoAvance?.(); }}
+            className="mt-2.5 flex w-full items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-left hover:bg-amber-100"
+          >
+            <HelpCircle className="h-4 w-4 shrink-0 text-amber-700" />
+            <span className="min-w-0 flex-1 text-xs font-semibold text-amber-800">
+              ¿Por qué no avanzó esta oferta? Cuéntanos la razón.
+            </span>
+            <span className="shrink-0 rounded-md border border-amber-400 bg-card px-2.5 py-1 text-xs font-semibold text-amber-800">
+              Registrar razón
+            </span>
+          </button>
+        )
       )}
 
       {/* Footer: acciones */}

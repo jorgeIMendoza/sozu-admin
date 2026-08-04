@@ -5,7 +5,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ModalFormHeader, MODAL_BODY_CLS, MODAL_FOOTER_CLS } from "@/components/ui/modal-form";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock, Share2 } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, Tag, Lock, Share2, HelpCircle, MessageSquareWarning } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -22,6 +22,9 @@ interface PipelineOfferDetailDialogProps {
   oferta: any;
   formatCurrency: (v: number) => string;
   stageInfo: { key: string; label: string; color: string; borderColor: string };
+  /** Abre la captura de la razón de no avance (solo ofertas expiradas). */
+  onRegistrarNoAvance?: () => void;
+  canUpdate?: boolean;
 }
 
 export function PipelineOfferDetailDialog({
@@ -30,6 +33,8 @@ export function PipelineOfferDetailDialog({
   oferta,
   formatCurrency,
   stageInfo,
+  onRegistrarNoAvance,
+  canUpdate = true,
 }: PipelineOfferDetailDialogProps) {
   const queryClient = useQueryClient();
   const [expandedSchemes, setExpandedSchemes] = useState(true);
@@ -349,6 +354,47 @@ export function PipelineOfferDetailDialog({
                 <span>{format(new Date(oferta.fecha_generacion), "dd MMM yyyy", { locale: es })}</span>
               </div>
             </div>
+
+            {/* Razón de no avance — solo ofertas expiradas */}
+            {stageInfo.key === 'expiradas' && (
+              oferta.no_avance ? (
+                <div className="rounded-md border border-border bg-muted/60 p-3">
+                  <div className="flex items-start gap-2">
+                    <MessageSquareWarning className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-foreground">
+                        No avanzó: {oferta.no_avance.motivo_nombre}
+                      </p>
+                      {oferta.no_avance.comentario && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">{oferta.no_avance.comentario}</p>
+                      )}
+                    </div>
+                    {canUpdate && onRegistrarNoAvance && (
+                      <button
+                        onClick={onRegistrarNoAvance}
+                        className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                      >
+                        Editar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={onRegistrarNoAvance}
+                  disabled={!canUpdate || !onRegistrarNoAvance}
+                  className="flex w-full items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-left hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <HelpCircle className="h-4 w-4 shrink-0 text-amber-700" />
+                  <span className="min-w-0 flex-1 text-xs font-semibold text-amber-800">
+                    ¿Por qué no avanzó esta oferta? Cuéntanos la razón.
+                  </span>
+                  <span className="shrink-0 rounded-md border border-amber-400 bg-card px-2.5 py-1 text-xs font-semibold text-amber-800">
+                    Registrar razón
+                  </span>
+                </button>
+              )
+            )}
 
             {/* Price section */}
             <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 space-y-1">
