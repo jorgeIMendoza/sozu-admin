@@ -66,7 +66,7 @@ const ACTIVATION_BLOCKS = [
 // (frente+reverso, tipos 2+3) O pasaporte (tipo 4) — el panel resuelve el selector y
 // la captura por cámara.
 const IDENTIDAD_DOC: ExpDocDef = { key: 'identidad', kind: 'identity' };
-const CSF_DOC: ExpDocDef = { key: 'csf', nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses', tipos: [6], kind: 'pdf', csf: true };
+const CSF_DOC: ExpDocDef = { key: 'csf', nombre: 'Constancia de Situación Fiscal', emisor: 'SAT', hint: 'PDF del SAT, no mayor a 3 meses. El original se valida al instante; un escaneo queda pendiente', tipos: [6], kind: 'pdf', csf: true };
 const CARTA_DOC: ExpDocDef = { key: 'carta', nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], kind: 'firma' };
 // Tipos que consulta el expediente del agente (fijos: la carta se oculta para los
 // dependientes pero su estatus sigue alimentando "Documentos" en Secciones).
