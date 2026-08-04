@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSocioBancarioImpersonationOptional } from "@/contexts/SocioBancarioImpersonationContext";
 
 /**
  * Resolver de los desarrollos (proyectos) que el socio bancario puede ver.
@@ -58,20 +59,24 @@ export interface SocioProyecto {
   noAsignado: boolean;
 }
 
-async function fetchDesarrollosSocio(authUserId: string): Promise<DesarrolloSocio[]> {
-  // 1) Banco del usuario: usuarios.id_socio_bancario (por auth_user_id). Probe graceful.
-  const { data: usuario, error: uErr } = await (supabase as any)
+/** Banco (id_socio_bancario) del usuario autenticado, o null. Probe graceful. */
+async function resolveIdSocioBancario(authUserId: string): Promise<number | null> {
+  const { data: usuario, error } = await (supabase as any)
     .from("usuarios")
     .select("id_socio_bancario, activo")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  if (uErr || !usuario?.id_socio_bancario || usuario.activo === false) return [];
+  if (error || !usuario?.id_socio_bancario || usuario.activo === false) return null;
+  return usuario.id_socio_bancario as number;
+}
 
+/** Desarrollos activos asignados a un banco (id_socio_bancario). */
+async function fetchDesarrollosPorBanco(idSocioBancario: number): Promise<DesarrolloSocio[]> {
   // 2) Desarrollos activos asignados al banco.
   const { data: asigns, error: aErr } = await (supabase as any)
     .from("socio_bancario_desarrollos")
     .select("id_desarrollo")
-    .eq("id_socio_bancario", usuario.id_socio_bancario)
+    .eq("id_socio_bancario", idSocioBancario)
     .eq("activo", true);
   if (aErr || !asigns?.length) return [];
   const ids = Array.from(
@@ -95,14 +100,28 @@ async function fetchDesarrollosSocio(authUserId: string): Promise<DesarrolloSoci
 }
 
 export function useSocioProyecto(): SocioProyecto {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const authUserId = user?.id ?? null;
 
+  // "Ver como": si un usuario que puede impersonar (Super Admin) eligió un
+  // usuario de banco, el scope se resuelve por el banco de ese usuario.
+  const { impersonatedUser } = useSocioBancarioImpersonationOptional();
+  const puedeImpersonar =
+    profile?.puede_impersonar === true || profile?.rol_nombre === "Super Administrador";
+  const impIdSocio = puedeImpersonar && impersonatedUser ? impersonatedUser.idSocioBancario : null;
+
   const { data: desarrollos = [], isLoading } = useQuery({
-    queryKey: ["socio-bancario-desarrollos", authUserId],
+    queryKey: ["socio-bancario-desarrollos", authUserId, impIdSocio],
     enabled: !!authUserId,
     staleTime: 5 * 60_000,
-    queryFn: () => fetchDesarrollosSocio(authUserId as string),
+    queryFn: async () => {
+      // Impersonando: scope del banco del usuario elegido.
+      if (impIdSocio != null) return fetchDesarrollosPorBanco(impIdSocio);
+      // Normal: banco del usuario autenticado.
+      const idSocio = await resolveIdSocioBancario(authUserId as string);
+      if (idSocio == null) return [];
+      return fetchDesarrollosPorBanco(idSocio);
+    },
   });
 
   // Override DEV (auditoría por pantalla, solo dev): inyecta un desarrollo.
