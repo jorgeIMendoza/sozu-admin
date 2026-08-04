@@ -336,7 +336,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
                 <SelectContent>
                   {agents.filter((a) => a.activo).map((a) => (
                     <SelectItem key={a.email} value={a.email}>
-                      {a.nombre}{a.rolPortal === "admin" ? " · Admin" : ""}
+                      {a.nombre} · {ROL_PORTAL_LABEL[a.rolPortal]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -834,6 +834,15 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
  * se reflejan al instante en Admin Panel → Usuarios del Sistema (misma tabla
  * `usuarios`). Reemplaza el antiguo equipo de contacto (`bancos_agentes`).
  */
+/**
+ * Etiquetas del tipo de ejecutivo = nombre del rol real en `roles`.
+ * 'agente' → Operador Banco · 'admin' → Supervisor Banco (ver `useBancoEquipo`).
+ */
+const ROL_PORTAL_LABEL: Record<RolBancoPortal, string> = {
+  agente: "Operador Banco",
+  admin: "Supervisor Banco",
+};
+
 export function BancosEquipo() {
   const scope = useBancoResolvedScope();
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
@@ -947,11 +956,13 @@ export function BancosEquipo() {
             onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "").slice(0, 10) })}
           />
           <div className="flex gap-2">
+            {/* El tipo de ejecutivo ES el rol del sistema: se nombra igual que en
+                `roles` para no inventar un vocabulario paralelo. */}
             <Select value={form.rol} onValueChange={(v: any) => setForm({ ...form, rol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="agente">Agente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="agente">{ROL_PORTAL_LABEL.agente}</SelectItem>
+                <SelectItem value="admin">{ROL_PORTAL_LABEL.admin}</SelectItem>
               </SelectContent>
             </Select>
             <Button onClick={submit} disabled={crear.isPending || !form.nombre.trim() || !form.email.trim() || selectedId == null}>Agregar</Button>
@@ -1041,10 +1052,10 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
         {canUpdate ? (
           <>
             <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
-              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="agente">Agente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="agente">{ROL_PORTAL_LABEL.agente}</SelectItem>
+                <SelectItem value="admin">{ROL_PORTAL_LABEL.admin}</SelectItem>
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
@@ -1053,7 +1064,7 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
             </Button>
           </>
         ) : (
-          <Badge variant="outline" className="text-[10px] capitalize">{e.rolPortal === "admin" ? "Admin" : "Agente"}</Badge>
+          <Badge variant="outline" className="text-[10px]">{ROL_PORTAL_LABEL[e.rolPortal]}</Badge>
         )}
       </div>
       {canUpdate && editing && (
