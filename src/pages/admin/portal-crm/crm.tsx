@@ -2710,7 +2710,8 @@ export function CrmDealDetail() {
         const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", uids);
         nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
-      const notes = notasRows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
+      const attByNote = await fetchNoteAttachments(notasRows.map((n: any) => n.id));
+      const notes = notasRows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false, attachments: attByNote[n.id] ?? [] }));
       const tasks = tareasRows.map((t: any) => ({
         id: t.id, title: t.titulo, tipo: t.tipo, status: t.estatus, priority: t.prioridad,
         descripcion: t.descripcion, due_date: t.fecha_vencimiento, reminder: t.fecha_recordatorio,
