@@ -31,7 +31,11 @@ export async function uploadCrmNoteFile(file: File): Promise<{ url: string; nomb
   const { data, error } = await supabase.storage
     .from(CRM_ATTACH_BUCKET)
     .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
-  if (error || !data) return null;
+  if (error || !data) {
+    console.error("[crm] fallo al subir adjunto a storage:", error);
+    toast.error(`No se pudo subir "${file.name}": ${error?.message ?? "error desconocido"}`);
+    return null;
+  }
   const { data: pub } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
   return { url: pub.publicUrl, nombre: file.name, mime: file.type || null, tamano: file.size };
 }
@@ -41,12 +45,15 @@ export async function uploadCrmNoteFile(file: File): Promise<{ url: string; nomb
 export async function saveNoteAttachments(noteId: number, userId: string | undefined, pend: PendingAttachment[]): Promise<void> {
   for (const a of pend) {
     const up = await uploadCrmNoteFile(a.file);
-    if (!up) { toast.error(`No se pudo subir ${a.nombre}`); continue; }
+    if (!up) continue; // uploadCrmNoteFile ya mostró el motivo exacto del fallo
     const { error } = await (supabase as any).from("crm_notas_adjuntos").insert({
       id_nota: noteId, tipo: a.tipo, url: up.url, nombre: up.nombre,
       mime: up.mime, tamano_bytes: up.tamano, id_usuario: userId ?? null,
     });
-    if (error) console.warn("crm_notas_adjuntos no disponible:", error.message);
+    if (error) {
+      console.warn("crm_notas_adjuntos insert:", error.message);
+      toast.error(`Se subió "${up.nombre}" pero no se registró: ${error.message}`);
+    }
   }
 }
 
