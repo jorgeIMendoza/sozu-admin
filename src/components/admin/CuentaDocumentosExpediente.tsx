@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, FileText, Eye, User, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DocumentosObligatorios } from "@/components/admin/expediente/DocumentosObligatorios";
 
 /**
  * Expediente de documentos de una cuenta de cobranza, seccionado.
@@ -151,6 +152,16 @@ export function CuentaDocumentosExpediente({
           {isLoading ? "Cargando..." : `${total} documento${total !== 1 ? "s" : ""}`}
         </p>
         {headerRight}
+      </div>
+
+      {/* Obligatorios del expediente — fuente única (PF/PM, rep legal, cónyuge, doc
+          más reciente por categoría). El listado de abajo queda como consulta/histórico. */}
+      <div className="px-5 py-4 border-b border-border/50">
+        <DocumentosObligatorios
+          cuentaId={cuentaId}
+          personaIds={personaIds.length ? personaIds : undefined}
+          portal="cobranza"
+        />
       </div>
 
       {isLoading ? (

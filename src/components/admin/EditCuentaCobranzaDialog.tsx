@@ -901,7 +901,11 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
   // Get payment agreements - usa query key diferente para evitar colisiones con la página padre
   const { data: acuerdosPago } = useQuery({
-    queryKey: ["acuerdos_pago_modal", cuenta.id],
+    // Prefijo ["acuerdos_pago", id] a propósito: React Query invalida por prefijo, así
+    // que las invalidaciones de este modal y de otros diálogos (multas, juicio
+    // terminado) alcanzan esta query. Con la key vieja ("acuerdos_pago_modal") nunca
+    // hacían match y la tabla quedaba stale hasta recargar la página.
+    queryKey: ["acuerdos_pago", cuenta.id, "modal"],
     queryFn: async () => {
       // Use raw query to avoid TypeScript type issues
       const { data: acuerdos, error } = await supabase
@@ -2114,7 +2118,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
 
   // Mutation to update payment agreement amount
   const updateAmountMutation = useMutation({
-    mutationFn: async ({ id, monto }: { id: number; monto: number }) => {
+    mutationFn: async ({ id, monto }: { id: number; monto: number; silent?: boolean }) => {
       console.log('Amount mutation called with:', { id, monto });
       
       // Get the current payment amount and applied amount
@@ -2250,13 +2254,14 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
         'actualizar_monto_acuerdo'
       );
       
-      toast.success("Monto actualizado exitosamente");
+      // En guardado por lote el toast y la invalidación se hacen al final.
+      if (!variables.silent) {
+        toast.success("Monto actualizado exitosamente");
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+        queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
+      }
       setEditingAmount(null);
       setEditingMonto('');
-      // Invalidate and refetch the acuerdos_pago query
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
-      // Also invalidate the main cuenta query to refresh all data
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] });
     },
     onError: (error, variables) => {
       console.error("Error updating amount:", error);
@@ -2266,7 +2271,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     }
   });
   const updateAcuerdoMutation = useMutation({
-    mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null }) => {
+    mutationFn: async ({ id, fecha_pago }: { id: number; fecha_pago: Date | null; silent?: boolean }) => {
       console.log('Date mutation called with:', { id, fecha_pago });
       // Fix timezone issue by using proper date formatting
       const dateString = fecha_pago ? 
@@ -2295,11 +2300,13 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
         'actualizar_fecha_acuerdo'
       );
       
-      toast.success("Fecha actualizada exitosamente");
+      // En guardado por lote el toast lo emite handleActualizar una sola vez.
+      if (!variables.silent) {
+        toast.success("Fecha actualizada exitosamente");
+        queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
+      }
       setEditingAcuerdo(null);
       setEditingDate(undefined);
-      // Invalidate and refetch the acuerdos_pago query
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
     },
     onError: (error, variables) => {
       console.error("Error updating date:", error);
@@ -2594,7 +2601,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           await queryClient.refetchQueries({ queryKey: ["acuerdos_pago", cuenta.id] });
           
           // Get the updated acuerdos from the query cache
-          const freshAcuerdos = queryClient.getQueryData<any[]>(["acuerdos_pago", cuenta.id]);
+          // Lectura por key exacta (getQueryData no hace match por prefijo).
+          const freshAcuerdos = queryClient.getQueryData<any[]>(["acuerdos_pago", cuenta.id, "modal"]);
           
           if (freshAcuerdos && Array.isArray(freshAcuerdos)) {
             console.log("Recalculating dates for remaining payments:", freshAcuerdos.length);
@@ -2617,103 +2625,68 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     updateAmountMutation.mutate({ id: acuerdoId, monto });
   };
 
-  const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
-    if (fecha) {
-      console.log('Updating date for acuerdo:', acuerdoId, 'to:', fecha);
-      
-      // Find the current agreement and its position
-      const currentAcuerdoIndex = acuerdos.findIndex(a => a.id === acuerdoId);
-      const currentAcuerdo = acuerdos[currentAcuerdoIndex];
-      
-      // Check if it's a Parcialidad and update subsequent Parcialidades and Entrega payments
-      if (currentAcuerdo?.concepto_nombre?.toLowerCase().includes('parcialidad')) {
-        // Update the current agreement date
-        updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
-        
-        // Update subsequent Parcialidades and Entrega payments with incremental months
-        for (let i = currentAcuerdoIndex + 1; i < acuerdos.length; i++) {
-          const nextAcuerdo = acuerdos[i];
-          if (nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') || nextAcuerdo.id_concepto === 3) {
-            const monthsToAdd = i - currentAcuerdoIndex;
-            
-            // Get the target day from the original date
-            const targetDay = fecha.getDate();
-            const originalMonth = fecha.getMonth();
-            const originalYear = fecha.getFullYear();
-            
-            // Calculate the new month and year
-            let newMonth = originalMonth + monthsToAdd;
-            let newYear = originalYear;
-            
-            // Handle year rollover
-            while (newMonth > 11) {
-              newMonth -= 12;
-              newYear++;
-            }
-            
-            // Get the maximum days in the target month
-            const daysInTargetMonth = new Date(newYear, newMonth + 1, 0).getDate();
-            
-            // Determine the final day (handle cases like Feb 30 -> Feb 28/29)
-            let finalDay = targetDay;
-            if (targetDay > daysInTargetMonth) {
-              finalDay = daysInTargetMonth;
-            }
-            
-            // Create the new date correctly
-            const nextDate = new Date(newYear, newMonth, finalDay);
-            
-            const conceptType = nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad') ? 'Parcialidad' : 'Entrega';
-            console.log(`Updating subsequent ${conceptType} ${nextAcuerdo.id} with date:`, nextDate, `(target day: ${targetDay}, final day: ${finalDay}, days in month: ${daysInTargetMonth})`);
-            updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
-          }
-        }
-      } else if (currentAcuerdo?.id_concepto === 3) { // Entrega payments
-        // Update the current agreement date
-        updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
-        
-        // Update subsequent Entrega payments with incremental months
-        for (let i = currentAcuerdoIndex + 1; i < acuerdos.length; i++) {
-          const nextAcuerdo = acuerdos[i];
-          if (nextAcuerdo.id_concepto === 3) { // Also Entrega
-            const monthsToAdd = i - currentAcuerdoIndex;
-            
-            // Get the target day from the original date
-            const targetDay = fecha.getDate();
-            const originalMonth = fecha.getMonth();
-            const originalYear = fecha.getFullYear();
-            
-            // Calculate the new month and year
-            let newMonth = originalMonth + monthsToAdd;
-            let newYear = originalYear;
-            
-            // Handle year rollover
-            while (newMonth > 11) {
-              newMonth -= 12;
-              newYear++;
-            }
-            
-            // Get the maximum days in the target month
-            const daysInTargetMonth = new Date(newYear, newMonth + 1, 0).getDate();
-            
-            // Determine the final day (handle cases like Feb 30 -> Feb 28/29)
-            let finalDay = targetDay;
-            if (targetDay > daysInTargetMonth) {
-              finalDay = daysInTargetMonth;
-            }
-            
-            // Create the new date correctly
-            const nextDate = new Date(newYear, newMonth, finalDay);
-            
-            console.log(`Updating subsequent Entrega ${nextAcuerdo.id} with date:`, nextDate, `(target day: ${targetDay}, final day: ${finalDay}, days in month: ${daysInTargetMonth})`);
-            updateAcuerdoMutation.mutate({ id: nextAcuerdo.id, fecha_pago: nextDate });
-          }
-        }
-      } else {
-        // For other agreement types, just update the single date
-        updateAcuerdoMutation.mutate({ id: acuerdoId, fecha_pago: fecha });
-      }
+  // Suma meses conservando el día; si el día no existe en el mes destino (ej. 31 → feb),
+  // se ajusta al último día de ese mes.
+  const addMonthsKeepDay = (fecha: Date, monthsToAdd: number) => {
+    const targetDay = fecha.getDate();
+    let newMonth = fecha.getMonth() + monthsToAdd;
+    let newYear = fecha.getFullYear();
+    while (newMonth > 11) {
+      newMonth -= 12;
+      newYear++;
     }
+    const daysInTargetMonth = new Date(newYear, newMonth + 1, 0).getDate();
+    return new Date(newYear, newMonth, Math.min(targetDay, daysInTargetMonth));
+  };
+
+  /**
+   * Persiste la fecha de un acuerdo.
+   *
+   * `cascade` (autollenado mes a mes de los acuerdos siguientes) solo es una
+   * conveniencia para cuando el usuario fija UNA fecha y espera que el resto se
+   * complete solo. `skipIds` lleva los acuerdos cuya fecha capturó el usuario a
+   * mano: la cascada se detiene al topar con el primero de ellos, porque ese
+   * acuerdo trae su propia fecha (y su propia cascada). Sin ese corte, cada
+   * fecha editada reescribía las siguientes con +1 mes y el plan terminaba
+   * mensual aunque el usuario hubiera capturado, por ejemplo, cada 6 meses.
+   */
+  const applyDateUpdate = async (
+    acuerdoId: number,
+    fecha: Date,
+    options?: { cascade?: boolean; skipIds?: Set<number>; silent?: boolean },
+  ) => {
+    const { cascade = true, skipIds, silent = false } = options || {};
+    console.log('Updating date for acuerdo:', acuerdoId, 'to:', fecha, { cascade, silent });
+
+    const currentIndex = acuerdos.findIndex(a => a.id === acuerdoId);
+    await updateAcuerdoMutation.mutateAsync({ id: acuerdoId, fecha_pago: fecha, silent });
+
+    if (!cascade || currentIndex < 0) return;
+
+    const currentAcuerdo = acuerdos[currentIndex];
+    const esParcialidad = !!currentAcuerdo?.concepto_nombre?.toLowerCase().includes('parcialidad');
+    const esEntrega = currentAcuerdo?.id_concepto === 3;
+    if (!esParcialidad && !esEntrega) return;
+
+    for (let i = currentIndex + 1; i < acuerdos.length; i++) {
+      const nextAcuerdo = acuerdos[i];
+      const nextEsParcialidad = !!nextAcuerdo.concepto_nombre?.toLowerCase().includes('parcialidad');
+      const nextEsEntrega = nextAcuerdo.id_concepto === 3;
+      // Desde una Parcialidad se propaga a Parcialidades y Entrega; desde Entrega solo a Entrega.
+      const aplica = esParcialidad ? (nextEsParcialidad || nextEsEntrega) : nextEsEntrega;
+      if (!aplica) continue;
+      // El usuario ya fijó esta fecha: corta aquí y deja que su propia cascada siga.
+      if (skipIds?.has(nextAcuerdo.id)) break;
+
+      const nextDate = addMonthsKeepDay(fecha, i - currentIndex);
+      console.log(`Cascada: acuerdo ${nextAcuerdo.id} →`, nextDate);
+      await updateAcuerdoMutation.mutateAsync({ id: nextAcuerdo.id, fecha_pago: nextDate, silent });
+    }
+  };
+
+  const handleDateUpdate = (acuerdoId: number, fecha: Date | undefined) => {
+    if (!fecha) return;
+    void applyDateUpdate(acuerdoId, fecha);
   };
 
   const handleNotarioChange = (value: string) => {
@@ -2889,6 +2862,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
+  // Refresca las queries del modal y espera el refetch (invalidateQueries resuelve
+  // cuando las queries activas ya volvieron a cargar), para que el front quede igual
+  // que la BD sin recargar la página.
+  const refrescarCuenta = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuenta.id] }),
+      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle_modal", cuenta.id] }),
+      queryClient.invalidateQueries({ queryKey: ["suma_pagos_real_modal", cuenta.id] }),
+    ]);
+  };
+
   // Cambios pendientes por campo (comparados contra los valores almacenados).
   const valorUmaChanged = tipoCuenta === 'Propiedad'
     && valorUma !== ''
@@ -2957,20 +2941,31 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
         setBuyerPctDraft({});
       }
       if (acuerdoChanged) {
-        // Aplicar cambios de acuerdos vía sus handlers existentes (conservan la lógica de cascada).
+        // Fechas capturadas explícitamente por el usuario en este lote: son las que manda.
+        const fechasEditadas = (acuerdos || []).filter((a) => {
+          const d = acuerdoDraft[a.id];
+          return d?.fecha !== undefined && d.fecha !== '' && d.fecha !== (a.fecha_pago || '');
+        });
+        const idsFechaEditada = new Set(fechasEditadas.map(a => a.id));
+
+        // Montos: secuencial, porque la mutation recalcula contra el estado en BD
+        // (ajusta el último acuerdo) y en paralelo leería montos ya obsoletos.
         for (const a of acuerdos || []) {
           const d = acuerdoDraft[a.id];
-          if (!d) continue;
-          if (d.monto !== undefined) {
-            const monto = parseFloat(d.monto);
-            if (!isNaN(monto) && monto > 0 && Math.abs(monto - (a.monto || 0)) > 0.001) {
-              handleAmountUpdate(a.id, monto);
-            }
-          }
-          if (d.fecha !== undefined && d.fecha !== (a.fecha_pago || '')) {
-            handleDateUpdate(a.id, new Date(d.fecha + 'T00:00:00'));
+          if (!d || d.monto === undefined) continue;
+          const monto = parseFloat(d.monto);
+          if (!isNaN(monto) && monto > 0 && Math.abs(monto - (a.monto || 0)) > 0.001) {
+            await updateAmountMutation.mutateAsync({ id: a.id, monto, silent: true });
           }
         }
+
+        // Fechas: cada fecha editada se escribe tal cual. La cascada mes a mes solo
+        // rellena los acuerdos siguientes que el usuario NO tocó.
+        for (const a of fechasEditadas) {
+          const fecha = new Date(acuerdoDraft[a.id]!.fecha! + 'T00:00:00');
+          await applyDateUpdate(a.id, fecha, { skipIds: idsFechaEditada, silent: true });
+        }
+
         setAcuerdoDraft({});
       }
       if (precioFinalChanged && precioFinalDraft !== null) {
@@ -2978,6 +2973,10 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
         handlePrecioFinalEdit(precioFinalDraft);
         setPrecioFinalDraft(null);
       }
+
+      // Refresca la vista con los datos ya escritos antes de avisar al usuario:
+      // se espera el refetch para que la tabla no quede mostrando lo anterior.
+      await refrescarCuenta();
       toast.success('Cambios actualizados correctamente');
       onUpdate?.();
     } catch (e) {

@@ -138,6 +138,31 @@ componente visual y el badge:
 **Estado al 2026-07-31:** hechos los puntos de arquitectura 1 y 2 (lógica + componente) y la
 migración de `ExpedientesDashboard`. Los 6 pasos de migración siguen pendientes.
 
+**Estado al 2026-08-03:** hechos los pasos 1, 3, 4 y 5 de la tabla de migración, con el
+criterio del cónyuge aplicado en todos (si `personas.id_conyuge` está presente, entra al
+expediente como segunda entidad con su juego completo):
+
+- El componente ahora se monta con `cuentaId` o `personaIds` y resuelve solo el tipo de
+  persona, el rep legal y el cónyuge (`fetchPersonasExpediente`, fuente única de esa lista).
+- **CC** (`CuentaDocumentosExpediente`, admin + portal cobranza): sección de obligatorios
+  arriba con `portal='cobranza'` (lista canónica completa); el listado existente queda como
+  consulta/histórico. Se agregó `'cobranza'` al catálogo de portales.
+- **Jurídico**: componente montado en `legal-flow/ExpedienteDocumentos` y
+  `EscrituracionExpedientes.tsx` migrado al módulo único (se borró su copia de los 5 grupos;
+  el filtro "N / 5" pasó a completo/incompleto porque el total ya es variable).
+- **Socio bancario**: ídem (`ExpedienteDocumentos` + `SocioBancarioExpedientesPage`).
+- **Notaría**: `useNotariaExpediente` migrado (grupos por PF/PM + rep + cónyuge vía
+  `resolverGrupo`; el ZIP y la auditoría usan el mismo criterio; `docsCompletos/docsTotal`
+  ahora son sumas sobre todas las personas). El modal monta el componente y conserva
+  "Ver detalle" por comprador.
+- **ExpedientesDashboard** (escrituración): se le cableó el cónyuge al cálculo masivo.
+- `src/utils/expediente-grupos.ts` quedó sin consumidores (candidato a borrarse).
+
+Pendientes: paso 2 (`useUnidadesListasEscriturar` + `AppJuridicoDashboard`), paso 6
+(agentes/embajadores/inmobiliarias), y confirmar con los dueños de socio bancario y notaría
+si amplían su subconjunto (ingresos/estado de cuenta; acta de matrimonio/poder vigente) —
+hoy validan el subconjunto ya definido en el campo `portales`.
+
 ## Datos que faltan, no código
 
 **2 de las 3 personas morales de Bottura no tienen representante legal ligado**

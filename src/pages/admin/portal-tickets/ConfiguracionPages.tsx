@@ -1,28 +1,18 @@
 import { CrudSection } from "@/components/admin/portal-tickets/CrudSection";
-import { useTickets, nuevoId } from "@/lib/portal-tickets/tickets-store";
+import {
+  PipelinesEtapasConfig,
+  CategoriasPorPipelineConfig,
+} from "@/components/admin/portal-tickets/PipelinesEtapasConfig";
+import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { PRIORIDADES } from "@/lib/portal-tickets/tickets-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 
+// Pipelines + sus etapas en una sola pantalla (master-detail, estilo CRM).
 export function PipelinesConfigPage() {
-  const { pipelines, guardarPipeline, eliminarPipeline } = useTickets();
   const { canUpdate, canCreate } = usePagePermissions("/admin/portal-tickets/configuracion/pipelines");
-  return (
-    <CrudSection
-      titulo="Pipelines"
-      descripcion="Flujos de trabajo disponibles para clasificar los tickets."
-      campos={[
-        { key: "nombre", label: "Nombre", tipo: "text" },
-        { key: "descripcion", label: "Descripción", tipo: "text" },
-      ]}
-      items={pipelines}
-      nuevo={() => ({ id: `p-${nuevoId()}`, nombre: "", descripcion: "" })}
-      onGuardar={guardarPipeline}
-      onEliminar={eliminarPipeline}
-      soloLectura={!canUpdate && !canCreate}
-    />
-  );
+  return <PipelinesEtapasConfig soloLectura={!canUpdate && !canCreate} />;
 }
 
 export function EtapasConfigPage() {
@@ -43,9 +33,11 @@ export function EtapasConfigPage() {
         { key: "orden", label: "Orden", tipo: "number" },
         { key: "cerrada", label: "Cierra el ticket", tipo: "switch" },
       ]}
-      items={[...etapas].sort((a, b) => a.pipelineId.localeCompare(b.pipelineId) || a.orden - b.orden)}
+      items={[...etapas].sort(
+        (a, b) => Number(a.pipelineId) - Number(b.pipelineId) || a.orden - b.orden,
+      )}
       nuevo={() => ({
-        id: `e-${nuevoId()}`,
+        id: "",
         pipelineId: pipelines[0]?.id ?? "",
         nombre: "",
         orden: etapas.length + 1,
@@ -69,41 +61,31 @@ export function EtapasConfigPage() {
   );
 }
 
+// Categorías por pipeline, con el mismo diseño master-detail que Pipelines.
 export function CategoriasConfigPage() {
-  const { categorias, guardarCategoria, eliminarCategoria } = useTickets();
   const { canUpdate, canCreate } = usePagePermissions("/admin/portal-tickets/configuracion/categorias");
-  return (
-    <CrudSection
-      titulo="Categorías"
-      descripcion="Tipos de incidencia disponibles al crear un ticket."
-      campos={[{ key: "nombre", label: "Nombre", tipo: "text" }]}
-      items={categorias}
-      nuevo={() => ({ id: `c-${nuevoId()}`, nombre: "" })}
-      onGuardar={guardarCategoria}
-      onEliminar={eliminarCategoria}
-      soloLectura={!canUpdate && !canCreate}
-    />
-  );
+  return <CategoriasPorPipelineConfig soloLectura={!canUpdate && !canCreate} />;
 }
 
 export function EquipoConfigPage() {
+  // El equipo son usuarios reales de la plataforma (con acceso al portal de tickets):
+  // se listan aquí como candidatos a propietario, pero se administran en el módulo de Usuarios.
   const { agentes, tickets, guardarAgente, eliminarAgente } = useTickets();
-  const { canUpdate, canCreate } = usePagePermissions("/admin/portal-tickets/configuracion/equipo");
   return (
     <div className="space-y-6">
       <CrudSection
         titulo="Equipo"
-        descripcion="Agentes que pueden ser propietarios de un ticket."
+        descripcion="Usuarios con acceso al portal que pueden ser propietarios de un ticket. Se administran desde el módulo de Usuarios."
         campos={[
           { key: "nombre", label: "Nombre", tipo: "text" },
           { key: "rol", label: "Rol", tipo: "text" },
           { key: "email", label: "Correo", tipo: "text" },
         ]}
         items={agentes}
-        nuevo={() => ({ id: `a-${nuevoId()}`, nombre: "", rol: "", email: "" })}
+        nuevo={() => ({ id: "", nombre: "", rol: "", email: "" })}
         onGuardar={guardarAgente}
         onEliminar={eliminarAgente}
-        soloLectura={!canUpdate && !canCreate}
+        soloLectura
       />
 
       <Card>

@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
+import { esTipoPersonal, expirarPreviosPersonales, esVersionVigente } from '@/lib/documentos/expediente-personal';
 import {
   TIPO_DOC_FACTURA_COMISION_EXTERNA,
   sincronizarFacturaComisionEnCuenta,
@@ -483,6 +484,14 @@ export function DocumentsTab({
         }
       }
 
+      // Expediente personal: una sola versión vigente. Solo cuando el documento es de
+      // una persona y el tipo es del perfil (identidad, CURP, CSF, domicilio, actas).
+      // Los documentos de cuenta o propiedad no entran: varias facturas, contratos o
+      // escrituras del mismo tipo son legítimas.
+      if (entityType === 'persona' && esTipoPersonal(parseInt(selectedTipoDocumento))) {
+        await expirarPreviosPersonales(entityId as number, parseInt(selectedTipoDocumento));
+      }
+
       const { error: insertError } = await supabase.from('documentos').insert(documentoData);
 
       if (insertError) throw insertError;
@@ -822,7 +831,24 @@ export function DocumentsTab({
 
       // Toggle: si está validado (2) -> pendiente (1), si no está validado -> validado (2)
       const nuevoEstatus = documento.id_estatus_verificacion === 2 ? 1 : 2;
-      
+
+      // No se puede validar una versión superada del expediente personal: por aquí
+      // volvían a estatus 2 filas viejas y el expediente mostraba dos documentos
+      // aprobados del mismo tipo. Quitar la validación sí se permite.
+      if (
+        nuevoEstatus === 2 &&
+        entityType === 'persona' &&
+        esTipoPersonal(documento.id_tipo_documento) &&
+        !(await esVersionVigente(entityId as number, documento.id, documento.id_tipo_documento))
+      ) {
+        toast({
+          variant: "destructive",
+          title: "No es la versión vigente",
+          description: "Este documento fue reemplazado por una carga más reciente. Valida la última versión.",
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('documentos')
         .update({ id_estatus_verificacion: nuevoEstatus })
