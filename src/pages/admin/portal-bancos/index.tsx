@@ -336,7 +336,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
                 <SelectContent>
                   {agents.filter((a) => a.activo).map((a) => (
                     <SelectItem key={a.email} value={a.email}>
-                      {a.nombre}{a.rolPortal === "admin" ? " · Admin" : ""}
+                      {a.nombre} · {ROL_PORTAL_LABEL[a.rolPortal]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -834,6 +834,15 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
  * se reflejan al instante en Admin Panel → Usuarios del Sistema (misma tabla
  * `usuarios`). Reemplaza el antiguo equipo de contacto (`bancos_agentes`).
  */
+/**
+ * Etiquetas del tipo de ejecutivo = nombre del rol real en `roles`.
+ * 'agente' → Operador Banco · 'admin' → Supervisor Banco (ver `useBancoEquipo`).
+ */
+const ROL_PORTAL_LABEL: Record<RolBancoPortal, string> = {
+  agente: "Operador Banco",
+  admin: "Supervisor Banco",
+};
+
 export function BancosEquipo() {
   const scope = useBancoResolvedScope();
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
@@ -861,6 +870,9 @@ export function BancosEquipo() {
 
   const { data: equipo = [], isLoading } = useBancoEquipo(selectedId);
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as RolBancoPortal });
+  // Email del usuario logueado: se marca su propia fila con la etiqueta «Tú».
+  const { profile } = useAuth();
+  const miEmail = (profile?.email ?? "").trim().toLowerCase();
 
   if (cargandoPermisos) {
     return (
@@ -935,13 +947,22 @@ export function BancosEquipo() {
         <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <Input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
           <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+          {/* Teléfono: solo dígitos, máximo 10 (formato MX) */}
+          <Input
+            placeholder="Teléfono"
+            inputMode="numeric"
+            maxLength={10}
+            value={form.telefono}
+            onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+          />
           <div className="flex gap-2">
+            {/* El tipo de ejecutivo ES el rol del sistema: se nombra igual que en
+                `roles` para no inventar un vocabulario paralelo. */}
             <Select value={form.rol} onValueChange={(v: any) => setForm({ ...form, rol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="agente">Agente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="agente">{ROL_PORTAL_LABEL.agente}</SelectItem>
+                <SelectItem value="admin">{ROL_PORTAL_LABEL.admin}</SelectItem>
               </SelectContent>
             </Select>
             <Button onClick={submit} disabled={crear.isPending || !form.nombre.trim() || !form.email.trim() || selectedId == null}>Agregar</Button>
@@ -958,7 +979,14 @@ export function BancosEquipo() {
           ) : equipo.length === 0 ? (
             <EmptyState icon={Building2} title="Sin ejecutivos" hint="Da de alta el primer ejecutivo de este banco." />
           ) : (
-            equipo.map((ej) => <EjecutivoRow key={ej.email} e={ej} canUpdate={canUpdate} />)
+            equipo.map((ej) => (
+              <EjecutivoRow
+                key={ej.email}
+                e={ej}
+                canUpdate={canUpdate}
+                esYo={!!miEmail && ej.email.trim().toLowerCase() === miEmail}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -966,7 +994,7 @@ export function BancosEquipo() {
   );
 }
 
-function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean }) {
+function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUpdate: boolean; esYo?: boolean }) {
   const cambiarRol = useCambiarRolEjecutivo();
   const setActivo = useSetActivoEjecutivo();
   const editar = useEditarEjecutivo();
@@ -1011,6 +1039,11 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">
             {e.nombre}
+            {esYo && (
+              <Badge className="ml-2 text-[10px] bg-primary/10 text-primary hover:bg-primary/10 border-primary/20">
+                Tú
+              </Badge>
+            )}
             {!e.activo && <Badge variant="outline" className="ml-2 text-[10px]">Inactivo</Badge>}
           </p>
           <p className="text-xs text-muted-foreground truncate">{[e.email, e.telefono].filter(Boolean).join(" · ") || "—"}</p>
@@ -1019,10 +1052,10 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
         {canUpdate ? (
           <>
             <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
-              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="agente">Agente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="agente">{ROL_PORTAL_LABEL.agente}</SelectItem>
+                <SelectItem value="admin">{ROL_PORTAL_LABEL.admin}</SelectItem>
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
@@ -1031,14 +1064,20 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
             </Button>
           </>
         ) : (
-          <Badge variant="outline" className="text-[10px] capitalize">{e.rolPortal === "admin" ? "Admin" : "Agente"}</Badge>
+          <Badge variant="outline" className="text-[10px]">{ROL_PORTAL_LABEL[e.rolPortal]}</Badge>
         )}
       </div>
       {canUpdate && editing && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
           <Input placeholder="Nombre" value={edit.nombre} onChange={(ev) => setEdit({ ...edit, nombre: ev.target.value })} />
           <Input placeholder="Email" type="email" value={edit.email} onChange={(ev) => setEdit({ ...edit, email: ev.target.value })} />
-          <Input placeholder="Teléfono" value={edit.telefono} onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value })} />
+          <Input
+            placeholder="Teléfono"
+            inputMode="numeric"
+            maxLength={10}
+            value={edit.telefono}
+            onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value.replace(/\D/g, "").slice(0, 10) })}
+          />
           <div className="flex gap-2">
             <Button variant="outline" onClick={guardar} disabled={editar.isPending || !edit.nombre.trim() || !edit.email.trim()}>
               <Save className="h-4 w-4 mr-1" /> Guardar
