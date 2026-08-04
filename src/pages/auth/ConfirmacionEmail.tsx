@@ -16,6 +16,8 @@ const resolvePortalKey = (portal: string | null): PortalKey => {
       return 'admin';
     case 'embajadores':
       return 'embajadores';
+    case 'bancos':
+      return 'bancos';
     case 'inmobiliarias':
     default:
       return 'inmobiliarias';

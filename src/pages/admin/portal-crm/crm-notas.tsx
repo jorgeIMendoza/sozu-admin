@@ -42,15 +42,18 @@ export function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEdito
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const ext = file.name.split(".").pop();
-      const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from(CRM_ATTACH_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
-      if (error) { toast.error("Error al subir imagen"); return; }
-      const { data: url } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
-      editor.chain().focus().setImage({ src: url.publicUrl }).run();
+      const files = Array.from(input.files ?? []);
+      if (!files.length) return;
+      for (const file of files) {
+        const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
+        const { data, error } = await supabase.storage.from(CRM_ATTACH_BUCKET).upload(path, file, { contentType: file.type || "image/png", upsert: false });
+        if (error || !data) { toast.error(`No se pudo subir "${file.name}": ${error?.message ?? "error desconocido"}`); continue; }
+        const { data: url } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
+        editor.chain().focus().setImage({ src: url.publicUrl }).run();
+      }
     };
     input.click();
   };
