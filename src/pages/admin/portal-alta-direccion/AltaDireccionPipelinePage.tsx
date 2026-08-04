@@ -19,7 +19,15 @@ import {
   useOfertasPipeline,
   STAGES,
   type PipelineCard,
+  type LeadTipo,
 } from "@/hooks/usePortalAltaDireccion/useOfertasPipeline";
+
+/** Etiquetas del filtro de embudo (Cliente / Contacto / Prospecto). */
+const LEAD_TIPO_LABEL: Record<LeadTipo, string> = {
+  cliente: "Clientes",
+  contacto: "Contacto",
+  prospecto: "Prospectos",
+};
 
 // PipelineCard, STAGES, classifyOffer y el fetch/enriquecimiento viven ahora
 // en el hook compartido `useOfertasPipeline` (única fuente de verdad que
@@ -40,6 +48,9 @@ export default function AltaDireccionPipelinePage() {
   });
   const [selectedTipoOferta, setSelectedTipoOferta] = useState<string>(
     () => searchParams.get("tipo") || "all",
+  );
+  const [selectedLeadTipo, setSelectedLeadTipo] = useState<string>(
+    () => searchParams.get("contacto") || "all",
   );
   const [searchOfertaId, setSearchOfertaId] = useState<string>("");
   const [searchProspecto, setSearchProspecto] = useState<string>("");
@@ -98,8 +109,11 @@ export default function AltaDireccionPipelinePage() {
     } else if (selectedTipoOferta === "producto") {
       result = result.filter((o) => !!o.id_producto);
     }
+    if (selectedLeadTipo !== "all") {
+      result = result.filter((o) => o.lead_tipo === selectedLeadTipo);
+    }
     return result;
-  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta, searchOfertaId, searchProspecto]);
+  }, [ofertas, selectedAgentes, selectedProyectos, selectedTipoOferta, selectedLeadTipo, searchOfertaId, searchProspecto]);
 
   const stageMap = useMemo(() => {
     const m = new Map<string, PipelineCard[]>();
@@ -179,12 +193,14 @@ export default function AltaDireccionPipelinePage() {
 
   const hasActiveFilters =
     selectedAgentes.length > 0 || selectedProyectos.length > 0 || selectedTipoOferta !== "all" ||
+    selectedLeadTipo !== "all" ||
     selectedMonths.length > 0 || searchOfertaId.trim().length > 0 || searchProspecto.trim().length > 0;
 
   const clearAllFilters = () => {
     setSelectedAgentes([]);
     setSelectedProyectos([]);
     setSelectedTipoOferta("all");
+    setSelectedLeadTipo("all");
     setSelectedMonths([]);
     setSearchOfertaId("");
     setSearchProspecto("");
@@ -243,6 +259,19 @@ export default function AltaDireccionPipelinePage() {
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="propiedad">Propiedades</SelectItem>
                   <SelectItem value="producto">Productos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-[170px]">
+              <label className="text-sm font-medium mb-1 block">Contacto</label>
+              <Select value={selectedLeadTipo} onValueChange={setSelectedLeadTipo}>
+                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="cliente">Clientes</SelectItem>
+                  <SelectItem value="contacto">Contacto</SelectItem>
+                  <SelectItem value="prospecto">Prospectos</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -375,6 +404,19 @@ export default function AltaDireccionPipelinePage() {
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                                 {card.is_producto ? "Producto" : "Propiedad"}
                               </Badge>
+                              {card.lead_tipo && (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] px-1.5 py-0 border-0",
+                                    card.lead_tipo === "cliente" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+                                    card.lead_tipo === "contacto" && "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+                                    card.lead_tipo === "prospecto" && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+                                  )}
+                                >
+                                  {LEAD_TIPO_LABEL[card.lead_tipo]}
+                                </Badge>
+                              )}
                               {card.is_producto && card.producto_nombre && (
                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 truncate max-w-[180px]">
                                   {card.producto_nombre}

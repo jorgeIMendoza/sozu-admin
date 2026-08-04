@@ -214,6 +214,54 @@ export function useDesarrollosAsignados(idSocio: number | null) {
   });
 }
 
+// ── Usuarios de banco impersonables ("Ver como") con su banco ──────
+export interface UsuarioSocioImpersonable {
+  email: string;
+  nombre: string;
+  idSocioBancario: number;
+  bancoNombre: string | null;
+}
+
+/**
+ * Lista TODOS los usuarios de banco (rol Socio Bancario, activos y vinculados a
+ * un banco) para el selector "Ver como" del portal. Solo se consulta cuando
+ * `enabled` (el usuario real puede impersonar).
+ */
+export function useUsuariosSocioImpersonables(enabled: boolean) {
+  return useQuery({
+    queryKey: ["socio-bancario-usuarios-impersonables"],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async (): Promise<UsuarioSocioImpersonable[]> => {
+      const rolId = await fetchSocioRolId();
+      if (rolId == null) return [];
+      const { data: users, error } = await (supabase as any)
+        .from("usuarios")
+        .select("email, nombre, id_socio_bancario")
+        .eq("rol_id", rolId)
+        .eq("activo", true)
+        .not("id_socio_bancario", "is", null)
+        .order("nombre", { ascending: true });
+      if (error || !users?.length) return [];
+      const bankIds = Array.from(
+        new Set((users as any[]).map((u) => u.id_socio_bancario).filter((v: any) => v != null)),
+      );
+      const { data: banks } = bankIds.length
+        ? await (supabase as any).from("socios_bancarios").select("id, nombre").in("id", bankIds)
+        : { data: [] };
+      const bankName = new Map<number, string | null>(
+        ((banks ?? []) as any[]).map((b) => [b.id as number, (b.nombre ?? null) as string | null]),
+      );
+      return (users as any[]).map((u) => ({
+        email: u.email as string,
+        nombre: (u.nombre as string) || (u.email as string),
+        idSocioBancario: u.id_socio_bancario as number,
+        bancoNombre: bankName.get(u.id_socio_bancario) ?? null,
+      }));
+    },
+  });
+}
+
 // ── Usuarios de un banco (viven en `usuarios`, rol Socio Bancario) ──
 export function useUsuariosSocioBancario(idSocio: number | null) {
   return useQuery({

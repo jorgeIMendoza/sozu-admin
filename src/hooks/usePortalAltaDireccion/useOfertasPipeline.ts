@@ -13,6 +13,21 @@ import { useProyectosSozuIds } from "./proyectosSozu";
  * lógica y los conteos coincidan por construcción.
  */
 
+/**
+ * Clasificación del lead de la oferta (embudo comercial), derivada del tipo de
+ * entidad de la persona (`entidades_relacionadas`) + estatus de la venta:
+ *   - `prospecto` → la persona es Prospecto (tipo 7), aún sin convertir.
+ *   - `contacto`  → la persona ya es Comprador (tipo 2) pero la venta NO está
+ *                   cerrada (propiedad fuera de estatus Vendido/Escrituración/
+ *                   Entregado/Pagado).
+ *   - `cliente`   → Comprador (tipo 2) con la venta cerrada (estatus 5/7/8/9).
+ */
+export type LeadTipo = "cliente" | "contacto" | "prospecto";
+
+/** Estatus de disponibilidad que cuentan como "venta cerrada" para separar
+ *  Cliente (cerrada) de Contacto (comprador en proceso). */
+const ESTATUS_VENTA_CERRADA = new Set([5, 7, 8, 9]);
+
 export interface PipelineCard {
   id: number;
   email_creador: string;
@@ -23,6 +38,7 @@ export interface PipelineCard {
   id_producto: number | null;
   id_persona_lead: number | null;
   lead_nombre?: string;
+  lead_tipo?: LeadTipo;
   propiedad_nombre?: string;
   producto_nombre?: string;
   proyecto_nombre?: string;
@@ -119,7 +135,7 @@ async function enrichOfertas(data: any[]): Promise<PipelineCard[]> {
     }
   }
 
-  const [propRes, leadRes, cuentaRes, productosRes] = await Promise.all([
+  const [propRes, leadRes, cuentaRes, productosRes, entLeadRes] = await Promise.all([
     propIds.length > 0
       ? (supabase.from("propiedades").select("id, numero_propiedad, precio_lista, id_estatus_disponibilidad, id_edificio_modelo").in("id", propIds) as any)
       : { data: [] },
@@ -132,12 +148,25 @@ async function enrichOfertas(data: any[]): Promise<PipelineCard[]> {
     productoIds.length > 0
       ? (supabase.from("productos_servicios").select("id, nombre, precio_lista, id_proyecto").in("id", productoIds) as any)
       : { data: [] },
+    // Tipo de entidad del lead (Comprador=2 / Prospecto=7) para clasificar el
+    // embudo (Cliente / Contacto / Prospecto). Una persona puede tener ambas.
+    leadIds.length > 0
+      ? (supabase.from("entidades_relacionadas").select("id_persona, id_tipo_entidad").in("id_persona", leadIds).in("id_tipo_entidad", [2, 7]).eq("activo", true) as any)
+      : { data: [] },
   ]);
 
   const propMap = new Map<number, any>();
   (propRes.data || []).forEach((p: any) => propMap.set(p.id, p));
   const leadMap = new Map<number, string>();
   (leadRes.data || []).forEach((l: any) => leadMap.set(l.id, l.nombre_legal || l.nombre_comercial || "Sin nombre"));
+  // persona → { esComprador, esProspecto }
+  const leadEntMap = new Map<number, { comprador: boolean; prospecto: boolean }>();
+  (entLeadRes.data || []).forEach((e: any) => {
+    const cur = leadEntMap.get(e.id_persona) || { comprador: false, prospecto: false };
+    if (e.id_tipo_entidad === 2) cur.comprador = true;
+    if (e.id_tipo_entidad === 7) cur.prospecto = true;
+    leadEntMap.set(e.id_persona, cur);
+  });
   const productoMap = new Map<number, any>();
   (productosRes.data || []).forEach((p: any) => productoMap.set(p.id, p));
   const cuentaMap = new Map<number, any>();
@@ -200,9 +229,22 @@ async function enrichOfertas(data: any[]): Promise<PipelineCard[]> {
       ? (producto?.id_proyecto ? productoProyMap.get(producto.id_proyecto) : null)
       : (o.id_propiedad ? proyectoByProp.get(o.id_propiedad) : null);
 
+    // Clasificación de embudo del lead. Si la persona ya es Comprador (tipo 2),
+    // Cliente cuando la venta cerró (estatus 5/7/8/9) y Contacto mientras sigue
+    // en proceso; en otro caso Prospecto (tipo 7). Sin marca → sin clasificar.
+    const leadEnt = o.id_persona_lead ? leadEntMap.get(o.id_persona_lead) : undefined;
+    let leadTipo: LeadTipo | undefined;
+    if (leadEnt?.comprador) {
+      const estatus = prop?.id_estatus_disponibilidad;
+      leadTipo = estatus != null && ESTATUS_VENTA_CERRADA.has(estatus) ? "cliente" : "contacto";
+    } else if (leadEnt?.prospecto) {
+      leadTipo = "prospecto";
+    }
+
     const card: PipelineCard = {
       ...o,
       lead_nombre: o.id_persona_lead ? leadMap.get(o.id_persona_lead) : undefined,
+      lead_tipo: leadTipo,
       propiedad_nombre: prop?.numero_propiedad || undefined,
       producto_nombre: producto?.nombre || undefined,
       proyecto_nombre: projInfo?.nombre || undefined,
