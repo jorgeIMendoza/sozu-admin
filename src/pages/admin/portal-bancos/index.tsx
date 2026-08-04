@@ -861,6 +861,9 @@ export function BancosEquipo() {
 
   const { data: equipo = [], isLoading } = useBancoEquipo(selectedId);
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as RolBancoPortal });
+  // Email del usuario logueado: se marca su propia fila con la etiqueta «Tú».
+  const { profile } = useAuth();
+  const miEmail = (profile?.email ?? "").trim().toLowerCase();
 
   if (cargandoPermisos) {
     return (
@@ -935,7 +938,14 @@ export function BancosEquipo() {
         <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <Input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
           <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+          {/* Teléfono: solo dígitos, máximo 10 (formato MX) */}
+          <Input
+            placeholder="Teléfono"
+            inputMode="numeric"
+            maxLength={10}
+            value={form.telefono}
+            onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+          />
           <div className="flex gap-2">
             <Select value={form.rol} onValueChange={(v: any) => setForm({ ...form, rol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -958,7 +968,14 @@ export function BancosEquipo() {
           ) : equipo.length === 0 ? (
             <EmptyState icon={Building2} title="Sin ejecutivos" hint="Da de alta el primer ejecutivo de este banco." />
           ) : (
-            equipo.map((ej) => <EjecutivoRow key={ej.email} e={ej} canUpdate={canUpdate} />)
+            equipo.map((ej) => (
+              <EjecutivoRow
+                key={ej.email}
+                e={ej}
+                canUpdate={canUpdate}
+                esYo={!!miEmail && ej.email.trim().toLowerCase() === miEmail}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -966,7 +983,7 @@ export function BancosEquipo() {
   );
 }
 
-function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean }) {
+function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUpdate: boolean; esYo?: boolean }) {
   const cambiarRol = useCambiarRolEjecutivo();
   const setActivo = useSetActivoEjecutivo();
   const editar = useEditarEjecutivo();
@@ -1011,6 +1028,11 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">
             {e.nombre}
+            {esYo && (
+              <Badge className="ml-2 text-[10px] bg-primary/10 text-primary hover:bg-primary/10 border-primary/20">
+                Tú
+              </Badge>
+            )}
             {!e.activo && <Badge variant="outline" className="ml-2 text-[10px]">Inactivo</Badge>}
           </p>
           <p className="text-xs text-muted-foreground truncate">{[e.email, e.telefono].filter(Boolean).join(" · ") || "—"}</p>
@@ -1038,7 +1060,13 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
           <Input placeholder="Nombre" value={edit.nombre} onChange={(ev) => setEdit({ ...edit, nombre: ev.target.value })} />
           <Input placeholder="Email" type="email" value={edit.email} onChange={(ev) => setEdit({ ...edit, email: ev.target.value })} />
-          <Input placeholder="Teléfono" value={edit.telefono} onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value })} />
+          <Input
+            placeholder="Teléfono"
+            inputMode="numeric"
+            maxLength={10}
+            value={edit.telefono}
+            onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value.replace(/\D/g, "").slice(0, 10) })}
+          />
           <div className="flex gap-2">
             <Button variant="outline" onClick={guardar} disabled={editar.isPending || !edit.nombre.trim() || !edit.email.trim()}>
               <Save className="h-4 w-4 mr-1" /> Guardar
