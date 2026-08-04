@@ -4,6 +4,9 @@ import { useAllowedMenus } from '@/hooks/useAllowedMenus';
 import { useDynamicMenus } from '@/hooks/useDynamicMenus';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHasEmbajadorRole } from '@/hooks/useHasEmbajadorRole';
+import { computePortalHostAccess } from '@/lib/portalHostAccess';
+import { CURRENT_PORTAL_SUBDOMAIN } from '@/lib/portalUrls';
+import { PortalSinAcceso } from './PortalSinAcceso';
 import { Loader2 } from 'lucide-react';
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
@@ -48,6 +51,51 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
 
   if (isPathDisabled(location.pathname)) {
     return <Navigate to="/admin/access-denied" replace />;
+  }
+
+  // ---------------------------------------------------------------------------
+  // GATE DE SUBDOMINIO — debe ir ANTES de los bypass de /admin/agent y
+  // /admin/portal-cliente de abajo, que están abiertos a cualquier rol
+  // autenticado: sin este gate, un embajador puro entraba al portal de agentes
+  // con solo abrir agentes.sozu.com.
+  //
+  // También corta el loop de redirección que se daba cuando un usuario sin
+  // acceso caía en un subdominio: PermissionRoute redirigía a
+  // getFirstAllowedPath(), esa ruta no existe en el árbol reducido del host, el
+  // catch-all la rebotaba, y vuelta a empezar.
+  //
+  // En admin.sozu.com / localhost CURRENT_PORTAL_SUBDOMAIN es null y nada de
+  // esto aplica, así que el comportamiento del panel completo no cambia.
+  // ---------------------------------------------------------------------------
+  if (CURRENT_PORTAL_SUBDOMAIN) {
+    // hasEmbajadorRole arranca en null mientras consulta user_roles; esperar a
+    // que resuelva evita mostrar "sin acceso" a un embajador por una carrera.
+    if (hasEmbajadorRole === null) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+
+    const portalAccess = computePortalHostAccess({
+      rolId: profile?.rol_id,
+      rolNombre: profile?.rol_nombre,
+      allowedPaths,
+      isSuperAdmin,
+      hasEmbajadorRole,
+      hasAdminMenus: menuItems.some((item) => !item.isPortal),
+    });
+
+    if (!portalAccess.hasAccessToCurrentPortal) {
+      return (
+        <PortalSinAcceso
+          portal={CURRENT_PORTAL_SUBDOMAIN}
+          accessiblePortals={portalAccess.accessiblePortals}
+          canGoToAdmin={portalAccess.canGoToAdmin}
+        />
+      );
+    }
   }
 
   // Allow agent portal routes for ALL roles.

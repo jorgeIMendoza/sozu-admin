@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DevelopmentBanner } from "@/components/DevelopmentBanner";
+import { matchPortalHost } from "@/lib/portalUrls";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
@@ -493,25 +494,26 @@ const queryClient = new QueryClient({
   },
 });
 
-const hostname = window.location.hostname;
-// Match both production (portal.sozu.com) and dev (portal-dev.sozu.com) subdomains
-const matchPortal = (portal: string) =>
-  hostname === `${portal}.sozu.com` || hostname === `${portal}-dev.sozu.com`;
+// Match both production (portal.sozu.com) and dev (portal-dev.sozu.com) subdomains.
+// La implementación vive en @/lib/portalUrls porque también la consumen
+// useCanReturnToAdmin y computePortalHostAccess.
+const matchPortal = matchPortalHost;
 const isRegistroSubdomain = matchPortal('registro');
 const isInmobiliariasSubdomain = matchPortal('inmobiliarias');
 const isAgentesSubdomain = matchPortal('agentes');
 const isClientesSubdomain = matchPortal('clientes');
 const isEmbajadoresSubdomain = matchPortal('embajadores');
-const isCrmSubdomain = matchPortal('crm');
 const isPropietariosSubdomain = matchPortal('propietarios');
+const isBancosSubdomain = matchPortal('bancos');
 
 // Determine portal context from subdomain for login page branding
-const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | null => {
+const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | 'bancos' | null => {
   if (isAgentesSubdomain) return 'agentes';
   if (isInmobiliariasSubdomain) return 'inmobiliarias';
   if (isClientesSubdomain) return 'clientes';
   if (isEmbajadoresSubdomain) return 'embajadores';
   if (isPropietariosSubdomain) return 'propietarios';
+  if (isBancosSubdomain) return 'bancos';
   return null;
 };
 const portalContext = getPortalContext();
@@ -580,6 +582,10 @@ const App = () => (
                     <Route path="agent/inventario/unidades" element={<AgentUnidadesProyecto />} />
                     <Route path="agent/proyecto/:id" element={<AgentProyectoDetalle />} />
                     <Route path="agent/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
+                    {/* Sin esta ruta, cualquier Navigate a /admin/access-denied desde
+                        PermissionRoute lo absorbe el catch-all de abajo y el gate vuelve
+                        a redirigir: loop infinito. */}
+                    <Route path="access-denied" element={<AccessDenied />} />
                     <Route path="*" element={<Navigate to="/admin/agent/inicio" replace />} />
                   </Route>
                   <Route path="/" element={<AgentesLanding />} />
@@ -611,6 +617,7 @@ const App = () => (
                     <Route path="portal-inmobiliaria/comisiones" element={<InmobComisiones />} />
                     <Route path="portal-inmobiliaria/reportes" element={<InmobReportes />} />
                     <Route path="portal-inmobiliaria/configuracion" element={<InmobConfiguracion />} />
+                    <Route path="access-denied" element={<AccessDenied />} />
                     <Route path="*" element={<Navigate to="/admin/portal-inmobiliaria/dashboard" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
@@ -637,7 +644,35 @@ const App = () => (
                     <Route path="portal-embajador/registrar-referido" element={<EmbajadorRegistrarReferido />} />
                     <Route path="portal-embajador/comisiones" element={<EmbajadorComisiones />} />
                     <Route path="portal-embajador/perfil" element={<EmbajadorPerfil />} />
+                    <Route path="access-denied" element={<AccessDenied />} />
                     <Route path="*" element={<Navigate to="/admin/portal-embajador/inicio" replace />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+              ) : isBancosSubdomain ? (
+                <Routes>
+                  <Route path="/login" element={<Login portalContext="bancos" />} />
+                  <Route path="/auth/login" element={<Login portalContext="bancos" />} />
+                  <Route path="/auth/change-password" element={<ChangePassword />} />
+                  <Route path="/auth/confirmacion-email" element={<ConfirmacionEmail />} />
+                  <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/admin" element={
+                    <ProtectedRoute>
+                      <PermissionRoute>
+                        <AdminLayout />
+                      </PermissionRoute>
+                    </ProtectedRoute>
+                  }>
+                    <Route index element={<Navigate to="/admin/portal-bancos/bandeja" replace />} />
+                    <Route path="portal-bancos/bandeja"  element={<BancosBandeja />} />
+                    <Route path="portal-bancos/pipeline" element={<BancosPipeline />} />
+                    <Route path="portal-bancos/tablero"  element={<BancosTablero />} />
+                    <Route path="portal-bancos/equipo"   element={<BancosEquipo />} />
+                    <Route path="portal-bancos/bancos"   element={<BancosBancos />} />
+                    <Route path="portal-bancos/notarias" element={<BancosNotarias />} />
+                    <Route path="access-denied" element={<AccessDenied />} />
+                    <Route path="*" element={<Navigate to="/admin/portal-bancos/bandeja" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
@@ -713,6 +748,7 @@ const App = () => (
                     <Route path="portal-cliente/productos" element={<ClienteProductos />} />
                     <Route path="portal-cliente/documentos" element={<ClienteDocumentos />} />
                     <Route path="portal-cliente/notificaciones" element={<ClienteNotificaciones />} />
+                    <Route path="access-denied" element={<AccessDenied />} />
                     <Route path="*" element={<Navigate to="/admin/portal-cliente/inicio" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/login" replace />} />
