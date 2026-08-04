@@ -32,7 +32,19 @@ interface Role {
   configurar_citas: boolean;
   puede_impersonar: boolean;
   administrar_app_clientes: boolean;
+  // Accesos por app (fuente de verdad). Forma: { administrar: ["clientes", ...] }.
+  apps: { administrar?: string[] } | null;
 }
+
+// Apps administrables desde un rol (escala agregando entradas aquí; el backend
+// las lee de roles.apps.administrar). El slug debe coincidir con el del backend.
+const ADMIN_APPS: { slug: string; label: string; desc: string }[] = [
+  {
+    slug: 'clientes',
+    label: 'Administrar app clientes',
+    desc: 'Permite administrar la app de clientes (acceso y gestión del portal de clientes)',
+  },
+];
 
 interface Permiso {
   id: number;
@@ -524,7 +536,7 @@ export default function RolesPermisos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roles')
-        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes')
+        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes, apps')
         .eq('es_rol_interno', true)
         .order('id');
       
@@ -893,17 +905,30 @@ export default function RolesPermisos() {
     },
   });
 
-  // Update administrar_app_clientes mutation
-  const updateAdministrarAppClientesMutation = useMutation({
-    mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
-      const { error } = await supabase
-        .from('roles')
-        .update({
-          administrar_app_clientes: value,
-          fecha_actualizacion: new Date().toISOString()
-        })
-        .eq('id', id);
+  // Update roles.apps.administrar (acceso admin por app). Fuente de verdad =
+  // roles.apps; para la app 'clientes' se mantiene el espejo del booleano legacy
+  // administrar_app_clientes para no dejarlo stale mientras exista la columna.
+  const updateAppAdministrarMutation = useMutation({
+    mutationFn: async ({
+      id, slug, value, currentApps,
+    }: {
+      id: number;
+      slug: string;
+      value: boolean;
+      currentApps: { administrar?: string[] } | null;
+    }) => {
+      const administrar = new Set(currentApps?.administrar ?? []);
+      if (value) administrar.add(slug);
+      else administrar.delete(slug);
+      const apps = { ...(currentApps ?? {}), administrar: [...administrar] };
 
+      const update: Record<string, unknown> = {
+        apps,
+        fecha_actualizacion: new Date().toISOString(),
+      };
+      if (slug === 'clientes') update.administrar_app_clientes = value;
+
+      const { error } = await supabase.from('roles').update(update).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -1572,24 +1597,38 @@ export default function RolesPermisos() {
                           </p>
                         </div>
                       </label>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <Checkbox
-                          checked={selectedRole.administrar_app_clientes || false}
-                          onCheckedChange={(checked) => {
-                            updateAdministrarAppClientesMutation.mutate({
-                              id: selectedRole.id,
-                              value: checked === true
-                            });
-                          }}
-                          disabled={updateAdministrarAppClientesMutation.isPending}
-                        />
-                        <div>
-                          <span className="text-sm font-medium">Administrar app clientes</span>
-                          <p className="text-xs text-muted-foreground">
-                            Permite administrar la app de clientes (acceso y gestión del portal de clientes)
-                          </p>
-                        </div>
-                      </label>
+                      {ADMIN_APPS.map((app) => {
+                        const administra =
+                          selectedRole.apps?.administrar?.includes(app.slug) ??
+                          // Fallback al booleano legacy para 'clientes' si apps aún vacío.
+                          (app.slug === 'clientes'
+                            ? selectedRole.administrar_app_clientes
+                            : false) ??
+                          false;
+                        return (
+                          <label
+                            key={app.slug}
+                            className="flex items-center gap-3 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={administra}
+                              onCheckedChange={(checked) => {
+                                updateAppAdministrarMutation.mutate({
+                                  id: selectedRole.id,
+                                  slug: app.slug,
+                                  value: checked === true,
+                                  currentApps: selectedRole.apps,
+                                });
+                              }}
+                              disabled={updateAppAdministrarMutation.isPending}
+                            />
+                            <div>
+                              <span className="text-sm font-medium">{app.label}</span>
+                              <p className="text-xs text-muted-foreground">{app.desc}</p>
+                            </div>
+                          </label>
+                        );
+                      })}
 
                       {/* Estatus de disponibilidad visibles */}
                       <EstatusDisponibilidadSelector 
