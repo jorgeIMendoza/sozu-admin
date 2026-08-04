@@ -305,11 +305,13 @@ export function TicketsWorkspace({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todas">Todas las categorías</SelectItem>
-            {categorias.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.nombre}
-              </SelectItem>
-            ))}
+            {categorias
+              .filter((c) => c.pipelineId === pipelineId)
+              .map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nombre}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
 

@@ -38,6 +38,7 @@ export function TicketDetailSheet({
 
   if (!ticket) return null;
   const etapasPipeline = etapas.filter((e) => e.pipelineId === ticket.pipelineId);
+  const categoriasDelPipeline = categorias.filter((c) => c.pipelineId === ticket.pipelineId);
 
   return (
     <Sheet open={!!ticket} onOpenChange={onOpenChange}>
@@ -143,7 +144,7 @@ export function TicketDetailSheet({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {categorias.map((c) => (
+                  {categoriasDelPipeline.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.nombre}
                     </SelectItem>
