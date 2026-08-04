@@ -419,27 +419,28 @@ function CategoriasEditor({ pipelineId, soloLectura }: { pipelineId: number | nu
           Sin categorías. Agrega la primera para este pipeline.
         </p>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="space-y-2">
           {list.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center gap-1 rounded-full border bg-muted/20 py-1 pl-3 pr-1.5 text-sm"
-            >
-              <span className="truncate">{c.nombre}</span>
+            <div key={c.id} className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2.5">
+              <span className="flex-1 truncate text-sm">{c.nombre}</span>
               {!soloLectura && (
                 <>
-                  <button
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 opacity-60 hover:opacity-100"
                     onClick={() => setDlg({ open: true, cat: c })}
-                    className="ml-1 text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <Pencil className="h-3 w-3" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-destructive opacity-60 hover:opacity-100"
                     onClick={() => remove(c.id)}
-                    className="text-muted-foreground transition-colors hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />
-                  </button>
+                  </Button>
                 </>
               )}
             </div>

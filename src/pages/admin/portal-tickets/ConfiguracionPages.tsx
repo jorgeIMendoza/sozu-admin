@@ -95,7 +95,7 @@ export function EquipoConfigPage() {
         <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {agentes.map((a) => {
             const abiertos = tickets.filter(
-              (t) => t.propietarioId === a.id && !t.fechaCierre,
+              (t) => t.propietarios.includes(a.id) && !t.fechaCierre,
             ).length;
             return (
               <div

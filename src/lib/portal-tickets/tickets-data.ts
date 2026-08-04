@@ -14,7 +14,8 @@ export type Ticket = {
   etapaId: string;
   prioridad: Priority;
   categoriaId: string;
-  propietarioId: string | null; // auth_user_id del usuario asignado; null = sin asignar
+  propietarios: string[]; // auth_user_id de los usuarios asignados (multi-propietario)
+  creadoPorId: string | null; // auth_user_id de quien dio de alta el ticket
   solicitante: string;
   inmueble: string;
   descripcion: string;
