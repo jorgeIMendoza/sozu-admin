@@ -19,7 +19,9 @@ import { useAllowedMenus } from "@/hooks/useAllowedMenus";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/sozu-logo";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
+import { SocioBancarioImpersonationProvider } from "@/contexts/SocioBancarioImpersonationContext";
 import { useSocioProyecto } from "@/hooks/usePortalSocioBancario/useSocioProyecto";
+import { SocioBancarioVerComoSelector } from "./SocioBancarioVerComoSelector";
 
 /**
  * Selector de desarrollo — visible SOLO cuando el banco financió más de uno.
@@ -269,8 +271,10 @@ const PortalSocioBancarioLayoutInner = () => {
         </header>
 
         <main className="px-8 py-4 bg-background min-h-screen">
-          {/* Sin selector "Ver como": el banco no impersona. Selector de
-              desarrollo solo si el banco financió más de uno. */}
+          {/* "Ver como": solo para Super Admin / puede_impersonar — valida la
+              vista de un usuario de banco. Selector de desarrollo solo si el
+              banco (real o impersonado) financió más de uno. */}
+          <SocioBancarioVerComoSelector />
           <DesarrolloSelector />
           <Outlet />
         </main>
@@ -281,7 +285,9 @@ const PortalSocioBancarioLayoutInner = () => {
 
 export const PortalSocioBancarioLayout = () => (
   <PortalTrackingProvider portal="socio-bancario">
-    <PortalSocioBancarioLayoutInner />
+    <SocioBancarioImpersonationProvider>
+      <PortalSocioBancarioLayoutInner />
+    </SocioBancarioImpersonationProvider>
   </PortalTrackingProvider>
 );
 
