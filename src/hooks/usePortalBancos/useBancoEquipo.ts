@@ -214,16 +214,32 @@ export function useCrearEjecutivoBanco() {
   });
 }
 
+/**
+ * Un UPDATE sobre `usuarios` que RLS no permite no devuelve error: filtra las filas
+ * y afecta 0 sin quejarse. Por eso todas las mutaciones piden `.select()` y aquí se
+ * verifica que sí tocaron la fila; sin esto la UI cantaba "desactivado" mientras el
+ * ejecutivo seguía activo en BD (y en el listado).
+ */
+function assertFilaActualizada(filas: unknown[] | null, accion: string) {
+  if (!filas || filas.length === 0) {
+    throw new Error(
+      `No se pudo ${accion}: tu rol no tiene permiso para modificar este usuario en la base de datos.`,
+    );
+  }
+}
+
 /** Baja/reactivación: `usuarios.activo`. Al reactivar, resetea la contraseña a temporal. */
 export function useSetActivoEjecutivo() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ email, activo }: { email: string; activo: boolean }) => {
-      const { error } = await supabase
+      const { data: filas, error } = await supabase
         .from("usuarios")
         .update({ activo, fecha_actualizacion: new Date().toISOString() })
-        .eq("email", email);
+        .eq("email", email)
+        .select("email");
       if (error) throw error;
+      assertFilaActualizada(filas, activo ? "reactivar al ejecutivo" : "desactivar al ejecutivo");
 
       // Al reactivar, resetear contraseña (mismo comportamiento que Admin Panel).
       if (activo) {
@@ -255,11 +271,13 @@ export function useCambiarRolEjecutivo() {
       if (!rolId) {
         throw new Error("No se encontraron los roles de banco en el sistema.");
       }
-      const { error } = await supabase
+      const { data: filas, error } = await supabase
         .from("usuarios")
         .update({ rol_id: rolId, fecha_actualizacion: new Date().toISOString() })
-        .eq("email", email);
+        .eq("email", email)
+        .select("email");
       if (error) throw error;
+      assertFilaActualizada(filas, "cambiar el rol");
     },
     onSuccess: () => invalidateEquipo(qc),
   });
@@ -283,15 +301,17 @@ export function useEditarEjecutivo() {
       telefono?: string | null;
       nuevoEmail?: string | null;
     }) => {
-      const { error } = await supabase
+      const { data: filas, error } = await supabase
         .from("usuarios")
         .update({
           nombre: nombre.trim(),
           telefono: telefono?.trim() || null,
           fecha_actualizacion: new Date().toISOString(),
         })
-        .eq("email", email);
+        .eq("email", email)
+        .select("email");
       if (error) throw error;
+      assertFilaActualizada(filas, "actualizar al ejecutivo");
 
       const dest = nuevoEmail?.toLowerCase().trim();
       if (dest && dest !== email.toLowerCase().trim()) {

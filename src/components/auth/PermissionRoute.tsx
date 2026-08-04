@@ -341,8 +341,20 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   // Check if current path is allowed
   const currentPath = location.pathname;
   
-  // On /admin, respect dynamic menu order and send user to first allowed page
+  // On /admin, respect dynamic menu order and send user to first allowed page.
+  //
+  // Excepción: si TODOS los menús del rol son portales y hay más de uno (p. ej. un
+  // usuario con Portal Embajador y Portal Bancos), redirigir lo encerraba en el
+  // primero de la lista sin poder elegir. En ese caso se deja en /admin, donde
+  // AdminIndex muestra el selector de portales y el sidebar sigue listando ambos.
   if (currentPath === '/admin') {
+    const portalMenus = menuItems.filter((item) => item.isPortal);
+    const soloPortales = portalMenus.length > 1 && portalMenus.length === menuItems.length;
+    if (soloPortales) {
+      // Sin este return, el chequeo de isPathAllowed('/admin') de abajo volvería a
+      // redirigir al primer portal (el rol no tiene permiso sobre el Dashboard).
+      return <>{children}</>;
+    }
     const firstAllowedPath = getFirstAllowedPath(menuItems);
     if (firstAllowedPath && firstAllowedPath !== '/admin') {
       return <Navigate to={firstAllowedPath} replace />;
