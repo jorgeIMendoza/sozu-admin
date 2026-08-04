@@ -54,6 +54,17 @@ export const AdminHeader = ({ onMenuClick }: AdminHeaderProps) => {
           {/* Left side */}
           {isSimplifiedRole ? (
             <div className="flex items-center gap-3 shrink-0">
+              {/* En móvil el sidebar está colapsado: sin este botón, estos roles
+                  se quedaban sin forma de abrir el menú en el panel admin. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onMenuClick}
+                className="lg:hidden"
+                aria-label="Abrir menú de navegación"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
               <div className="flex flex-col gap-0.5">
                 <SozuLogo className="h-7" />
                 <span className="text-[9px] text-muted-foreground/40 select-none">{APP_VERSION}</span>

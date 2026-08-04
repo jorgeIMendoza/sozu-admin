@@ -116,27 +116,26 @@ export const AdminLayout = () => {
     return <PortalTicketsLayout />;
   }
 
+  // Este render solo se alcanza en el panel admin (todos los portales retornan
+  // antes, arriba). Los roles "simplificados" también necesitan aquí su sidebar
+  // y su header: antes se les suprimían ambos y quedaban sin menú, sin nombre y
+  // sin rol — solo el contenido suelto. Su experiencia reducida vive en el
+  // portal (AgentPortalLayout y compañía), no en el panel admin. AdminHeader ya
+  // tiene su propia variante para estos roles y la aplica solo.
   return (
     <div className="min-h-screen bg-background">
-      {!isSimplifiedRole && (
-        <AdminSidebar 
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          currentPath={location.pathname}
+      <AdminSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        currentPath={location.pathname}
+      />
+
+      <div className="flex flex-col min-h-screen transition-all duration-300 lg:ml-64">
+        <AdminHeader
+          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         />
-      )}
-      
-      <div className={cn(
-        "flex flex-col min-h-screen transition-all duration-300",
-        !isSimplifiedRole && "lg:ml-64"
-      )}>
-        {!isSimplifiedRole && (
-          <AdminHeader 
-            onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-          />
-        )}
-        
-        <main className={cn("flex-1", isSimplifiedRole ? "p-0" : "px-8 py-4")}>
+
+        <main className="flex-1 px-8 py-4">
           <Outlet />
         </main>
       </div>
