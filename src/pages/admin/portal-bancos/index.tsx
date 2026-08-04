@@ -33,6 +33,7 @@ import {
 import {
   useBancoEquipo, useCrearEjecutivoBanco, useSetActivoEjecutivo,
   useCambiarRolEjecutivo, useEditarEjecutivo, useBancoRoles,
+  useReenviarConfirmacionEjecutivo,
   type EjecutivoBanco, type RolBancoPortal,
 } from "@/hooks/usePortalBancos/useBancoEquipo";
 import {
@@ -46,7 +47,7 @@ import {
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X, Image as ImageIcon,
+  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X, Image as ImageIcon, Mail,
 } from "lucide-react";
 import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 import { PropiedadDetalleSheet } from "@/components/admin/portal-bancos/PropiedadDetalleSheet";
@@ -902,15 +903,21 @@ export function BancosEquipo() {
     crear.mutate(
       { id_banco: selectedId, nombre: form.nombre.trim(), email: form.email.trim(), telefono: form.telefono.trim() || null, rolPortal: form.rol },
       {
-        onSuccess: () => {
+        onSuccess: (data: any) => {
           setForm({ nombre: "", email: "", telefono: "", rol: "agente" });
           // Las credenciales llegan por correo DESPUÉS de que el ejecutivo confirme
-          // su email (trigger handle_email_confirmation), no en el alta.
+          // su email (trigger handle_email_confirmation), no en el alta. El envío
+          // puede fallar sin tumbar el alta, así que el aviso sigue a
+          // `confirmacionEnviada` en vez de prometerlo siempre: antes decía "le
+          // enviamos un correo" incluso cuando no salió ninguno.
+          const enviada = data?.confirmacionEnviada !== false;
+          const donde = banco ? `Usuario creado en ${banco.nombre}. ` : "";
           toast({
             title: "Ejecutivo dado de alta",
-            description: banco
-              ? `Usuario creado en ${banco.nombre}. Le enviamos un correo para confirmar su cuenta; al confirmarlo recibirá sus credenciales.`
-              : "Le enviamos un correo para confirmar su cuenta; al confirmarlo recibirá sus credenciales.",
+            description: enviada
+              ? `${donde}Le enviamos un correo para confirmar su cuenta; al confirmarlo recibirá sus credenciales.`
+              : `${donde}${data?.message ?? "No se pudo enviar el correo de confirmación."}`,
+            variant: enviada ? undefined : "destructive",
           });
         },
         onError: (e: any) => toast({ title: "No se pudo crear", description: e?.message ?? "Error", variant: "destructive" }),
@@ -1005,6 +1012,7 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
   const cambiarRol = useCambiarRolEjecutivo();
   const setActivo = useSetActivoEjecutivo();
   const editar = useEditarEjecutivo();
+  const reenviar = useReenviarConfirmacionEjecutivo();
   const [editing, setEditing] = useState(false);
   const [edit, setEdit] = useState({ nombre: e.nombre, email: e.email, telefono: e.telefono ?? "" });
 
@@ -1025,6 +1033,17 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
       {
         onSuccess: () => toast({ title: "Rol actualizado" }),
         onError: (err: any) => toast({ title: "No se pudo cambiar el rol", description: err?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
+  const onReenviarConfirmacion = () => {
+    reenviar.mutate(
+      { email: e.email },
+      {
+        onSuccess: () => toast({ title: "Correo de confirmación reenviado", description: e.email }),
+        onError: (err: any) =>
+          toast({ title: "No se pudo reenviar", description: err?.message ?? "Error", variant: "destructive" }),
       },
     );
   };
@@ -1060,12 +1079,34 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
               </Badge>
             )}
             {!e.activo && <Badge variant="outline" className="ml-2 text-[10px]">Inactivo</Badge>}
+            {/* Sin confirmar = todavía no tiene credenciales: las manda el trigger
+                handle_email_confirmation cuando pulsa el botón del correo. */}
+            {e.activo && !e.emailConfirmado && (
+              <Badge variant="outline" className="ml-2 text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400">
+                Sin confirmar
+              </Badge>
+            )}
           </p>
           <p className="text-xs text-muted-foreground truncate">{[e.email, e.telefono].filter(Boolean).join(" · ") || "—"}</p>
         </div>
         {/* Cambio de rol / edición / baja: solo con permiso "actualizar". */}
         {canUpdate ? (
           <>
+            {/* Visible aunque la fila diga "confirmado": el DEFAULT true de
+                usuarios.email_confirmado dejó cuentas viejas marcadas como
+                confirmadas sin estarlo, y hay que poder reintentar el envío. Si de
+                verdad ya confirmó, la edge function responde y se avisa. */}
+            {e.activo && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onReenviarConfirmacion}
+                disabled={reenviar.isPending}
+                title="Reenviar el correo de confirmación"
+              >
+                <Mail className="h-4 w-4 mr-1" /> Reenviar correo
+              </Button>
+            )}
             <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
               <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
