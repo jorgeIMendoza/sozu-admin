@@ -22,6 +22,7 @@ import {
 import { PriorityDot } from "./PriorityDot";
 import { ContactoPicker } from "./ContactoPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
+import { PropietariosPicker } from "./PropietariosPicker";
 import { toast } from "sonner";
 
 export function TicketDetailSheet({
@@ -98,34 +99,24 @@ export function TicketDetailSheet({
               </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Propietario</Label>
-              <Select
-                value={ticket.propietarioId ?? "sin"}
-                disabled={readOnly}
-                onValueChange={(v) =>
-                  actualizarTicket(
-                    ticket.id,
-                    { propietarioId: v === "sin" ? null : v },
-                    v === "sin"
-                      ? "Ticket marcado como no asignado."
-                      : `Asignado a ${agentes.find((a) => a.id === v)?.nombre}.`,
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sin">Sin asignar</SelectItem>
-                  {agentes.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PropietariosPicker
+              value={ticket.propietarios}
+              disabled={readOnly}
+              agentes={agentes}
+              label="Propietarios"
+              onChange={(ids) =>
+                actualizarTicket(
+                  ticket.id,
+                  { propietarios: ids },
+                  ids.length
+                    ? `Propietarios: ${ids
+                        .map((id) => agentes.find((a) => a.id === id)?.nombre)
+                        .filter(Boolean)
+                        .join(", ")}.`
+                    : "Ticket marcado como no asignado.",
+                )
+              }
+            />
 
             <div className="space-y-1.5">
               <Label>Categoría</Label>

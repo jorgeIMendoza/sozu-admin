@@ -15,6 +15,7 @@ import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { FUENTES, PRIORIDADES, type Priority } from "@/lib/portal-tickets/tickets-data";
 import { ContactoPicker, type ContactoRef } from "./ContactoPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
+import { PropietariosPicker } from "./PropietariosPicker";
 import { toast } from "sonner";
 
 // Fecha de hoy en formato YYYY-MM-DD (hora local, para el <input type="date">).
@@ -40,7 +41,7 @@ export function CreateTicketDialog({
   );
   const [descripcion, setDescripcion] = useState("");
   const [fuente, setFuente] = useState("Portal");
-  const [propietarioId, setPropietarioId] = useState("sin");
+  const [propietarios, setPropietarios] = useState<string[]>([]);
   const [prioridad, setPrioridad] = useState<Priority>("sin");
   const [fechaCreacion, setFechaCreacion] = useState(hoyLocal());
   const [categoriaId, setCategoriaId] = useState(categorias[0]?.id ?? "");
@@ -84,6 +85,7 @@ export function CreateTicketDialog({
     setPrioridad("sin");
     setContacto(null);
     setProyecto("");
+    setPropietarios([]);
     setError("");
   };
 
@@ -98,7 +100,7 @@ export function CreateTicketDialog({
       etapaId,
       prioridad,
       categoriaId,
-      propietarioId: propietarioId === "sin" ? null : propietarioId,
+      propietarios,
       solicitante: contacto?.nombre ?? "",
       entidadRelacionadaId: contacto?.id ?? null,
       inmueble: proyecto,
@@ -200,22 +202,12 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Propietario del ticket</Label>
-            <Select value={propietarioId} onValueChange={setPropietarioId}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sin">Sin asignar</SelectItem>
-                {agentes.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <PropietariosPicker
+            value={propietarios}
+            onChange={setPropietarios}
+            agentes={agentes}
+            label="Propietario(s) del ticket"
+          />
 
           <div className="space-y-1.5">
             <Label>Prioridad</Label>
