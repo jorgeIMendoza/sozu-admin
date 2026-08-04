@@ -2,9 +2,10 @@
  * Hook de datos para el modal de expediente del Portal Notaría.
  *
  * Responsabilidades de ESTE hook (toda la lógica de negocio):
- *   - Waterfall de queries: cuentas_cobranza → compradores → personas → documentos
- *   - Construcción de buildLatestDocByKey (selección del doc más reciente por grupo)
- *   - Determinación de completitud del expediente (5/5 grupos validados × todos los compradores)
+ *   - Personas del expediente vía fetchPersonasExpediente (compradores + rep legal + cónyuge)
+ *   - Doc vigente por grupo vía resolverGrupo (fuente única: expediente-obligatorios.ts)
+ *   - Completitud: todos los grupos exigidos por 'notaria' validados en todas las personas
+ *     (el total varía: PF=5, PM=9, cónyuge suma su propio juego)
  *   - Construcción de ExpedienteZipInput para buildExpedienteZip (URLs en bruto — NO resueltas)
  *   - Invocación de buildExpedienteZip y seguimiento de progreso
  *   - Emisión de eventos de auditoría (EXPEDIENTE_VIEWED, EXPEDIENTE_DOWNLOAD_*)
@@ -20,10 +21,14 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  OBLIGATORIO_GRUPOS,
-  ALL_OBLIGATORIO_IDS,
-  buildLatestDocByKey,
-} from '@/utils/expediente-grupos';
+  ALL_TIPO_IDS_OBLIGATORIOS,
+  buildLatestPorPersonaTipo,
+  fetchPersonasExpediente,
+  gruposObligatorios,
+  resolverGrupo,
+  ESTATUS_VALIDADO,
+  type PersonaExpedienteResuelta,
+} from '@/utils/expediente-obligatorios';
 import {
   buildExpedienteZip,
   type ExpedienteZipInput,
@@ -54,8 +59,8 @@ export interface UseNotariaExpedienteResult {
   isLoading: boolean;
   isError: boolean;
   isCompleto: boolean;
-  docsCompletos: number;      // mínimo entre compradores
-  docsTotal: number;          // siempre OBLIGATORIO_GRUPOS.length
+  docsCompletos: number;      // Σ grupos cumplidos de todas las personas del expediente
+  docsTotal: number;          // Σ grupos exigidos (varía: PF=5, PM=9, cónyuge suma su juego)
   downloadableCount: number;  // grupos con estatusId===2 y hasDoc, traíbles como ZIP
   download: () => Promise<void>;
   isDownloading: boolean;
@@ -104,40 +109,31 @@ export function useNotariaExpediente({
 
       if (cuentaErr || !cuentaCheck) return null;
 
-      // Compradores activos de esta cuenta
-      const { data: compradores } = await supabase
-        .from('compradores')
-        .select('id_persona, activo')
-        .eq('id_cuenta_cobranza' as any, idCuentaCobranza)
-        .eq('activo', true);
+      // Personas del expediente: compradores activos + rep legal (PM) + cónyuge
+      // (personas.id_conyuge) — fuente única de esa lista.
+      const personas = await fetchPersonasExpediente({ cuentaId: idCuentaCobranza }, supabase as never);
+      if (!personas.length) return { personas: [], latestByKey: {}, urlByDocId: {} };
 
-      if (!compradores?.length) return { compradores: [], docsByPersona: {}, urlByDocId: {} };
-
-      const personaIds = compradores.map(c => (c as any).id_persona as number).filter(Boolean);
-
-      // Personas — nombres
-      const { data: personas } = await supabase
-        .from('personas')
-        .select('id, nombre_legal, nombre_comercial')
-        .in('id', personaIds as any);
-      const personaMap: Record<number, { nombre_legal: string | null; nombre_comercial: string | null }> = {};
-      for (const p of personas ?? []) personaMap[(p as any).id] = p as any;
+      const docOwnerIds = [...new Set([
+        ...personas.map(p => p.personaId),
+        ...personas.map(p => p.repPersonaId).filter((v): v is number => v != null),
+      ])];
 
       // Documentos obligatorios con URL — única query para el modal
       const { data: docs } = await (supabase as any)
         .from('documentos')
         .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion, url')
-        .in('id_persona', personaIds)
-        .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
+        .in('id_persona', docOwnerIds)
+        .in('id_tipo_documento', ALL_TIPO_IDS_OBLIGATORIOS)
         .eq('activo', true)
         .eq('es_draft', false)
-        .limit(500);
+        .limit(1000);
 
-      const latestByKey = buildLatestDocByKey(docs ?? []);
+      const latestByKey = buildLatestPorPersonaTipo(docs ?? []);
       const urlByDocId: Record<number, string | null> = {};
       for (const d of docs ?? []) urlByDocId[d.id] = d.url;
 
-      return { compradores: compradores as any[], personaMap, latestByKey, urlByDocId, personaIds };
+      return { personas, latestByKey, urlByDocId };
     },
   });
 
@@ -160,18 +156,18 @@ export function useNotariaExpediente({
   const compradoresDisplay: CompradorExpedienteDisplay[] = [];
   const compradoresForZip: CompradorExpediente[] = [];
 
-  if (data?.personaIds && data.latestByKey && data.urlByDocId) {
-    data.personaIds.forEach((personaId: number, index: number) => {
-      const persona = data.personaMap?.[personaId];
-      const nombre = (persona?.nombre_legal || persona?.nombre_comercial || `Comprador ${index + 1}`) as string;
-
+  if (data?.personas && data.latestByKey && data.urlByDocId) {
+    (data.personas as PersonaExpedienteResuelta[]).forEach((persona, index) => {
       const gruposDisplay: GrupoStatusDisplay[] = [];
       const gruposForZip: GrupoDocStatus[] = [];
 
-      for (const grupo of OBLIGATORIO_GRUPOS) {
-        const entry = data.latestByKey[`${personaId}__${grupo.key}`];
-        const estatusId = entry?.estatusId ?? null;
-        const docId = entry?.id ?? null;
+      // Grupos según tipo de persona (PF/PM); los de owner 'rep' se evalúan
+      // contra la persona del representante legal.
+      for (const grupo of gruposObligatorios(persona.tipoPersona, 'notaria')) {
+        const ownerId = grupo.owner === 'rep' ? persona.repPersonaId : persona.personaId;
+        const { doc, cumplido } = resolverGrupo(ownerId, grupo, data.latestByKey);
+        const estatusId = cumplido ? ESTATUS_VALIDADO : doc?.estatusId ?? null;
+        const docId = doc?.id ?? null;
         const url = docId !== null ? (data.urlByDocId[docId] ?? null) : null;
 
         gruposDisplay.push({
@@ -190,19 +186,19 @@ export function useNotariaExpediente({
         });
       }
 
-      compradoresDisplay.push({ idPersona: personaId, nombre, folderIndex: index + 1, grupos: gruposDisplay });
-      compradoresForZip.push({ idPersona: personaId, nombre, folderIndex: index + 1, grupos: gruposForZip });
+      compradoresDisplay.push({ idPersona: persona.personaId, nombre: persona.nombre, folderIndex: index + 1, grupos: gruposDisplay });
+      compradoresForZip.push({ idPersona: persona.personaId, nombre: persona.nombre, folderIndex: index + 1, grupos: gruposForZip });
     });
   }
 
-  const validatedPerComprador = compradoresDisplay.map(c =>
-    c.grupos.filter(g => g.estatusId === 2).length
+  // El total ya no es fijo: PF exige 5, PM 9, y el cónyuge suma su propio juego.
+  const docsCompletos = compradoresDisplay.reduce(
+    (sum, c) => sum + c.grupos.filter(g => g.estatusId === ESTATUS_VALIDADO).length, 0
   );
-  const docsCompletos = validatedPerComprador.length > 0 ? Math.min(...validatedPerComprador) : 0;
-  const docsTotal = OBLIGATORIO_GRUPOS.length;
-  const isCompleto = docsCompletos === docsTotal && compradoresDisplay.length > 0;
+  const docsTotal = compradoresDisplay.reduce((sum, c) => sum + c.grupos.length, 0);
+  const isCompleto = compradoresDisplay.length > 0 && docsCompletos === docsTotal;
   const downloadableCount = compradoresDisplay.reduce(
-    (sum, c) => sum + c.grupos.filter(g => g.estatusId === 2 && g.hasDoc).length, 0
+    (sum, c) => sum + c.grupos.filter(g => g.estatusId === ESTATUS_VALIDADO && g.hasDoc).length, 0
   );
 
   // ── Download action ────────────────────────────────────────────────────────

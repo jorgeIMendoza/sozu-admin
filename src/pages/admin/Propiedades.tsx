@@ -171,6 +171,47 @@ const EsquemasPagoCell = ({ projectId }: { projectId: number }) => {
   );
 };
 
+// Depósito detectado en pagos_stp_raw (lo mismo que muestra Rastreo Pagos STP),
+// cruzado con la propiedad por CLABE: la temporal de apartado mientras no existe
+// cuenta de cobranza, y la de la cuenta una vez generada.
+interface DepositoSTP {
+  id: number;
+  monto: number;
+  fecha: string; // YYYY-MM-DD
+  ordenante: string | null;
+  rfc_ordenante: string | null;
+  clave_rastreo: string;
+  aplicado: boolean;
+  razon_rechazo: string | null;
+  destino: 'apartado' | 'cuenta';
+}
+
+// fecha_operacion es texto y llega tanto como YYYYMMDD como YYYY-MM-DD; si falta,
+// se usa fecha_creacion.
+const normalizarFechaSTP = (fechaOperacion: string | null, fechaCreacion: string): string => {
+  if (fechaOperacion) {
+    if (/^\d{8}$/.test(fechaOperacion)) {
+      return `${fechaOperacion.slice(0, 4)}-${fechaOperacion.slice(4, 6)}-${fechaOperacion.slice(6, 8)}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(fechaOperacion)) {
+      return fechaOperacion.slice(0, 10);
+    }
+  }
+  return (fechaCreacion || '').slice(0, 10);
+};
+
+const formatFechaCorta = (fecha: string): string => {
+  if (!fecha) return '';
+  const parsed = new Date(`${fecha}T00:00:00`);
+  return isNaN(parsed.getTime()) ? fecha : parsed.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' });
+};
+
+const formatFechaLarga = (fecha: string): string => {
+  if (!fecha) return '';
+  const parsed = new Date(`${fecha}T00:00:00`);
+  return isNaN(parsed.getTime()) ? fecha : parsed.toLocaleDateString('es-MX');
+};
+
 interface Property {
   id: number;
   numero_propiedad: string;
@@ -223,6 +264,8 @@ interface Property {
   // Nuevas propiedades para estacionamientos y bodegas
   estacionamientos_count: number;
   bodegas_count: number;
+  // Depósitos STP detectados en las CLABEs de la propiedad
+  pagos_stp: DepositoSTP[];
   // Estado de pagos
   payment_status?: {
     apartado: { status: 'no_pagado' | 'en_proceso' | 'pagado'; monto: number; monto_pagado: number; total: number; fecha: string | null };
@@ -239,7 +282,7 @@ type ColumnKey =
   | 'piso' | 'vista' | 'area' | 'configuracion' | 'planos' | 'tipo_transaccion' | 'precio' | 'precio_m2'
   | 'estacionamientos' | 'bodegas' | 'ofertas_comerciales' | 'ofertas_productos'
   | 'esquemas_pago' | 'disponibilidad' | 'cuenta_cobranza' | 'cuenta_clabe' | 'precio_final'
-  | 'pagado' | 'restante' | 'estado_pagos' | 'factura' | 'acciones';
+  | 'apartado' | 'pagos_stp' | 'pagado' | 'restante' | 'estado_pagos' | 'factura' | 'acciones';
 
 interface ColumnConfig {
   key: ColumnKey;
@@ -271,6 +314,8 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
   { key: 'cuenta_cobranza', label: 'Cuenta de cobranza', required: false, defaultVisible: true },
   { key: 'cuenta_clabe', label: 'Cuenta Clabe', required: false, defaultVisible: false },
   { key: 'precio_final', label: 'Precio Final', required: false, defaultVisible: true },
+  { key: 'apartado', label: 'Apartado', required: false, defaultVisible: true },
+  { key: 'pagos_stp', label: 'Pagos STP', required: false, defaultVisible: true },
   { key: 'pagado', label: 'Pagado', required: false, defaultVisible: false },
   { key: 'restante', label: 'Restante', required: false, defaultVisible: false },
   { key: 'estado_pagos', label: 'Estado de Pagos', required: false, defaultVisible: true },
@@ -281,6 +326,47 @@ const COLUMNS_CONFIG: ColumnConfig[] = [
 const STORAGE_KEY = 'propiedades-visible-columns';
 const ORDER_STORAGE_KEY = 'propiedades-columns-order';
 const FILTERS_STORAGE_KEY = 'propiedades-filtros';
+const KNOWN_COLUMNS_KEY = 'propiedades-columnas-conocidas';
+
+const CONFIG_COLUMN_KEYS = COLUMNS_CONFIG.map(col => col.key);
+
+// Columnas que existían antes de agregar 'Apartado' y 'Pagos STP'. Sirve como punto
+// de partida para usuarios que ya tenían su selección guardada en localStorage: sin
+// esto una columna nueva queda oculta para siempre, porque la selección guardada
+// solo contiene las columnas visibles de aquel momento.
+const COLUMNAS_AGREGADAS: ColumnKey[] = ['apartado', 'pagos_stp'];
+const COLUMNAS_CONOCIDAS_PREVIAS: ColumnKey[] = CONFIG_COLUMN_KEYS.filter(key => !COLUMNAS_AGREGADAS.includes(key));
+
+const getColumnasConocidas = (): ColumnKey[] => {
+  const guardadas = localStorage.getItem(KNOWN_COLUMNS_KEY);
+  if (!guardadas) return COLUMNAS_CONOCIDAS_PREVIAS;
+  try {
+    return JSON.parse(guardadas) as ColumnKey[];
+  } catch {
+    return COLUMNAS_CONOCIDAS_PREVIAS;
+  }
+};
+
+// Columnas agregadas después de la última vez que el usuario guardó su configuración
+// y que deben aparecer visibles por defecto.
+const getColumnasNuevasVisibles = (): ColumnKey[] => {
+  const conocidas = getColumnasConocidas();
+  return COLUMNS_CONFIG
+    .filter(col => col.defaultVisible && !conocidas.includes(col.key))
+    .map(col => col.key);
+};
+
+// Reinserta en el orden guardado las columnas que no estaban, junto a su vecina
+// anterior de COLUMNS_CONFIG (en vez de mandarlas al final, después de Acciones).
+const mergeColumnsOrder = (guardado: ColumnKey[]): ColumnKey[] => {
+  const orden = guardado.filter(key => CONFIG_COLUMN_KEYS.includes(key));
+  CONFIG_COLUMN_KEYS.forEach((key, index) => {
+    if (orden.includes(key)) return;
+    const previa = CONFIG_COLUMN_KEYS.slice(0, index).reverse().find(k => orden.includes(k));
+    orden.splice(previa ? orden.indexOf(previa) + 1 : 0, 0, key);
+  });
+  return orden;
+};
 
 // Sortable Item Component
 const SortableColumnItem = ({ column, isVisible, onToggle }: { column: ColumnConfig; isVisible: boolean; onToggle: (key: ColumnKey) => void }) => {
@@ -472,7 +558,7 @@ const Propiedades = () => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
-        return new Set(JSON.parse(saved));
+        return new Set([...(JSON.parse(saved) as ColumnKey[]), ...getColumnasNuevasVisibles()]);
       } catch {
         return new Set(COLUMNS_CONFIG.filter(col => col.defaultVisible).map(col => col.key));
       }
@@ -484,13 +570,26 @@ const Propiedades = () => {
     const saved = localStorage.getItem(ORDER_STORAGE_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        return mergeColumnsOrder(JSON.parse(saved) as ColumnKey[]);
       } catch {
-        return COLUMNS_CONFIG.map(col => col.key);
+        return [...CONFIG_COLUMN_KEYS];
       }
     }
-    return COLUMNS_CONFIG.map(col => col.key);
+    return [...CONFIG_COLUMN_KEYS];
   });
+
+  // Persistir la configuración ya fusionada y marcar las columnas como conocidas:
+  // sin esto la columna nueva volvería a desaparecer en la siguiente recarga.
+  useEffect(() => {
+    const conocidas = getColumnasConocidas();
+    if (CONFIG_COLUMN_KEYS.some(key => !conocidas.includes(key))) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(visibleColumns)));
+      localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(columnsOrder));
+    }
+    localStorage.setItem(KNOWN_COLUMNS_KEY, JSON.stringify(CONFIG_COLUMN_KEYS));
+    // Solo en el montaje: fija la configuración inicial ya fusionada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Get ordered columns config
   const orderedColumns = columnsOrder
@@ -582,6 +681,8 @@ const Propiedades = () => {
           m2_interiores,
           m2_exteriores,
           precio_lista,
+          monto_apartado,
+          monto_apartado_pagando,
           clabe_stp_tmp_apartado,
           id_tipo_transaccion,
           edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
@@ -852,6 +953,9 @@ const Propiedades = () => {
           "Tipo de Transacción": prop.tipos_transaccion?.nombre || '',
           "Precio Lista": prop.precio_lista || 0,
           "Precio Final": cuentaCobranza?.precio_final || '',
+          "Monto Apartado": prop.monto_apartado || 0,
+          // Solo tiene valor mientras no exista la cuenta de cobranza; al generarla el campo se limpia.
+          "Apartado Depositado": prop.monto_apartado_pagando || 0,
           Disponibilidad: prop.estatus_disponibilidad?.nombre || '',
           Propietario: prop.entidades_relacionadas?.personas?.nombre_legal || '',
           "Cuenta Cobranza": cuentaCobranza?.id ? formatCuentaCobranzaId(cuentaCobranza.id) : '',
@@ -1459,6 +1563,43 @@ const Propiedades = () => {
       return acc;
     }, {});
 
+    // Depósitos STP de las CLABEs de la página. Es la misma fuente que Rastreo Pagos
+    // STP (pagos_stp_raw): sirve para confirmar que un depósito de prueba cayó a la
+    // propiedad sin tener que salir a esa pantalla ni consultar la base.
+    const clabesCuentas = new Set(
+      activeCuentas.map((cuenta: any) => cuenta.clabe_stp).filter(Boolean) as string[]
+    );
+    const clabesApartado = new Set(
+      enrichedData.map((property: any) => property.clabe_stp_tmp_apartado).filter(Boolean) as string[]
+    );
+    const clabesPagina = [...new Set([...clabesApartado, ...clabesCuentas])];
+
+    const depositosPorClabe: Record<string, DepositoSTP[]> = {};
+    if (clabesPagina.length > 0) {
+      const { data: stpData } = await supabase
+        .from('pagos_stp_raw')
+        .select('id, claverastreo, monto, cuenta_beneficiario, nombre_ordenante, rfc_curp_ordenante, es_pago_aplicado, razon_rechazo, fecha_operacion, fecha_creacion')
+        .in('cuenta_beneficiario', clabesPagina)
+        .order('fecha_creacion', { ascending: false })
+        .limit(5000);
+
+      (stpData || []).forEach((row: any) => {
+        const clabe = row.cuenta_beneficiario as string;
+        if (!depositosPorClabe[clabe]) depositosPorClabe[clabe] = [];
+        depositosPorClabe[clabe].push({
+          id: row.id,
+          monto: Number(row.monto) || 0,
+          fecha: normalizarFechaSTP(row.fecha_operacion, row.fecha_creacion),
+          ordenante: row.nombre_ordenante,
+          rfc_ordenante: row.rfc_curp_ordenante,
+          clave_rastreo: row.claverastreo,
+          aplicado: row.es_pago_aplicado === true,
+          razon_rechazo: row.razon_rechazo,
+          destino: clabesApartado.has(clabe) ? 'apartado' : 'cuenta',
+        });
+      });
+    }
+
     // Fetch compradores for all active cuentas to determine current owner
     const cuentaIdsAll = activeCuentas.map(c => c.id);
     let compradoresPorCuenta: Record<number, { nombre: string; porcentaje: number }[]> = {};
@@ -1723,6 +1864,18 @@ const Propiedades = () => {
       // Get es_comision_venta_efectivo and porcentaje_comision_venta
       const esComisionEfectivo = cuentaCobranzaData?.es_comision_venta_efectivo || false;
       const porcentajeComision = cuentaCobranzaData?.porcentaje_comision_venta || 0;
+
+      // Depósitos STP de las dos CLABEs posibles de la propiedad (temporal de apartado
+      // y la de la cuenta). Se deduplican porque pueden coincidir.
+      const depositosSTP = Object.values(
+        [
+          ...(property.clabe_stp_tmp_apartado ? depositosPorClabe[property.clabe_stp_tmp_apartado] || [] : []),
+          ...(cuentaCobranzaData?.clabe_stp ? depositosPorClabe[cuentaCobranzaData.clabe_stp] || [] : []),
+        ].reduce((acc: Record<number, DepositoSTP>, deposito) => {
+          acc[deposito.id] = deposito;
+          return acc;
+        }, {})
+      ).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id);
       
       let paymentStatus = cuentaCobranzaData?.id && paymentStatusMap[cuentaCobranzaData.id] 
         ? paymentStatusMap[cuentaCobranzaData.id] 
@@ -1796,6 +1949,7 @@ const Propiedades = () => {
         monto_apartado: property.monto_apartado,
         monto_apartado_pagando: property.monto_apartado_pagando,
         clabe_stp_tmp_apartado: property.clabe_stp_tmp_apartado,
+        pagos_stp: depositosSTP,
         id_entidad_relacionada_dueno: property.id_entidad_relacionada_dueno,
         clabe_stp: property.id_tipo_transaccion === ID_TIPO_REVENTA 
           ? property.clabe_stp_tmp_apartado 
@@ -4316,6 +4470,76 @@ const Propiedades = () => {
     return formatCurrency(precio / totalM2);
   };
 
+  // Estado del apartado. Antes de generar la cuenta de cobranza el único rastro del
+  // depósito está en propiedades.monto_apartado_pagando (no hay pago ni acuerdo
+  // todavía), por eso los depósitos de prueba no se veían en ninguna pantalla. Al
+  // generar la cuenta ese campo se limpia y el apartado pasa a ser el acuerdo de
+  // concepto 1, de donde sale el estado desde ese momento.
+  const getApartadoInfo = (property: Property): {
+    tono: 'pagado' | 'parcial' | 'pendiente' | 'na';
+    texto: string;
+    detalle: string[];
+  } => {
+    const montoApartado = Number(property.monto_apartado || 0);
+    const depositado = Number(property.monto_apartado_pagando || 0);
+    const acuerdo = property.payment_status?.apartado;
+    const esReventa = property.tipo_transaccion === "Re-venta";
+    const detalle: string[] = [];
+
+    if (montoApartado > 0) {
+      detalle.push(`Monto de apartado de la unidad: ${formatCurrency(montoApartado)}`);
+    }
+
+    // Contraste con lo que realmente cayó por STP: si hay depósito detectado pero el
+    // apartado sigue en cero, el depósito no se ha aplicado a la cuenta.
+    const depositosSTP = property.pagos_stp || [];
+    const totalSTP = depositosSTP.reduce((sum, deposito) => sum + deposito.monto, 0);
+    if (depositosSTP.length > 0) {
+      detalle.push(`Depósitos STP en la CLABE: ${formatCurrency(totalSTP)} (${depositosSTP.length})`);
+    }
+
+    if (property.cuenta_cobranza_id && !esReventa) {
+      if (acuerdo && acuerdo.total > 0) {
+        detalle.push(`Acuerdo de apartado: ${formatCurrency(acuerdo.monto_pagado)} de ${formatCurrency(acuerdo.monto)}`);
+        if (acuerdo.fecha) {
+          detalle.push(`Última fecha de pago: ${new Date(acuerdo.fecha).toLocaleDateString('es-MX')}`);
+        }
+        if (acuerdo.status === 'pagado') return { tono: 'pagado', texto: 'Pagado', detalle };
+        if (acuerdo.monto_pagado > 0) {
+          return { tono: 'parcial', texto: `${formatCurrency(acuerdo.monto_pagado)} abonado`, detalle };
+        }
+        return { tono: 'pendiente', texto: 'Pendiente', detalle };
+      }
+
+      // Esquema sin acuerdo de apartado: el monto quedó dentro del pago inicial de la cuenta.
+      detalle.push('El esquema no tiene acuerdo de apartado; el monto se registró en el pago inicial de la cuenta');
+      return property.apartado_pagado
+        ? { tono: 'pagado', texto: 'Pagado', detalle }
+        : { tono: 'pendiente', texto: 'Pendiente', detalle };
+    }
+
+    if (depositado > 0) {
+      detalle.push(`Depositado antes de generar la cuenta: ${formatCurrency(depositado)}`);
+      if (property.clabe_stp_tmp_apartado) {
+        detalle.push(`CLABE de apartado: ${property.clabe_stp_tmp_apartado}`);
+      }
+      const cubierto = montoApartado > 0 && depositado >= montoApartado - 0.01;
+      return cubierto
+        ? { tono: 'pagado', texto: `Pagado ${formatCurrency(depositado)}`, detalle }
+        : { tono: 'parcial', texto: `${formatCurrency(depositado)} abonado`, detalle };
+    }
+
+    // Cayó dinero por STP pero no está reflejado ni en la propiedad ni en la cuenta:
+    // el depósito existe y falta aplicarlo (el caso que hoy solo se veía en STP).
+    if (totalSTP > 0) {
+      detalle.push('El depósito aún no está aplicado al apartado');
+      return { tono: 'parcial', texto: `${formatCurrency(totalSTP)} sin aplicar`, detalle };
+    }
+
+    if (montoApartado > 0) return { tono: 'pendiente', texto: 'Sin depósitos', detalle };
+    return { tono: 'na', texto: '-', detalle };
+  };
+
   const handlePropertyAdded = () => {
     refetchActivos();
     refetchDraft();
@@ -4913,6 +5137,103 @@ const Propiedades = () => {
                           </TableCell>
                         );
                       
+                      case 'apartado': {
+                        const apartadoInfo = getApartadoInfo(property);
+
+                        if (apartadoInfo.tono === 'na') {
+                          return <TableCell key={column.key} className="text-muted-foreground">-</TableCell>;
+                        }
+
+                        const apartadoClases = apartadoInfo.tono === 'pagado'
+                          ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400'
+                          : apartadoInfo.tono === 'parcial'
+                          ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400'
+                          : 'text-muted-foreground';
+
+                        return (
+                          <TableCell key={column.key}>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className={`text-xs whitespace-nowrap ${apartadoClases}`}>
+                                    {apartadoInfo.texto}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  {apartadoInfo.detalle.length > 0 ? (
+                                    apartadoInfo.detalle.map((linea) => (
+                                      <p key={linea} className="text-sm">{linea}</p>
+                                    ))
+                                  ) : (
+                                    <p className="text-sm">Sin información de apartado</p>
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                        );
+                      }
+
+                      case 'pagos_stp': {
+                        const depositos = property.pagos_stp || [];
+
+                        if (depositos.length === 0) {
+                          return (
+                            <TableCell key={column.key}>
+                              <span className="text-xs text-muted-foreground">Sin depósitos</span>
+                            </TableCell>
+                          );
+                        }
+
+                        const ultimo = depositos[0];
+                        const totalDepositado = depositos.reduce((sum, dep) => sum + dep.monto, 0);
+                        const hayNoAplicados = depositos.some(dep => !dep.aplicado);
+                        const stpClases = hayNoAplicados
+                          ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400'
+                          : 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400';
+
+                        return (
+                          <TableCell key={column.key}>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className={`text-xs whitespace-nowrap ${stpClases}`}>
+                                    {formatCurrency(ultimo.monto)} · {formatFechaCorta(ultimo.fecha)}
+                                    {depositos.length > 1 && ` (+${depositos.length - 1})`}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-sm">
+                                  <p className="font-semibold">
+                                    {depositos.length} {depositos.length === 1 ? 'depósito STP' : 'depósitos STP'} · {formatCurrency(totalDepositado)}
+                                  </p>
+                                  <div className="mt-1 space-y-1">
+                                    {depositos.slice(0, 5).map((deposito) => (
+                                      <div key={deposito.id} className="text-xs">
+                                        <p>
+                                          {formatFechaLarga(deposito.fecha)} — {formatCurrency(deposito.monto)}
+                                          {deposito.aplicado ? ' — aplicado' : ' — sin aplicar'}
+                                          {deposito.destino === 'apartado' ? ' (CLABE de apartado)' : ''}
+                                        </p>
+                                        {deposito.ordenante && <p className="text-muted-foreground">{deposito.ordenante}</p>}
+                                        <p className="font-mono text-muted-foreground">{deposito.clave_rastreo}</p>
+                                        {deposito.razon_rechazo && (
+                                          <p className="text-amber-600 dark:text-amber-400">Rechazo: {deposito.razon_rechazo}</p>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {depositos.length > 5 && (
+                                      <p className="text-xs text-muted-foreground">
+                                        y {depositos.length - 5} más — ver Rastreo Pagos STP
+                                      </p>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                        );
+                      }
+
                       case 'pagado':
                         // Para Reventa, no mostrar pagado de cuenta de cobranza anterior
                         return (

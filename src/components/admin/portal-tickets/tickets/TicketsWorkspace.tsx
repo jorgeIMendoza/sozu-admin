@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Download, LayoutGrid, List, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,16 @@ export function TicketsWorkspace({
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
   const [seleccion, setSeleccion] = useState<string[]>([]);
-  const [detalle, setDetalle] = useState<Ticket | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
   const [crear, setCrear] = useState(false);
+
+  // pipelines carga async (React Query): al llegar, fijar el pipeline activo si aún no es válido.
+  useEffect(() => {
+    if (pipelines.length && !pipelines.some((p) => p.id === pipelineId)) {
+      setPipelineId(pipelines[0].id);
+      setEtapaFiltro("todas");
+    }
+  }, [pipelines, pipelineId]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -123,6 +131,9 @@ export function TicketsWorkspace({
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
+  // El ticket del panel de detalle se deriva de la lista viva (no de una copia capturada al
+  // abrir), para que al editar (propietario, etapa, etc.) el panel refleje el cambio sin F5.
+  const detalle = useMemo(() => tickets.find((t) => t.id === detalleId) ?? null, [tickets, detalleId]);
 
   const cambiarOrden = (campo: OrdenCampo) =>
     setOrden((o) => ({ campo, dir: o.campo === campo && o.dir === "desc" ? "asc" : "desc" }));
@@ -340,7 +351,7 @@ export function TicketsWorkspace({
             tickets={visibles}
             seleccion={seleccion}
             onSeleccion={setSeleccion}
-            onAbrir={setDetalle}
+            onAbrir={(t) => setDetalleId(t.id)}
             orden={orden}
             onOrden={cambiarOrden}
           />
@@ -387,10 +398,10 @@ export function TicketsWorkspace({
           </div>
         </>
       ) : (
-        <TicketsKanban tickets={filtrados} pipelineId={pipelineId} onAbrir={setDetalle} />
+        <TicketsKanban tickets={filtrados} pipelineId={pipelineId} onAbrir={(t) => setDetalleId(t.id)} />
       )}
 
-      <TicketDetailSheet ticket={detalle} onOpenChange={(o) => !o && setDetalle(null)} />
+      <TicketDetailSheet ticket={detalle} onOpenChange={(o) => !o && setDetalleId(null)} />
       <CreateTicketDialog open={crear} onOpenChange={setCrear} />
     </div>
   );

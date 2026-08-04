@@ -31,7 +31,7 @@ export type TipoPersona = 'pf' | 'pm';
 /** De quién es el documento: de la persona del expediente o de su representante legal. */
 export type DocOwner = 'self' | 'rep';
 /** Portales que validan expedientes. Cada uno declara qué grupos le bloquean. */
-export type PortalExpediente = 'escrituracion' | 'juridico' | 'socio_bancario' | 'notaria';
+export type PortalExpediente = 'escrituracion' | 'juridico' | 'socio_bancario' | 'notaria' | 'cobranza';
 
 export interface GrupoObligatorio {
   key: string;
@@ -44,18 +44,19 @@ export interface GrupoObligatorio {
 }
 
 const TODOS_LOS_PORTALES: readonly PortalExpediente[] =
-  ['escrituracion', 'juridico', 'socio_bancario', 'notaria'];
+  ['escrituracion', 'juridico', 'socio_bancario', 'notaria', 'cobranza'];
 
 /**
  * Persona física. `acta` está obligatoria porque escrituración la exige; por la regla de
  * fusión, el perfil de cliente también la pide obligatoria.
  */
 export const GRUPOS_PF: readonly GrupoObligatorio[] = [
-  { key: 'identidad', label: 'Identificación oficial',         ids: ID_DOC_TIPO_IDS, owner: 'self', portales: TODOS_LOS_PORTALES },
+  { key: 'identidad', label: 'Identificación oficial (INE o pasaporte)',         ids: ID_DOC_TIPO_IDS, owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'curp',      label: 'CURP',                           ids: [5],             owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'csf',       label: 'Constancia de situación fiscal',  ids: [6],             owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8],             owner: 'self', portales: TODOS_LOS_PORTALES },
-  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1],             owner: 'self', portales: ['escrituracion', 'juridico', 'notaria'] },
+  // Cobranza muestra la lista canónica completa del perfil de cliente, acta incluida.
+  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1],             owner: 'self', portales: ['escrituracion', 'juridico', 'notaria', 'cobranza'] },
 ];
 
 /**
@@ -69,7 +70,7 @@ export const GRUPOS_PM: readonly GrupoObligatorio[] = [
   { key: 'csf_empresa',       label: 'CSF de la empresa',               ids: [6],  owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'domicilio_empresa', label: 'Domicilio fiscal de la empresa',  ids: [8],  owner: 'self', portales: TODOS_LOS_PORTALES },
   { key: 'poder_notarial',    label: 'Poder notarial',                  ids: [9],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
-  { key: 'identidad_rep',     label: 'Identificación del rep. legal',   ids: ID_DOC_TIPO_IDS, owner: 'rep', portales: TODOS_LOS_PORTALES },
+  { key: 'identidad_rep',     label: 'Identificación del rep. legal (INE o pasaporte)',   ids: ID_DOC_TIPO_IDS, owner: 'rep', portales: TODOS_LOS_PORTALES },
   { key: 'curp_rep',          label: 'CURP del rep. legal',             ids: [5],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
   { key: 'csf_rep',           label: 'CSF del rep. legal',              ids: [6],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
   { key: 'domicilio_rep',     label: 'Domicilio del rep. legal',        ids: [8],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
@@ -127,14 +128,139 @@ export function buildLatestPorPersonaTipo(docs: DocParaEvaluar[]): Record<string
   return map;
 }
 
-/** Un grupo está cumplido si ALGUNO de sus tipos tiene su doc más reciente validado. */
+// ── Identificación oficial: INE completo, pasaporte, y el legacy como fallback ──
+export const INE_FRENTE_TIPO_ID = 2;
+export const INE_REVERSO_TIPO_ID = 3;
+export const PASAPORTE_TIPO_ID = 4;
+/** Frente y reverso por separado: deprecados por el INE completo (tipo 63). */
+export const INE_LEGACY_TIPO_IDS = [INE_FRENTE_TIPO_ID, INE_REVERSO_TIPO_ID];
+
+export type OrigenIdentidad = 'ine_completo' | 'pasaporte' | 'ine_legacy' | 'ninguno';
+
+export interface ResolucionIdentidad {
+  cumplida: boolean;
+  origen: OrigenIdentidad;
+  /** Tipos que mandan hoy (63; o 4; o el par 2+3). Se resaltan en la UI. */
+  tiposVigentes: number[];
+  /** Presentes en la base pero ya sin efecto: se pintan como deprecados. */
+  tiposDeprecados: number[];
+  /** El legacy caducó: el único camino es subir el INE completo en un PDF. */
+  exigeIneCompleto: boolean;
+}
+
+/**
+ * Regla de negocio 2026-07-31, alineada con el portal del cliente (que es quien la dicta):
+ *
+ *  1. **Identificación oficial = INE o pasaporte**, uno u otro.
+ *  2. El canal vigente del INE es el **completo** (frente y reverso en un PDF, tipo 63).
+ *     `Frente INE` (2) y `Reverso INE` (3) quedan **deprecados**.
+ *  3. Al subir una identificación nueva, el portal del cliente ya expira las demás
+ *     (`commitDoc(..., ID_DOC_TIPO_IDS.filter(t => t !== tipoId))`): así solo queda una
+ *     versión vigente. Aquí solo se **lee** ese resultado.
+ *  4. Mientras el legacy siga **validado**, vale como fallback — el par frente + reverso,
+ *     igual que exige el portal del cliente. Quien ya lo tenía aprobado no se rompe.
+ *  5. Si el legacy está **expirado o rechazado**, el fallback muere: solo cuenta el INE
+ *     completo. (20 personas en prod al 2026-07-31.)
+ */
+export function resolverIdentidad(
+  personaId: number | null,
+  latest: Record<string, LatestDoc>,
+): ResolucionIdentidad {
+  const vacia: ResolucionIdentidad = {
+    cumplida: false, origen: 'ninguno', tiposVigentes: [], tiposDeprecados: [], exigeIneCompleto: false,
+  };
+  if (!personaId) return vacia;
+
+  const doc = (t: number) => latest[`${personaId}__${t}`];
+  const validado = (t: number) => doc(t)?.estatusId === ESTATUS_VALIDADO;
+  const caduco = (t: number) => doc(t)?.estatusId === 4 || doc(t)?.estatusId === 3;
+  const legacyPresente = INE_LEGACY_TIPO_IDS.filter(t => !!doc(t));
+
+  // 1. INE completo subido → manda, y el legacy queda deprecado aunque siga en la base.
+  if (doc(INE_COMPLETO_TIPO_ID)) {
+    return {
+      cumplida: validado(INE_COMPLETO_TIPO_ID),
+      origen: 'ine_completo',
+      tiposVigentes: [INE_COMPLETO_TIPO_ID],
+      tiposDeprecados: legacyPresente,
+      exigeIneCompleto: false,
+    };
+  }
+
+  // 2. Pasaporte: alternativa válida por sí sola, no deprecada.
+  if (validado(PASAPORTE_TIPO_ID)) {
+    return { ...vacia, cumplida: true, origen: 'pasaporte', tiposVigentes: [PASAPORTE_TIPO_ID], tiposDeprecados: legacyPresente };
+  }
+
+  // 3. Fallback legacy: basta el FRENTE validado. Muchas cargas históricas subieron un
+  //    solo PDF con ambos lados bajo el tipo "Frente INE" (780 frentes contra 174 reversos
+  //    en prod), así que exigir el reverso castigaría a quien ya cumplió. El reverso, si
+  //    existe y está validado, suma pero no bloquea.
+  if (validado(INE_FRENTE_TIPO_ID)) {
+    return {
+      ...vacia, cumplida: true, origen: 'ine_legacy',
+      tiposVigentes: INE_LEGACY_TIPO_IDS.filter(validado),
+    };
+  }
+
+  // 4. Sin identificación vigente. Si el legacy existe pero caducó (o está incompleto),
+  //    el único camino es el INE completo.
+  return {
+    ...vacia,
+    tiposDeprecados: legacyPresente,
+    // El frente no está validado (expirado, rechazado o en revisión): el único camino
+    // vigente es el INE completo.
+    exigeIneCompleto: legacyPresente.length > 0,
+  };
+}
+
+/** El grupo de identificación oficial no se evalúa por "algún tipo validado". */
+export const ES_GRUPO_IDENTIDAD = (key: string) => key === 'identidad' || key === 'identidad_rep';
+
+export interface ResolucionGrupo {
+  /** Documento vigente del grupo (el más reciente entre sus tipos que mandan). */
+  doc: LatestDoc | null;
+  cumplido: boolean;
+}
+
+/**
+ * Documento vigente y cumplimiento de un grupo, con el mismo criterio en todas las
+ * pantallas. El grupo de identificación oficial usa `resolverIdentidad` (INE completo >
+ * pasaporte > par legacy) y su vigente sale de los tipos que mandan, no del más nuevo
+ * a secas: un frente rechazado no tapa un pasaporte validado.
+ */
+export function resolverGrupo(
+  personaId: number | null,
+  grupo: GrupoObligatorio,
+  latest: Record<string, LatestDoc>,
+): ResolucionGrupo {
+  if (!personaId) return { doc: null, cumplido: false };
+
+  const masReciente = (tipos: readonly number[]): LatestDoc | null => {
+    let mejor: LatestDoc | null = null;
+    for (const t of tipos) {
+      const d = latest[`${personaId}__${t}`];
+      if (d && (!mejor || d.fecha > mejor.fecha || (d.fecha === mejor.fecha && d.id > mejor.id))) mejor = d;
+    }
+    return mejor;
+  };
+
+  if (ES_GRUPO_IDENTIDAD(grupo.key)) {
+    const res = resolverIdentidad(personaId, latest);
+    const doc = res.tiposVigentes.length ? masReciente(res.tiposVigentes) : masReciente(grupo.ids);
+    return { doc, cumplido: res.cumplida };
+  }
+
+  const doc = masReciente(grupo.ids);
+  return { doc, cumplido: doc?.estatusId === ESTATUS_VALIDADO };
+}
+
 function grupoCumplido(
   personaId: number | null,
   grupo: GrupoObligatorio,
   latest: Record<string, LatestDoc>,
 ): boolean {
-  if (!personaId) return false;
-  return grupo.ids.some(tipoId => latest[`${personaId}__${tipoId}`]?.estatusId === ESTATUS_VALIDADO);
+  return resolverGrupo(personaId, grupo, latest).cumplido;
 }
 
 export interface EvaluacionExpediente {
@@ -234,4 +360,133 @@ export async function fetchDocsObligatorios(
     if (data) out.push(...(data as DocParaEvaluar[]));
   }
   return out;
+}
+
+// ── Cónyuge (propiedad mancomunada) ───────────────────────────────────────────
+/**
+ * Criterio autorizado por Eduardo (2026-08-03): **si `personas.id_conyuge` está presente,
+ * el expediente incluye también los documentos del cónyuge.**
+ *
+ * No existe campo de régimen matrimonial en la base (`personas.regimen` guarda el régimen
+ * FISCAL del SAT: 601, 603, 605…), así que no se puede distinguir mancomunado de separación
+ * de bienes. Con el vínculo presente se asume que aplica. En prod hay 126 personas con
+ * cónyuge ligado y 315 filas de compradores que lo tienen.
+ *
+ * El cónyuge se evalúa con los MISMOS grupos que un comprador persona física: son dos
+ * entidades distintas, cada una con su juego completo de documentos.
+ */
+export function personasDelExpediente(
+  compradores: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; conyugePersonaId?: number | null }>,
+): Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number }> {
+  const salida: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number }> = [];
+  for (const c of compradores) {
+    salida.push({ personaId: c.personaId, nombre: c.nombre, tipoPersona: c.tipoPersona, repPersonaId: c.repPersonaId ?? null });
+    // Solo persona física puede tener cónyuge; una PM no.
+    if (c.tipoPersona === 'pf' && c.conyugePersonaId) {
+      salida.push({ personaId: c.conyugePersonaId, tipoPersona: 'pf', esConyugeDe: c.personaId });
+    }
+  }
+  // Dedup por si el cónyuge también figura como comprador de la misma cuenta.
+  const vistos = new Set<number>();
+  return salida.filter(p => (vistos.has(p.personaId) ? false : (vistos.add(p.personaId), true)));
+}
+
+// ── Personas del expediente resueltas desde la base ──────────────────────────
+export interface PersonaExpedienteResuelta {
+  personaId: number;
+  nombre: string;
+  tipoPersona: TipoPersona;
+  repPersonaId: number | null;
+  /** Presente cuando la persona entra al expediente como cónyuge de ese comprador. */
+  esConyugeDe?: number;
+  /** Nombre del comprador titular (solo cuando esConyugeDe está presente). */
+  nombreTitular?: string;
+}
+
+/**
+ * Resuelve las personas que componen un expediente: compradores de la cuenta (o los
+ * `personaIds` dados), su representante legal cuando son PM
+ * (`id_entidad_relacionada_rep_leg` → `entidades_relacionadas.id_persona`) y su cónyuge
+ * cuando `personas.id_conyuge` está presente. Es el ÚNICO lugar que arma esa lista:
+ * cualquier pantalla que la necesite parte de aquí.
+ */
+export async function fetchPersonasExpediente(
+  args: { cuentaId?: number | null; personaIds?: number[] },
+  cliente: { from: (t: string) => any },
+): Promise<PersonaExpedienteResuelta[]> {
+  let ids = [...new Set(args.personaIds ?? [])];
+  if (!ids.length && args.cuentaId) {
+    const { data } = await cliente
+      .from('compradores')
+      .select('id_persona')
+      .eq('id_cuenta_cobranza', args.cuentaId)
+      .eq('activo', true);
+    ids = [...new Set((data ?? []).map((c: any) => c.id_persona as number).filter(Boolean))];
+  }
+  if (!ids.length) return [];
+
+  type PersonaRow = {
+    id: number; nombre_legal: string | null; nombre_comercial: string | null;
+    tipo_persona: string | null; id_conyuge: number | null;
+    id_entidad_relacionada_rep_leg: number | null;
+  };
+  const { data: personas } = await cliente
+    .from('personas')
+    .select('id, nombre_legal, nombre_comercial, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg')
+    .in('id', ids);
+  const rows = (personas ?? []) as PersonaRow[];
+
+  // Representante legal: entidad relacionada → persona.
+  const repEntidadIds = [...new Set(rows.map(r => r.id_entidad_relacionada_rep_leg).filter((v): v is number => v != null))];
+  const repPersonaPorEntidad: Record<number, number> = {};
+  if (repEntidadIds.length) {
+    const { data: reps } = await cliente
+      .from('entidades_relacionadas')
+      .select('id, id_persona')
+      .in('id', repEntidadIds);
+    for (const r of (reps ?? []) as Array<{ id: number; id_persona: number | null }>) {
+      if (r.id_persona) repPersonaPorEntidad[r.id] = r.id_persona;
+    }
+  }
+
+  const nombreDe = (r: PersonaRow) => r.nombre_legal || r.nombre_comercial || `Persona ${r.id}`;
+  const porId = new Map(rows.map(r => [r.id, r]));
+
+  const base = ids
+    .map(id => porId.get(id))
+    .filter((r): r is PersonaRow => !!r)
+    .map(r => ({
+      personaId: r.id,
+      nombre: nombreDe(r),
+      tipoPersona: normalizarTipoPersona(r.tipo_persona),
+      repPersonaId: r.id_entidad_relacionada_rep_leg != null
+        ? repPersonaPorEntidad[r.id_entidad_relacionada_rep_leg] ?? null
+        : null,
+      conyugePersonaId: r.id_conyuge ?? null,
+    }));
+
+  const expandidas = personasDelExpediente(base);
+
+  // Nombres de los cónyuges que no venían en la lista original.
+  const faltanNombre = expandidas.filter(p => p.esConyugeDe && !porId.has(p.personaId)).map(p => p.personaId);
+  const nombreConyuge: Record<number, string> = {};
+  if (faltanNombre.length) {
+    const { data: cs } = await cliente
+      .from('personas')
+      .select('id, nombre_legal, nombre_comercial')
+      .in('id', faltanNombre);
+    for (const c of (cs ?? []) as Array<{ id: number; nombre_legal: string | null; nombre_comercial: string | null }>) {
+      nombreConyuge[c.id] = c.nombre_legal || c.nombre_comercial || `Persona ${c.id}`;
+    }
+  }
+
+  const nombrePorId = new Map(base.map(b => [b.personaId, b.nombre]));
+  return expandidas.map(p => ({
+    personaId: p.personaId,
+    nombre: p.nombre ?? nombreConyuge[p.personaId] ?? nombrePorId.get(p.personaId) ?? `Persona ${p.personaId}`,
+    tipoPersona: p.tipoPersona,
+    repPersonaId: p.repPersonaId ?? null,
+    esConyugeDe: p.esConyugeDe,
+    nombreTitular: p.esConyugeDe ? nombrePorId.get(p.esConyugeDe) : undefined,
+  }));
 }

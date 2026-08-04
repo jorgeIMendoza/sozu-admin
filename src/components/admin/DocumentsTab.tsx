@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
+import { esTipoPersonal, expirarPreviosPersonales, esVersionVigente } from '@/lib/documentos/expediente-personal';
 import {
   TIPO_DOC_FACTURA_COMISION_EXTERNA,
   sincronizarFacturaComisionEnCuenta,
@@ -288,7 +289,24 @@ export function DocumentsTab({
           return new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime();
         });
       
-      setDocumentos(docs);
+      // Una fila por categoría: se conserva el documento MÁS RECIENTE de cada
+      // (persona, tipo). El histórico completo sigue accesible en el botón de historial de
+      // cada fila. Antes se listaba todo lo activo, así que el mismo comprador mostraba dos
+      // "Constancia de situación fiscal" —una expirada y una válida— y no quedaba claro
+      // cuál cuenta. Regla única del proyecto: manda el más reciente
+      // (src/utils/expediente-obligatorios.ts).
+      const vigentePorCategoria = new Map<string, typeof docs[number]>();
+      for (const d of docs) {
+        const clave = `${d.id_persona ?? 'sin_persona'}__${d.id_tipo_documento}`;
+        const previo = vigentePorCategoria.get(clave);
+        const fecha = (x: typeof d) => new Date(x.fecha_creacion ?? 0).getTime();
+        if (!previo || fecha(d) > fecha(previo) || (fecha(d) === fecha(previo) && d.id > previo.id)) {
+          vigentePorCategoria.set(clave, d);
+        }
+      }
+      setDocumentos([...vigentePorCategoria.values()].sort((a, b) =>
+        (a.tipo_documento_nombre || '').localeCompare(b.tipo_documento_nombre || '', 'es', { sensitivity: 'base' })
+      ));
     } catch (error) {
       console.error('Error loading documents:', error);
     } finally {
@@ -464,6 +482,14 @@ export function DocumentsTab({
         if (idPersona) {
           documentoData.id_persona = idPersona;
         }
+      }
+
+      // Expediente personal: una sola versión vigente. Solo cuando el documento es de
+      // una persona y el tipo es del perfil (identidad, CURP, CSF, domicilio, actas).
+      // Los documentos de cuenta o propiedad no entran: varias facturas, contratos o
+      // escrituras del mismo tipo son legítimas.
+      if (entityType === 'persona' && esTipoPersonal(parseInt(selectedTipoDocumento))) {
+        await expirarPreviosPersonales(entityId as number, parseInt(selectedTipoDocumento));
       }
 
       const { error: insertError } = await supabase.from('documentos').insert(documentoData);
@@ -805,7 +831,24 @@ export function DocumentsTab({
 
       // Toggle: si está validado (2) -> pendiente (1), si no está validado -> validado (2)
       const nuevoEstatus = documento.id_estatus_verificacion === 2 ? 1 : 2;
-      
+
+      // No se puede validar una versión superada del expediente personal: por aquí
+      // volvían a estatus 2 filas viejas y el expediente mostraba dos documentos
+      // aprobados del mismo tipo. Quitar la validación sí se permite.
+      if (
+        nuevoEstatus === 2 &&
+        entityType === 'persona' &&
+        esTipoPersonal(documento.id_tipo_documento) &&
+        !(await esVersionVigente(entityId as number, documento.id, documento.id_tipo_documento))
+      ) {
+        toast({
+          variant: "destructive",
+          title: "No es la versión vigente",
+          description: "Este documento fue reemplazado por una carga más reciente. Valida la última versión.",
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('documentos')
         .update({ id_estatus_verificacion: nuevoEstatus })

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,6 +20,8 @@ import {
   type Ticket,
 } from "@/lib/portal-tickets/tickets-data";
 import { PriorityDot } from "./PriorityDot";
+import { ContactoPicker } from "./ContactoPicker";
+import { ProyectoSelect } from "./ProyectoSelect";
 import { toast } from "sonner";
 
 export function TicketDetailSheet({
@@ -151,23 +152,33 @@ export function TicketDetailSheet({
               </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Solicitante</Label>
-              <Input
-                value={ticket.solicitante}
-                readOnly={readOnly}
-                onChange={(e) => actualizarTicket(ticket.id, { solicitante: e.target.value })}
-              />
-            </div>
+            <ContactoPicker
+              disabled={readOnly}
+              value={
+                ticket.entidadRelacionadaId
+                  ? { id: ticket.entidadRelacionadaId, nombre: ticket.solicitante || "Contacto" }
+                  : null
+              }
+              onChange={(c) =>
+                actualizarTicket(
+                  ticket.id,
+                  { entidadRelacionadaId: c?.id ?? null, solicitante: c?.nombre ?? "" },
+                  c ? `Contacto vinculado: ${c.nombre}.` : "Contacto desvinculado.",
+                )
+              }
+            />
 
-            <div className="space-y-1.5">
-              <Label>Inmueble</Label>
-              <Input
-                value={ticket.inmueble}
-                readOnly={readOnly}
-                onChange={(e) => actualizarTicket(ticket.id, { inmueble: e.target.value })}
-              />
-            </div>
+            <ProyectoSelect
+              disabled={readOnly}
+              value={ticket.inmueble}
+              onChange={(nombre) =>
+                actualizarTicket(
+                  ticket.id,
+                  { inmueble: nombre },
+                  nombre ? `Proyecto: ${nombre}.` : "Proyecto quitado.",
+                )
+              }
+            />
           </div>
 
           <div className="space-y-1.5">
