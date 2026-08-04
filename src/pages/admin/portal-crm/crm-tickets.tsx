@@ -7,9 +7,10 @@ import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchAgentes } from "@/lib/portal-tickets/tickets-store";
+import { fetchAgentes, enviarCorreoAsignacion } from "@/lib/portal-tickets/tickets-store";
 import { PRIORIDADES } from "@/lib/portal-tickets/tickets-data";
 import { ProyectoSelect } from "@/components/admin/portal-tickets/tickets/ProyectoSelect";
+import { PropietariosPicker } from "@/components/admin/portal-tickets/tickets/PropietariosPicker";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ const EMPTY = {
   id_etapa: "",
   prioridad: "sin",
   id_categoria: "",
-  id_propietario: "",
+  propietarios: [] as string[],
   proyecto: "",
   descripcion: "",
 };
@@ -64,7 +65,7 @@ function CreateTicketFromContactDialog({
   onSaved: () => void;
   trigger: ReactNode;
 }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
   const [saving, setSaving] = useState(false);
@@ -125,7 +126,7 @@ function CreateTicketFromContactDialog({
         id_etapa: Number(form.id_etapa),
         prioridad: form.prioridad,
         id_categoria: form.id_categoria ? Number(form.id_categoria) : null,
-        id_usuario_propietario: form.id_propietario || null,
+        id_usuario_propietario: form.propietarios[0] || null,
         id_usuario_creador: user?.id ?? null,
         id_entidad_relacionada: Number(contactId),
         solicitante: contactName || null,
@@ -133,9 +134,19 @@ function CreateTicketFromContactDialog({
         descripcion: form.descripcion.trim() || null,
         fuente: "Portal",
       })
-      .select("id")
+      .select("id, numero")
       .single();
     if (!error && ins?.id) {
+      if (form.propietarios.length) {
+        await sb
+          .from("tickets_propietarios")
+          .insert(form.propietarios.map((u) => ({ id_ticket: ins.id, id_usuario: u })));
+        const destinatarios = form.propietarios
+          .map((id) => agentes.find((a) => a.id === id))
+          .filter((a): a is NonNullable<typeof a> => !!a?.email);
+        const asignadoPor = (profile as any)?.nombre || user?.email || "Equipo SOZU";
+        enviarCorreoAsignacion(destinatarios, ins.numero, form.nombre.trim(), asignadoPor);
+      }
       await sb.from("tickets_actividad").insert({
         id_ticket: ins.id,
         texto: "Ticket creado desde la ficha de contacto.",
@@ -242,21 +253,12 @@ function CreateTicketFromContactDialog({
               </Select>
             </div>
           </div>
-          <div className="grid gap-1.5">
-            <Label>Propietario</Label>
-            <Select value={form.id_propietario} onValueChange={(v) => setForm({ ...form, id_propietario: v })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sin asignar" />
-              </SelectTrigger>
-              <SelectContent>
-                {agentes.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <PropietariosPicker
+            value={form.propietarios}
+            onChange={(ids) => setForm({ ...form, propietarios: ids })}
+            agentes={agentes}
+            label="Propietario(s)"
+          />
           <ProyectoSelect value={form.proyecto} onChange={(v) => setForm({ ...form, proyecto: v })} />
           <div className="grid gap-1.5">
             <Label>Descripción</Label>

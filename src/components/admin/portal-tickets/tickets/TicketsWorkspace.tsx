@@ -69,10 +69,15 @@ export function TicketsWorkspace({
     const q = busqueda.trim().toLowerCase();
     const lista = tickets.filter((t) => {
       if (t.pipelineId !== pipelineId) return false;
-      if (scope === "mios" && t.propietarioId !== propietarioActualId) return false;
-      if (scope === "sin-asignar" && t.propietarioId !== null) return false;
+      // "Mis tickets" = donde soy propietario O donde yo di de alta el ticket.
+      if (
+        scope === "mios" &&
+        !(t.propietarios.includes(propietarioActualId ?? "") || t.creadoPorId === propietarioActualId)
+      )
+        return false;
+      if (scope === "sin-asignar" && t.propietarios.length > 0) return false;
       if (propietario !== "todos") {
-        if (propietario === "sin" ? t.propietarioId !== null : t.propietarioId !== propietario)
+        if (propietario === "sin" ? t.propietarios.length > 0 : !t.propietarios.includes(propietario))
           return false;
       }
       if (prioridad !== "todas" && t.prioridad !== prioridad) return false;
@@ -123,7 +128,7 @@ export function TicketsWorkspace({
     return {
       total: filtrados.length,
       abiertos: abiertos.length,
-      sinAsignar: filtrados.filter((t) => t.propietarioId === null).length,
+      sinAsignar: filtrados.filter((t) => t.propietarios.length === 0).length,
       altaPrioridad: abiertos.filter((t) => t.prioridad === "alta").length,
     };
   }, [filtrados, etapas]);
@@ -145,7 +150,8 @@ export function TicketsWorkspace({
         pipelines.find((p) => p.id === t.pipelineId)?.nombre,
         etapas.find((e) => e.id === t.etapaId)?.nombre,
         t.prioridad,
-        agentes.find((a) => a.id === t.propietarioId)?.nombre ?? "Sin asignar",
+        t.propietarios.map((id) => agentes.find((a) => a.id === id)?.nombre).filter(Boolean).join("; ") ||
+          "Sin asignar",
         new Date(t.fechaCreacion).toLocaleDateString("es-MX"),
       ].join(","),
     );
@@ -305,11 +311,13 @@ export function TicketsWorkspace({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todas">Todas las categorías</SelectItem>
-            {categorias.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.nombre}
-              </SelectItem>
-            ))}
+            {categorias
+              .filter((c) => c.pipelineId === pipelineId)
+              .map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nombre}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
 
