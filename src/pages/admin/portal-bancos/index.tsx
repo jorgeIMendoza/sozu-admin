@@ -904,7 +904,14 @@ export function BancosEquipo() {
       {
         onSuccess: () => {
           setForm({ nombre: "", email: "", telefono: "", rol: "agente" });
-          toast({ title: "Ejecutivo dado de alta", description: banco ? `Usuario creado en ${banco.nombre} · contraseña temporal: Temporal123!` : undefined });
+          // Las credenciales llegan por correo DESPUÉS de que el ejecutivo confirme
+          // su email (trigger handle_email_confirmation), no en el alta.
+          toast({
+            title: "Ejecutivo dado de alta",
+            description: banco
+              ? `Usuario creado en ${banco.nombre}. Le enviamos un correo para confirmar su cuenta; al confirmarlo recibirá sus credenciales.`
+              : "Le enviamos un correo para confirmar su cuenta; al confirmarlo recibirá sus credenciales.",
+          });
         },
         onError: (e: any) => toast({ title: "No se pudo crear", description: e?.message ?? "Error", variant: "destructive" }),
       },
@@ -942,7 +949,7 @@ export function BancosEquipo() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Nuevo ejecutivo</CardTitle>
-          {banco && <p className="text-xs text-muted-foreground">Se creará como usuario del sistema vinculado a <span className="font-medium text-foreground">{banco.nombre}</span> con contraseña temporal.</p>}
+          {banco && <p className="text-xs text-muted-foreground">Se creará como usuario del sistema vinculado a <span className="font-medium text-foreground">{banco.nombre}</span>. Recibirá un correo para confirmar su cuenta y ahí se le enviarán sus credenciales.</p>}
         </CardHeader>
         <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <Input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
@@ -1023,6 +1030,14 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
   };
 
   const onToggleActive = () => {
+    if (esYo && e.activo) {
+      toast({
+        title: "No puedes desactivar tu propia cuenta",
+        description: "Pide a otro supervisor del banco que lo haga.",
+        variant: "destructive",
+      });
+      return;
+    }
     setActivo.mutate(
       { email: e.email, activo: !e.activo },
       {
@@ -1059,7 +1074,15 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
-            <Button size="sm" variant={e.activo ? "outline" : "default"} onClick={onToggleActive} disabled={setActivo.isPending}>
+            {/* Nadie se da de baja a sí mismo: perdería el acceso al portal en el acto
+                y quedaría sin quién lo reactive si es el único supervisor. */}
+            <Button
+              size="sm"
+              variant={e.activo ? "outline" : "default"}
+              onClick={onToggleActive}
+              disabled={setActivo.isPending || (esYo && e.activo)}
+              title={esYo && e.activo ? "No puedes desactivar tu propia cuenta" : undefined}
+            >
               {e.activo ? "Desactivar" : "Reactivar"}
             </Button>
           </>

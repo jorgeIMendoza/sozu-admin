@@ -19,6 +19,9 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { AdminLayout } from "./components/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
+// Landing de /admin: Dashboard para quien tiene permiso, selector de portales
+// para los roles que solo tienen portales (ver AdminIndex).
+import AdminIndex from "./pages/admin/AdminIndex";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import InmobiliariasThemeWrapper from "./components/admin/InmobiliariasThemeWrapper";
@@ -804,7 +807,7 @@ const App = () => (
                     </PermissionRoute>
                   </ProtectedRoute>
                 }>
-                  <Route index element={<Dashboard />} />
+                  <Route index element={<AdminIndex />} />
                   <Route path="access-denied" element={<AccessDenied />} />
                   <Route path="proyectos" element={<Proyectos />} />
                   <Route path="propiedades" element={<Propiedades />} />
