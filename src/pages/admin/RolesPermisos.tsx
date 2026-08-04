@@ -31,20 +31,20 @@ interface Role {
   ver_todos_duenos: boolean;
   configurar_citas: boolean;
   puede_impersonar: boolean;
+  // Legacy: la fuente de verdad es la tabla roles_apps. Se conserva porque la
+  // consumen clientes externos y un trigger la mantiene sincronizada; aquí solo
+  // alimenta el fallback de AdministracionAppsSelector.
   administrar_app_clientes: boolean;
-  // Accesos por app (fuente de verdad). Forma: { administrar: ["clientes", ...] }.
-  apps: { administrar?: string[] } | null;
 }
 
-// Apps administrables desde un rol (escala agregando entradas aquí; el backend
-// las lee de roles.apps.administrar). El slug debe coincidir con el del backend.
-const ADMIN_APPS: { slug: string; label: string; desc: string }[] = [
-  {
-    slug: 'clientes',
-    label: 'Administrar app clientes',
-    desc: 'Permite administrar la app de clientes (acceso y gestión del portal de clientes)',
-  },
-];
+// Fila del catálogo `apps`. El catálogo vive en BD, no aquí: dar de alta una
+// app nueva es un INSERT en public.apps, sin tocar este archivo.
+interface AppCatalogo {
+  id: number;
+  slug: string;
+  nombre: string;
+  descripcion: string | null;
+}
 
 interface Permiso {
   id: number;
@@ -512,6 +512,200 @@ const EstatusDisponibilidadSelector = ({ rolId, isSuperAdmin }: { rolId: number;
   );
 };
 
+/**
+ * Selector múltiple de apps administrables por un rol.
+ *
+ * El catálogo vive en la tabla `apps`, no en el código: dar de alta una app
+ * nueva es un INSERT, sin desplegar nada. La asignación vive en `roles_apps`.
+ *
+ * Mientras el DDL de `Ejecuciones_manuales/20260803_apps_administracion_roles.md`
+ * no se haya ejecutado, cae al checkbox legacy de la app de clientes para no
+ * dejar la pantalla sin esa función.
+ */
+const AdministracionAppsSelector = ({
+  rolId,
+  isSuperAdmin,
+  legacyAdministrarAppClientes,
+}: {
+  rolId: number;
+  isSuperAdmin: boolean;
+  legacyAdministrarAppClientes: boolean;
+}) => {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  // Catálogo de apps. `probe` distingue "tabla ausente" de "catálogo vacío".
+  const { data: appsData } = useQuery({
+    queryKey: ['apps-catalogo'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('apps')
+        .select('id, slug, nombre, descripcion')
+        .eq('activo', true)
+        .order('orden');
+      if (error) return { exists: false, apps: [] as AppCatalogo[] };
+      return { exists: true, apps: (data ?? []) as AppCatalogo[] };
+    },
+  });
+
+  const tablaExiste = appsData?.exists ?? false;
+  const apps = appsData?.apps ?? [];
+
+  const { data: rolApps = [], refetch: refetchRolApps } = useQuery({
+    queryKey: ['rol-apps', rolId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('roles_apps')
+        .select('id_app')
+        .eq('id_rol', rolId)
+        .eq('activo', true);
+      if (error) throw error;
+      return (data ?? []).map((r: { id_app: number }) => r.id_app) as number[];
+    },
+    enabled: !!rolId && !isSuperAdmin && tablaExiste,
+  });
+
+  const toggleAppMutation = useMutation({
+    mutationFn: async ({ appId, isActive }: { appId: number; isActive: boolean }) => {
+      if (isActive) {
+        const { error } = await (supabase as any)
+          .from('roles_apps')
+          .delete()
+          .eq('id_rol', rolId)
+          .eq('id_app', appId);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('roles_apps')
+          .upsert({ id_rol: rolId, id_app: appId, activo: true }, { onConflict: 'id_rol,id_app' });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      refetchRolApps();
+      // roles-management trae administrar_app_clientes, que el trigger acaba de
+      // sincronizar; sin invalidarla el fallback legacy quedaría stale.
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Error al actualizar apps: ${error.message}`);
+    },
+  });
+
+  // Fallback legacy: sin las tablas nuevas, se conserva el checkbox de clientes.
+  const updateLegacyClientesMutation = useMutation({
+    mutationFn: async (value: boolean) => {
+      const { error } = await supabase
+        .from('roles')
+        .update({ administrar_app_clientes: value, fecha_actualizacion: new Date().toISOString() })
+        .eq('id', rolId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      toast.success('Configuración actualizada');
+    },
+    onError: (error: Error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  if (isSuperAdmin) return null;
+
+  if (!tablaExiste) {
+    return (
+      <label className="flex items-center gap-3 cursor-pointer">
+        <Checkbox
+          checked={legacyAdministrarAppClientes}
+          onCheckedChange={(checked) => updateLegacyClientesMutation.mutate(checked === true)}
+          disabled={updateLegacyClientesMutation.isPending}
+        />
+        <div>
+          <span className="text-sm font-medium">Administrar app clientes</span>
+          <p className="text-xs text-muted-foreground">
+            Permite administrar la app de clientes (acceso y gestión del portal de clientes)
+          </p>
+        </div>
+      </label>
+    );
+  }
+
+  const hasApp = (appId: number) => rolApps.includes(appId);
+  const isLoading = toggleAppMutation.isPending;
+
+  const selectedLabels = apps.filter((a) => rolApps.includes(a.id)).map((a) => a.nombre);
+  const displayText =
+    selectedLabels.length === 0
+      ? 'Seleccionar apps...'
+      : selectedLabels.length === apps.length
+      ? 'Todas las apps'
+      : selectedLabels.join(', ');
+
+  return (
+    <div className="mt-4 pt-4 border-t">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <span className="text-sm font-medium">Administración de apps</span>
+          <p className="text-xs text-muted-foreground">
+            Define qué apps puede administrar este rol
+          </p>
+        </div>
+      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between"
+            disabled={isLoading}
+          >
+            <span className="truncate">{displayText}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <ScrollArea className="max-h-[320px]">
+            <div className="p-1">
+              {apps.length === 0 && (
+                <p className="px-2 py-3 text-sm text-muted-foreground">
+                  No hay apps registradas.
+                </p>
+              )}
+              {apps.map((app) => (
+                <div
+                  key={app.id}
+                  onClick={() => toggleAppMutation.mutate({ appId: app.id, isActive: hasApp(app.id) })}
+                  className={cn(
+                    'relative flex cursor-pointer select-none items-start rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground',
+                    hasApp(app.id) && 'bg-accent/50'
+                  )}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 mt-0.5 h-4 w-4 shrink-0',
+                      hasApp(app.id) ? 'opacity-100' : 'opacity-0'
+                    )}
+                  />
+                  <div>
+                    <span>{app.nombre}</span>
+                    {app.descripcion && (
+                      <p className="text-xs text-muted-foreground">{app.descripcion}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
+      <p className="text-xs text-muted-foreground mt-2">
+        Seleccionadas: {rolApps.length} de {apps.length}
+      </p>
+    </div>
+  );
+};
+
 export default function RolesPermisos() {
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [expandedMenus, setExpandedMenus] = useState<Set<number>>(new Set());
@@ -536,7 +730,7 @@ export default function RolesPermisos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('roles')
-        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes, apps')
+        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes')
         .eq('es_rol_interno', true)
         .order('id');
       
@@ -905,41 +1099,9 @@ export default function RolesPermisos() {
     },
   });
 
-  // Update roles.apps.administrar (acceso admin por app). Fuente de verdad =
-  // roles.apps; para la app 'clientes' se mantiene el espejo del booleano legacy
-  // administrar_app_clientes para no dejarlo stale mientras exista la columna.
-  const updateAppAdministrarMutation = useMutation({
-    mutationFn: async ({
-      id, slug, value, currentApps,
-    }: {
-      id: number;
-      slug: string;
-      value: boolean;
-      currentApps: { administrar?: string[] } | null;
-    }) => {
-      const administrar = new Set(currentApps?.administrar ?? []);
-      if (value) administrar.add(slug);
-      else administrar.delete(slug);
-      const apps = { ...(currentApps ?? {}), administrar: [...administrar] };
-
-      const update: Record<string, unknown> = {
-        apps,
-        fecha_actualizacion: new Date().toISOString(),
-      };
-      if (slug === 'clientes') update.administrar_app_clientes = value;
-
-      const { error } = await supabase.from('roles').update(update).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
-      triggerPermissionRefresh();
-      toast.success('Configuración actualizada');
-    },
-    onError: (error) => {
-      toast.error(`Error al actualizar: ${error.message}`);
-    },
-  });
+  // La asignación de apps por rol vive ahora en la tabla roles_apps y la maneja
+  // AdministracionAppsSelector. roles.apps (jsonb) queda obsoleta; el trigger
+  // de BD mantiene sincronizada la columna legacy administrar_app_clientes.
 
   // Save permissions mutation
   const savePermissionsMutation = useMutation({
@@ -1597,38 +1759,12 @@ export default function RolesPermisos() {
                           </p>
                         </div>
                       </label>
-                      {ADMIN_APPS.map((app) => {
-                        const administra =
-                          selectedRole.apps?.administrar?.includes(app.slug) ??
-                          // Fallback al booleano legacy para 'clientes' si apps aún vacío.
-                          (app.slug === 'clientes'
-                            ? selectedRole.administrar_app_clientes
-                            : false) ??
-                          false;
-                        return (
-                          <label
-                            key={app.slug}
-                            className="flex items-center gap-3 cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={administra}
-                              onCheckedChange={(checked) => {
-                                updateAppAdministrarMutation.mutate({
-                                  id: selectedRole.id,
-                                  slug: app.slug,
-                                  value: checked === true,
-                                  currentApps: selectedRole.apps,
-                                });
-                              }}
-                              disabled={updateAppAdministrarMutation.isPending}
-                            />
-                            <div>
-                              <span className="text-sm font-medium">{app.label}</span>
-                              <p className="text-xs text-muted-foreground">{app.desc}</p>
-                            </div>
-                          </label>
-                        );
-                      })}
+                      {/* Administración de apps */}
+                      <AdministracionAppsSelector
+                        rolId={selectedRole.id}
+                        isSuperAdmin={isSuperAdminSelected}
+                        legacyAdministrarAppClientes={selectedRole.administrar_app_clientes ?? false}
+                      />
 
                       {/* Estatus de disponibilidad visibles */}
                       <EstatusDisponibilidadSelector 
