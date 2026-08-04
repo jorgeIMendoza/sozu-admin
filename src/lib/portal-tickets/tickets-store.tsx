@@ -98,10 +98,14 @@ async function fetchEtapas(): Promise<Etapa[]> {
 async function fetchCategorias(): Promise<Categoria[]> {
   const { data } = await sb
     .from("tickets_categorias")
-    .select("id, nombre, orden")
+    .select("id, nombre, orden, id_pipeline")
     .eq("activo", true)
     .order("orden");
-  return (data ?? []).map((r: any) => ({ id: String(r.id), nombre: r.nombre }));
+  return (data ?? []).map((r: any) => ({
+    id: String(r.id),
+    nombre: r.nombre,
+    pipelineId: r.id_pipeline != null ? String(r.id_pipeline) : null,
+  }));
 }
 
 // Pool de asignables = usuarios activos cuyo rol tiene acceso a alguna ruta del portal

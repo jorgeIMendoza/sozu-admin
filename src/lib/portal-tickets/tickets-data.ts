@@ -35,7 +35,7 @@ export type Etapa = {
   orden: number;
   cerrada: boolean;
 };
-export type Categoria = { id: string; nombre: string };
+export type Categoria = { id: string; nombre: string; pipelineId: string | null };
 // Un "agente" del módulo = usuario real de la plataforma con acceso al portal de tickets.
 export type Agente = { id: string; nombre: string; rol: string; email: string };
 
