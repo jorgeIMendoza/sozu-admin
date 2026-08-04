@@ -25,9 +25,10 @@ import { toast } from 'sonner';
  *
  * Resuelve por documento: estatus (validado / en revisión / rechazado / expirado),
  * captura por cámara de la identidad (INE frente+reverso o pasaporte), subida de
- * PDF, flujo especial de la Constancia de Situación Fiscal (extrae datos → modal de
- * confirmación → guarda documento validado + datos fiscales en `personas`), firma
- * digital delegada al llamador y visores in-app.
+ * PDF, flujo especial de la Constancia de Situación Fiscal (si el PDF trae texto:
+ * extrae datos → modal de confirmación → documento validado + datos fiscales en
+ * `personas`; si no: se sube igual y queda pendiente de validación), firma digital
+ * delegada al llamador y visores in-app.
  */
 
 export const INE_TIPOS = [2, 3];
@@ -233,7 +234,7 @@ export function ExpedienteDocsPanel({
 
   const afterChange = () => { invalidate(); onChanged?.(); };
 
-  // ── Subida de PDF. La Constancia (tipo 6) pasa por extracción + confirmación ──
+  // ── Subida de PDF. La Constancia (tipo 6) intenta extracción + confirmación ──
   const handleDocFile = async (file: File, doc: ExpDocDef) => {
     const tipo = (doc.tipos ?? [])[0];
     if (!tipo) return;
@@ -242,19 +243,31 @@ export function ExpedienteDocsPanel({
       if (ok) { setDocDetail(null); afterChange(); }
       return;
     }
+    // La Constancia acepta CUALQUIER PDF: nunca se rechaza la subida. Si el PDF trae
+    // el texto original del SAT, se extraen y validan los datos en automático
+    // (confirmación + `estatus 2`). Si no se puede leer el texto (escaneo, imagen,
+    // PDF protegido) o el contenido no pasa la validación, el archivo se sube igual y
+    // queda pendiente de validación manual (`estatus 1`, el default).
     let text = '';
     try {
       text = await extractPdfText(file);
     } catch {
-      toast.error('No se pudo leer el PDF. Intenta de nuevo.');
+      text = '';
+    }
+    const legible = (text || '').trim().length >= 20;
+    const v = legible ? validateCSFPdf(text) : null;
+    if (!v?.ok) {
+      const motivo = v && !v.ok
+        ? v.reason
+        : 'No se pudo leer el texto del PDF (parece un escaneo o imagen).';
+      const ok = await uploadDocFile(file, tipo, { silent: true });
+      if (ok) {
+        setDocDetail(null);
+        afterChange();
+        toast.warning(`${motivo} Tu Constancia se guardó y queda pendiente de validación.`, { duration: 9000 });
+      }
       return;
     }
-    if (!text || text.trim().length < 20) {
-      toast.error('Debe ser el PDF original de la Constancia (no escaneo ni imagen).', { duration: 7000 });
-      return;
-    }
-    const v = validateCSFPdf(text);
-    if (!v.ok) { toast.error(v.reason, { duration: 8000 }); return; }
     const f = extractCSFFields(text);
     setDocDetail(null);
     setCsfConfirm({
