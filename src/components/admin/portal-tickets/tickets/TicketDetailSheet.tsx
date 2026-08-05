@@ -23,6 +23,8 @@ import { PriorityDot } from "./PriorityDot";
 import { ContactoPicker } from "./ContactoPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
+import { EvidenciaSection } from "./TicketEvidencia";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export function TicketDetailSheet({
@@ -35,7 +37,10 @@ export function TicketDetailSheet({
   readOnly?: boolean;
 }) {
   const { etapas, categorias, agentes, actualizarTicket, moverEtapa, agregarNota } = useTickets();
+  const { profile } = useAuth();
   const [nota, setNota] = useState("");
+  const isSuperAdmin =
+    (profile as any)?.rol_id === 1 || (profile as any)?.rol_nombre === "Super Administrador";
 
   if (!ticket) return null;
   const etapasPipeline = etapas.filter((e) => e.pipelineId === ticket.pipelineId);
@@ -182,6 +187,10 @@ export function TicketDetailSheet({
               onChange={(e) => actualizarTicket(ticket.id, { descripcion: e.target.value })}
             />
           </div>
+
+          <Separator />
+
+          <EvidenciaSection ticketId={ticket.id} canDelete={isSuperAdmin} readOnly={readOnly} />
 
           <Separator />
 
