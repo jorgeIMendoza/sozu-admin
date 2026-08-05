@@ -21,6 +21,7 @@ import type {
   Pipeline,
   Ticket,
 } from "./tickets-data";
+import { saveTicketAdjuntos, type PendingAdjunto } from "./tickets-adjuntos";
 
 // Las tablas tickets_* no están en los tipos generados de Supabase → cast puntual.
 const sb = supabase as any;
@@ -76,6 +77,7 @@ type NuevoTicket = {
   fechaCreacion?: string;
   entidadRelacionadaId?: string | null;
   propiedadId?: string | null;
+  adjuntos?: PendingAdjunto[];
 };
 
 type Store = {
@@ -316,6 +318,9 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
             .from("tickets_propietarios")
             .insert(props.map((u: string) => ({ id_ticket: ins.id, id_usuario: u })));
           notificarAsignacion(props, ins.numero, data.nombre.trim());
+        }
+        if (data.adjuntos?.length) {
+          await saveTicketAdjuntos(ins.id, uid, data.adjuntos);
         }
         await registrarActividad(String(ins.id), "Ticket creado desde el Portal Tickets de Seguimiento.");
         logger.registrarCreacion(
