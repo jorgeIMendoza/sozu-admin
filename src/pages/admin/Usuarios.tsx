@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { fetchAllChunked } from "@/lib/postgrest-batch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProjectAccessDialog } from "@/components/admin/UserProjectAccessDialog";
 import { ChangeUserRoleDialog } from "@/components/admin/ChangeUserRoleDialog";
@@ -889,7 +890,9 @@ export default function Usuarios() {
         body: { email },
       });
 
-      if (response.error) throw new Error(response.error.message);
+      // El motivo real vive en el cuerpo de la respuesta, no en `.message`
+      // (que solo dice "Edge Function returned a non-2xx status code").
+      if (response.error) throw new Error(await extractEdgeFunctionError(response.error));
       if (response.data && !response.data.success) {
         throw new Error(response.data.message || 'Error al reenviar');
       }

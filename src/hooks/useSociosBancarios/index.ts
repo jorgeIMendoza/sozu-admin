@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchProyectosSozuIds } from "@/hooks/usePortalSocioBancario/proyectosSozu";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 /**
  * Admin de Socios Bancarios (solo Super Administrador).
@@ -61,22 +62,7 @@ export function estadoUsuario(u: { activo: boolean; email_confirmado: boolean })
 }
 
 /** Mensaje real de un error de functions.invoke (el motivo vive en error.context). */
-async function extractInvokeError(error: any): Promise<string> {
-  const ctx = error?.context;
-  try {
-    if (ctx && typeof ctx.json === "function") {
-      const body = await ctx.json();
-      if (body?.error) return String(body.error);
-      if (body?.message) return String(body.message);
-    } else if (ctx && typeof ctx.text === "function") {
-      const t = await ctx.text();
-      if (t) return t;
-    }
-  } catch {
-    /* cuerpo no-JSON o consumido */
-  }
-  return error?.message ?? "Error desconocido";
-}
+const extractInvokeError = extractEdgeFunctionError;
 
 /** id del rol 'Socio Bancario' (por nombre; los ids difieren por ambiente). */
 async function fetchSocioRolId(): Promise<number | null> {
