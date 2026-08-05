@@ -488,6 +488,38 @@ export function DealActionsMenu({ deal, onOpen, onEdit, onDelete, onBoard }: { d
   );
 }
 
+// Señal Purchase → Meta cuando un negocio pasa a etapa "Cierre Ganado" (es_ganado).
+// Auto-contenido: checa el toggle del catálogo (crm_meta_conversion_stages, fila
+// 'cierre_ganado', activo=true) y, si está prendido, dispara el evento con value+moneda.
+// Fire-and-forget: nunca bloquea el guardado del negocio.
+export async function firePurchaseIfWon(opts: {
+  id_entidad_relacionada: number | null | undefined;
+  valor: number | null | undefined;
+  moneda: string | null | undefined;
+  esGanado: boolean;
+}) {
+  if (!opts.esGanado || !opts.id_entidad_relacionada) return;
+  try {
+    const { data: cfg } = await (supabase as any)
+      .from("crm_meta_conversion_stages")
+      .select("meta_event_name")
+      .eq("etapa_ciclo_vida", "cierre_ganado")
+      .eq("activo", true)
+      .maybeSingle();
+    if (!cfg?.meta_event_name) return; // toggle OFF → no se manda nada
+    await (supabase as any).functions.invoke("meta-capi-lead-stage", {
+      body: {
+        id_entidad_relacionada: Number(opts.id_entidad_relacionada),
+        event_name: cfg.meta_event_name,
+        value: opts.valor != null ? Number(opts.valor) : undefined,
+        currency: opts.moneda || "MXN",
+      },
+    });
+  } catch (e: any) {
+    console.warn("meta-capi purchase:", e?.message ?? e);
+  }
+}
+
 // Diálogo para editar un negocio (mismos campos que "Acerca de este negocio").
 export function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved }: { deal: any | null; pipelines: any[]; owners: any[]; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
   const [form, setForm] = useState<any | null>(null);
@@ -512,8 +544,8 @@ export function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved 
     enabled: !!form?.id_pipeline,
     queryFn: async () => {
       const { data } = await (supabase as any).from("crm_pipeline_etapas")
-        .select("id, nombre, orden").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
-      return (data ?? []) as { id: number; nombre: string }[];
+        .select("id, nombre, orden, es_ganado").eq("id_pipeline", Number(form.id_pipeline)).eq("activo", true).order("orden");
+      return (data ?? []) as { id: number; nombre: string; es_ganado?: boolean }[];
     },
   });
 
@@ -534,6 +566,8 @@ export function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved 
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Negocio actualizado");
+    const etGanado = !!(etapas ?? []).find((e: any) => String(e.id) === form.id_etapa)?.es_ganado;
+    firePurchaseIfWon({ id_entidad_relacionada: deal.id_entidad_relacionada, valor: form.valor ? Number(form.valor) : null, moneda: form.moneda, esGanado: etGanado });
     onSaved();
   };
 
