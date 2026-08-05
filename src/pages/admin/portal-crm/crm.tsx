@@ -88,7 +88,7 @@ import {
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL,
+  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -2345,6 +2345,8 @@ export function CrmDeals() {
     toast.success(`Movido a "${targetEt?.nombre ?? "etapa"}"`);
     qc.invalidateQueries({ queryKey: ["deals-list"] });
     if (deal.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+    // Si el negocio cayó en una etapa "ganada" → señal Purchase a Meta (si el toggle está activo).
+    firePurchaseIfWon({ id_entidad_relacionada: deal.id_entidad_relacionada, valor: deal.valor, moneda: deal.moneda, esGanado: !!targetEt?.es_ganado });
   };
 
   const openDeal = (id: number) => navigate(`/admin/portal-crm/ventas/negocios/${id}`);
