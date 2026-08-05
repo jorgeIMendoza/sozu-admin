@@ -965,6 +965,8 @@ export function CrmContacts() {
                             crm:            { txt: "CRM",         cls: "bg-violet-50 text-violet-700 border-violet-200" },
                             manual:         { txt: "Manual",      cls: "bg-slate-50 text-slate-500 border-slate-200" },
                             formulario_web: { txt: "Web",         cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                            // Endpoint del bot externo (por ahora lo usa solo Stephen Burr).
+                            agente_externo: { txt: "Stephen Burr", cls: "bg-teal-50 text-teal-700 border-teal-200" },
                           };
                           const fuente = KNOWN_ORIGEN[o]
                             ? KNOWN_ORIGEN[o]
