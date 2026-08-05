@@ -148,7 +148,16 @@ function CreateTicketFromContactDialog({
           .map((id) => agentes.find((a) => a.id === id))
           .filter((a): a is NonNullable<typeof a> => !!a?.email);
         const asignadoPor = (profile as any)?.nombre || user?.email || "Equipo SOZU";
-        enviarCorreoAsignacion(destinatarios, ins.numero, form.nombre.trim(), asignadoPor);
+        const pipelineNombre =
+          (pipelines ?? []).find((p) => String(p.id) === form.id_pipeline)?.nombre ?? "";
+        enviarCorreoAsignacion(destinatarios, {
+          folio: ins.numero,
+          nombre: form.nombre.trim(),
+          pipeline: pipelineNombre,
+          proyecto: form.proyecto,
+          descripcion: form.descripcion,
+          por: asignadoPor,
+        });
       }
       await sb.from("tickets_actividad").insert({
         id_ticket: ins.id,
