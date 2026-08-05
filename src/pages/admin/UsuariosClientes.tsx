@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 
@@ -135,7 +136,8 @@ export default function UsuariosClientes() {
         body: { email },
       });
 
-      if (response.error) throw new Error(response.error.message);
+      // El motivo real vive en el cuerpo de la respuesta, no en `.message`.
+      if (response.error) throw new Error(await extractEdgeFunctionError(response.error));
       if (response.data && !response.data.success) throw new Error(response.data.message || 'Error al reenviar');
 
       return response.data;

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 /**
  * Equipo del Portal Bancos = usuarios REALES del sistema (con login) cuyos roles
@@ -33,29 +34,8 @@ export interface BancoRoles {
   supervisorRolId: number | null;
 }
 
-/**
- * Extrae el mensaje real de un error de `supabase.functions.invoke`.
- * En non-2xx, supabase-js devuelve un `FunctionsHttpError` cuyo cuerpo JSON
- * (`{ error: "..." }`) vive en `error.context` (un Response), no en `.message`
- * (que solo dice "Edge Function returned a non-2xx status code"). Sin esto, el
- * motivo real queda oculto.
- */
-async function extractInvokeError(error: any): Promise<string> {
-  const ctx = error?.context;
-  try {
-    if (ctx && typeof ctx.json === "function") {
-      const body = await ctx.json();
-      if (body?.error) return String(body.error);
-      if (body?.message) return String(body.message);
-    } else if (ctx && typeof ctx.text === "function") {
-      const t = await ctx.text();
-      if (t) return t;
-    }
-  } catch {
-    /* cuerpo no-JSON o ya consumido: usar el mensaje genérico */
-  }
-  return error?.message ?? "Error desconocido";
-}
+/** Mensaje real de un error de `functions.invoke` (vive en `error.context`). */
+const extractInvokeError = extractEdgeFunctionError;
 
 // Detección por NOMBRE (los ids difieren entre ambientes). Tolerante a
 // singular/plural: "Operador Banco" / "Operador Bancos".

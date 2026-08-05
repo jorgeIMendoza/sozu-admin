@@ -35,6 +35,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
@@ -177,6 +178,23 @@ export function EditUserDialog({
       return data?.notarios ? { id: data.notarios.id as number, notaria: (data.notarios.notaria as string | null) ?? null } : null;
     },
     enabled: open && isNotarioRole,
+  });
+
+  // Persona vinculada (usuarios.id_persona): el id solo no dice a quién apunta la
+  // cuenta, así que se resuelve su nombre para poder verificar el vínculo de un ojo.
+  const { data: personaVinculada } = useQuery({
+    queryKey: ['persona_vinculada', userPersonaId],
+    queryFn: async () => {
+      if (!userPersonaId) return null;
+      const { data, error } = await supabase
+        .from('personas')
+        .select('id, nombre_legal, nombre_comercial, email')
+        .eq('id', userPersonaId)
+        .maybeSingle();
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: open && !onlyPhone && !!userPersonaId,
   });
 
   // Rol (por nombre) y banco vinculado del usuario (usuarios.id_banco)
@@ -414,7 +432,8 @@ export function EditUserDialog({
       const { data, error } = await supabase.functions.invoke('reenviar-confirmacion-email', {
         body: { email: userEmail },
       });
-      if (error) throw error;
+      // El motivo real vive en el cuerpo de la respuesta, no en `.message`.
+      if (error) throw new Error(await extractEdgeFunctionError(error));
       if (data && !data.success) throw new Error(data.message);
       return data;
     },
@@ -1073,8 +1092,12 @@ export function EditUserDialog({
 
               {userPersonaId ? (
                 <p className="text-sm text-muted-foreground">
-                  Vinculado a la persona #{userPersonaId}. Para cambiarlo, contacta a
-                  sistemas: reasignar la persona cambia a qué datos accede la cuenta.
+                  Vinculado a la persona #{userPersonaId}
+                  {personaVinculada
+                    ? ` — ${personaVinculada.nombre_comercial || personaVinculada.nombre_legal}`
+                    : ''}
+                  . Para cambiarlo, contacta a sistemas: reasignar la persona cambia a
+                  qué datos accede la cuenta.
                 </p>
               ) : !esSuperAdmin ? (
                 <p className="text-sm text-muted-foreground">
