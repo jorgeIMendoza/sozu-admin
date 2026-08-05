@@ -167,7 +167,15 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   }
 
   if (location.pathname.startsWith('/admin/portal-embajador')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2 || profile?.rol_nombre === 'Embajador') {
+    // El rol Cliente (23) entra al portal de Embajadores por rol, sin fila en
+    // user_roles: todo cliente puede referir con su misma cuenta.
+    if (
+      profile?.rol_id === 1 ||
+      profile?.rol_id === 2 ||
+      profile?.rol_id === 23 ||
+      profile?.rol_nombre === 'Embajador' ||
+      profile?.rol_nombre === 'Cliente'
+    ) {
       return <>{children}</>;
     }
     if (hasEmbajadorRole === null) {

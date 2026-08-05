@@ -519,13 +519,27 @@ export default function Inmobiliarias() {
           .select('email, telefono, clave_pais_telefono, roles(nombre)')
           .eq('rol_id', 2)
           .eq('activo', true);
-        
+
+        // Obtener usuarios con rol Admin Soporte (rol_id = 30): reciben copia de las
+        // notificaciones de altas de inmobiliarias y agentes (solo correo, sin WhatsApp).
+        const { data: adminSoporte } = await supabase
+          .from('usuarios')
+          .select('email')
+          .eq('rol_id', 30)
+          .eq('activo', true);
+
         // Formatear correos de super admins
         const correosSuperAdmin = (superAdmins || [])
           .map(u => u.email)
           .filter(Boolean)
           .join(',');
-        
+
+        // Formatear correos de Admin Soporte
+        const correosSoporte = (adminSoporte || [])
+          .map(u => u.email)
+          .filter(Boolean)
+          .join(',');
+
         // Formatear correos de admin proyecto
         const correosAdminProy = (adminProyecto || [])
           .map(u => u.email)
@@ -563,7 +577,9 @@ export default function Inmobiliarias() {
         const notificationPayload = {
           tipo: "ambos",
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
-          email: correosAdminProy || correosSuperAdmin,
+          // Admin Soporte (30) va en el "to" junto con los admins de proyecto: el `cc`
+          // depende del workflow de N8N, el `to` no.
+          email: [correosAdminProy || correosSuperAdmin, correosSoporte].filter(Boolean).join(','),
           cc: correosSuperAdmin,
           telefono: numerosAdminProy,
           mensajeWA: `Se ha creado la Inmobiliaria *${cleanPersonData.nombre_legal}*, con el usuario: *${cleanPersonData.email}*`,
