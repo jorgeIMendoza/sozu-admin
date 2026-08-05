@@ -26,32 +26,50 @@ import { saveTicketAdjuntos, type PendingAdjunto } from "./tickets-adjuntos";
 // Las tablas tickets_* no están en los tipos generados de Supabase → cast puntual.
 const sb = supabase as any;
 
-// Correo "ticket asignado" (fire-and-forget). Estándar del ecosistema SOZU: enviar-notificacion
-// (proxy n8n) + template Postmark 41353048 — mismo patrón que crm-recordatorios-tareas
-// (recordatorio de tarea al asesor asignado). Nunca bloquea ni hace fallar la operación.
-// Reutilizada por el store (Portal Tickets) y por la ficha de contacto del CRM.
-export function enviarCorreoAsignacion(
-  destinatarios: { email?: string | null; nombre?: string | null }[],
-  folio: number | string,
-  nombreTicket: string,
-  asignadoPor: string,
-) {
+// ─── Correos de tickets (fire-and-forget) ───────────────────────────────────────
+// Estándar del ecosistema SOZU: enviar-notificacion (proxy n8n) + template Postmark
+// 41353048 — mismo patrón que crm-recordatorios-tareas. Nunca bloquea ni hace fallar
+// la operación. Reutilizados por el store (Portal Tickets) y por la ficha del CRM.
+export type CorreoTicketInfo = {
+  folio: number | string;
+  nombre: string;
+  pipeline?: string | null;
+  proyecto?: string | null;
+  descripcion?: string | null;
+  por?: string | null; // quién asignó / cerró
+};
+
+type Destinatario = { email?: string | null; nombre?: string | null };
+
+const escHtml = (s?: string | number | null) =>
+  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Tabla del cuerpo del correo: Ticket, Nombre, Pipeline, (Asignado/Cerrado) por, Proyecto, Descripción.
+function detallesHtml(info: CorreoTicketInfo, porLabel: string): string {
+  const row = (label: string, val: string) =>
+    `<tr><td style="padding:6px 12px;color:#6b7280;white-space:nowrap;vertical-align:top;">${label}</td>` +
+    `<td style="padding:6px 12px;">${val}</td></tr>`;
+  return [
+    row("Ticket", `#${escHtml(info.folio)}`),
+    row("Nombre del ticket", escHtml(info.nombre) || "—"),
+    info.pipeline ? row("Pipeline", escHtml(info.pipeline)) : "",
+    info.por ? row(porLabel, escHtml(info.por)) : "",
+    row("Proyecto", info.proyecto ? escHtml(info.proyecto) : "Sin proyecto"),
+    info.descripcion ? row("Descripción", escHtml(info.descripcion)) : "",
+  ].join("");
+}
+
+function enviarCorreoTicket(destinatarios: Destinatario[], asunto: string, detalles: string) {
   for (const dest of destinatarios) {
     if (!dest?.email) continue;
-    const actividad = `Se te asignó el ticket #${folio}: ${nombreTicket}`;
-    const detalles =
-      `<tr><td style="padding:6px 12px;color:#6b7280;">Ticket</td>` +
-      `<td style="padding:6px 12px;font-weight:600;">#${folio} — ${nombreTicket}</td></tr>` +
-      `<tr><td style="padding:6px 12px;color:#6b7280;">Asignado por</td>` +
-      `<td style="padding:6px 12px;">${asignadoPor}</td></tr>`;
-    const modelo = { nombre: dest.nombre || "Equipo", actividad, detalles };
+    const modelo = { nombre: dest.nombre || "Equipo", actividad: asunto, detalles };
     sb.functions
       .invoke("enviar-notificacion", {
         body: {
           tipo: "email",
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
           email: dest.email,
-          asunto: actividad,
+          asunto,
           mensaje: modelo,
           templateId: 41353048,
           templateModel: modelo,
@@ -61,6 +79,18 @@ export function enviarCorreoAsignacion(
         /* fire-and-forget: el correo no debe romper el flujo */
       });
   }
+}
+
+// Correo "ticket asignado" a un usuario.
+export function enviarCorreoAsignacion(destinatarios: Destinatario[], info: CorreoTicketInfo) {
+  const asunto = `Se te asignó el ticket #${info.folio}: ${info.nombre}`;
+  enviarCorreoTicket(destinatarios, asunto, detallesHtml(info, "Asignado por"));
+}
+
+// Correo "ticket cerrado" a propietarios + creador (al llegar a una etapa final).
+export function enviarCorreoCierre(destinatarios: Destinatario[], info: CorreoTicketInfo) {
+  const asunto = `Se cerró el ticket #${info.folio}: ${info.nombre}`;
+  enviarCorreoTicket(destinatarios, asunto, detallesHtml(info, "Cerrado por"));
 }
 
 type NuevoTicket = {
@@ -273,16 +303,43 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
     [uid],
   );
 
-  // Resuelve el email de cada propietario NUEVO (por auth_user_id) y dispara el correo estándar
-  // (ver enviarCorreoAsignacion). `autor` = quién está asignando.
+  // Nombre del pipeline (para el cuerpo de los correos).
+  const pipelineNombre = useCallback(
+    (pipelineId?: string | null) => pipelines.find((p) => p.id === pipelineId)?.nombre ?? "",
+    [pipelines],
+  );
+
+  // Resuelve el email de cada propietario NUEVO (por auth_user_id) y dispara el correo de
+  // asignación. `autor` = quién está asignando.
   const notificarAsignacion = useCallback(
-    (idsNuevos: string[], folio: number | string, nombreTicket: string) => {
+    (idsNuevos: string[], info: Omit<CorreoTicketInfo, "por">) => {
       const destinatarios = idsNuevos
         .map((id) => agentes.find((a) => a.id === id))
         .filter((a): a is Agente => !!a?.email);
-      enviarCorreoAsignacion(destinatarios, folio, nombreTicket, autor);
+      enviarCorreoAsignacion(destinatarios, { ...info, por: autor });
     },
     [agentes, autor],
+  );
+
+  // Al cerrar un ticket (etapa final) avisa por correo a los propietarios + el creador.
+  const notificarCierre = useCallback(
+    (tk: Ticket) => {
+      const ids = Array.from(
+        new Set([...(tk.propietarios ?? []), tk.creadoPorId].filter(Boolean) as string[]),
+      );
+      const destinatarios = ids
+        .map((id) => agentes.find((a) => a.id === id))
+        .filter((a): a is Agente => !!a?.email);
+      enviarCorreoCierre(destinatarios, {
+        folio: tk.numero,
+        nombre: tk.nombre,
+        pipeline: pipelineNombre(tk.pipelineId),
+        proyecto: tk.inmueble,
+        descripcion: tk.descripcion,
+        por: autor,
+      });
+    },
+    [agentes, autor, pipelineNombre],
   );
 
   const crearTicket = useCallback(
@@ -317,7 +374,13 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
           await sb
             .from("tickets_propietarios")
             .insert(props.map((u: string) => ({ id_ticket: ins.id, id_usuario: u })));
-          notificarAsignacion(props, ins.numero, data.nombre.trim());
+          notificarAsignacion(props, {
+            folio: ins.numero,
+            nombre: data.nombre.trim(),
+            pipeline: pipelineNombre(data.pipelineId),
+            proyecto: data.inmueble,
+            descripcion: data.descripcion,
+          });
         }
         if (data.adjuntos?.length) {
           await saveTicketAdjuntos(ins.id, uid, data.adjuntos);
@@ -336,7 +399,7 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
       }
       invalidate("tickets-list");
     },
-    [uid, registrarActividad, invalidate, logger, notificarAsignacion],
+    [uid, registrarActividad, invalidate, logger, notificarAsignacion, pipelineNombre],
   );
 
   const actualizarTicket = useCallback(
@@ -356,7 +419,14 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
         }
         patch.id_usuario_propietario = props[0] || null;
         // Notificar SOLO a los propietarios recién agregados.
-        if (nuevos.length) notificarAsignacion(nuevos, tk?.numero ?? "", tk?.nombre ?? "Ticket");
+        if (nuevos.length)
+          notificarAsignacion(nuevos, {
+            folio: tk?.numero ?? "",
+            nombre: tk?.nombre ?? "Ticket",
+            pipeline: pipelineNombre(tk?.pipelineId),
+            proyecto: tk?.inmueble,
+            descripcion: tk?.descripcion,
+          });
       }
       if ("categoriaId" in cambios) patch.id_categoria = cambios.categoriaId ? Number(cambios.categoriaId) : null;
       if ("solicitante" in cambios) patch.solicitante = cambios.solicitante || null;
@@ -391,7 +461,7 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
       }
       invalidate("tickets-list");
     },
-    [tickets, registrarActividad, invalidate, logger, notificarAsignacion],
+    [tickets, registrarActividad, invalidate, logger, notificarAsignacion, pipelineNombre],
   );
 
   const moverEtapa = useCallback(
@@ -417,9 +487,14 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
         { id_ticket: Number(id), id_etapa: Number(etapaId), etapa: etapa.nombre },
         etapa.cerrada ? "cerrar_ticket" : "mover_etapa_ticket",
       );
+      // Etapa final → avisar por correo a propietarios + creador.
+      if (etapa.cerrada) {
+        const tk = tickets.find((t) => t.id === id);
+        if (tk) notificarCierre(tk);
+      }
       invalidate("tickets-list");
     },
-    [etapas, registrarActividad, invalidate, logger],
+    [etapas, tickets, registrarActividad, invalidate, logger, notificarCierre],
   );
 
   const eliminarTickets = useCallback(
