@@ -40,26 +40,48 @@ export function TicketsWorkspace({
 }) {
   const { tickets, pipelines, etapas, categorias, agentes, eliminarTickets } = useTickets();
 
-  const [vista, setVista] = useState<"tabla" | "kanban">(vistaInicial);
-  const [pipelineId, setPipelineId] = useState(pipelines[0]?.id ?? "");
-  const [propietario, setPropietario] = useState("todos");
-  const [prioridad, setPrioridad] = useState("todas");
-  const [categoria, setCategoria] = useState("todas");
-  const [etapaFiltro, setEtapaFiltro] = useState("todas");
-  const [busqueda, setBusqueda] = useState("");
-  const [orden, setOrden] = useState<{ campo: OrdenCampo; dir: "asc" | "desc" }>({
-    campo: "fechaCreacion",
-    dir: "desc",
+  // Filtros persistidos por scope (sobreviven navegación / recarga) — se leen una sola vez.
+  const persistKey = `tickets:filtros:${scope}`;
+  const [persist] = useState<Record<string, any>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(persistKey) || "{}");
+    } catch {
+      return {};
+    }
   });
+
+  const [vista, setVista] = useState<"tabla" | "kanban">(persist.vista ?? vistaInicial);
+  const [pipelineId, setPipelineId] = useState<string>(persist.pipelineId ?? pipelines[0]?.id ?? "");
+  const [propietario, setPropietario] = useState<string>(persist.propietario ?? "todos");
+  const [prioridad, setPrioridad] = useState<string>(persist.prioridad ?? "todas");
+  const [categoria, setCategoria] = useState<string>(persist.categoria ?? "todas");
+  const [etapaFiltro, setEtapaFiltro] = useState<string>(persist.etapaFiltro ?? "todas");
+  const [busqueda, setBusqueda] = useState("");
+  const [orden, setOrden] = useState<{ campo: OrdenCampo; dir: "asc" | "desc" }>(
+    persist.orden ?? { campo: "fechaCreacion", dir: "desc" },
+  );
   const [pagina, setPagina] = useState(1);
-  const [porPagina, setPorPagina] = useState(25);
+  const [porPagina, setPorPagina] = useState<number>(persist.porPagina ?? 25);
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [crear, setCrear] = useState(false);
 
-  // pipelines carga async (React Query): al llegar, fijar el pipeline activo si aún no es válido.
+  // Guardar los filtros cada vez que cambian.
   useEffect(() => {
-    if (pipelines.length && !pipelines.some((p) => p.id === pipelineId)) {
+    try {
+      localStorage.setItem(
+        persistKey,
+        JSON.stringify({ vista, pipelineId, propietario, prioridad, categoria, etapaFiltro, porPagina, orden }),
+      );
+    } catch {
+      /* localStorage no disponible: ignorar */
+    }
+  }, [persistKey, vista, pipelineId, propietario, prioridad, categoria, etapaFiltro, porPagina, orden]);
+
+  // pipelines carga async (React Query): al llegar, fijar el pipeline activo si aún no es válido
+  // ("todos" es válido = ver todos los pipelines).
+  useEffect(() => {
+    if (pipelines.length && pipelineId !== "todos" && !pipelines.some((p) => p.id === pipelineId)) {
       setPipelineId(pipelines[0].id);
       setEtapaFiltro("todas");
     }
@@ -68,7 +90,7 @@ export function TicketsWorkspace({
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     const lista = tickets.filter((t) => {
-      if (t.pipelineId !== pipelineId) return false;
+      if (pipelineId !== "todos" && t.pipelineId !== pipelineId) return false;
       // "Mis tickets" = donde soy propietario O donde yo di de alta el ticket.
       if (
         scope === "mios" &&
@@ -139,6 +161,8 @@ export function TicketsWorkspace({
   // El ticket del panel de detalle se deriva de la lista viva (no de una copia capturada al
   // abrir), para que al editar (propietario, etapa, etc.) el panel refleje el cambio sin F5.
   const detalle = useMemo(() => tickets.find((t) => t.id === detalleId) ?? null, [tickets, detalleId]);
+  // El Kanban necesita un pipeline concreto → con "Todos los pipelines" se usa siempre la tabla.
+  const vistaEfectiva = pipelineId === "todos" ? "tabla" : vista;
 
   const cambiarOrden = (campo: OrdenCampo) =>
     setOrden((o) => ({ campo, dir: o.campo === campo && o.dir === "desc" ? "asc" : "desc" }));
@@ -223,7 +247,7 @@ export function TicketsWorkspace({
             aria-label="Vista de tabla"
             className={cn(
               "px-2.5 py-2",
-              vista === "tabla" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground",
+              vistaEfectiva === "tabla" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground",
             )}
           >
             <List className="size-4" />
@@ -231,9 +255,12 @@ export function TicketsWorkspace({
           <button
             onClick={() => setVista("kanban")}
             aria-label="Vista kanban"
+            disabled={pipelineId === "todos"}
+            title={pipelineId === "todos" ? "El Kanban requiere elegir un pipeline" : undefined}
             className={cn(
               "px-2.5 py-2",
-              vista === "kanban" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground",
+              vistaEfectiva === "kanban" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground",
+              pipelineId === "todos" && "cursor-not-allowed opacity-40",
             )}
           >
             <LayoutGrid className="size-4" />
@@ -245,13 +272,16 @@ export function TicketsWorkspace({
           onValueChange={(v) => {
             setPipelineId(v);
             setEtapaFiltro("todas");
+            setCategoria("todas");
             setPagina(1);
+            if (v === "todos") setVista("tabla"); // el Kanban necesita un pipeline concreto
           }}
         >
           <SelectTrigger className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="todos">Todos los pipelines</SelectItem>
             {pipelines.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.nombre}
@@ -282,7 +312,7 @@ export function TicketsWorkspace({
           <SelectContent>
             <SelectItem value="todas">Todas las etapas</SelectItem>
             {etapas
-              .filter((e) => e.pipelineId === pipelineId)
+              .filter((e) => pipelineId === "todos" || e.pipelineId === pipelineId)
               .map((e) => (
                 <SelectItem key={e.id} value={e.id}>
                   {e.nombre}
@@ -312,7 +342,7 @@ export function TicketsWorkspace({
           <SelectContent>
             <SelectItem value="todas">Todas las categorías</SelectItem>
             {categorias
-              .filter((c) => c.pipelineId === pipelineId)
+              .filter((c) => pipelineId === "todos" || c.pipelineId === pipelineId)
               .map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nombre}
@@ -353,7 +383,7 @@ export function TicketsWorkspace({
         )}
       </div>
 
-      {vista === "tabla" ? (
+      {vistaEfectiva === "tabla" ? (
         <>
           <TicketsTable
             tickets={visibles}
