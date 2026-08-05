@@ -95,7 +95,15 @@ export function computePortalHostAccess(input: PortalHostAccessInput): PortalHos
         return rolId === ROL_CLIENTE || rolNombre === 'Cliente';
       case 'embajadores':
         // Mismas condiciones que el gate de portal-embajador en PermissionRoute.
-        return rolId === 1 || rolId === 2 || rolNombre === 'Embajador' || hasEmbajadorRole === true;
+        // ROL_CLIENTE (23): todo cliente entra al portal de Embajadores por rol.
+        return (
+          rolId === 1 ||
+          rolId === 2 ||
+          rolId === ROL_CLIENTE ||
+          rolNombre === 'Embajador' ||
+          rolNombre === 'Cliente' ||
+          hasEmbajadorRole === true
+        );
       case 'bancos':
         return isRolDeBanco(rolNombre);
       default:
