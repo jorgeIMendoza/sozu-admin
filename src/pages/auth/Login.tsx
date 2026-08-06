@@ -2,11 +2,22 @@ import { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users, Eye, EyeOff, KeyRound, ArrowRight } from 'lucide-react';
+import { Loader2, LogIn, AlertCircle, RefreshCw, Clock, ShieldAlert, Building2, User, CheckCircle, Users, Eye, EyeOff, KeyRound, ArrowRight, MailCheck } from 'lucide-react';
 import { z } from 'zod';
 import { checkForUpdates, clearCacheAndReload } from '@/utils/versionUtils';
 import { APP_VERSION } from '@/lib/config';
 import sozuLogo from '@/assets/sozu-logo-black.png';
+import { useReenviarConfirmacion } from '@/components/auth/useReenviarConfirmacion';
+
+/**
+ * GoTrue rechaza el login de un usuario cuyo correo fue des-confirmado (pasa en
+ * resets de contraseña y reactivaciones de usuarios de portal). Sin sesión no
+ * hay perfil, así que el gate de <ProtectedRoute> nunca llega a pintarse: la
+ * salida tiene que ofrecerse aquí mismo.
+ */
+const esErrorEmailNoConfirmado = (error: Error) =>
+  (error as { code?: string }).code === 'email_not_confirmed' ||
+  /email not confirmed/i.test(error.message ?? '');
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -58,7 +69,17 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
   
   const [availablePortals, setAvailablePortals] = useState<PortalOption[]>([]);
   const [showPortalSelector, setShowPortalSelector] = useState(false);
-  
+  /** Correo cuyo login rechazó GoTrue por falta de confirmación (habilita el reenvío). */
+  const [emailSinConfirmar, setEmailSinConfirmar] = useState<string | null>(null);
+
+  // Sin sesión: el reenvío se manda con la anon key (misma lógica que usan
+  // EmailNoConfirmado y ConfirmacionEmail, un solo sitio).
+  const {
+    estado: reenvio,
+    mensaje: reenvioMsg,
+    reenviar: reenviarConfirmacion,
+  } = useReenviarConfirmacion(emailSinConfirmar, { sinSesion: true });
+
   const { signIn, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -107,6 +128,7 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setEmailSinConfirmar(null);
     setIsLoading(true);
 
     try {
@@ -154,8 +176,14 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
           setError('Email o contraseña incorrectos');
-        } else if (error.message.includes('Email not confirmed')) {
-          setError('Por favor confirma tu email antes de iniciar sesión');
+        } else if (/banned/i.test(error.message ?? '') || (error as any)?.code === 'user_banned') {
+          // Cuenta desactivada: la baja banea al usuario en Auth (ver
+          // src/lib/usuarios/estado-cuenta.ts). GoTrue responde "User is banned"; sin
+          // esto el usuario veía ese texto crudo en inglés.
+          setError('Tu cuenta está desactivada. Contacta al administrador para recuperar el acceso.');
+        } else if (esErrorEmailNoConfirmado(error)) {
+          setError('Tu correo aún no está confirmado. Abre el enlace que te enviamos o pide uno nuevo.');
+          setEmailSinConfirmar(emailLower);
         } else {
           setError(error.message);
         }
@@ -357,6 +385,46 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
+          )}
+
+          {/* Correo sin confirmar: única salida del callejón sin salida que dejaba
+              GoTrue al rechazar el login con "Email not confirmed". */}
+          {emailSinConfirmar && (
+            <>
+              {reenvioMsg && (
+                <div
+                  className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
+                  style={
+                    reenvio === 'error'
+                      ? { color: 'hsl(0 84% 40%)', background: 'hsl(0 84% 97%)' }
+                      : { color: 'hsl(145 45% 28%)', background: 'hsl(145 45% 94%)' }
+                  }
+                >
+                  {reenvio === 'error' ? (
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <MailCheck className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  )}
+                  <span>{reenvioMsg}</span>
+                </div>
+              )}
+
+              {reenvio !== 'enviado' && (
+                <button
+                  type="button"
+                  onClick={reenviarConfirmacion}
+                  disabled={reenvio === 'enviando'}
+                  className="login-btn-outline flex items-center justify-center gap-2 w-full disabled:opacity-60"
+                >
+                  {reenvio === 'enviando' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MailCheck className="h-4 w-4" />
+                  )}
+                  {reenvio === 'enviando' ? 'Enviando…' : 'Reenviar correo de confirmación'}
+                </button>
+              )}
+            </>
           )}
 
           {/* Email */}

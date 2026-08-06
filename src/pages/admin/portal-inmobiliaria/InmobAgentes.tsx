@@ -2,6 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  desactivarUsuario,
+  reactivarUsuario,
+  resetearPassword,
+  textoResetPassword,
+  useRolesRequierenConfirmacion,
+} from "@/lib/usuarios/estado-cuenta";
 import { useInmobAgents } from "@/hooks/useInmobAgents";
 import { useInmobiliariaPersonaId } from "@/hooks/useInmobiliariaPersonaId";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
@@ -55,6 +62,9 @@ export default function InmobAgentes() {
   const [newAgentPhone, setNewAgentPhone] = useState("");
   const [addingAgent, setAddingAgent] = useState(false);
   const currentUserEmail = (profile?.email || "").toLowerCase();
+  // En esta lista conviven agentes inmobiliarios (rol de portal) y agentes internos
+  // Sozu (rol 9, interno): el texto del reset cambia según cuál sea.
+  const { requiereConfirmacion: rolRequiereConfirmacion } = useRolesRequierenConfirmacion();
 
   // Get inmobiliaria name for bulk upload
   const { data: inmobiliariaData } = useQuery({
@@ -817,15 +827,11 @@ export default function InmobAgentes() {
       const emails = await resolveAgentEmails(agent);
       if (!emails.length) throw new Error("No se encontró el usuario");
 
-      const { error, count } = await supabase
-        .from("usuarios")
-        .update({ activo: false, fecha_actualizacion: new Date().toISOString() }, { count: "exact" })
-        .in("email", emails) as any;
+      // El helper verifica filas afectadas: un UPDATE que RLS filtra no da error.
+      // Un agente es rol de portal, así que la baja solo apaga el acceso.
+      const resultado = await desactivarUsuario({ email: emails });
 
-      if (error) throw error;
-      if (!count) throw new Error("No se encontró el usuario o no tienes permisos para desactivarlo");
-
-      toast.success("Agente desactivado. Ya no tendrá acceso al sistema.");
+      toast.success(`Agente desactivado. ${resultado?.mensaje ?? ""}`.trim());
       queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
       queryClient.invalidateQueries({ queryKey: ["inmob-agentes-sozu-extra-users"] });
     } catch (err: any) {
@@ -845,20 +851,15 @@ export default function InmobAgentes() {
       if (reactivateError) throw reactivateError;
       if (reactivateData?.error) throw new Error(reactivateData.error);
 
-      try {
-        const { data: resetData, error: resetError } = await supabase.functions.invoke("reset-user-password", {
-          body: { email: directEmail },
-        });
-        if (resetError) throw resetError;
-        if (resetData?.error) {
-          toast.success("Agente reactivado.");
-          toast.warning("Para resetear la contraseña de este usuario tienes que solicitar al administrador.");
-        } else {
-          toast.success("Agente reactivado. Se envió correo de confirmación para resetear contraseña.");
-        }
-      } catch {
+      // El reset solo se dispara si el rol lo pide (portal): des-confirma y manda el
+      // enlace. Si el rol fuera interno, el helper no toca la contraseña.
+      const resultado = await reactivarUsuario({ email: directEmail });
+
+      if (resultado?.resetFallo) {
         toast.success("Agente reactivado.");
         toast.warning("Para resetear la contraseña de este usuario tienes que solicitar al administrador.");
+      } else {
+        toast.success(`Agente reactivado. ${resultado?.mensaje ?? ""}`.trim());
       }
 
       queryClient.invalidateQueries({ queryKey: ["inmob-agents-full"] });
@@ -878,15 +879,8 @@ export default function InmobAgentes() {
       const emails = await resolveAgentEmails(resetTarget);
       if (!emails.length) throw new Error("No se encontró el usuario");
 
-      const { data: resetData, error } = await supabase.functions.invoke("reset-user-password", {
-        body: { email: emails[0] },
-      });
-      if (error) throw error;
-      if (resetData?.error) {
-        toast.error("Para resetear la contraseña de este usuario tienes que solicitar al administrador.");
-      } else {
-        toast.success("Se envió un correo de confirmación. Una vez confirmado, recibirá sus credenciales temporales.");
-      }
+      const resultado = await resetearPassword({ email: emails[0] });
+      toast.success(resultado?.mensaje ?? "La contraseña fue restablecida.");
     } catch {
       toast.error("Para resetear la contraseña de este usuario tienes que solicitar al administrador.");
     } finally {
@@ -1118,7 +1112,8 @@ export default function InmobAgentes() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Resetear contraseña?</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Confirmas resetear la contraseña de <strong>{resetTarget?.email}</strong>? Primero se enviará un correo para confirmar su email y, una vez confirmado, recibirá otro correo con su contraseña temporal.
+              ¿Confirmas resetear la contraseña de <strong>{resetTarget?.email}</strong>?{' '}
+              {textoResetPassword(rolRequiereConfirmacion(resetTarget?.roleId ?? null))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

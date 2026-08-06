@@ -26,6 +26,15 @@ import { ChangeUserRoleDialog } from "@/components/admin/ChangeUserRoleDialog";
 import { EditUserDialog } from "@/components/admin/EditUserDialog";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { rolRequierePersona, mensajeFaltaPersona } from "@/lib/usuarios/roles-requieren-persona";
+import {
+  desactivarUsuario,
+  reactivarUsuario,
+  resetearPassword,
+  textoAltaUsuario,
+  textoDesactivarUsuario,
+  textoResetPassword,
+  useRolesRequierenConfirmacion,
+} from "@/lib/usuarios/estado-cuenta";
 
 type Usuario = {
   email: string;
@@ -384,6 +393,10 @@ export default function Usuarios() {
   const [selectedPersonaTipo, setSelectedPersonaTipo] = useState<string | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
+  // Clasificación rol -> ¿es de portal? Decide qué prometen los textos de los diálogos
+  // (correo de confirmación vs. contraseña temporal).
+  const { requiereConfirmacion: rolRequiereConfirmacion } = useRolesRequierenConfirmacion();
+
   const [isInmobiliariaLocked, setIsInmobiliariaLocked] = useState(false);
   const [isInmobiliariaPopoverOpen, setIsInmobiliariaPopoverOpen] = useState(false);
   const [isNotarioPopoverOpen, setIsNotarioPopoverOpen] = useState(false);
@@ -648,6 +661,10 @@ export default function Usuarios() {
 
   // Rol seleccionado en el formulario de nuevo usuario (por nombre)
   const selectedRolNombre = assignableRoles.find(r => r.id.toString() === newUserForm.rol_id)?.nombre ?? "";
+  // ¿El rol elegido en el alta entrega contraseña temporal o correo de confirmación?
+  const nuevoUsuarioRequiereConfirmacion = rolRequiereConfirmacion(
+    newUserForm.rol_id ? Number(newUserForm.rol_id) : null
+  );
   const isBancoRoleSelected = BANCO_ROLE_NAMES.includes(selectedRolNombre);
   // Igual que bancos: cualquier rol cuyo nombre contenga "Notario" requiere notaría
   const isNotarioRoleSelected = selectedRolNombre.includes('Notario');
@@ -801,28 +818,32 @@ export default function Usuarios() {
       })) as (InmobiliariaOption & { tiene_usuario_principal: boolean; email?: string })[];
     },
   });
+  // Baja: el helper decide si además repone la contraseña temporal (rol interno) o
+  // si solo apaga el acceso (rol de portal). Verifica filas afectadas: un UPDATE que
+  // RLS filtra no da error y esta pantalla cantaba éxito en falso.
   const deactivateMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase
-        .from('usuarios')
-        .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
-        .eq('email', email);
-      
-      if (error) throw error;
-    },
-    onSuccess: (_, email) => {
+    mutationFn: async (email: string) => desactivarUsuario({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      
+
       // Registrar actividad
-      registrarActualizacion('usuario', 
+      registrarActualizacion('usuario',
         { email, activo: true },
         { email, activo: false }
       );
-      
+
       toast({
         title: "Usuario desactivado",
-        description: "El usuario ha sido desactivado correctamente.",
+        description: resultado?.mensaje ?? "El usuario ha sido desactivado correctamente.",
       });
+      if (resultado?.resetFallo) {
+        toast({
+          // El ban de Auth es lo grave: sin él la cuenta conserva sesión válida.
+          title: resultado.banFallo ? "El usuario conserva acceso" : "Contraseña sin reponer",
+          description: resultado.resetFallo,
+          variant: "destructive",
+        });
+      }
     },
     onError: (error) => {
       toast({
@@ -833,45 +854,33 @@ export default function Usuarios() {
     },
   });
 
-  // Activate user mutation (also resets password to temporary)
+  // Reactivación. Antes SIEMPRE reseteaba la contraseña, incluso a usuarios internos
+  // que no lo pedían. Ahora solo los roles de portal pasan por des-confirmación +
+  // correo; el interno recupera el acceso con la contraseña que ya tenía.
   const activateMutation = useMutation({
-    mutationFn: async (email: string) => {
-      // First activate the user
-      const { error: updateError } = await supabase
-        .from('usuarios')
-        .update({ activo: true, fecha_actualizacion: new Date().toISOString() })
-        .eq('email', email);
-      
-      if (updateError) throw updateError;
-
-      // Then reset the password
-      const response = await supabase.functions.invoke('reset-user-password', {
-        body: { email },
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      if (response.data?.error) {
-        throw new Error(response.data.error);
-      }
-
-      return response.data;
-    },
-    onSuccess: (_, email) => {
+    mutationFn: async (email: string) => reactivarUsuario({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      
+
       // Registrar actividad
-      registrarRestauracion('usuario', 
+      registrarRestauracion('usuario',
         { email, activo: false },
-        { email, activo: true, password_reset: true }
+        { email, activo: true, password_reset: resultado?.passwordTemporal ?? false }
       );
-      
+
       toast({
         title: "Usuario activado",
-        description: "El usuario ha sido activado con contraseña temporal: Temporal123!",
+        description: resultado?.mensaje ?? "El usuario ha sido activado.",
       });
+      if (resultado?.resetFallo) {
+        toast({
+          title: resultado.banFallo
+            ? "El usuario aún no puede entrar"
+            : "Correo de confirmación no enviado",
+          description: resultado.resetFallo,
+          variant: "destructive",
+        });
+      }
     },
     onError: (error) => {
       toast({
@@ -915,33 +924,19 @@ export default function Usuarios() {
   });
 
   const resetPasswordMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const response = await supabase.functions.invoke('reset-user-password', {
-        body: { email },
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      if (response.data?.error) {
-        throw new Error(response.data.error);
-      }
-
-      return response.data;
-    },
-    onSuccess: (data, email) => {
+    mutationFn: async (email: string) => resetearPassword({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      
+
       // Registrar actividad
-      registrarActualizacion('usuario_password', 
+      registrarActualizacion('usuario_password',
         { email },
         { email, password_reset: true }
       );
-      
+
       toast({
         title: "Contraseña Reseteada",
-        description: data.message || "Se envió un correo de confirmación. Una vez confirmado, recibirá sus credenciales temporales.",
+        description: resultado?.mensaje ?? "La contraseña fue restablecida.",
       });
       setIsResetPasswordDialogOpen(false);
       setSelectedUserEmail(null);
@@ -1148,9 +1143,14 @@ export default function Usuarios() {
         throw new Error(response.data.error);
       }
 
+      // El alta de un rol de portal ya no entrega contraseña: manda correo de
+      // confirmación y el usuario define la suya. Solo los internos nacen con
+      // Temporal123!.
       toast({
         title: "Usuario Creado",
-        description: response.data?.message || "El usuario fue creado exitosamente con contraseña temporal: Temporal123!",
+        description:
+          response.data?.message ||
+          `Usuario creado. ${textoAltaUsuario(nuevoUsuarioRequiereConfirmacion)}`,
       });
 
       // Registrar actividad
@@ -1362,6 +1362,11 @@ export default function Usuarios() {
     setSelectedUserEmail(email);
     setIsResetPasswordDialogOpen(true);
   };
+
+  // Rol del usuario sobre el que están abiertos los diálogos de reset/baja.
+  const selectedUserRequiereConfirmacion = rolRequiereConfirmacion(
+    usuarios.find(u => u.email === selectedUserEmail)?.rol_id ?? null
+  );
 
   const getRoleBadgeColor = (roleName: string | undefined) => {
     switch (roleName) {
@@ -1721,7 +1726,8 @@ export default function Usuarios() {
               Nuevo Usuario
             </DialogTitle>
             <DialogDescription>
-              Crea un nuevo usuario con acceso al sistema. La contraseña temporal será: Temporal123!
+              Crea un nuevo usuario con acceso al sistema.
+              {newUserForm.rol_id ? ` ${textoAltaUsuario(nuevoUsuarioRequiereConfirmacion)}` : ''}
             </DialogDescription>
           </DialogHeader>
           
@@ -2163,7 +2169,7 @@ export default function Usuarios() {
             <DialogDescription>
               ¿Estás seguro de que deseas resetear la contraseña del usuario <strong>{selectedUserEmail}</strong>?
               <br /><br />
-              Primero se enviará un correo para que confirme su email. Una vez confirmado, recibirá otro correo con su contraseña temporal.
+              {textoResetPassword(selectedUserRequiereConfirmacion)}
             </DialogDescription>
           </DialogHeader>
           
@@ -2207,8 +2213,8 @@ export default function Usuarios() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Desactivar usuario?</AlertDialogTitle>
             <AlertDialogDescription>
-              Estás a punto de desactivar a <strong>{selectedUserName}</strong>. 
-              El usuario no podrá acceder al sistema hasta que sea reactivado.
+              Estás a punto de desactivar a <strong>{selectedUserName}</strong>.{' '}
+              {textoDesactivarUsuario(selectedUserRequiereConfirmacion)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
