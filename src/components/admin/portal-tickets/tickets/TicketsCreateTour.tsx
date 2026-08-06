@@ -168,6 +168,7 @@ export function TicketsCreateTour({
       <div
         role="dialog"
         aria-label="Tutorial: crear un ticket"
+        data-tour-tooltip
         className="pointer-events-auto fixed w-[300px] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl transition-all duration-200"
         style={tipStyle}
       >

@@ -104,6 +104,7 @@ export function TicketsTour({ open, onClose }: { open: boolean; onClose: () => v
       <div
         role="dialog"
         aria-label="Tutorial del Portal de Tickets"
+        data-tour-tooltip
         className="fixed w-[300px] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl transition-all duration-200"
         style={tipStyle}
       >

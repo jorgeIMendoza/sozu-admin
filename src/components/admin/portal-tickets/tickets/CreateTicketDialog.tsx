@@ -124,7 +124,15 @@ export function CreateTicketDialog({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="w-full overflow-y-auto sm:max-w-md"
+        onInteractOutside={(e) => {
+          // No cerrar el formulario si el clic/foco es sobre el globo del tutorial guiado.
+          const t = ((e as any).detail?.originalEvent?.target as HTMLElement | undefined) ?? undefined;
+          if (t?.closest?.("[data-tour-tooltip]")) e.preventDefault();
+        }}
+      >
         <SheetHeader>
           <div className="flex items-center justify-between gap-3 pr-10">
             <SheetTitle className="text-left">Crear ticket</SheetTitle>
