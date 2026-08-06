@@ -25,7 +25,7 @@ export type Ticket = {
   // Enlace opcional al CRM / inventario (se llena con los selectores reales, ver Fase 2b)
   entidadRelacionadaId: string | null;
   propiedadId: string | null;
-  actividad: { id: string; fecha: string; autor: string; texto: string }[];
+  actividad: { id: string; fecha: string; autor: string; texto: string; audioUrl?: string | null }[];
 };
 
 export type Pipeline = { id: string; nombre: string; descripcion: string };
