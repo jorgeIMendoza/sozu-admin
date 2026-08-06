@@ -13,9 +13,10 @@ export const TICKETS_ATTACH_BUCKET = "documentos";
 // Límites de negocio (se validan en el front; el bucket `documentos` no tiene límite).
 export const MAX_FOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
+export const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB
 export const MAX_ADJUNTOS = 10; // por ticket
 
-export type AdjuntoTipo = "foto" | "video";
+export type AdjuntoTipo = "foto" | "video" | "audio";
 
 // Archivo elegido pero aún NO subido (usado al CREAR el ticket, que todavía no tiene id).
 export type PendingAdjunto = {
@@ -47,16 +48,19 @@ export function humanFileSize(bytes?: number | null): string {
 export function classifyTicketFile(file: File): AdjuntoTipo | null {
   if (file.type.startsWith("image/")) return "foto";
   if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
   return null;
 }
 
 // Valida tipo y tamaño. Devuelve el mensaje de error, o null si es válido.
 export function validateTicketFile(file: File): string | null {
   const tipo = classifyTicketFile(file);
-  if (!tipo) return `"${file.name}" no es una foto ni un video.`;
-  const max = tipo === "foto" ? MAX_FOTO_BYTES : MAX_VIDEO_BYTES;
+  if (!tipo) return `"${file.name}" no es una foto, video ni audio.`;
+  const max = tipo === "foto" ? MAX_FOTO_BYTES : tipo === "video" ? MAX_VIDEO_BYTES : MAX_AUDIO_BYTES;
   if (file.size > max) {
-    return `"${file.name}" pesa ${humanFileSize(file.size)}; el máximo para ${tipo === "foto" ? "fotos es 10 MB" : "videos es 50 MB"}.`;
+    const lim = tipo === "foto" ? "10 MB" : tipo === "video" ? "50 MB" : "25 MB";
+    const cual = tipo === "foto" ? "fotos" : tipo === "video" ? "videos" : "audios";
+    return `"${file.name}" pesa ${humanFileSize(file.size)}; el máximo para ${cual} es ${lim}.`;
   }
   return null;
 }
