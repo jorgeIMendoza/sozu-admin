@@ -9,17 +9,21 @@ import { useTickets } from "@/lib/portal-tickets/tickets-store";
 
 type Paso = { sel: string; titulo: string; texto: string; gate?: "abrir" | "crear" };
 
+// Pasos en el MISMO orden que los campos del formulario (CreateTicketDialog).
 const PASOS: Paso[] = [
-  { sel: "crear", titulo: "1. Abre el formulario", texto: 'Da clic en "Crear ticket". Aquí te espero.', gate: "abrir" },
-  { sel: "ct-nombre", titulo: "2. Nombre", texto: 'Un título claro. Ej. "1820 — fuga en calentador".' },
-  { sel: "ct-pipeline", titulo: "3. Pipeline", texto: "El flujo al que pertenece (ej. Atención al Cliente)." },
-  { sel: "ct-estado", titulo: "4. Estado", texto: "La etapa inicial dentro de ese flujo." },
-  { sel: "ct-solicitante", titulo: "5. Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
-  { sel: "ct-propietarios", titulo: "6. Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
-  { sel: "ct-prioridad", titulo: "7. Prioridad", texto: "Qué tan urgente es el caso." },
-  { sel: "ct-categoria", titulo: "8. Categoría", texto: "Clasifícalo dentro del flujo." },
-  { sel: "ct-evidencia", titulo: "9. Evidencia", texto: "Sube fotos, video o una nota de voz (opcional)." },
-  { sel: "ct-enviar", titulo: "10. ¡Ya está!", texto: 'Da clic en "Crear ticket" para crearlo, o "Terminar" para salir.' },
+  { sel: "crear", titulo: "Abre el formulario", texto: 'Da clic en "Crear ticket". Aquí te espero.', gate: "abrir" },
+  { sel: "ct-nombre", titulo: "Nombre", texto: 'Un título claro. Ej. "1820 — fuga en calentador".' },
+  { sel: "ct-pipeline", titulo: "Pipeline", texto: "El flujo al que pertenece (ej. Atención al Cliente)." },
+  { sel: "ct-estado", titulo: "Estado", texto: "La etapa inicial dentro de ese flujo." },
+  { sel: "ct-solicitante", titulo: "Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
+  { sel: "ct-proyecto", titulo: "Proyecto", texto: "El proyecto o inmueble relacionado (opcional)." },
+  { sel: "ct-descripcion", titulo: "Descripción", texto: "Detalla el caso: qué pasó y qué se necesita." },
+  { sel: "ct-fuente", titulo: "Fuente", texto: "Por dónde llegó el caso (portal, correo, teléfono…)." },
+  { sel: "ct-propietarios", titulo: "Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
+  { sel: "ct-prioridad", titulo: "Prioridad", texto: "Qué tan urgente es el caso." },
+  { sel: "ct-categoria", titulo: "Categoría", texto: "Clasifícalo dentro del flujo." },
+  { sel: "ct-evidencia", titulo: "Evidencia", texto: "Sube fotos, video o una nota de voz (opcional)." },
+  { sel: "ct-enviar", titulo: "¡Ya está!", texto: 'Da clic en "Crear ticket" para crearlo, o "Terminar" para salir.' },
 ];
 
 const TIP_W = 300;
@@ -102,7 +106,7 @@ export function TicketsCreateTour({
     };
     document
       .querySelector<HTMLElement>(`[data-tour="${paso.sel}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+      ?.scrollIntoView({ block: "center", behavior: "auto" });
     medir();
     const t = window.setTimeout(medir, 280);
     const iv = window.setInterval(medir, 500);

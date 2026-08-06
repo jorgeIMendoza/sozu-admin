@@ -56,7 +56,7 @@ export function TicketsTour({ open, onClose }: { open: boolean; onClose: () => v
     };
     document
       .querySelector<HTMLElement>(`[data-tour="${paso.sel}"]`)
-      ?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      ?.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
     medir();
     const t = window.setTimeout(medir, 280); // re-medir tras el scroll
     const onMove = () => {

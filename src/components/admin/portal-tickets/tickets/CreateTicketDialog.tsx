@@ -198,14 +198,16 @@ export function CreateTicketDialog({
             <ContactoPicker value={contacto} onChange={setContacto} />
           </div>
 
-          <ProyectoSelect value={proyecto} onChange={setProyecto} />
+          <div data-tour="ct-proyecto">
+            <ProyectoSelect value={proyecto} onChange={setProyecto} />
+          </div>
 
-          <div className="space-y-1.5">
+          <div data-tour="ct-descripcion" className="space-y-1.5">
             <Label>Descripción del ticket</Label>
             <Textarea rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
           </div>
 
-          <div className="space-y-1.5">
+          <div data-tour="ct-fuente" className="space-y-1.5">
             <Label>Fuente</Label>
             <Select value={fuente} onValueChange={setFuente}>
               <SelectTrigger>
