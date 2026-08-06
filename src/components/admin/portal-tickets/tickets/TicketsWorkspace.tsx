@@ -106,7 +106,7 @@ export function TicketsWorkspace({
       if (categoria !== "todas" && t.categoriaId !== categoria) return false;
       if (etapaFiltro !== "todas" && t.etapaId !== etapaFiltro) return false;
       if (q) {
-        const texto = `${t.nombre} ${t.solicitante} ${t.inmueble} ${t.descripcion}`.toLowerCase();
+        const texto = `#${t.numero} ${t.nombre} ${t.solicitante} ${t.inmueble} ${t.descripcion}`.toLowerCase();
         if (!texto.includes(q)) return false;
       }
       return true;
@@ -170,6 +170,7 @@ export function TicketsWorkspace({
   const exportar = () => {
     const filas = filtrados.map((t) =>
       [
+        `#${t.numero}`,
         t.nombre,
         pipelines.find((p) => p.id === t.pipelineId)?.nombre,
         etapas.find((e) => e.id === t.etapaId)?.nombre,
@@ -179,7 +180,7 @@ export function TicketsWorkspace({
         new Date(t.fechaCreacion).toLocaleDateString("es-MX"),
       ].join(","),
     );
-    const csv = ["Nombre,Pipeline,Etapa,Prioridad,Propietario,Fecha creación", ...filas].join("\n");
+    const csv = ["Folio,Nombre,Pipeline,Etapa,Prioridad,Propietario,Fecha creación", ...filas].join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;

@@ -75,7 +75,12 @@ export function TicketsKanban({
                       arrastrando === t.id && "opacity-50",
                     )}
                   >
-                    <h4 className="font-semibold text-primary">{t.nombre}</h4>
+                    <h4 className="font-semibold text-primary">
+                      <span className="mr-1 text-xs font-medium tabular-nums text-muted-foreground">
+                        #{t.numero}
+                      </span>
+                      {t.nombre}
+                    </h4>
                     <p className="mt-1 text-xs text-muted-foreground">{antiguedad(t.fechaCreacion)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t.propietarios.length > 1 ? "Propietarios" : "Propietario"}:{" "}

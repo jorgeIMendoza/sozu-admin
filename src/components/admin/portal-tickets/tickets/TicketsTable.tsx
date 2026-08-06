@@ -96,12 +96,17 @@ export function TicketsTable({
                   />
                 </TableCell>
                 <TableCell>
-                  <button
-                    onClick={() => onAbrir(t)}
-                    className="text-left font-medium text-primary hover:underline"
-                  >
-                    {t.nombre}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                      #{t.numero}
+                    </span>
+                    <button
+                      onClick={() => onAbrir(t)}
+                      className="text-left font-medium text-primary hover:underline"
+                    >
+                      {t.nombre}
+                    </button>
+                  </div>
                   <p className="text-xs text-muted-foreground">{t.inmueble}</p>
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm">{pipeline?.nombre}</TableCell>
