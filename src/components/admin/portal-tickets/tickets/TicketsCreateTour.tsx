@@ -17,8 +17,8 @@ const PASOS: Paso[] = [
   { sel: "ct-estado", titulo: "Estado", texto: "La etapa inicial dentro de ese flujo." },
   { sel: "ct-solicitante", titulo: "Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
   { sel: "ct-proyecto", titulo: "Proyecto", texto: "El proyecto o inmueble relacionado (opcional)." },
-  { sel: "ct-descripcion", titulo: "Descripción", texto: "Detalla el caso: qué pasó y qué se necesita." },
   { sel: "ct-fuente", titulo: "Fuente", texto: "Por dónde llegó el caso (portal, correo, teléfono…)." },
+  { sel: "ct-descripcion", titulo: "Descripción", texto: "Detalla el caso: qué pasó y qué se necesita." },
   { sel: "ct-propietarios", titulo: "Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
   { sel: "ct-prioridad", titulo: "Prioridad", texto: "Qué tan urgente es el caso." },
   { sel: "ct-categoria", titulo: "Categoría", texto: "Clasifícalo dentro del flujo." },
@@ -31,7 +31,7 @@ const TIP_H = 160; // alto aproximado del globo (para centrar/limitar)
 
 // Coloca el globo AL LADO del objetivo (izq/der) cuando hay espacio, para no tapar el campo
 // ni el dropdown del Select (que abre hacia abajo). Si no, abajo o arriba. Centrado si no hay rect.
-function posicionGlobo(rect: DOMRect | null): CSSProperties {
+function posicionGlobo(rect: DOMRect | null, host: DOMRect | null): CSSProperties {
   if (!rect) return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
   const GAP = 12;
   const vw = window.innerWidth;
@@ -39,10 +39,22 @@ function posicionGlobo(rect: DOMRect | null): CSSProperties {
   const clampTop = (t: number) => Math.min(Math.max(t, 8), Math.max(8, vh - TIP_H - 8));
   const clampLeft = (l: number) => Math.min(Math.max(l, 8), Math.max(8, vw - TIP_W - 8));
   const centroV = clampTop(rect.top + rect.height / 2 - TIP_H / 2);
-  if (rect.left >= TIP_W + GAP) return { top: centroV, left: rect.left - GAP - TIP_W };
-  if (vw - rect.right >= TIP_W + GAP) return { top: centroV, left: rect.right + GAP };
+  // En layout de 2 columnas anclamos el globo al borde del panel (aside), no al campo:
+  // así nunca tapa el campo vecino y queda siempre del mismo lado, claro y consistente.
+  const left = host ? host.left : rect.left;
+  const right = host ? host.right : rect.right;
+  if (left >= TIP_W + GAP) return { top: centroV, left: left - GAP - TIP_W };
+  if (vw - right >= TIP_W + GAP) return { top: centroV, left: right + GAP };
   if (vh - rect.bottom >= TIP_H + GAP) return { top: rect.bottom + GAP, left: clampLeft(rect.left) };
   return { top: rect.top - GAP, left: clampLeft(rect.left), transform: "translateY(-100%)" };
+}
+
+// Igualdad por valor de dos rects: evita re-render cuando la posición no cambió de verdad
+// (getBoundingClientRect devuelve un objeto nuevo cada vez).
+function mismaRect(a: DOMRect | null, b: DOMRect | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height;
 }
 
 export function TicketsCreateTour({
@@ -57,6 +69,7 @@ export function TicketsCreateTour({
   const { tickets } = useTickets();
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const [hostRect, setHostRect] = useState<DOMRect | null>(null);
   const [hecho, setHecho] = useState(false);
   const baseCount = useRef(0);
   const armado = useRef(false); // el formulario ya se abrió al menos una vez
@@ -96,33 +109,28 @@ export function TicketsCreateTour({
     if (armado.current && tickets.length > baseCount.current) setHecho(true);
   }, [open, hecho, tickets.length]);
 
-  // Medir el elemento objetivo (re-mide en scroll/resize y por intervalo mientras abre el form).
+  // Seguir el elemento objetivo con un loop de requestAnimationFrame: mide cada frame pero solo
+  // re-renderiza cuando la posición cambió de verdad (comparación por valor). Así el globo sigue
+  // sin saltos la animación de apertura del panel y el scroll, y NO "aparece dos veces".
   useLayoutEffect(() => {
     if (!open || hecho) return;
     let raf = 0;
     const medir = () => {
       const el = document.querySelector<HTMLElement>(`[data-tour="${paso.sel}"]`);
-      setRect(el ? el.getBoundingClientRect() : null);
-    };
-    document
-      .querySelector<HTMLElement>(`[data-tour="${paso.sel}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "auto" });
-    medir();
-    const t = window.setTimeout(medir, 280);
-    const iv = window.setInterval(medir, 500);
-    const onMove = () => {
-      cancelAnimationFrame(raf);
+      const r = el ? el.getBoundingClientRect() : null;
+      setRect((prev) => (mismaRect(prev, r) ? prev : r));
+      // El panel (SheetContent) es el único role=dialog abierto además del propio globo.
+      const host = document.querySelector<HTMLElement>('[role="dialog"]:not([data-tour-tooltip])');
+      const h = host ? host.getBoundingClientRect() : null;
+      setHostRect((prev) => (mismaRect(prev, h) ? prev : h));
       raf = requestAnimationFrame(medir);
     };
-    window.addEventListener("resize", onMove);
-    window.addEventListener("scroll", onMove, true);
-    return () => {
-      window.clearTimeout(t);
-      window.clearInterval(iv);
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onMove);
-      window.removeEventListener("scroll", onMove, true);
-    };
+    // Centrar el campo al instante (sin animación) antes de la primera medición.
+    document
+      .querySelector<HTMLElement>(`[data-tour="${paso.sel}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "instant" });
+    medir();
+    return () => cancelAnimationFrame(raf);
   }, [open, hecho, i, paso?.sel, dialogOpen]);
 
   // Esc para salir.
@@ -168,14 +176,14 @@ export function TicketsCreateTour({
   const esGate = !!paso.gate;
   const ultimo = i === PASOS.length - 1;
 
-  const tipStyle = posicionGlobo(rect);
+  const tipStyle = posicionGlobo(rect, hostRect);
 
   return createPortal(
     // Contenedor click-through: los clics pasan a la app para que interactúen de verdad.
     <div className="pointer-events-none fixed inset-0 z-[100]">
       {rect && (
         <div
-          className="fixed rounded-xl ring-2 ring-primary transition-all duration-200"
+          className="fixed rounded-xl ring-2 ring-primary"
           style={{
             top: rect.top - 8,
             left: rect.left - 8,
@@ -190,7 +198,11 @@ export function TicketsCreateTour({
         role="dialog"
         aria-label="Tutorial: crear un ticket"
         data-tour-tooltip
-        className="pointer-events-auto fixed w-[300px] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl transition-all duration-200"
+        // Clave: evitar que los botones del globo roben el foco al panel modal. Si lo robaran, el
+        // FocusScope de Radix devuelve el foco a un campo y hace scroll del panel, moviendo el botón
+        // justo antes del mouseup → el clic se pierde y el paso "no avanza" (solo cambia de posición).
+        onMouseDown={(e) => e.preventDefault()}
+        className="pointer-events-auto fixed w-[300px] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl"
         style={tipStyle}
       >
         <button

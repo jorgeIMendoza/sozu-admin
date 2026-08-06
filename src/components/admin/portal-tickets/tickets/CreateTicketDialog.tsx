@@ -126,7 +126,7 @@ export function CreateTicketDialog({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full overflow-y-auto sm:max-w-md"
+        className="w-full overflow-y-auto sm:max-w-lg"
         onInteractOutside={(e) => {
           // No cerrar el formulario si el clic/foco es sobre el globo del tutorial guiado.
           const t = ((e as any).detail?.originalEvent?.target as HTMLElement | undefined) ?? undefined;
@@ -156,71 +156,75 @@ export function CreateTicketDialog({
             />
           </div>
 
-          <div data-tour="ct-pipeline" className="space-y-1.5">
-            <Label>Pipeline *</Label>
-            <Select
-              value={pipelineId}
-              onValueChange={(v) => {
-                setPipelineId(v);
-                setEtapaId(etapas.find((e) => e.pipelineId === v)?.id ?? "");
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {pipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div data-tour="ct-pipeline" className="space-y-1.5">
+              <Label>Pipeline *</Label>
+              <Select
+                value={pipelineId}
+                onValueChange={(v) => {
+                  setPipelineId(v);
+                  setEtapaId(etapas.find((e) => e.pipelineId === v)?.id ?? "");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div data-tour="ct-estado" className="space-y-1.5">
-            <Label>Estado del ticket *</Label>
-            <Select value={etapaId} onValueChange={setEtapaId}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {etapasPipeline.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div data-tour="ct-estado" className="space-y-1.5">
+              <Label>Estado del ticket *</Label>
+              <Select value={etapaId} onValueChange={setEtapaId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {etapasPipeline.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div data-tour="ct-solicitante">
             <ContactoPicker value={contacto} onChange={setContacto} />
           </div>
 
-          <div data-tour="ct-proyecto">
-            <ProyectoSelect value={proyecto} onChange={setProyecto} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div data-tour="ct-proyecto">
+              <ProyectoSelect value={proyecto} onChange={setProyecto} />
+            </div>
+
+            <div data-tour="ct-fuente" className="space-y-1.5">
+              <Label>Fuente</Label>
+              <Select value={fuente} onValueChange={setFuente}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FUENTES.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div data-tour="ct-descripcion" className="space-y-1.5">
             <Label>Descripción del ticket</Label>
             <Textarea rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
-          </div>
-
-          <div data-tour="ct-fuente" className="space-y-1.5">
-            <Label>Fuente</Label>
-            <Select value={fuente} onValueChange={setFuente}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FUENTES.map((f) => (
-                  <SelectItem key={f} value={f}>
-                    {f}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div data-tour="ct-propietarios">
@@ -232,36 +236,38 @@ export function CreateTicketDialog({
             />
           </div>
 
-          <div data-tour="ct-prioridad" className="space-y-1.5">
-            <Label>Prioridad</Label>
-            <Select value={prioridad} onValueChange={(v) => setPrioridad(v as Priority)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRIORIDADES.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div data-tour="ct-prioridad" className="space-y-1.5">
+              <Label>Prioridad</Label>
+              <Select value={prioridad} onValueChange={(v) => setPrioridad(v as Priority)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORIDADES.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div data-tour="ct-categoria" className="space-y-1.5">
-            <Label>Categoría</Label>
-            <Select value={categoriaId} onValueChange={setCategoriaId}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categoriasDelPipeline.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div data-tour="ct-categoria" className="space-y-1.5">
+              <Label>Categoría</Label>
+              <Select value={categoriaId} onValueChange={setCategoriaId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoriasDelPipeline.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div data-tour="ct-evidencia">
