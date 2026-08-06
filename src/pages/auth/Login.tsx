@@ -87,6 +87,10 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
   
   const inactivityLogout = searchParams.get('reason') === 'inactivity';
   const passwordUpdated = searchParams.get('reason') === 'password-updated';
+  // Lo manda ChangePassword cuando alguien llega ahí sin sesión: el enlace del
+  // correo ya no era válido y verifyOtp no dejó sesión. Sin este aviso el usuario
+  // solo veía el formulario de login y no entendía por qué.
+  const linkExpirado = searchParams.get('reason') === 'link-expirado';
   const getDefaultRedirect = () => {
     if (portalContext === 'agentes') return '/admin/agent/inicio';
     if (portalContext === 'inmobiliarias') return '/admin/portal-inmobiliaria/dashboard';
@@ -363,6 +367,20 @@ export default function Login({ portalContext }: { portalContext?: 'agentes' | '
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm" style={{ color: 'hsl(43 80% 30%)', background: 'hsl(43 80% 95%)' }}>
               <Clock className="h-4 w-4 flex-shrink-0" />
               <span>Tu sesión expiró por inactividad.</span>
+            </div>
+          )}
+
+          {linkExpirado && !error && !isUpdating && (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm" style={{ color: 'hsl(43 80% 25%)', background: 'hsl(43 80% 95%)' }}>
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>
+                El enlace para cambiar tu contraseña ya no era válido (venció, ya se había usado o
+                lo reemplazó uno más reciente). Pide uno nuevo en{' '}
+                <Link to="/auth/forgot-password" className="font-semibold underline">
+                  ¿Olvidaste tu contraseña?
+                </Link>{' '}
+                y abre siempre el último correo que recibas.
+              </span>
             </div>
           )}
 
