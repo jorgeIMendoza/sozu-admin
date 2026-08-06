@@ -16,7 +16,7 @@ import { TicketsTable, type OrdenCampo } from "./TicketsTable";
 import { TicketsKanban } from "./TicketsKanban";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { CreateTicketDialog } from "./CreateTicketDialog";
-import { TutorialDialog } from "./TutorialDialog";
+import { TicketsTour } from "./TicketsTour";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -221,10 +221,10 @@ export function TicketsWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setTutorial(true)}>
+          <Button data-tour="tutorial" variant="outline" onClick={() => setTutorial(true)}>
             <HelpCircle className="size-4" /> Tutorial
           </Button>
-          <Button onClick={() => setCrear(true)}>
+          <Button data-tour="crear" onClick={() => setCrear(true)}>
             <Plus className="size-4" /> Crear ticket
           </Button>
         </div>
@@ -261,7 +261,7 @@ export function TicketsWorkspace({
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
-        <div className="flex overflow-hidden rounded-md border">
+        <div data-tour="vista" className="flex overflow-hidden rounded-md border">
           <button
             onClick={() => setVista("tabla")}
             aria-label="Vista de tabla"
@@ -297,7 +297,7 @@ export function TicketsWorkspace({
             if (v === "todos") setVista("tabla"); // el Kanban necesita un pipeline concreto
           }}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger data-tour="pipeline" className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -374,6 +374,7 @@ export function TicketsWorkspace({
         <div className="relative ml-auto min-w-[220px] flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            data-tour="buscar"
             value={busqueda}
             onChange={(e) => {
               setBusqueda(e.target.value);
@@ -461,7 +462,7 @@ export function TicketsWorkspace({
 
       <TicketDetailSheet ticket={detalle} onOpenChange={(o) => !o && setDetalleId(null)} />
       <CreateTicketDialog open={crear} onOpenChange={setCrear} />
-      <TutorialDialog open={tutorial} onOpenChange={setTutorial} />
+      <TicketsTour open={tutorial} onClose={() => setTutorial(false)} />
     </div>
   );
 }
