@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import { PropietariosPicker } from "./PropietariosPicker";
 import { PendingEvidenciaField } from "./TicketEvidencia";
 import type { PendingAdjunto } from "@/lib/portal-tickets/tickets-adjuntos";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 // Fecha de hoy en formato YYYY-MM-DD (hora local, para el <input type="date">).
 function hoyLocal() {
@@ -28,6 +29,24 @@ function hoyLocal() {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
+
+// Sección del formulario (Detalles · Clasificación · Personas · Evidencia): encabezado + campos.
+function Section({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h3>
+      {children}
+    </section>
+  );
+}
+
+// Estilo de los chips de prioridad (punto de color + resaltado del activo).
+const PRIO_STYLE: Record<Priority, { dot: string; active: string }> = {
+  alta: { dot: "bg-destructive", active: "border-destructive bg-destructive/10 text-foreground" },
+  media: { dot: "bg-amber-500", active: "border-amber-500 bg-amber-500/10 text-foreground" },
+  baja: { dot: "bg-emerald-500", active: "border-emerald-500 bg-emerald-500/10 text-foreground" },
+  sin: { dot: "bg-muted-foreground/40", active: "border-muted-foreground/40 bg-muted text-foreground" },
+};
 
 export function CreateTicketDialog({
   open,
@@ -148,133 +167,145 @@ export function CreateTicketDialog({
           </div>
         </SheetHeader>
 
-        <div className="space-y-5 px-1 py-5">
-          <div data-tour="ct-nombre" className="space-y-1.5">
-            <Label>Nombre del ticket *</Label>
-            <Input
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej. 1820 - fuga en calentador"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div data-tour="ct-pipeline" className="space-y-1.5">
-              <Label>Pipeline *</Label>
-              <Select
-                value={pipelineId}
-                onValueChange={(v) => {
-                  setPipelineId(v);
-                  setEtapaId(etapas.find((e) => e.pipelineId === v)?.id ?? "");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {pipelines.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="space-y-6 px-1 py-5">
+          <Section titulo="Detalles del ticket">
+            <div data-tour="ct-nombre" className="space-y-1.5">
+              <Label>Nombre del ticket *</Label>
+              <Input
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej. 1820 - fuga en calentador"
+              />
             </div>
 
-            <div data-tour="ct-estado" className="space-y-1.5">
-              <Label>Estado del ticket *</Label>
-              <Select value={etapaId} onValueChange={setEtapaId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {etapasPipeline.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div data-tour="ct-solicitante">
-            <SolicitantesPicker value={solicitantes} onChange={setSolicitantes} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div data-tour="ct-proyecto">
               <ProyectoSelect value={proyecto} onChange={setProyecto} />
             </div>
 
-            <div data-tour="ct-fuente" className="space-y-1.5">
-              <Label>Fuente</Label>
-              <Select value={fuente} onValueChange={setFuente}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FUENTES.map((f) => (
-                    <SelectItem key={f} value={f}>
-                      {f}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div data-tour="ct-descripcion" className="space-y-1.5">
+              <Label>Descripción del ticket</Label>
+              <Textarea rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
             </div>
-          </div>
+          </Section>
 
-          <div data-tour="ct-descripcion" className="space-y-1.5">
-            <Label>Descripción del ticket</Label>
-            <Textarea rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
-          </div>
+          <Section titulo="Clasificación">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div data-tour="ct-pipeline" className="space-y-1.5">
+                <Label>Pipeline *</Label>
+                <Select
+                  value={pipelineId}
+                  onValueChange={(v) => {
+                    setPipelineId(v);
+                    setEtapaId(etapas.find((e) => e.pipelineId === v)?.id ?? "");
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelines.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div data-tour="ct-propietarios">
-            <PropietariosPicker
-              value={propietarios}
-              onChange={setPropietarios}
-              agentes={agentes}
-              label="Propietario(s) del ticket"
-            />
-          </div>
+              <div data-tour="ct-estado" className="space-y-1.5">
+                <Label>Estado del ticket *</Label>
+                <Select value={etapaId} onValueChange={setEtapaId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {etapasPipeline.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div data-tour="ct-prioridad" className="space-y-1.5">
               <Label>Prioridad</Label>
-              <Select value={prioridad} onValueChange={(v) => setPrioridad(v as Priority)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRIORIDADES.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap gap-2">
+                {PRIORIDADES.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPrioridad(p.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                      prioridad === p.id
+                        ? cn(PRIO_STYLE[p.id].active, "font-medium")
+                        : "border-border text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    <span className={cn("size-2.5 rounded-full", PRIO_STYLE[p.id].dot)} aria-hidden />
+                    {p.nombre}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div data-tour="ct-categoria" className="space-y-1.5">
-              <Label>Categoría</Label>
-              <Select value={categoriaId} onValueChange={setCategoriaId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoriasDelPipeline.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div data-tour="ct-categoria" className="space-y-1.5">
+                <Label>Categoría</Label>
+                <Select value={categoriaId} onValueChange={setCategoriaId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriasDelPipeline.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div data-tour="ct-evidencia">
-            <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
-          </div>
+              <div data-tour="ct-fuente" className="space-y-1.5">
+                <Label>Fuente</Label>
+                <Select value={fuente} onValueChange={setFuente}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FUENTES.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Section>
+
+          <Section titulo="Personas">
+            <div data-tour="ct-solicitante">
+              <SolicitantesPicker value={solicitantes} onChange={setSolicitantes} />
+            </div>
+
+            <div data-tour="ct-propietarios">
+              <PropietariosPicker
+                value={propietarios}
+                onChange={setPropietarios}
+                agentes={agentes}
+                label="Propietario(s) del ticket"
+              />
+            </div>
+          </Section>
+
+          <Section titulo="Evidencia">
+            <div data-tour="ct-evidencia">
+              <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
+            </div>
+          </Section>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
