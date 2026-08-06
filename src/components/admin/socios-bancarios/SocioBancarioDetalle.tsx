@@ -20,6 +20,7 @@ import {
   useInvitarUsuario, useReenviarInvitacion, useToggleUsuarioSocio,
   type EstadoUsuarioSocio,
 } from "@/hooks/useSociosBancarios";
+import { PASSWORD_TEMPORAL, textoAltaUsuario } from "@/lib/usuarios/estado-cuenta";
 
 // Estado derivado de activo + email_confirmado (no hay columna estado).
 const ESTADO_USUARIO: Record<EstadoUsuarioSocio, { label: string; cls: string }> = {
@@ -159,7 +160,7 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
               {loadingUsers ? (
                 <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="inline h-4 w-4 animate-spin mr-2" />Cargando…</td></tr>
               ) : usuarios.length === 0 ? (
-                <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">Sin usuarios. Agrega el primero con una invitación.</td></tr>
+                <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">Sin usuarios. Agrega el primero: recibirá un correo de confirmación.</td></tr>
               ) : (
                 usuarios.map((u) => {
                   const meta = ESTADO_USUARIO[u.estado];
@@ -176,7 +177,11 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
                               size="sm" variant="ghost" className="h-8 gap-1 text-[12px]"
                               disabled={reenviar.isPending}
                               onClick={() => reenviar.mutate({ correo: u.email }, {
-                                onSuccess: () => toast({ title: "Invitación reenviada" }),
+                                onSuccess: (data) => toast({
+                                  title: data?.confirmacionEnviada === false ? "No se pudo reenviar" : "Correo de confirmación reenviado",
+                                  description: data?.message ?? "Al confirmarlo podrá definir su contraseña y entrar.",
+                                  variant: data?.confirmacionEnviada === false ? "destructive" : undefined,
+                                }),
                                 onError: (e: any) => toast({ title: "No se pudo reenviar", description: e?.message ?? "Error", variant: "destructive" }),
                               })}
                             >
@@ -187,7 +192,7 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
                             <Button
                               size="sm" variant="outline" className="h-8 gap-1 text-[12px]"
                               onClick={() => toggleUsuario.mutate({ correo: u.email, activar: true }, {
-                                onSuccess: () => toast({ title: "Usuario reactivado" }),
+                                onSuccess: (r) => toast({ title: "Usuario reactivado", description: r?.mensaje }),
                                 onError: (e: any) => toast({ title: "No se pudo reactivar", description: e?.message ?? "Error", variant: "destructive" }),
                               })}
                             >
@@ -197,7 +202,7 @@ export function SocioBancarioDetalle({ idSocio, onBack }: { idSocio: number; onB
                             <Button
                               size="sm" variant="ghost" className="h-8 gap-1 text-[12px] text-destructive hover:text-destructive"
                               onClick={() => toggleUsuario.mutate({ correo: u.email, activar: false }, {
-                                onSuccess: () => toast({ title: "Acceso revocado", description: "Se revocó el acceso del usuario." }),
+                                onSuccess: (r) => toast({ title: "Acceso revocado", description: r?.mensaje ?? "Se revocó el acceso del usuario." }),
                                 onError: (e: any) => toast({ title: "No se pudo revocar", description: e?.message ?? "Error", variant: "destructive" }),
                               })}
                             >
@@ -238,12 +243,18 @@ function AltaUsuarioDialog({
     invitar.mutate(
       { idSocio, nombre, correo, telefono },
       {
-        onSuccess: () => {
-          toast({ title: "Invitación enviada", description: "El usuario recibirá un enlace para definir su acceso." });
+        onSuccess: (data: any) => {
+          const enviado = data?.confirmacionEnviada !== false;
+          toast({
+            title: enviado ? "Usuario creado" : "Usuario creado, sin correo",
+            description: data?.message ??
+              "Se le envió un correo de confirmación; al confirmarlo definirá su contraseña.",
+            variant: enviado ? undefined : "destructive",
+          });
           setNombre(""); setCorreo(""); setTelefono("");
           onOpenChange(false);
         },
-        onError: (e: any) => toast({ title: "No se pudo enviar la invitación", description: e?.message ?? "Error", variant: "destructive" }),
+        onError: (e: any) => toast({ title: "No se pudo crear el usuario", description: e?.message ?? "Error", variant: "destructive" }),
       },
     );
   };
@@ -254,7 +265,8 @@ function AltaUsuarioDialog({
         <DialogHeader>
           <DialogTitle>Agregar usuario</DialogTitle>
           <DialogDescription>
-            Se enviará una invitación por correo (magic link). La contraseña la define el usuario en Supabase; la app nunca la captura.
+            {textoAltaUsuario(true)} Entra con la contraseña temporal {PASSWORD_TEMPORAL} y el
+            sistema le pide definir la suya.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -274,7 +286,7 @@ function AltaUsuarioDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={enviar} disabled={!valido || invitar.isPending} className="gap-1.5">
-            {invitar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Enviar invitación
+            {invitar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Crear y enviar confirmación
           </Button>
         </DialogFooter>
       </DialogContent>

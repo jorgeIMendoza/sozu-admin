@@ -13,6 +13,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
+import {
+  resetearPassword,
+  textoResetPassword,
+  useRolesRequierenConfirmacion,
+} from "@/lib/usuarios/estado-cuenta";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -45,6 +50,8 @@ export default function UsuariosClientes() {
   const queryClient = useQueryClient();
   const { registrarActualizacion } = useActivityLogger();
   const { canUpdate, isLoading: isLoadingPermissions } = usePagePermissions('/admin/usuarios-clientes');
+  // Todos los de esta pantalla son rol Cliente, pero la clasificación se lee de BD.
+  const { requiereConfirmacion: rolRequiereConfirmacion } = useRolesRequierenConfirmacion();
 
   // Fetch users with role "Cliente"
   const { data: usuarios = [], isLoading: isLoadingUsuarios } = useQuery({
@@ -84,8 +91,12 @@ export default function UsuariosClientes() {
     },
   });
 
+  const clienteRequiereConfirmacion = rolRequiereConfirmacion(
+    usuarios.find(u => u.email === selectedUserEmail)?.rol_id ?? null
+  );
+
   // Filter users based on search
-  const filteredUsers = useMemo(() => 
+  const filteredUsers = useMemo(() =>
     usuarios.filter(u => 
       u.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || 
       u.email.toLowerCase().includes(searchTerm.toLowerCase())),
@@ -107,20 +118,11 @@ export default function UsuariosClientes() {
 
   // Reset password mutation
   const resetPasswordMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const response = await supabase.functions.invoke('reset-user-password', {
-        body: { email },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
-
-      return response.data;
-    },
-    onSuccess: (data, email) => {
+    mutationFn: async (email: string) => resetearPassword({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios-clientes'] });
       registrarActualizacion('usuario_cliente_password', { email }, { email, password_reset: true });
-      toast({ title: "Contraseña Reseteada", description: data.message || "Se envió un correo de confirmación. Una vez confirmado, recibirá sus credenciales temporales." });
+      toast({ title: "Contraseña Reseteada", description: resultado?.mensaje ?? "La contraseña fue restablecida." });
       setIsResetPasswordDialogOpen(false);
       setSelectedUserEmail(null);
     },
@@ -491,7 +493,7 @@ export default function UsuariosClientes() {
             <AlertDialogDescription>
               ¿Estás seguro de que deseas resetear la contraseña del usuario <strong>{selectedUserEmail}</strong>?
               <br /><br />
-              Primero se enviará un correo para que el cliente confirme su email. Una vez confirmado, recibirá otro correo con su contraseña temporal.
+              {textoResetPassword(clienteRequiereConfirmacion)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

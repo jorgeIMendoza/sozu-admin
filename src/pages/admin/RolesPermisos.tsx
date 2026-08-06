@@ -35,6 +35,11 @@ interface Role {
   // consumen clientes externos y un trigger la mantiene sincronizada; aquí solo
   // alimenta el fallback de AdministracionAppsSelector.
   administrar_app_clientes: boolean;
+  // Rol de portal/externo: sus usuarios nacen sin confirmar, reciben correo de
+  // confirmación y su portal les niega el acceso hasta que lo abran. En false el rol
+  // es interno: nace confirmado, entra con la contraseña temporal y solo puede
+  // cambiarla. Lo leen las edge functions y el gate de ProtectedRoute.
+  requiere_confirmacion_email: boolean;
 }
 
 // Fila del catálogo `apps`. El catálogo vive en BD, no aquí: dar de alta una
@@ -724,16 +729,23 @@ export default function RolesPermisos() {
   const { registrarCreacion, registrarActualizacion, registrarEliminacion, registrarRestauracion } = useActivityLogger();
   const isSuperAdminSelected = selectedRoleId === SUPER_ADMIN_ROLE_ID;
 
-  // Fetch roles (only internal roles)
+  // Se listan TODOS los roles activos, no solo los de `es_rol_interno`. Ese filtro dejaba
+  // fuera a Cliente, Directores y Socio Bancario, que sí necesitan configurarse aquí desde
+  // que existe `requiere_confirmacion_email` (Cliente y Socio Bancario son roles de portal
+  // y son justo los que más importa poder clasificar). Pese a su nombre, `es_rol_interno`
+  // no significa "empleado de SOZU": se pone en true a todo rol creado desde esta pantalla
+  // y gobierna RLS de lectura de `usuarios`, así que no sirve como discriminador — el
+  // propio repo lo advierte en AdministracionBandejaValidacionesPage.tsx.
   const { data: roles = [], isLoading: loadingRoles } = useQuery({
     queryKey: ['roles-management'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Cast: `requiere_confirmacion_email` aún no está en los tipos generados de Supabase
+      // (los regenera otro flujo, no esta rama), así que el cliente tipado la rechaza.
+      const { data, error } = await (supabase as any)
         .from('roles')
-        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes')
-        .eq('es_rol_interno', true)
+        .select('id, nombre, activo, ver_todos_prospectos_compradores, ver_todos_proyectos_propiedades, ver_filtros_avanzados_eliminados, ver_todos_duenos, configurar_citas, puede_impersonar, administrar_app_clientes, requiere_confirmacion_email')
         .order('id');
-      
+
       if (error) throw error;
       return data as Role[];
     },
@@ -1064,6 +1076,31 @@ export default function RolesPermisos() {
         })
         .eq('id', id);
       
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles-management'] });
+      triggerPermissionRefresh();
+      toast.success('Configuración actualizada');
+    },
+    onError: (error) => {
+      toast.error(`Error al actualizar: ${error.message}`);
+    },
+  });
+
+  // Clasificación interno / portal. Es la fuente de verdad que leen las edge functions
+  // (create-user, reset-user-password) y el gate de acceso del front, así que cambiarla
+  // altera cómo se dan de alta y cómo se recuperan las cuentas de ese rol.
+  const updateRequiereConfirmacionMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: number; value: boolean }) => {
+      const { error } = await (supabase as any)
+        .from('roles')
+        .update({
+          requiere_confirmacion_email: value,
+          fecha_actualizacion: new Date().toISOString()
+        })
+        .eq('id', id);
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -1756,6 +1793,26 @@ export default function RolesPermisos() {
                           <span className="text-sm font-medium">Impersonar usuarios en portales</span>
                           <p className="text-xs text-muted-foreground">
                             Muestra el selector "Ver como" en los portales (agentes, cobranza, CRM, bancos, etc.) para navegar como otro usuario
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={selectedRole.requiere_confirmacion_email || false}
+                          onCheckedChange={(checked) => {
+                            updateRequiereConfirmacionMutation.mutate({
+                              id: selectedRole.id,
+                              value: checked === true
+                            });
+                          }}
+                          disabled={updateRequiereConfirmacionMutation.isPending}
+                        />
+                        <div>
+                          <span className="text-sm font-medium">Requiere confirmar su correo (rol externo)</span>
+                          <p className="text-xs text-muted-foreground">
+                            El usuario nace sin confirmar, recibe un correo de confirmación y no entra a su portal
+                            hasta abrirlo. Sin esto el rol se trata como interno: nace confirmado, entra con la
+                            contraseña temporal y solo puede cambiarla.
                           </p>
                         </div>
                       </label>

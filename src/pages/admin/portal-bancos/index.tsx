@@ -1060,7 +1060,12 @@ function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUp
     setActivo.mutate(
       { email: e.email, activo: !e.activo },
       {
-        onSuccess: () => toast({ title: e.activo ? "Ejecutivo desactivado" : "Ejecutivo reactivado", description: e.activo ? undefined : "Contraseña temporal: Temporal123!" }),
+        // El texto lo redacta el helper: dice "correo de confirmación" o "Temporal123!"
+        // según lo que realmente haya pasado con el rol del ejecutivo.
+        onSuccess: (resultado) => toast({
+          title: e.activo ? "Ejecutivo desactivado" : "Ejecutivo reactivado",
+          description: resultado?.mensaje,
+        }),
         onError: (err: any) => toast({ title: "No se pudo actualizar", description: err?.message ?? "Error", variant: "destructive" }),
       },
     );

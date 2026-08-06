@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { desactivarUsuario, reactivarUsuario } from "@/lib/usuarios/estado-cuenta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
@@ -858,20 +859,20 @@ export default function Agentes() {
         .from('personas')
         .update({ activo: false })
         .eq('id', id);
-      
+
       if (error) throw error;
 
-      // Also deactivate associated user if exists
-      const { error: userError } = await supabase
-        .from('usuarios')
-        .update({ activo: false })
-        .eq('id_persona', id);
-      
-      if (userError) {
+      // La baja del usuario va por el helper: un agente es rol de portal, así que solo
+      // se apaga el acceso; si fuera interno además le repondría la contraseña temporal.
+      // Puede no haber usuario ligado a la persona, de ahí `permitirSinUsuario`.
+      try {
+        return await desactivarUsuario({ idPersona: id }, { permitirSinUsuario: true });
+      } catch (userError) {
         console.error('Error deactivating user:', userError);
+        return null;
       }
     },
-    onSuccess: (_, id: number) => {
+    onSuccess: (resultado, id: number) => {
       queryClient.invalidateQueries({ queryKey: ['agentes'] });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       
@@ -889,7 +890,9 @@ export default function Agentes() {
       setAgenteToDelete(null);
       toast({
         title: "Éxito",
-        description: "Agente eliminado y usuario desactivado correctamente.",
+        description: resultado
+          ? `Agente eliminado. ${resultado.mensaje}`
+          : "Agente eliminado correctamente (no tenía usuario ligado).",
       });
     },
     onError: (error: any) => {
@@ -908,38 +911,47 @@ export default function Agentes() {
         .from('personas')
         .update({ activo: true })
         .eq('id', id);
-      
+
       if (error) throw error;
 
-      // Also reactivate associated user if exists
-      const { error: userError } = await supabase
-        .from('usuarios')
-        .update({ activo: true })
-        .eq('id_persona', id);
-      
-      if (userError) {
+      // Reactivación del usuario. Un agente es rol de portal: recupera el acceso, se
+      // des-confirma su correo y recibe el enlace para definir contraseña. Antes esta
+      // pantalla lo reactivaba sin resetear nada.
+      try {
+        return await reactivarUsuario({ idPersona: id }, { permitirSinUsuario: true });
+      } catch (userError) {
         console.error('Error reactivating user:', userError);
+        return null;
       }
     },
-    onSuccess: (_, id: number) => {
+    onSuccess: (resultado, id: number) => {
       queryClient.invalidateQueries({ queryKey: ['agentes'] });
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
-      
+
       // Registrar actividad
       const agente = agenteToRestore;
       if (agente) {
-        registrarRestauracion('agente', 
+        registrarRestauracion('agente',
           { id: agente.id, nombre_legal: agente.nombre_legal, activo: false },
           { id: agente.id, nombre_legal: agente.nombre_legal, activo: true }
         );
       }
-      
+
       setRestoreDialogOpen(false);
       setAgenteToRestore(null);
       toast({
         title: "Éxito",
-        description: "Agente restaurado y usuario reactivado correctamente.",
+        description: resultado
+          ? `Agente restaurado. ${resultado.mensaje}`
+          : "Agente restaurado correctamente.",
       });
+      if (resultado?.resetFallo) {
+        toast({
+          title: "Correo de confirmación no enviado",
+          description: resultado.resetFallo,
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: any) => {
       toast({

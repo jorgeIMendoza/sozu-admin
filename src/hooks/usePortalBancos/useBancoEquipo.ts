@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
+import { desactivarUsuario, reactivarUsuario } from "@/lib/usuarios/estado-cuenta";
 
 /**
  * Equipo del Portal Bancos = usuarios REALES del sistema (con login) cuyos roles
@@ -211,28 +212,19 @@ function assertFilaActualizada(filas: unknown[] | null, accion: string) {
   }
 }
 
-/** Baja/reactivación: `usuarios.activo`. Al reactivar, resetea la contraseña a temporal. */
+/**
+ * Baja/reactivación: `usuarios.activo`.
+ *
+ * Qué pasa además del flag lo decide el helper según `roles.requiere_confirmacion_email`:
+ * los roles de banco son de portal, así que la baja solo apaga el acceso y la
+ * reactivación des-confirma el correo y manda el enlace para definir contraseña. Antes
+ * este hook reseteaba al reactivar sin importar el rol.
+ */
 export function useSetActivoEjecutivo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ email, activo }: { email: string; activo: boolean }) => {
-      const { data: filas, error } = await supabase
-        .from("usuarios")
-        .update({ activo, fecha_actualizacion: new Date().toISOString() })
-        .eq("email", email)
-        .select("email");
-      if (error) throw error;
-      assertFilaActualizada(filas, activo ? "reactivar al ejecutivo" : "desactivar al ejecutivo");
-
-      // Al reactivar, resetear contraseña (mismo comportamiento que Admin Panel).
-      if (activo) {
-        const response = await supabase.functions.invoke("reset-user-password", {
-          body: { email },
-        });
-        if (response.error) throw new Error(await extractInvokeError(response.error));
-        if (response.data?.error) throw new Error(response.data.error);
-      }
-    },
+    mutationFn: async ({ email, activo }: { email: string; activo: boolean }) =>
+      activo ? reactivarUsuario({ email }) : desactivarUsuario({ email }),
     onSuccess: () => invalidateEquipo(qc),
   });
 }
