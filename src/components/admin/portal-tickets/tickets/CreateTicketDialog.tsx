@@ -230,7 +230,7 @@ export function CreateTicketDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div data-tour="ct-prioridad" className="space-y-1.5">
             <Label>Prioridad</Label>
             <Select value={prioridad} onValueChange={(v) => setPrioridad(v as Priority)}>
               <SelectTrigger>
@@ -246,7 +246,7 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          <div className="space-y-1.5">
+          <div data-tour="ct-categoria" className="space-y-1.5">
             <Label>Categoría</Label>
             <Select value={categoriaId} onValueChange={setCategoriaId}>
               <SelectTrigger>
@@ -262,7 +262,9 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
+          <div data-tour="ct-evidencia">
+            <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
+          </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

@@ -16,7 +16,10 @@ const PASOS: Paso[] = [
   { sel: "ct-estado", titulo: "4. Estado", texto: "La etapa inicial dentro de ese flujo." },
   { sel: "ct-solicitante", titulo: "5. Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
   { sel: "ct-propietarios", titulo: "6. Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
-  { sel: "ct-enviar", titulo: "7. ¡Créalo!", texto: 'Da clic en "Crear ticket". No termino hasta que crees el tuyo. 😉', gate: "crear" },
+  { sel: "ct-prioridad", titulo: "7. Prioridad", texto: "Qué tan urgente es el caso." },
+  { sel: "ct-categoria", titulo: "8. Categoría", texto: "Clasifícalo dentro del flujo." },
+  { sel: "ct-evidencia", titulo: "9. Evidencia", texto: "Sube fotos, video o una nota de voz (opcional)." },
+  { sel: "ct-enviar", titulo: "10. ¡Ya está!", texto: 'Da clic en "Crear ticket" para crearlo, o "Terminar" para salir.' },
 ];
 
 const TIP_W = 300;
@@ -52,6 +55,7 @@ export function TicketsCreateTour({
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [hecho, setHecho] = useState(false);
   const baseCount = useRef(0);
+  const armado = useRef(false); // el formulario ya se abrió al menos una vez
 
   const paso = PASOS[i];
 
@@ -60,12 +64,16 @@ export function TicketsCreateTour({
     if (open) {
       setI(0);
       setHecho(false);
+      armado.current = false;
     }
   }, [open]);
 
   // Al abrir el formulario, capturar cuántos tickets había (para detectar el nuevo).
   useEffect(() => {
-    if (open && dialogOpen) baseCount.current = tickets.length;
+    if (open && dialogOpen) {
+      baseCount.current = tickets.length;
+      armado.current = true;
+    }
     // tickets.length intencionalmente fuera de deps: solo re-snapshot al abrir/cerrar el form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, dialogOpen]);
@@ -74,15 +82,15 @@ export function TicketsCreateTour({
   useEffect(() => {
     if (!open || hecho) return;
     if (paso?.gate === "abrir" && dialogOpen) setI((n) => n + 1);
-    // Si cierran el form a mitad de los pasos explicativos, regresar a "abre el formulario".
-    else if (paso && !paso.gate && !dialogOpen) setI(0);
-  }, [open, hecho, dialogOpen, paso]);
+    // Si cierran el form a mitad de los pasos explicativos (no el último), volver a "abre el formulario".
+    else if (paso && !paso.gate && i < PASOS.length - 1 && !dialogOpen) setI(0);
+  }, [open, hecho, dialogOpen, paso, i]);
 
-  // Gate "crear": cuando la lista crece respecto al snapshot → ¡creado!
+  // Bono: si crea un ticket durante el tutorial (la lista creció tras abrir el form), celebrar.
   useEffect(() => {
     if (!open || hecho) return;
-    if (paso?.gate === "crear" && tickets.length > baseCount.current) setHecho(true);
-  }, [open, hecho, tickets.length, paso]);
+    if (armado.current && tickets.length > baseCount.current) setHecho(true);
+  }, [open, hecho, tickets.length]);
 
   // Medir el elemento objetivo (re-mide en scroll/resize y por intervalo mientras abre el form).
   useLayoutEffect(() => {
@@ -154,6 +162,7 @@ export function TicketsCreateTour({
   }
 
   const esGate = !!paso.gate;
+  const ultimo = i === PASOS.length - 1;
 
   const tipStyle = posicionGlobo(rect);
 
@@ -210,8 +219,16 @@ export function TicketsCreateTour({
             {esGate ? (
               <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground">
                 <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-                {paso.gate === "abrir" ? "Esperando tu clic…" : "Esperando tu ticket…"}
+                Esperando tu clic…
               </span>
+            ) : ultimo ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Terminar
+              </button>
             ) : (
               <button
                 type="button"
