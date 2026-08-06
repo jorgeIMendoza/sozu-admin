@@ -98,12 +98,23 @@ export function SolicitantesPicker({
           },
         ]),
       );
-      return (ents ?? []).map((e: any) => ({
-        id: String(e.id),
-        nombre: pInfo[String(e.id_persona)]?.nombre ?? "Sin nombre",
-        email: pInfo[String(e.id_persona)]?.email ?? "",
-        telefono: pInfo[String(e.id_persona)]?.telefono ?? null,
-      })) as ContactoRef[];
+      // Dedupe por PERSONA: una persona puede tener varias entidades ("contactos"); mostramos UNA
+      // sola opción por persona (usando su primera entidad como enlace). El ticket es de la persona,
+      // y en la ficha del CRM los tickets se muestran a nivel persona (todas sus entidades).
+      const vistos = new Set<number>();
+      const salida: ContactoRef[] = [];
+      for (const e of ents ?? []) {
+        if (e.id_persona == null || vistos.has(e.id_persona)) continue;
+        vistos.add(e.id_persona);
+        const info = pInfo[String(e.id_persona)];
+        salida.push({
+          id: String(e.id),
+          nombre: info?.nombre ?? "Sin nombre",
+          email: info?.email ?? "",
+          telefono: info?.telefono ?? null,
+        });
+      }
+      return salida;
     },
   });
 

@@ -12,16 +12,20 @@ type Paso = { sel: string; titulo: string; texto: string; gate?: "abrir" | "crea
 // Pasos en el MISMO orden que los campos del formulario (CreateTicketDialog).
 const PASOS: Paso[] = [
   { sel: "crear", titulo: "Abre el formulario", texto: 'Da clic en "Crear ticket". Aquí te espero.', gate: "abrir" },
+  // Sección "Detalles del ticket"
   { sel: "ct-nombre", titulo: "Nombre", texto: 'Un título claro. Ej. "1820 — fuga en calentador".' },
+  { sel: "ct-proyecto", titulo: "Proyecto", texto: "El proyecto o inmueble relacionado (opcional)." },
+  { sel: "ct-descripcion", titulo: "Descripción", texto: "Detalla el caso: qué pasó y qué se necesita." },
+  // Sección "Clasificación"
   { sel: "ct-pipeline", titulo: "Pipeline", texto: "El flujo al que pertenece (ej. Atención al Cliente)." },
   { sel: "ct-estado", titulo: "Estado", texto: "La etapa inicial dentro de ese flujo." },
-  { sel: "ct-solicitante", titulo: "Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
-  { sel: "ct-proyecto", titulo: "Proyecto", texto: "El proyecto o inmueble relacionado (opcional)." },
-  { sel: "ct-fuente", titulo: "Fuente", texto: "Por dónde llegó el caso (portal, correo, teléfono…)." },
-  { sel: "ct-descripcion", titulo: "Descripción", texto: "Detalla el caso: qué pasó y qué se necesita." },
-  { sel: "ct-propietarios", titulo: "Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
-  { sel: "ct-prioridad", titulo: "Prioridad", texto: "Qué tan urgente es el caso." },
+  { sel: "ct-prioridad", titulo: "Prioridad", texto: "Qué tan urgente es. Un clic en el color." },
   { sel: "ct-categoria", titulo: "Categoría", texto: "Clasifícalo dentro del flujo." },
+  { sel: "ct-fuente", titulo: "Fuente", texto: "Por dónde llegó el caso (portal, correo, teléfono…)." },
+  // Sección "Personas"
+  { sel: "ct-solicitante", titulo: "Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
+  { sel: "ct-propietarios", titulo: "Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
+  // Sección "Evidencia"
   { sel: "ct-evidencia", titulo: "Evidencia", texto: "Sube fotos, video o una nota de voz (opcional)." },
   { sel: "ct-enviar", titulo: "¡Ya está!", texto: 'Da clic en "Crear ticket" para crearlo, o "Terminar" para salir.' },
 ];
