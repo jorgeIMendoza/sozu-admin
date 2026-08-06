@@ -1169,12 +1169,15 @@ export default function Inmobiliarias() {
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
           email: inmobiliaria.email,
           telefono: telefonoFormateado,
-          mensajeWA: `Tu inmobiliaria *${inmobiliaria.nombre_legal}* ha sido aprobada.\nLink: admin.sozu.com\nUsuario: ${inmobiliaria.email}\nPassword: Temporal123!`,
+          // La inmobiliaria es rol de portal: el alta ya no entrega contraseña, manda
+          // correo de confirmación. Anunciar Temporal123! aquí era además filtrar una
+          // credencial en claro por WhatsApp.
+          mensajeWA: `Tu inmobiliaria *${inmobiliaria.nombre_legal}* ha sido aprobada.\nTe enviamos un correo a ${inmobiliaria.email} para confirmar tu cuenta. Al confirmarlo defines tu contraseña y entras a inmobiliarias.sozu.com`,
           asunto: "Aprobación de Inmobiliaria",
           mensaje: {
             nombre: inmobiliaria.nombre_legal || inmobiliaria.nombre_comercial,
             actividad: "Aprobación de inmobiliaria",
-            detalles: `<tr><td class='label'>Link:</td><td class='value'>admin.sozu.com</td></tr><tr><td class='label'>Usuario:</td><td class='value'>${inmobiliaria.email}</td></tr><tr><td class='label'>Password:</td><td class='value'>Temporal123!</td></tr>`
+            detalles: `<tr><td class='label'>Portal:</td><td class='value'>inmobiliarias.sozu.com</td></tr><tr><td class='label'>Usuario:</td><td class='value'>${inmobiliaria.email}</td></tr><tr><td class='label'>Acceso:</td><td class='value'>Confirma tu correo con el enlace que te enviamos y define tu contraseña</td></tr>`
           },
           templateId: 41353048
         };
@@ -1782,7 +1785,8 @@ export default function Inmobiliarias() {
                 </div>
                 <div className="bg-muted/50 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground">
-                    <strong>Password temporal:</strong> <code className="bg-background px-1 rounded">Temporal123!</code>
+                    A cada usuario le llegó un <strong>correo de confirmación</strong>. Define su
+                    contraseña al abrirlo; hasta entonces no puede entrar al portal.
                   </p>
                 </div>
               </>

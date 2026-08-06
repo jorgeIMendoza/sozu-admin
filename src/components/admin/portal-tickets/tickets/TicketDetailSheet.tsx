@@ -50,7 +50,10 @@ export function TicketDetailSheet({
     <Sheet open={!!ticket} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle className="pr-6 text-left text-lg">{ticket.nombre}</SheetTitle>
+          <SheetTitle className="pr-6 text-left text-lg">
+            <span className="mr-1.5 font-medium tabular-nums text-muted-foreground">#{ticket.numero}</span>
+            {ticket.nombre}
+          </SheetTitle>
           <p className="text-left text-sm text-muted-foreground">
             Creado el {fechaLarga(ticket.fechaCreacion)} · Fuente: {ticket.fuente}
           </p>

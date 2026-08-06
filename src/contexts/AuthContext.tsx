@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { activityLoggerService } from "@/services/activityLoggerService";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
 import { clearCollectionFilters } from "@/lib/portal-cobranza/collection-inbox-store";
+import { vieneDeFlujoConfirmacion } from "@/lib/emailConfirmacion";
 
 interface UserProfile {
   email: string;
@@ -24,6 +25,10 @@ interface UserProfile {
   administrar_app_clientes: boolean;
   foto_perfil_url: string | null;
   frase_perfil: string | null;
+  /** usuarios.email_confirmado — si el correo ya fue verificado. */
+  email_confirmado: boolean;
+  /** roles.requiere_confirmacion_email — true solo en roles de portal/externos. */
+  requiere_confirmacion_email: boolean;
 }
 
 interface AuthContextType {
@@ -31,6 +36,8 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   isLoading: boolean;
+  /** True mientras get_current_user_profile está en vuelo (incluye reintentos). */
+  isProfileLoading: boolean;
   mustChangePassword: boolean;
   permissionVersion: number; // Incremented when permissions change
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -56,13 +63,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(async () => {
     setIsProfileLoading(true);
     try {
-      // Auto-mark email as confirmed if user can log in (Auth confirmed it)
-      try {
-        await supabase.rpc("mark_email_confirmed");
-      } catch (e) {
-        console.error("Error marking email confirmed:", e);
-      }
-
       // Add timeout to prevent infinite loading
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Profile fetch timeout")), 15000)
@@ -78,23 +78,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data && data.length > 0) {
-        const base = data[0] as UserProfile;
+        const row = data[0] as Partial<UserProfile>;
+        // La RPC nueva devuelve email_confirmado / requiere_confirmacion_email.
+        // Mientras la migración no esté desplegada esas columnas llegan undefined:
+        // los defaults tolerantes (confirmado / no requiere confirmación) evitan
+        // que el gate bloquee a nadie contra una BD vieja.
+        const base: UserProfile = {
+          ...(row as UserProfile),
+          email_confirmado: row.email_confirmado ?? true,
+          requiere_confirmacion_email: row.requiere_confirmacion_email ?? false,
+        };
+
+        // Reparación de la divergencia auth.users.email_confirmed_at (no nulo)
+        // vs usuarios.email_confirmado (false). `mark_email_confirmed` sube la
+        // bandera y sigue haciendo falta para los usuarios migrados en masa, que
+        // llegan confirmados en Auth pero con la columna en false.
+        //
+        // Se ejecuta DESPUÉS de leer el perfil y solo en los casos en que no
+        // anula el gate de EmailNoConfirmado. Antes corría siempre y dos líneas
+        // antes del SELECT: borraba la única divergencia que el gate podía
+        // detectar, así que la pantalla nunca se pintaba.
+        //   · rol interno (requiere_confirmacion_email = false): la bandera es
+        //     puro dato heredado, no hay gate que proteger → se repara.
+        //   · rol de portal que ACABA de confirmar por enlace en esta pestaña:
+        //     la confirmación es real y la columna aún no se propagó → se repara.
+        //   · rol de portal sin rastro de confirmación: NO se toca. Si la bandera
+        //     está en false ahí es señal legítima y el gate debe verla.
+        const puedeRepararBandera =
+          !base.email_confirmado &&
+          (!base.requiere_confirmacion_email || vieneDeFlujoConfirmacion(base.email));
+        if (puedeRepararBandera) {
+          try {
+            await supabase.rpc("mark_email_confirmed");
+          } catch (e) {
+            console.error("Error marking email confirmed:", e);
+          }
+        }
+
         // La RPC get_current_user_profile no devuelve la foto/frase de perfil;
         // se traen por separado desde usuarios para el avatar del header.
         let foto_perfil_url: string | null = null;
         let frase_perfil: string | null = null;
+        let email_confirmado = base.email_confirmado;
         try {
           const { data: u } = await (supabase as any)
             .from("usuarios")
-            .select("foto_perfil_url, frase_perfil")
+            .select("foto_perfil_url, frase_perfil, email_confirmado")
             .eq("email", base.email)
             .maybeSingle();
           foto_perfil_url = u?.foto_perfil_url ?? null;
           frase_perfil = u?.frase_perfil ?? null;
+          // Releer la bandera aquí evita un round-trip extra: dice si la
+          // reparación realmente prosperó (la RPC no hace nada cuando Auth
+          // tampoco tiene el correo confirmado).
+          if (puedeRepararBandera && typeof u?.email_confirmado === "boolean") {
+            email_confirmado = u.email_confirmado;
+          }
         } catch (e) {
           console.error("Error fetching perfil foto:", e);
         }
-        setProfile({ ...base, foto_perfil_url, frase_perfil });
+        setProfile({ ...base, email_confirmado, foto_perfil_url, frase_perfil });
       } else {
         setProfile(null);
       }
@@ -324,8 +367,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Registrar inicio de sesión exitoso
       activityLoggerService.registrarInicioSesion(email, "exito");
 
-      // mark_email_confirmed is now called automatically in fetchProfile
-      // so no need to call it here separately
+      // fetchProfile decide si toca reparar usuarios.email_confirmado
+      // (ver el bloque `puedeRepararBandera`); no hay que llamarlo aquí.
 
       return { error: null };
     } catch (err) {
@@ -407,6 +450,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     profile,
     isLoading,
+    isProfileLoading,
     mustChangePassword: profile?.debe_cambiar_password ?? false,
     permissionVersion,
     signIn,

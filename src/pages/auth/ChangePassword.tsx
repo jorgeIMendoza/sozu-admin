@@ -6,6 +6,9 @@ import { activityLoggerService } from '@/services/activityLoggerService';
 import { Loader2, KeyRound, AlertCircle, CheckCircle, ShieldAlert, LogOut, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 import sozuLogo from '@/assets/sozu-logo-black.png';
+import { EmailNoConfirmado } from '@/components/auth/EmailNoConfirmado';
+import { PerfilNoDisponible } from '@/components/auth/PerfilNoDisponible';
+import { vieneDeFlujoConfirmacion } from '@/lib/emailConfirmacion';
 
 const BLOCKED_ROLE_NAMES = ['Directores'];
 
@@ -32,7 +35,15 @@ export default function ChangePassword() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isCompletingPasswordFlow, setIsCompletingPasswordFlow] = useState(false);
   
-  const { updatePassword, profile, signOut, session, isLoading: authLoading } = useAuth();
+  const {
+    updatePassword,
+    profile,
+    signOut,
+    session,
+    isLoading: authLoading,
+    isProfileLoading,
+    refreshProfile,
+  } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,8 +52,20 @@ export default function ChangePassword() {
     }
   }, [authLoading, session, navigate]);
 
+  // Quien llega por el enlace de "¿Olvidaste tu contraseña?" viene a definir una nueva
+  // aunque `debe_cambiar_password` sea false: el modo público de reset-user-password ya no
+  // toca la cuenta (no repone Temporal123! ni levanta esa bandera), justamente para que un
+  // anónimo no pueda alterar la cuenta de otro. Sin esta excepción, la página lo expulsaría
+  // al portal y el flujo de recuperación no tendría salida.
   useEffect(() => {
-    if (!authLoading && session && profile && !profile.debe_cambiar_password && !isCompletingPasswordFlow) {
+    if (
+      !authLoading &&
+      session &&
+      profile &&
+      !profile.debe_cambiar_password &&
+      !isCompletingPasswordFlow &&
+      !vieneDeFlujoConfirmacion(profile.email)
+    ) {
       navigate(profile.rol_nombre === 'Cliente' ? '/admin/portal-cliente/inicio' : '/admin', { replace: true });
     }
   }, [authLoading, session, profile, navigate, isCompletingPasswordFlow]);
@@ -63,7 +86,71 @@ export default function ChangePassword() {
 
   if (!session) return null;
 
-  if (profile && BLOCKED_ROLE_NAMES.includes(profile.rol_nombre)) {
+  // ── Guards propios ────────────────────────────────────────────────────────
+  // App.tsx registra /auth/change-password como hermana de /admin, FUERA de
+  // <ProtectedRoute>: aquí no corre ningún guard previo. Las comprobaciones de
+  // cuenta (activa, correo confirmado) se hacen en esta pantalla o no se hacen.
+
+  // Sin perfil no sabemos si la cuenta está activa: fail-closed con reintento,
+  // igual que ProtectedRoute. (El spinner cubre el fetch en vuelo, típico de la
+  // sesión recién creada por el enlace de confirmación.)
+  if (!profile) {
+    if (isProfileLoading) {
+      return (
+        <div className="login-page">
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'hsl(145 35% 51%)' }} />
+        </div>
+      );
+    }
+    return <PerfilNoDisponible onReintentar={refreshProfile} onCerrarSesion={handleSignOut} />;
+  }
+
+  // Un usuario dado de baja conserva su sesión hasta que expira: sin esto podía
+  // entrar aquí directo y cambiarse la contraseña.
+  if (profile.activo === false) {
+    return (
+      <div className="login-page">
+        <div className="login-bg-gradient" />
+        <div className="relative w-full max-w-sm text-center z-10">
+          <img src={sozuLogo} alt="Sozu" className="h-10 mx-auto mb-10" />
+          <ShieldAlert className="h-16 w-16 mx-auto mb-4" style={{ color: 'hsl(0 84% 60%)' }} />
+          <h1 className="text-xl font-black text-[hsl(0_0%_5%)] mb-3 tracking-tight">
+            Cuenta Desactivada
+          </h1>
+          <p className="text-sm mb-8" style={{ color: 'hsl(0 0% 45%)' }}>
+            Tu cuenta ha sido desactivada, así que no puedes cambiar tu contraseña.
+            Contacta al administrador para más información.
+          </p>
+          <button onClick={handleSignOut} className="login-btn-primary flex items-center justify-center gap-2">
+            <LogOut className="h-4 w-4" />
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Correo sin confirmar en un rol de portal. OJO: esta pantalla es el aterrizaje
+  // del flujo legítimo de confirmación — la sesión la acaba de crear el enlace y
+  // usuarios.email_confirmado puede tardar en propagarse. Solo se bloquea cuando
+  // NO hay rastro de ese flujo en la pestaña (marcado por ConfirmacionEmail.tsx);
+  // si el usuario sí viene del enlace se deja pasar, porque romper este camino
+  // deja al usuario de portal sin ninguna forma de recuperar su cuenta.
+  if (
+    profile.requiere_confirmacion_email &&
+    !profile.email_confirmado &&
+    !vieneDeFlujoConfirmacion(profile.email)
+  ) {
+    return (
+      <EmailNoConfirmado
+        email={profile.email}
+        onActualizarEstado={refreshProfile}
+        onCerrarSesion={handleSignOut}
+      />
+    );
+  }
+
+  if (BLOCKED_ROLE_NAMES.includes(profile.rol_nombre)) {
     return (
       <div className="login-page">
         <div className="login-bg-gradient" />

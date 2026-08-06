@@ -16,6 +16,15 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import {
+  desactivarUsuario,
+  reactivarUsuario,
+  resetearPassword,
+  textoAltaUsuario,
+  textoDesactivarUsuario,
+  textoResetPassword,
+  useRolesRequierenConfirmacion,
+} from "@/lib/usuarios/estado-cuenta";
 
 // Role ID for "Directores" (internal role)
 const ROLE_DIRECTORES_ID = 19;
@@ -72,6 +81,11 @@ export default function UsuariosDirectivos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { registrarCreacion, registrarActualizacion, registrarRestauracion } = useActivityLogger();
+
+  // Directores es un rol interno, pero la clasificación se lee de BD
+  // (roles.requiere_confirmacion_email) en vez de darla por hecho aquí.
+  const { requiereConfirmacion: rolRequiereConfirmacion } = useRolesRequierenConfirmacion();
+  const directoresRequiereConfirmacion = rolRequiereConfirmacion(ROLE_DIRECTORES_ID);
 
   // Fetch users with role "Directores"
   const { data: usuarios = [], isLoading: isLoadingUsuarios } = useQuery({
@@ -198,20 +212,18 @@ export default function UsuariosDirectivos() {
     [usuarios, searchTerm]
   );
 
-  // Deactivate user mutation
+  // Baja. Directores es rol interno: además de apagar el acceso, la contraseña queda
+  // en Temporal123! (el helper lo decide leyendo roles.requiere_confirmacion_email).
   const deactivateMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase
-        .from('usuarios')
-        .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
-        .eq('email', email);
-      
-      if (error) throw error;
-    },
-    onSuccess: (_, email) => {
+    mutationFn: async (email: string) => desactivarUsuario({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios-directivos'] });
       registrarActualizacion('usuario_directivo', { email, activo: true }, { email, activo: false });
-      toast({ title: "Usuario desactivado", description: "El usuario ha sido desactivado correctamente." });
+      toast({ title: "Usuario desactivado", description: resultado?.mensaje ?? "El usuario ha sido desactivado correctamente." });
+      if (resultado?.resetFallo) {
+        // El ban de Auth es lo grave: sin él la cuenta conserva sesión válida.
+        toast({ title: resultado.banFallo ? "El usuario conserva acceso" : "Contraseña sin reponer", description: resultado.resetFallo, variant: "destructive" });
+      }
       setIsDeactivateDialogOpen(false);
       setSelectedUserEmail(null);
     },
@@ -220,29 +232,17 @@ export default function UsuariosDirectivos() {
     },
   });
 
-  // Activate user mutation
+  // Reactivación. Antes reseteaba siempre la contraseña; para un rol interno como
+  // Directores la baja/alta no debe tocarla: recupera el acceso tal cual lo tenía.
   const activateMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error: updateError } = await supabase
-        .from('usuarios')
-        .update({ activo: true, fecha_actualizacion: new Date().toISOString() })
-        .eq('email', email);
-      
-      if (updateError) throw updateError;
-
-      const response = await supabase.functions.invoke('reset-user-password', {
-        body: { email },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
-
-      return response.data;
-    },
-    onSuccess: (_, email) => {
+    mutationFn: async (email: string) => reactivarUsuario({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios-directivos'] });
-      registrarRestauracion('usuario_directivo', { email, activo: false }, { email, activo: true, password_reset: true });
-      toast({ title: "Usuario activado", description: "El usuario ha sido activado con contraseña temporal: Temporal123!" });
+      registrarRestauracion('usuario_directivo', { email, activo: false }, { email, activo: true, password_reset: resultado?.passwordTemporal ?? false });
+      toast({ title: "Usuario activado", description: resultado?.mensaje ?? "El usuario ha sido activado." });
+      if (resultado?.resetFallo) {
+        toast({ title: resultado.banFallo ? "El usuario aún no puede entrar" : "Correo de confirmación no enviado", description: resultado.resetFallo, variant: "destructive" });
+      }
     },
     onError: (error) => {
       toast({ title: "Error", description: `Error al activar el usuario: ${error.message}`, variant: "destructive" });
@@ -251,20 +251,11 @@ export default function UsuariosDirectivos() {
 
   // Reset password mutation
   const resetPasswordMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const response = await supabase.functions.invoke('reset-user-password', {
-        body: { email },
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
-
-      return response.data;
-    },
-    onSuccess: (data, email) => {
+    mutationFn: async (email: string) => resetearPassword({ email }),
+    onSuccess: (resultado, email) => {
       queryClient.invalidateQueries({ queryKey: ['usuarios-directivos'] });
       registrarActualizacion('usuario_directivo_password', { email }, { email, password_reset: true });
-      toast({ title: "Contraseña Reseteada", description: data.message || "Se envió un correo de confirmación. Una vez confirmado, recibirá sus credenciales temporales." });
+      toast({ title: "Contraseña Reseteada", description: resultado?.mensaje ?? "La contraseña fue restablecida." });
       setIsResetPasswordDialogOpen(false);
       setSelectedUserEmail(null);
     },
@@ -296,7 +287,7 @@ export default function UsuariosDirectivos() {
       queryClient.invalidateQueries({ queryKey: ['usuarios-directivos'] });
       registrarCreacion('usuario_directivo', { email: newUserForm.email, nombre: newUserForm.nombre, rol: 'Directores' });
       
-      toast({ title: "Usuario creado", description: `Usuario creado con contraseña temporal: Temporal123!` });
+      toast({ title: "Usuario creado", description: textoAltaUsuario(directoresRequiereConfirmacion) });
       setIsNewUserDialogOpen(false);
       setNewUserForm({ email: "", nombre: "" });
     } catch (error: any) {
@@ -674,7 +665,7 @@ export default function UsuariosDirectivos() {
           <DialogHeader>
             <DialogTitle>Nuevo Usuario Directivo</DialogTitle>
             <DialogDescription>
-              Crea un nuevo usuario directivo. La contraseña inicial será: Temporal123!
+              Crea un nuevo usuario directivo. {textoAltaUsuario(directoresRequiereConfirmacion)}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -716,7 +707,7 @@ export default function UsuariosDirectivos() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Resetear contraseña?</AlertDialogTitle>
             <AlertDialogDescription>
-              La contraseña del usuario <strong>{selectedUserEmail}</strong> será cambiada a <strong>Temporal123!</strong>
+              Usuario <strong>{selectedUserEmail}</strong>. {textoResetPassword(directoresRequiereConfirmacion)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -738,7 +729,8 @@ export default function UsuariosDirectivos() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Desactivar usuario?</AlertDialogTitle>
             <AlertDialogDescription>
-              El usuario <strong>{selectedUserEmail}</strong> será desactivado y no podrá acceder al sistema.
+              El usuario <strong>{selectedUserEmail}</strong> será desactivado.{' '}
+              {textoDesactivarUsuario(directoresRequiereConfirmacion)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

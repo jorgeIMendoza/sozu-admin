@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { desactivarUsuario, reactivarUsuario } from '@/lib/usuarios/estado-cuenta';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,17 +139,18 @@ export function AppNotariaUsuarios() {
   });
 
   // ── Toggle activo ─────────────────────────────────────────────────────────
-  // Uses email (PK of usuarios) — usuarios has NO id column
+  // Uses email (PK of usuarios) — usuarios has NO id column.
+  // El helper hace el UPDATE verificando filas afectadas (un UPDATE que RLS filtra no
+  // devuelve error) y, según `roles.requiere_confirmacion_email`, decide si además
+  // repone la contraseña temporal (rol interno) o manda el correo de confirmación
+  // (rol de portal, como Notario).
   const { mutate: toggleActivo } = useMutation({
-    mutationFn: async ({ email, activo }: { email: string; activo: boolean }) => {
-      const { error } = await (supabase as any)
-        .from('usuarios')
-        .update({ activo })
-        .eq('email', email);
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: (_, { activo }) => {
-      toast.success(activo ? 'Usuario activado' : 'Usuario desactivado');
+    mutationFn: async ({ email, activo }: { email: string; activo: boolean }) =>
+      activo ? reactivarUsuario({ email }) : desactivarUsuario({ email }),
+    onSuccess: (resultado, { activo }) => {
+      toast.success(activo ? 'Usuario activado' : 'Usuario desactivado', {
+        description: resultado?.mensaje,
+      });
       qc.invalidateQueries({ queryKey: ['notaria-usuarios-list'] });
     },
     onError: (e: any) => toast.error('Error', { description: e.message }),
