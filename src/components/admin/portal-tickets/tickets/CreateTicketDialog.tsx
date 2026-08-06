@@ -139,7 +139,7 @@ export function CreateTicketDialog({
         </SheetHeader>
 
         <div className="space-y-5 px-1 py-5">
-          <div className="space-y-1.5">
+          <div data-tour="ct-nombre" className="space-y-1.5">
             <Label>Nombre del ticket *</Label>
             <Input
               value={nombre}
@@ -148,7 +148,7 @@ export function CreateTicketDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div data-tour="ct-pipeline" className="space-y-1.5">
             <Label>Pipeline *</Label>
             <Select
               value={pipelineId}
@@ -170,7 +170,7 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          <div className="space-y-1.5">
+          <div data-tour="ct-estado" className="space-y-1.5">
             <Label>Estado del ticket *</Label>
             <Select value={etapaId} onValueChange={setEtapaId}>
               <SelectTrigger>
@@ -186,7 +186,9 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          <ContactoPicker value={contacto} onChange={setContacto} />
+          <div data-tour="ct-solicitante">
+            <ContactoPicker value={contacto} onChange={setContacto} />
+          </div>
 
           <ProyectoSelect value={proyecto} onChange={setProyecto} />
 
@@ -211,12 +213,14 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          <PropietariosPicker
-            value={propietarios}
-            onChange={setPropietarios}
-            agentes={agentes}
-            label="Propietario(s) del ticket"
-          />
+          <div data-tour="ct-propietarios">
+            <PropietariosPicker
+              value={propietarios}
+              onChange={setPropietarios}
+              agentes={agentes}
+              label="Propietario(s) del ticket"
+            />
+          </div>
 
           <div className="space-y-1.5">
             <Label>Prioridad</Label>
@@ -255,7 +259,7 @@ export function CreateTicketDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex gap-2 border-t pt-4">
-            <Button className="flex-1" onClick={submit} disabled={saving}>
+            <Button data-tour="ct-enviar" className="flex-1" onClick={submit} disabled={saving}>
               {saving ? "Guardando…" : "Crear ticket"}
             </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)}>

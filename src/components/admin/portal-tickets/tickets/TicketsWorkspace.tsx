@@ -4,6 +4,12 @@ import { Download, HelpCircle, LayoutGrid, List, Plus, Search, Trash2 } from "lu
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -17,6 +23,7 @@ import { TicketsKanban } from "./TicketsKanban";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { CreateTicketDialog } from "./CreateTicketDialog";
 import { TicketsTour } from "./TicketsTour";
+import { TicketsCreateTour } from "./TicketsCreateTour";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -67,6 +74,7 @@ export function TicketsWorkspace({
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [crear, setCrear] = useState(false);
   const [tutorial, setTutorial] = useState(false);
+  const [createTour, setCreateTour] = useState(false);
 
   // Guardar los filtros cada vez que cambian.
   useEffect(() => {
@@ -221,9 +229,19 @@ export function TicketsWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button data-tour="tutorial" variant="outline" onClick={() => setTutorial(true)}>
-            <HelpCircle className="size-4" /> Tutorial
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button data-tour="tutorial" variant="outline">
+                <HelpCircle className="size-4" /> Tutorial
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTutorial(true)}>Recorrido rápido</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCreateTour(true)}>
+                Crear un ticket (guiado)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button data-tour="crear" onClick={() => setCrear(true)}>
             <Plus className="size-4" /> Crear ticket
           </Button>
@@ -463,6 +481,7 @@ export function TicketsWorkspace({
       <TicketDetailSheet ticket={detalle} onOpenChange={(o) => !o && setDetalleId(null)} />
       <CreateTicketDialog open={crear} onOpenChange={setCrear} />
       <TicketsTour open={tutorial} onClose={() => setTutorial(false)} />
+      <TicketsCreateTour open={createTour} onClose={() => setCreateTour(false)} dialogOpen={crear} />
     </div>
   );
 }
