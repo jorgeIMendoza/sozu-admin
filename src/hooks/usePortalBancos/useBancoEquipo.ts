@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
+import { desactivarUsuario, reactivarUsuario } from "@/lib/usuarios/estado-cuenta";
 
 /**
  * Equipo del Portal Bancos = usuarios REALES del sistema (con login) cuyos roles
@@ -24,6 +26,8 @@ export interface EjecutivoBanco {
   rolPortal: RolBancoPortal;
   activo: boolean;
   telefono: string | null;
+  /** false = nunca pulsó "Confirmar mi Email", así que aún no tiene credenciales. */
+  emailConfirmado: boolean;
 }
 
 export interface BancoRoles {
@@ -31,29 +35,8 @@ export interface BancoRoles {
   supervisorRolId: number | null;
 }
 
-/**
- * Extrae el mensaje real de un error de `supabase.functions.invoke`.
- * En non-2xx, supabase-js devuelve un `FunctionsHttpError` cuyo cuerpo JSON
- * (`{ error: "..." }`) vive en `error.context` (un Response), no en `.message`
- * (que solo dice "Edge Function returned a non-2xx status code"). Sin esto, el
- * motivo real queda oculto.
- */
-async function extractInvokeError(error: any): Promise<string> {
-  const ctx = error?.context;
-  try {
-    if (ctx && typeof ctx.json === "function") {
-      const body = await ctx.json();
-      if (body?.error) return String(body.error);
-      if (body?.message) return String(body.message);
-    } else if (ctx && typeof ctx.text === "function") {
-      const t = await ctx.text();
-      if (t) return t;
-    }
-  } catch {
-    /* cuerpo no-JSON o ya consumido: usar el mensaje genérico */
-  }
-  return error?.message ?? "Error desconocido";
-}
+/** Mensaje real de un error de `functions.invoke` (vive en `error.context`). */
+const extractInvokeError = extractEdgeFunctionError;
 
 // Detección por NOMBRE (los ids difieren entre ambientes). Tolerante a
 // singular/plural: "Operador Banco" / "Operador Bancos".
@@ -111,7 +94,7 @@ export function useBancoEquipo(idBanco?: number | null) {
       // cast a any igual que en EditUserDialog para poder filtrar por banco.
       const { data, error } = await (supabase as any)
         .from("usuarios")
-        .select("email, nombre, rol_id, activo, telefono")
+        .select("email, nombre, rol_id, activo, telefono, email_confirmado")
         .eq("id_banco", idBanco)
         .eq("activo", true) // Ejecutivos inactivos no se muestran ni tienen acceso al portal
         .in("rol_id", rolIds)
@@ -124,6 +107,7 @@ export function useBancoEquipo(idBanco?: number | null) {
         rolPortal: (u.rol_id === supervisorRolId ? "admin" : "agente") as RolBancoPortal,
         activo: !!u.activo,
         telefono: u.telefono ?? null,
+        emailConfirmado: u.email_confirmado !== false,
       }));
     },
   });
@@ -214,25 +198,54 @@ export function useCrearEjecutivoBanco() {
   });
 }
 
-/** Baja/reactivación: `usuarios.activo`. Al reactivar, resetea la contraseña a temporal. */
+/**
+ * Un UPDATE sobre `usuarios` que RLS no permite no devuelve error: filtra las filas
+ * y afecta 0 sin quejarse. Por eso todas las mutaciones piden `.select()` y aquí se
+ * verifica que sí tocaron la fila; sin esto la UI cantaba "desactivado" mientras el
+ * ejecutivo seguía activo en BD (y en el listado).
+ */
+function assertFilaActualizada(filas: unknown[] | null, accion: string) {
+  if (!filas || filas.length === 0) {
+    throw new Error(
+      `No se pudo ${accion}: tu rol no tiene permiso para modificar este usuario en la base de datos.`,
+    );
+  }
+}
+
+/**
+ * Baja/reactivación: `usuarios.activo`.
+ *
+ * Qué pasa además del flag lo decide el helper según `roles.requiere_confirmacion_email`:
+ * los roles de banco son de portal, así que la baja solo apaga el acceso y la
+ * reactivación des-confirma el correo y manda el enlace para definir contraseña. Antes
+ * este hook reseteaba al reactivar sin importar el rol.
+ */
 export function useSetActivoEjecutivo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ email, activo }: { email: string; activo: boolean }) => {
-      const { error } = await supabase
-        .from("usuarios")
-        .update({ activo, fecha_actualizacion: new Date().toISOString() })
-        .eq("email", email);
-      if (error) throw error;
+    mutationFn: async ({ email, activo }: { email: string; activo: boolean }) =>
+      activo ? reactivarUsuario({ email }) : desactivarUsuario({ email }),
+    onSuccess: () => invalidateEquipo(qc),
+  });
+}
 
-      // Al reactivar, resetear contraseña (mismo comportamiento que Admin Panel).
-      if (activo) {
-        const response = await supabase.functions.invoke("reset-user-password", {
-          body: { email },
-        });
-        if (response.error) throw new Error(await extractInvokeError(response.error));
-        if (response.data?.error) throw new Error(response.data.error);
+/**
+ * Reenvía el correo con el botón "Confirmar mi Email". Necesario cuando el envío
+ * del alta falló: sin esto no había forma de reintentar desde el portal y el
+ * ejecutivo se quedaba sin credenciales (las manda el trigger al confirmar).
+ */
+export function useReenviarConfirmacionEjecutivo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const response = await supabase.functions.invoke("reenviar-confirmacion-email", {
+        body: { email: email.toLowerCase().trim() },
+      });
+      if (response.error) throw new Error(await extractInvokeError(response.error));
+      if (response.data && response.data.success === false) {
+        throw new Error(response.data.message || "No se pudo reenviar el correo");
       }
+      return response.data;
     },
     onSuccess: () => invalidateEquipo(qc),
   });
@@ -255,11 +268,13 @@ export function useCambiarRolEjecutivo() {
       if (!rolId) {
         throw new Error("No se encontraron los roles de banco en el sistema.");
       }
-      const { error } = await supabase
+      const { data: filas, error } = await supabase
         .from("usuarios")
         .update({ rol_id: rolId, fecha_actualizacion: new Date().toISOString() })
-        .eq("email", email);
+        .eq("email", email)
+        .select("email");
       if (error) throw error;
+      assertFilaActualizada(filas, "cambiar el rol");
     },
     onSuccess: () => invalidateEquipo(qc),
   });
@@ -283,15 +298,17 @@ export function useEditarEjecutivo() {
       telefono?: string | null;
       nuevoEmail?: string | null;
     }) => {
-      const { error } = await supabase
+      const { data: filas, error } = await supabase
         .from("usuarios")
         .update({
           nombre: nombre.trim(),
           telefono: telefono?.trim() || null,
           fecha_actualizacion: new Date().toISOString(),
         })
-        .eq("email", email);
+        .eq("email", email)
+        .select("email");
       if (error) throw error;
+      assertFilaActualizada(filas, "actualizar al ejecutivo");
 
       const dest = nuevoEmail?.toLowerCase().trim();
       if (dest && dest !== email.toLowerCase().trim()) {

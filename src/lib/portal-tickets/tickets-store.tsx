@@ -21,45 +21,107 @@ import type {
   Pipeline,
   Ticket,
 } from "./tickets-data";
+import { saveTicketAdjuntos, uploadTicketFile, type PendingAdjunto } from "./tickets-adjuntos";
 
 // Las tablas tickets_* no están en los tipos generados de Supabase → cast puntual.
 const sb = supabase as any;
 
-// Correo "ticket asignado" (fire-and-forget). Estándar del ecosistema SOZU: enviar-notificacion
-// (proxy n8n) + template Postmark 41353048 — mismo patrón que crm-recordatorios-tareas
-// (recordatorio de tarea al asesor asignado). Nunca bloquea ni hace fallar la operación.
-// Reutilizada por el store (Portal Tickets) y por la ficha de contacto del CRM.
-export function enviarCorreoAsignacion(
-  destinatarios: { email?: string | null; nombre?: string | null }[],
-  folio: number | string,
-  nombreTicket: string,
-  asignadoPor: string,
+// ─── Correos de tickets (fire-and-forget) ───────────────────────────────────────
+// Estándar del ecosistema SOZU: enviar-notificacion (proxy n8n) + template Postmark
+// 41353048 — mismo patrón que crm-recordatorios-tareas. Nunca bloquea ni hace fallar
+// la operación. Reutilizados por el store (Portal Tickets) y por la ficha del CRM.
+export type CorreoTicketInfo = {
+  folio: number | string;
+  nombre: string;
+  pipeline?: string | null;
+  proyecto?: string | null;
+  descripcion?: string | null;
+  por?: string | null; // quién asignó / cerró
+};
+
+type Destinatario = { email?: string | null; nombre?: string | null; telefono?: string | null };
+
+const escHtml = (s?: string | number | null) =>
+  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Tabla del cuerpo del correo: Ticket, Nombre, Pipeline, (Asignado/Cerrado) por, Proyecto, Descripción.
+function detallesHtml(info: CorreoTicketInfo, porLabel: string): string {
+  const row = (label: string, val: string) =>
+    `<tr><td style="padding:6px 12px;color:#6b7280;white-space:nowrap;vertical-align:top;">${label}</td>` +
+    `<td style="padding:6px 12px;">${val}</td></tr>`;
+  return [
+    row("Ticket", `#${escHtml(info.folio)}`),
+    row("Nombre del ticket", escHtml(info.nombre) || "—"),
+    info.pipeline ? row("Pipeline", escHtml(info.pipeline)) : "",
+    info.por ? row(porLabel, escHtml(info.por)) : "",
+    row("Proyecto", info.proyecto ? escHtml(info.proyecto) : "Sin proyecto"),
+    info.descripcion ? row("Descripción", escHtml(info.descripcion)) : "",
+  ].join("");
+}
+
+function enviarCorreoTicket(
+  destinatarios: Destinatario[],
+  asunto: string,
+  detalles: string,
+  mensajeWA: string,
 ) {
   for (const dest of destinatarios) {
-    if (!dest?.email) continue;
-    const actividad = `Se te asignó el ticket #${folio}: ${nombreTicket}`;
-    const detalles =
-      `<tr><td style="padding:6px 12px;color:#6b7280;">Ticket</td>` +
-      `<td style="padding:6px 12px;font-weight:600;">#${folio} — ${nombreTicket}</td></tr>` +
-      `<tr><td style="padding:6px 12px;color:#6b7280;">Asignado por</td>` +
-      `<td style="padding:6px 12px;">${asignadoPor}</td></tr>`;
-    const modelo = { nombre: dest.nombre || "Equipo", actividad, detalles };
+    if (!dest?.email && !dest?.telefono) continue;
+    const modelo = { nombre: dest.nombre || "Equipo", actividad: asunto, detalles };
+    const conWA = !!dest.telefono;
     sb.functions
       .invoke("enviar-notificacion", {
         body: {
-          tipo: "email",
+          // "ambos" = correo + WhatsApp (Evolution vía n8n); sin teléfono, solo correo.
+          tipo: conWA ? "ambos" : "email",
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
           email: dest.email,
-          asunto: actividad,
+          ...(conWA ? { telefono: dest.telefono, mensajeWA } : {}),
+          asunto,
           mensaje: modelo,
           templateId: 41353048,
           templateModel: modelo,
         },
       })
       .catch(() => {
-        /* fire-and-forget: el correo no debe romper el flujo */
+        /* fire-and-forget: la notificación no debe romper el flujo */
       });
   }
+}
+
+// Cuerpo del mensaje de WhatsApp (texto plano; admite *negritas*).
+function textoWa(info: CorreoTicketInfo, encabezado: string, porLabel: string): string {
+  return [
+    `*${encabezado} #${info.folio}*`,
+    info.nombre || "",
+    info.pipeline ? `Pipeline: ${info.pipeline}` : "",
+    info.por ? `${porLabel}: ${info.por}` : "",
+    info.proyecto ? `Proyecto: ${info.proyecto}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// Correo (+ WhatsApp si el destinatario tiene teléfono) "ticket asignado" a un usuario.
+export function enviarCorreoAsignacion(destinatarios: Destinatario[], info: CorreoTicketInfo) {
+  const asunto = `Se te asignó el ticket #${info.folio}: ${info.nombre}`;
+  enviarCorreoTicket(
+    destinatarios,
+    asunto,
+    detallesHtml(info, "Asignado por"),
+    textoWa(info, "Se te asignó el ticket", "Asignado por"),
+  );
+}
+
+// Correo (+ WhatsApp si hay teléfono) "ticket cerrado" a propietarios + creador.
+export function enviarCorreoCierre(destinatarios: Destinatario[], info: CorreoTicketInfo) {
+  const asunto = `Se cerró el ticket #${info.folio}: ${info.nombre}`;
+  enviarCorreoTicket(
+    destinatarios,
+    asunto,
+    detallesHtml(info, "Cerrado por"),
+    textoWa(info, "Se cerró el ticket", "Cerrado por"),
+  );
 }
 
 type NuevoTicket = {
@@ -76,6 +138,7 @@ type NuevoTicket = {
   fechaCreacion?: string;
   entidadRelacionadaId?: string | null;
   propiedadId?: string | null;
+  adjuntos?: PendingAdjunto[];
 };
 
 type Store = {
@@ -90,7 +153,7 @@ type Store = {
   actualizarTicket: (id: string, cambios: Partial<Ticket>, nota?: string) => void;
   moverEtapa: (id: string, etapaId: string) => void;
   eliminarTickets: (ids: string[]) => void;
-  agregarNota: (id: string, texto: string) => void;
+  agregarNota: (id: string, texto: string, audioFile?: File) => void;
   guardarPipeline: (p: Pipeline) => void;
   eliminarPipeline: (id: string) => void;
   guardarEtapa: (e: Etapa) => void;
@@ -167,10 +230,17 @@ export async function fetchAgentes(): Promise<Agente[]> {
   if (!rolIds.length) rolIds = [1]; // fallback: Super Admin
 
   const [{ data: us }, { data: roles }] = await Promise.all([
-    sb.from("usuarios").select("auth_user_id, nombre, email, rol_id").eq("activo", true).in("rol_id", rolIds),
+    sb.from("usuarios").select("auth_user_id, nombre, email, rol_id, telefono, clave_pais_telefono").eq("activo", true).in("rol_id", rolIds),
     sb.from("roles").select("id, nombre"),
   ]);
   const rolMap = new Map((roles ?? []).map((r: any) => [r.id, r.nombre]));
+  // Número para WhatsApp = clave de país + teléfono (solo dígitos); null si no hay teléfono.
+  const numeroWA = (u: any): string | null => {
+    const tel = String(u.telefono ?? "").replace(/\D/g, "");
+    if (!tel) return null;
+    const lada = String(u.clave_pais_telefono ?? "").replace(/\D/g, "");
+    return `${lada}${tel}`;
+  };
   return (us ?? [])
     .filter((u: any) => u.auth_user_id)
     .map((u: any) => ({
@@ -178,6 +248,7 @@ export async function fetchAgentes(): Promise<Agente[]> {
       nombre: u.nombre,
       email: u.email,
       rol: rolMap.get(u.rol_id) ?? "",
+      telefono: numeroWA(u),
     }))
     .sort((a: Agente, b: Agente) => (a.nombre ?? "").localeCompare(b.nombre ?? ""));
 }
@@ -186,7 +257,7 @@ async function fetchTickets(): Promise<Ticket[]> {
   const { data } = await sb
     .from("tickets")
     .select(
-      "id, numero, nombre, id_pipeline, id_etapa, prioridad, id_categoria, id_usuario_creador, id_entidad_relacionada, id_propiedad, solicitante, inmueble, descripcion, fuente, fecha_creacion, fecha_cierre, tickets_propietarios(id_usuario), tickets_actividad(id, texto, id_usuario_autor, fecha_creacion)",
+      "id, numero, nombre, id_pipeline, id_etapa, prioridad, id_categoria, id_usuario_creador, id_entidad_relacionada, id_propiedad, solicitante, inmueble, descripcion, fuente, fecha_creacion, fecha_cierre, tickets_propietarios(id_usuario), tickets_actividad(id, texto, id_usuario_autor, fecha_creacion, audio_url, audio_nombre, audio_mime)",
     )
     .eq("activo", true)
     .order("fecha_creacion", { ascending: false });
@@ -230,6 +301,7 @@ async function fetchTickets(): Promise<Ticket[]> {
         fecha: a.fecha_creacion,
         autor: a.id_usuario_autor ? nameMap[a.id_usuario_autor] ?? "Usuario" : "Sistema",
         texto: a.texto,
+        audioUrl: a.audio_url ?? null,
       }))
       .sort((x: any, y: any) => new Date(x.fecha).getTime() - new Date(y.fecha).getTime()),
   }));
@@ -260,27 +332,62 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
   );
 
   const registrarActividad = useCallback(
-    async (idTicket: string, texto: string, tipo = "sistema") => {
+    async (
+      idTicket: string,
+      texto: string,
+      tipo = "sistema",
+      audio?: { url: string; nombre: string | null; mime: string | null } | null,
+    ) => {
       await sb.from("tickets_actividad").insert({
         id_ticket: Number(idTicket),
         texto,
         tipo,
         id_usuario_autor: uid,
+        audio_url: audio?.url ?? null,
+        audio_nombre: audio?.nombre ?? null,
+        audio_mime: audio?.mime ?? null,
       });
     },
     [uid],
   );
 
-  // Resuelve el email de cada propietario NUEVO (por auth_user_id) y dispara el correo estándar
-  // (ver enviarCorreoAsignacion). `autor` = quién está asignando.
+  // Nombre del pipeline (para el cuerpo de los correos).
+  const pipelineNombre = useCallback(
+    (pipelineId?: string | null) => pipelines.find((p) => p.id === pipelineId)?.nombre ?? "",
+    [pipelines],
+  );
+
+  // Resuelve el email de cada propietario NUEVO (por auth_user_id) y dispara el correo de
+  // asignación. `autor` = quién está asignando.
   const notificarAsignacion = useCallback(
-    (idsNuevos: string[], folio: number | string, nombreTicket: string) => {
+    (idsNuevos: string[], info: Omit<CorreoTicketInfo, "por">) => {
       const destinatarios = idsNuevos
         .map((id) => agentes.find((a) => a.id === id))
         .filter((a): a is Agente => !!a?.email);
-      enviarCorreoAsignacion(destinatarios, folio, nombreTicket, autor);
+      enviarCorreoAsignacion(destinatarios, { ...info, por: autor });
     },
     [agentes, autor],
+  );
+
+  // Al cerrar un ticket (etapa final) avisa por correo a los propietarios + el creador.
+  const notificarCierre = useCallback(
+    (tk: Ticket) => {
+      const ids = Array.from(
+        new Set([...(tk.propietarios ?? []), tk.creadoPorId].filter(Boolean) as string[]),
+      );
+      const destinatarios = ids
+        .map((id) => agentes.find((a) => a.id === id))
+        .filter((a): a is Agente => !!a?.email);
+      enviarCorreoCierre(destinatarios, {
+        folio: tk.numero,
+        nombre: tk.nombre,
+        pipeline: pipelineNombre(tk.pipelineId),
+        proyecto: tk.inmueble,
+        descripcion: tk.descripcion,
+        por: autor,
+      });
+    },
+    [agentes, autor, pipelineNombre],
   );
 
   const crearTicket = useCallback(
@@ -315,7 +422,16 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
           await sb
             .from("tickets_propietarios")
             .insert(props.map((u: string) => ({ id_ticket: ins.id, id_usuario: u })));
-          notificarAsignacion(props, ins.numero, data.nombre.trim());
+          notificarAsignacion(props, {
+            folio: ins.numero,
+            nombre: data.nombre.trim(),
+            pipeline: pipelineNombre(data.pipelineId),
+            proyecto: data.inmueble,
+            descripcion: data.descripcion,
+          });
+        }
+        if (data.adjuntos?.length) {
+          await saveTicketAdjuntos(ins.id, uid, data.adjuntos);
         }
         await registrarActividad(String(ins.id), "Ticket creado desde el Portal Tickets de Seguimiento.");
         logger.registrarCreacion(
@@ -331,7 +447,7 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
       }
       invalidate("tickets-list");
     },
-    [uid, registrarActividad, invalidate, logger, notificarAsignacion],
+    [uid, registrarActividad, invalidate, logger, notificarAsignacion, pipelineNombre],
   );
 
   const actualizarTicket = useCallback(
@@ -351,7 +467,14 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
         }
         patch.id_usuario_propietario = props[0] || null;
         // Notificar SOLO a los propietarios recién agregados.
-        if (nuevos.length) notificarAsignacion(nuevos, tk?.numero ?? "", tk?.nombre ?? "Ticket");
+        if (nuevos.length)
+          notificarAsignacion(nuevos, {
+            folio: tk?.numero ?? "",
+            nombre: tk?.nombre ?? "Ticket",
+            pipeline: pipelineNombre(tk?.pipelineId),
+            proyecto: tk?.inmueble,
+            descripcion: tk?.descripcion,
+          });
       }
       if ("categoriaId" in cambios) patch.id_categoria = cambios.categoriaId ? Number(cambios.categoriaId) : null;
       if ("solicitante" in cambios) patch.solicitante = cambios.solicitante || null;
@@ -386,7 +509,7 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
       }
       invalidate("tickets-list");
     },
-    [tickets, registrarActividad, invalidate, logger, notificarAsignacion],
+    [tickets, registrarActividad, invalidate, logger, notificarAsignacion, pipelineNombre],
   );
 
   const moverEtapa = useCallback(
@@ -412,9 +535,14 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
         { id_ticket: Number(id), id_etapa: Number(etapaId), etapa: etapa.nombre },
         etapa.cerrada ? "cerrar_ticket" : "mover_etapa_ticket",
       );
+      // Etapa final → avisar por correo a propietarios + creador.
+      if (etapa.cerrada) {
+        const tk = tickets.find((t) => t.id === id);
+        if (tk) notificarCierre(tk);
+      }
       invalidate("tickets-list");
     },
-    [etapas, registrarActividad, invalidate, logger],
+    [etapas, tickets, registrarActividad, invalidate, logger, notificarCierre],
   );
 
   const eliminarTickets = useCallback(
@@ -436,8 +564,13 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
   );
 
   const agregarNota = useCallback(
-    async (id: string, texto: string) => {
-      await registrarActividad(id, texto, "nota");
+    async (id: string, texto: string, audioFile?: File) => {
+      let audio: { url: string; nombre: string | null; mime: string | null } | undefined;
+      if (audioFile) {
+        const up = await uploadTicketFile(id, audioFile);
+        if (up) audio = { url: up.url, nombre: up.nombre, mime: up.mime };
+      }
+      await registrarActividad(id, texto || "Nota de voz", "nota", audio);
       invalidate("tickets-list");
     },
     [registrarActividad, invalidate],

@@ -11,6 +11,8 @@ import { fetchAgentes, enviarCorreoAsignacion } from "@/lib/portal-tickets/ticke
 import { PRIORIDADES } from "@/lib/portal-tickets/tickets-data";
 import { ProyectoSelect } from "@/components/admin/portal-tickets/tickets/ProyectoSelect";
 import { PropietariosPicker } from "@/components/admin/portal-tickets/tickets/PropietariosPicker";
+import { PendingEvidenciaField } from "@/components/admin/portal-tickets/tickets/TicketEvidencia";
+import { saveTicketAdjuntos, type PendingAdjunto } from "@/lib/portal-tickets/tickets-adjuntos";
 import { AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,7 @@ function CreateTicketFromContactDialog({
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
+  const [evidencia, setEvidencia] = useState<PendingAdjunto[]>([]);
   const [saving, setSaving] = useState(false);
 
   const { data: pipelines } = useQuery({
@@ -145,7 +148,16 @@ function CreateTicketFromContactDialog({
           .map((id) => agentes.find((a) => a.id === id))
           .filter((a): a is NonNullable<typeof a> => !!a?.email);
         const asignadoPor = (profile as any)?.nombre || user?.email || "Equipo SOZU";
-        enviarCorreoAsignacion(destinatarios, ins.numero, form.nombre.trim(), asignadoPor);
+        const pipelineNombre =
+          (pipelines ?? []).find((p) => String(p.id) === form.id_pipeline)?.nombre ?? "";
+        enviarCorreoAsignacion(destinatarios, {
+          folio: ins.numero,
+          nombre: form.nombre.trim(),
+          pipeline: pipelineNombre,
+          proyecto: form.proyecto,
+          descripcion: form.descripcion,
+          por: asignadoPor,
+        });
       }
       await sb.from("tickets_actividad").insert({
         id_ticket: ins.id,
@@ -153,6 +165,7 @@ function CreateTicketFromContactDialog({
         tipo: "sistema",
         id_usuario_autor: user?.id ?? null,
       });
+      if (evidencia.length) await saveTicketAdjuntos(ins.id, user?.id, evidencia);
     }
     setSaving(false);
     if (error) {
@@ -161,12 +174,14 @@ function CreateTicketFromContactDialog({
     }
     toast.success("Ticket creado");
     setForm({ ...EMPTY });
+    evidencia.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    setEvidencia([]);
     onSaved();
     setOpen(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm({ ...EMPTY }); }}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ ...EMPTY }); evidencia.forEach((p) => URL.revokeObjectURL(p.previewUrl)); setEvidencia([]); } }}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -268,6 +283,7 @@ function CreateTicketFromContactDialog({
               onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
             />
           </div>
+          <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>

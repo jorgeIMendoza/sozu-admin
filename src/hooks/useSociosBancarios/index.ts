@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchProyectosSozuIds } from "@/hooks/usePortalSocioBancario/proyectosSozu";
+import { extractEdgeFunctionError } from "@/lib/edgeFunctionError";
+import { reactivarUsuario } from "@/lib/usuarios/estado-cuenta";
 
 /**
  * Admin de Socios Bancarios (solo Super Administrador).
@@ -13,11 +15,17 @@ import { fetchProyectosSozuIds } from "@/hooks/usePortalSocioBancario/proyectosS
  *     exige desarrollo comercializado por SOZU, tipo_entidad 5)
  *   - Usuarios de banco viven en `usuarios` (rol 'Socio Bancario', id_socio_bancario);
  *     su estado se DERIVA de activo + email_confirmado (no hay campo estado).
- *   - Alta/reenvío/revocación vía edge function invite-socio-bancario-user (por correo).
+ *   - Alta/reenvío/revocación/reactivación vía edge function invite-socio-bancario-user.
+ *
+ * Alta: 'Socio Bancario' es un rol de PORTAL (roles.requiere_confirmacion_email = true),
+ * así que sigue el mismo flujo que Cliente, Agente Inmobiliario, Inmobiliaria, Embajador
+ * y los roles de Banco: la cuenta nace con contraseña temporal y sin confirmar, se manda
+ * el correo de CONFIRMACIÓN estándar y el usuario define su contraseña al confirmarlo.
+ * Ya no hay magic link ni HTML propio de este portal.
  *
  * Probe graceful: si las tablas/columnas aún no existen en el ambiente, las
  * consultas devuelven vacío y `tablesMissing=true` (banner honesto). Sin
- * hard-delete: baja = activo=false + auditoría. Contraseñas: nunca.
+ * hard-delete: baja = activo=false + ban en Auth + auditoría.
  */
 
 const ROL_SOCIO_BANCARIO = "Socio Bancario";
@@ -61,22 +69,7 @@ export function estadoUsuario(u: { activo: boolean; email_confirmado: boolean })
 }
 
 /** Mensaje real de un error de functions.invoke (el motivo vive en error.context). */
-async function extractInvokeError(error: any): Promise<string> {
-  const ctx = error?.context;
-  try {
-    if (ctx && typeof ctx.json === "function") {
-      const body = await ctx.json();
-      if (body?.error) return String(body.error);
-      if (body?.message) return String(body.message);
-    } else if (ctx && typeof ctx.text === "function") {
-      const t = await ctx.text();
-      if (t) return t;
-    }
-  } catch {
-    /* cuerpo no-JSON o consumido */
-  }
-  return error?.message ?? "Error desconocido";
-}
+const extractInvokeError = extractEdgeFunctionError;
 
 /** id del rol 'Socio Bancario' (por nombre; los ids difieren por ambiente). */
 async function fetchSocioRolId(): Promise<number | null> {
@@ -392,7 +385,8 @@ export function useInvitarUsuario() {
       correo: string;
       telefono?: string | null;
     }) => {
-      // Invitación (magic link) vía edge function service-role. Nunca contraseña.
+      // Alta vía edge function service-role: crea la cuenta con contraseña temporal
+      // sin confirmar y dispara el correo de confirmación estándar.
       const response = await supabase.functions.invoke("invite-socio-bancario-user", {
         body: {
           id_socio_bancario: input.idSocio,
@@ -409,6 +403,11 @@ export function useInvitarUsuario() {
   });
 }
 
+/**
+ * Reenvía el correo de CONFIRMACIÓN (el mismo del alta), no un magic link.
+ * Devuelve `{ confirmacionEnviada, message }` para que el toast diga la verdad: el
+ * envío puede fallar (Postmark, enlace) sin que la llamada falle.
+ */
 export function useReenviarInvitacion() {
   return useMutation({
     mutationFn: async (input: { correo: string }) => {
@@ -417,32 +416,54 @@ export function useReenviarInvitacion() {
       });
       if (response.error) throw new Error(await extractInvokeError(response.error));
       if (response.data?.error) throw new Error(response.data.error);
-      return response.data;
+      return response.data as { confirmacionEnviada?: boolean; message?: string };
     },
   });
+}
+
+export interface ResultadoToggleUsuarioSocio {
+  activar: boolean;
+  mensaje: string;
 }
 
 export function useToggleUsuarioSocio() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: async ({ correo, activar }: { correo: string; activar: boolean }) => {
+    mutationFn: async ({
+      correo,
+      activar,
+    }: {
+      correo: string;
+      activar: boolean;
+    }): Promise<ResultadoToggleUsuarioSocio> => {
       const email = correo.toLowerCase().trim();
       if (!activar) {
-        // Revocar: la edge function desactiva el usuario y revoca su acceso auth.
+        // Revocar: la edge function desactiva el usuario y lo banea en Auth (así se
+        // corta la sesión viva, no solo el acceso del front).
         const response = await supabase.functions.invoke("invite-socio-bancario-user", {
           body: { revocar: true, correo: email },
         });
         if (response.error) throw new Error(await extractInvokeError(response.error));
         if (response.data?.error) throw new Error(response.data.error);
-        return;
+        return { activar: false, mensaje: "El usuario ya no puede acceder al portal." };
       }
-      // Reactivar: no hay acción de la edge fn en el contrato → reactivar activo.
-      // SWAP POINT: si re-habilitar el acceso auth requiere backend, añadir acción.
-      const { error } = await (supabase as any)
-        .from("usuarios")
-        .update({ activo: true })
-        .eq("email", email);
-      if (error) throw error;
+
+      // Reactivar: un solo paso. El helper compartido ya quita el BAN de Auth que dejó
+      // la revocación (acción `desbanear` de `reset-user-password`) además de poner
+      // `activo=true`, des-confirmar y mandar el correo de confirmación — Socio Bancario
+      // es rol de portal —, verificando que RLS haya dejado tocar la fila.
+      //
+      // Antes esto llamaba primero a `invite-socio-bancario-user` con `{reactivar:true}`
+      // solo para el des-baneo. Ya no hace falta: sería un segundo des-baneo idéntico y
+      // el orden respecto al correo lo garantiza el helper.
+      const resultado = await reactivarUsuario({ email });
+      // El des-ban o el correo pueden fallar sin que falle la reactivación: se cuenta en
+      // el mensaje en vez de dejar un toast de éxito que miente.
+      const base = resultado?.mensaje ?? "El usuario recuperó el acceso.";
+      return {
+        activar: true,
+        mensaje: resultado?.resetFallo ? `${base} ${resultado.resetFallo}` : base,
+      };
     },
     onSuccess: invalidate,
   });

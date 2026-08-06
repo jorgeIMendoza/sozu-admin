@@ -16,6 +16,8 @@ import { FUENTES, PRIORIDADES, type Priority } from "@/lib/portal-tickets/ticket
 import { ContactoPicker, type ContactoRef } from "./ContactoPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
+import { PendingEvidenciaField } from "./TicketEvidencia";
+import type { PendingAdjunto } from "@/lib/portal-tickets/tickets-adjuntos";
 import { toast } from "sonner";
 
 // Fecha de hoy en formato YYYY-MM-DD (hora local, para el <input type="date">).
@@ -47,6 +49,8 @@ export function CreateTicketDialog({
   const [categoriaId, setCategoriaId] = useState(categorias[0]?.id ?? "");
   const [contacto, setContacto] = useState<ContactoRef | null>(null);
   const [proyecto, setProyecto] = useState("");
+  const [evidencia, setEvidencia] = useState<PendingAdjunto[]>([]);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   // Los catálogos cargan async (React Query): fijar defaults válidos al abrir / al llegar datos.
@@ -86,15 +90,18 @@ export function CreateTicketDialog({
     setContacto(null);
     setProyecto("");
     setPropietarios([]);
+    evidencia.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    setEvidencia([]);
     setError("");
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!nombre.trim() || !etapaId) {
       setError("El nombre del ticket y el estado son obligatorios.");
       return;
     }
-    crearTicket({
+    setSaving(true);
+    await crearTicket({
       nombre,
       pipelineId,
       etapaId,
@@ -107,7 +114,9 @@ export function CreateTicketDialog({
       descripcion,
       fuente,
       fechaCreacion: fechaCreacion ? new Date(fechaCreacion).toISOString() : undefined,
+      adjuntos: evidencia,
     });
+    setSaving(false);
     toast.success("Ticket creado correctamente");
     reset();
     onOpenChange(false);
@@ -241,11 +250,13 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
+          <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
+
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex gap-2 border-t pt-4">
-            <Button className="flex-1" onClick={submit}>
-              Crear ticket
+            <Button className="flex-1" onClick={submit} disabled={saving}>
+              {saving ? "Guardando…" : "Crear ticket"}
             </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar

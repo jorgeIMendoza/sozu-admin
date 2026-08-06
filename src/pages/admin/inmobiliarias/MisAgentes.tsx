@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { desactivarUsuario, reactivarUsuario } from "@/lib/usuarios/estado-cuenta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PersonForm } from "@/components/admin/PersonForm";
 import { DeleteConfirmationDialog } from "@/components/admin/DeleteConfirmationDialog";
@@ -333,11 +334,20 @@ export default function MisAgentes() {
         .from('personas')
         .update({ activo: false })
         .eq('id', id);
-      
+
       if (error) throw error;
-      // Note: User deactivation is handled by database trigger
+
+      // La baja del usuario se hace explícita (antes se confiaba solo en el trigger de
+      // BD, así que la pantalla no sabía si había pasado). Rol de portal: solo se apaga
+      // el acceso, no se toca la confirmación del correo.
+      try {
+        return await desactivarUsuario({ idPersona: id }, { permitirSinUsuario: true });
+      } catch (userError) {
+        console.error('Error deactivating user:', userError);
+        return null;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (resultado) => {
       queryClient.invalidateQueries({ queryKey: ['mis-agentes-activos'] });
       queryClient.invalidateQueries({ queryKey: ['mis-agentes-eliminados'] });
       
@@ -354,7 +364,9 @@ export default function MisAgentes() {
       setAgenteToDelete(null);
       toast({
         title: "Éxito",
-        description: "Agente eliminado y usuario desactivado correctamente.",
+        description: resultado
+          ? `Agente eliminado. ${resultado.mensaje}`
+          : "Agente eliminado correctamente (no tenía usuario ligado).",
       });
     },
     onError: (error: any) => {
@@ -373,18 +385,14 @@ export default function MisAgentes() {
         .from('personas')
         .update({ activo: true })
         .eq('id', agente.id);
-      
+
       if (personaError) throw personaError;
 
-      // Reactivate the user if exists
-      const { error: userError } = await supabase
-        .from('usuarios')
-        .update({ activo: true })
-        .eq('id_persona', agente.id);
-      
-      if (userError) throw userError;
+      // Rol de portal: además de reactivar, se des-confirma el correo y le llega el
+      // enlace para definir contraseña. Antes solo se ponía activo=true.
+      return await reactivarUsuario({ idPersona: agente.id }, { permitirSinUsuario: true });
     },
-    onSuccess: () => {
+    onSuccess: (resultado) => {
       queryClient.invalidateQueries({ queryKey: ['mis-agentes-activos'] });
       queryClient.invalidateQueries({ queryKey: ['mis-agentes-eliminados'] });
       
@@ -400,8 +408,17 @@ export default function MisAgentes() {
       setAgenteToRestore(null);
       toast({
         title: "Éxito",
-        description: "Agente restaurado y usuario reactivado correctamente.",
+        description: resultado
+          ? `Agente restaurado. ${resultado.mensaje}`
+          : "Agente restaurado correctamente (no tenía usuario ligado).",
       });
+      if (resultado?.resetFallo) {
+        toast({
+          title: "Correo de confirmación no enviado",
+          description: resultado.resetFallo,
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: any) => {
       toast({

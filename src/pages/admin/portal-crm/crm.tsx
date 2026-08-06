@@ -88,7 +88,7 @@ import {
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL,
+  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -428,6 +428,17 @@ export function CrmContacts() {
     },
   });
 
+  // ¿El rol impersonado es "Agente Externo"? Para que "Ver como" a Stephen muestre SOLO sus
+  // leads (el RPC filtra server-side; el front le pasa p_force_agente_externo).
+  const { data: impIsAgenteExterno } = useQuery({
+    queryKey: ["crm-imp-role-agente-externo", impersonatedCrmUserRolId],
+    enabled: isImpersonating && impersonatedCrmUserRolId != null,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("roles").select("nombre").eq("id", impersonatedCrmUserRolId).maybeSingle();
+      return data?.nombre === "Agente Externo";
+    },
+  });
+
   // Permiso de eliminar del ROL impersonado (cuando se usa "Ver como"). permiso_id 4 = eliminar.
   const { data: impCanDelete } = useQuery({
     queryKey: ["crm-contactos-imp-candelete", impersonatedCrmUserRolId],
@@ -446,6 +457,9 @@ export function CrmContacts() {
   const canDelete = isImpersonating ? (impIsSuper ? true : (impCanDelete ?? false)) : realCanDelete;
   const isSuperAdmin = isImpersonating ? (impIsSuper ?? false) : (profile?.rol_nombre === "Super Administrador");
   const effUserId = isImpersonating ? impersonatedCrmUserId : (user?.id ?? null);
+  // "Ver como" a un Agente Externo → forzar el filtro de sus leads en el RPC (server-side).
+  // El Agente Externo real ya lo tiene forzado por su auth.uid; esto solo cubre la impersonation.
+  const forceAgenteExterno = isImpersonating && (impIsAgenteExterno ?? false);
 
   const [stageTab, setStageTab] = useState<StageTab>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -531,7 +545,7 @@ export function CrmContacts() {
   );
 
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, filterStatus, page, isSuperAdmin, effUserId],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, filterStatus, page, isSuperAdmin, effUserId, forceAgenteExterno],
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -607,6 +621,7 @@ export function CrmContacts() {
         p_unassigned,
         p_limit: pageSize,
         p_offset: page * pageSize,
+        p_force_agente_externo: forceAgenteExterno,
       });
       if (!rpc.error) {
         const grouped: any[] = rpc.data ?? [];
@@ -965,6 +980,8 @@ export function CrmContacts() {
                             crm:            { txt: "CRM",         cls: "bg-violet-50 text-violet-700 border-violet-200" },
                             manual:         { txt: "Manual",      cls: "bg-slate-50 text-slate-500 border-slate-200" },
                             formulario_web: { txt: "Web",         cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                            // Endpoint del bot externo (por ahora lo usa solo Stephen Burr).
+                            agente_externo: { txt: "Stephen Burr", cls: "bg-teal-50 text-teal-700 border-teal-200" },
                           };
                           const fuente = KNOWN_ORIGEN[o]
                             ? KNOWN_ORIGEN[o]
@@ -2345,6 +2362,8 @@ export function CrmDeals() {
     toast.success(`Movido a "${targetEt?.nombre ?? "etapa"}"`);
     qc.invalidateQueries({ queryKey: ["deals-list"] });
     if (deal.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
+    // Si el negocio cayó en una etapa "ganada" → señal Purchase a Meta (si el toggle está activo).
+    firePurchaseIfWon({ id_entidad_relacionada: deal.id_entidad_relacionada, valor: deal.valor, moneda: deal.moneda, esGanado: !!targetEt?.es_ganado });
   };
 
   const openDeal = (id: number) => navigate(`/admin/portal-crm/ventas/negocios/${id}`);
@@ -2710,7 +2729,8 @@ export function CrmDealDetail() {
         const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", uids);
         nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
-      const notes = notasRows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false }));
+      const attByNote = await fetchNoteAttachments(notasRows.map((n: any) => n.id));
+      const notes = notasRows.map((n: any) => ({ id: n.id, content: n.contenido, created_at: n.fecha_creacion, author: n.id_usuario ? (nameMap[n.id_usuario] ?? null) : null, anclado: n.anclado ?? false, attachments: attByNote[n.id] ?? [] }));
       const tasks = tareasRows.map((t: any) => ({
         id: t.id, title: t.titulo, tipo: t.tipo, status: t.estatus, priority: t.prioridad,
         descripcion: t.descripcion, due_date: t.fecha_vencimiento, reminder: t.fecha_recordatorio,

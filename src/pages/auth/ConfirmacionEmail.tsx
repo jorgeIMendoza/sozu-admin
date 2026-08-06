@@ -5,6 +5,8 @@ import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_PUBLISHABLE_KEY } from '@/lib/config';
 import { getPortalHost, type PortalKey } from '@/lib/portalUrls';
+import { claveConfirmacionLocal, marcarConfirmacionLocal } from '@/lib/emailConfirmacion';
+import { useReenviarConfirmacion } from '@/components/auth/useReenviarConfirmacion';
 
 const resolvePortalKey = (portal: string | null): PortalKey => {
   switch (portal) {
@@ -16,6 +18,8 @@ const resolvePortalKey = (portal: string | null): PortalKey => {
       return 'admin';
     case 'embajadores':
       return 'embajadores';
+    case 'bancos':
+      return 'bancos';
     case 'inmobiliarias':
     default:
       return 'inmobiliarias';
@@ -38,8 +42,6 @@ const stripOtpParams = (url: URL) => {
   url.searchParams.delete('type');
   return url;
 };
-
-const confirmedFlagKey = (email: string) => `sozu-email-confirmado:${email.toLowerCase()}`;
 
 // El `type` del enlace debe coincidir con el tipo de token que emitió GoTrue.
 // Enlaces generados por flujos que lo declaraban a mano pueden traer `magiclink`
@@ -111,43 +113,13 @@ export default function ConfirmacionEmail() {
   const [errorMsg, setErrorMsg] = useState('');
   const [emailEnlace, setEmailEnlace] = useState<string | null>(null);
   const [puedeReenviar, setPuedeReenviar] = useState(false);
-  const [reenvio, setReenvio] = useState<'idle' | 'enviando' | 'enviado' | 'error'>('idle');
-  const [reenvioMsg, setReenvioMsg] = useState('');
-
-  const reenviarConfirmacion = async () => {
-    if (!emailEnlace) return;
-    setReenvio('enviando');
-    setReenvioMsg('');
-
-    const { data, error } = await supabase.functions.invoke<{ success?: boolean; message?: string }>(
-      'reenviar-confirmacion-email',
-      {
-        body: { email: emailEnlace },
-        headers: { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
-      },
-    );
-
-    if (error || data?.success === false) {
-      console.error('reenviar-confirmacion-email error:', error, data);
-      // Con status != 2xx, invoke deja `data` en null y el cuerpo viaja en
-      // error.context (Response); de ahí sale el motivo real del rechazo.
-      let motivo = data?.message ?? '';
-      const respuesta = (error as { context?: Response } | null)?.context;
-      if (!motivo && respuesta && typeof respuesta.json === 'function') {
-        motivo = await respuesta
-          .clone()
-          .json()
-          .then((cuerpo: { message?: string }) => cuerpo?.message ?? '')
-          .catch(() => '');
-      }
-      setReenvio('error');
-      setReenvioMsg(motivo || 'No pudimos reenviar el correo. Contacta a soporte.');
-      return;
-    }
-
-    setReenvio('enviado');
-    setReenvioMsg('Te enviamos un correo nuevo. Revisa tu bandeja de entrada y la carpeta de spam.');
-  };
+  // Se llama sin sesión válida (el enlace acaba de fallar): el reenvío va con la
+  // anon key, no con el token muerto que quede en localStorage.
+  const {
+    estado: reenvio,
+    mensaje: reenvioMsg,
+    reenviar: reenviarConfirmacion,
+  } = useReenviarConfirmacion(emailEnlace, { sinSesion: true });
 
   useEffect(() => {
     if (calledRef.current) return;
@@ -193,7 +165,7 @@ export default function ConfirmacionEmail() {
           const alreadyConfirmed = Boolean(
             email && (
               sessionEmail === email.toLowerCase() ||
-              sessionStorage.getItem(confirmedFlagKey(email))
+              sessionStorage.getItem(claveConfirmacionLocal(email))
             )
           );
 
@@ -230,11 +202,10 @@ export default function ConfirmacionEmail() {
       }
 
       if (verified) {
-        try {
-          sessionStorage.setItem(confirmedFlagKey(email), '1');
-        } catch {
-          // sessionStorage puede no estar disponible (modo privado); no es crítico.
-        }
+        // Deja constancia para /auth/change-password y para AuthContext: esta
+        // sesión nace del flujo de confirmación, aunque usuarios.email_confirmado
+        // tarde un instante en reflejarlo.
+        marcarConfirmacionLocal(email);
       }
 
       // post-confirmacion-registro exige prueba de titularidad del correo: el

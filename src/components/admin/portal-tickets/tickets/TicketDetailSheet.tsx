@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Mic, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,9 @@ import { PriorityDot } from "./PriorityDot";
 import { ContactoPicker } from "./ContactoPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
+import { EvidenciaSection } from "./TicketEvidencia";
+import { VoiceRecorderButton } from "./VoiceRecorder";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export function TicketDetailSheet({
@@ -35,7 +39,11 @@ export function TicketDetailSheet({
   readOnly?: boolean;
 }) {
   const { etapas, categorias, agentes, actualizarTicket, moverEtapa, agregarNota } = useTickets();
+  const { profile } = useAuth();
   const [nota, setNota] = useState("");
+  const [audioNota, setAudioNota] = useState<File | null>(null);
+  const isSuperAdmin =
+    (profile as any)?.rol_id === 1 || (profile as any)?.rol_nombre === "Super Administrador";
 
   if (!ticket) return null;
   const etapasPipeline = etapas.filter((e) => e.pipelineId === ticket.pipelineId);
@@ -45,7 +53,10 @@ export function TicketDetailSheet({
     <Sheet open={!!ticket} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle className="pr-6 text-left text-lg">{ticket.nombre}</SheetTitle>
+          <SheetTitle className="pr-6 text-left text-lg">
+            <span className="mr-1.5 font-medium tabular-nums text-muted-foreground">#{ticket.numero}</span>
+            {ticket.nombre}
+          </SheetTitle>
           <p className="text-left text-sm text-muted-foreground">
             Creado el {fechaLarga(ticket.fechaCreacion)} · Fuente: {ticket.fuente}
           </p>
@@ -185,6 +196,10 @@ export function TicketDetailSheet({
 
           <Separator />
 
+          <EvidenciaSection ticketId={ticket.id} canDelete={isSuperAdmin} readOnly={readOnly} />
+
+          <Separator />
+
           {!readOnly && (
             <div className="space-y-3">
               <Label>Agregar nota</Label>
@@ -194,17 +209,35 @@ export function TicketDetailSheet({
                 placeholder="Escribe una nota de seguimiento..."
                 onChange={(e) => setNota(e.target.value)}
               />
-              <Button
-                size="sm"
-                disabled={!nota.trim()}
-                onClick={() => {
-                  agregarNota(ticket.id, nota.trim());
-                  setNota("");
-                  toast.success("Nota agregada al ticket");
-                }}
-              >
-                Guardar nota
-              </Button>
+              {audioNota && (
+                <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+                  <Mic className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Nota de voz lista para guardar</span>
+                  <button
+                    type="button"
+                    onClick={() => setAudioNota(null)}
+                    aria-label="Quitar audio"
+                    className="ml-auto text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={!nota.trim() && !audioNota}
+                  onClick={() => {
+                    agregarNota(ticket.id, nota.trim(), audioNota ?? undefined);
+                    setNota("");
+                    setAudioNota(null);
+                    toast.success("Nota agregada al ticket");
+                  }}
+                >
+                  Guardar nota
+                </Button>
+                <VoiceRecorderButton onRecorded={(f) => setAudioNota(f)} />
+              </div>
             </div>
           )}
 
@@ -219,6 +252,9 @@ export function TicketDetailSheet({
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm text-foreground">{a.texto}</p>
+                  {a.audioUrl && (
+                    <audio controls src={a.audioUrl} className="mt-1 h-8 w-full max-w-[260px]" />
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {a.autor} · {fechaLarga(a.fecha)}
                   </p>

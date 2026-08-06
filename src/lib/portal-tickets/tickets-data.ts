@@ -25,7 +25,7 @@ export type Ticket = {
   // Enlace opcional al CRM / inventario (se llena con los selectores reales, ver Fase 2b)
   entidadRelacionadaId: string | null;
   propiedadId: string | null;
-  actividad: { id: string; fecha: string; autor: string; texto: string }[];
+  actividad: { id: string; fecha: string; autor: string; texto: string; audioUrl?: string | null }[];
 };
 
 export type Pipeline = { id: string; nombre: string; descripcion: string };
@@ -38,7 +38,7 @@ export type Etapa = {
 };
 export type Categoria = { id: string; nombre: string; pipelineId: string | null };
 // Un "agente" del módulo = usuario real de la plataforma con acceso al portal de tickets.
-export type Agente = { id: string; nombre: string; rol: string; email: string };
+export type Agente = { id: string; nombre: string; rol: string; email: string; telefono?: string | null };
 
 export const PRIORIDADES: { id: Priority; nombre: string }[] = [
   { id: "alta", nombre: "Alta" },

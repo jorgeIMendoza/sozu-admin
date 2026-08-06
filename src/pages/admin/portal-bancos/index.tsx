@@ -33,6 +33,7 @@ import {
 import {
   useBancoEquipo, useCrearEjecutivoBanco, useSetActivoEjecutivo,
   useCambiarRolEjecutivo, useEditarEjecutivo, useBancoRoles,
+  useReenviarConfirmacionEjecutivo,
   type EjecutivoBanco, type RolBancoPortal,
 } from "@/hooks/usePortalBancos/useBancoEquipo";
 import {
@@ -46,7 +47,7 @@ import {
 } from "@/lib/portal-bancos/metrics";
 import {
   Building2, Inbox, ArrowRight, CheckCircle2, XCircle, Activity, Landmark,
-  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X, Image as ImageIcon,
+  Plus, Save, Power, ShieldAlert, Users, Loader2, Pencil, Trash2, X, Image as ImageIcon, Mail,
 } from "lucide-react";
 import { CompradorDetalleSheet } from "@/components/admin/legal-flow/CompradorDetalleSheet";
 import { PropiedadDetalleSheet } from "@/components/admin/portal-bancos/PropiedadDetalleSheet";
@@ -336,7 +337,7 @@ function SolicitudDetailSheet({ leadId, onClose }: { leadId: string | null; onCl
                 <SelectContent>
                   {agents.filter((a) => a.activo).map((a) => (
                     <SelectItem key={a.email} value={a.email}>
-                      {a.nombre}{a.rolPortal === "admin" ? " · Admin" : ""}
+                      {a.nombre} · {ROL_PORTAL_LABEL[a.rolPortal]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -834,6 +835,15 @@ function Kpi({ icon: Icon, label, value, hint }: { icon: any; label: string; val
  * se reflejan al instante en Admin Panel → Usuarios del Sistema (misma tabla
  * `usuarios`). Reemplaza el antiguo equipo de contacto (`bancos_agentes`).
  */
+/**
+ * Etiquetas del tipo de ejecutivo = nombre del rol real en `roles`.
+ * 'agente' → Operador Banco · 'admin' → Supervisor Banco (ver `useBancoEquipo`).
+ */
+const ROL_PORTAL_LABEL: Record<RolBancoPortal, string> = {
+  agente: "Operador Banco",
+  admin: "Supervisor Banco",
+};
+
 export function BancosEquipo() {
   const scope = useBancoResolvedScope();
   const { data: convenios = [], isLoading: cargandoBancos } = useBancosConvenio();
@@ -861,6 +871,9 @@ export function BancosEquipo() {
 
   const { data: equipo = [], isLoading } = useBancoEquipo(selectedId);
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", rol: "agente" as RolBancoPortal });
+  // Email del usuario logueado: se marca su propia fila con la etiqueta «Tú».
+  const { profile } = useAuth();
+  const miEmail = (profile?.email ?? "").trim().toLowerCase();
 
   if (cargandoPermisos) {
     return (
@@ -890,9 +903,22 @@ export function BancosEquipo() {
     crear.mutate(
       { id_banco: selectedId, nombre: form.nombre.trim(), email: form.email.trim(), telefono: form.telefono.trim() || null, rolPortal: form.rol },
       {
-        onSuccess: () => {
+        onSuccess: (data: any) => {
           setForm({ nombre: "", email: "", telefono: "", rol: "agente" });
-          toast({ title: "Ejecutivo dado de alta", description: banco ? `Usuario creado en ${banco.nombre} · contraseña temporal: Temporal123!` : undefined });
+          // Las credenciales llegan por correo DESPUÉS de que el ejecutivo confirme
+          // su email (trigger handle_email_confirmation), no en el alta. El envío
+          // puede fallar sin tumbar el alta, así que el aviso sigue a
+          // `confirmacionEnviada` en vez de prometerlo siempre: antes decía "le
+          // enviamos un correo" incluso cuando no salió ninguno.
+          const enviada = data?.confirmacionEnviada !== false;
+          const donde = banco ? `Usuario creado en ${banco.nombre}. ` : "";
+          toast({
+            title: "Ejecutivo dado de alta",
+            description: enviada
+              ? `${donde}Le enviamos un correo para confirmar su cuenta; al confirmarlo recibirá sus credenciales.`
+              : `${donde}${data?.message ?? "No se pudo enviar el correo de confirmación."}`,
+            variant: enviada ? undefined : "destructive",
+          });
         },
         onError: (e: any) => toast({ title: "No se pudo crear", description: e?.message ?? "Error", variant: "destructive" }),
       },
@@ -930,18 +956,27 @@ export function BancosEquipo() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Nuevo ejecutivo</CardTitle>
-          {banco && <p className="text-xs text-muted-foreground">Se creará como usuario del sistema vinculado a <span className="font-medium text-foreground">{banco.nombre}</span> con contraseña temporal.</p>}
+          {banco && <p className="text-xs text-muted-foreground">Se creará como usuario del sistema vinculado a <span className="font-medium text-foreground">{banco.nombre}</span>. Recibirá un correo para confirmar su cuenta y ahí se le enviarán sus credenciales.</p>}
         </CardHeader>
         <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <Input placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
           <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+          {/* Teléfono: solo dígitos, máximo 10 (formato MX) */}
+          <Input
+            placeholder="Teléfono"
+            inputMode="numeric"
+            maxLength={10}
+            value={form.telefono}
+            onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+          />
           <div className="flex gap-2">
+            {/* El tipo de ejecutivo ES el rol del sistema: se nombra igual que en
+                `roles` para no inventar un vocabulario paralelo. */}
             <Select value={form.rol} onValueChange={(v: any) => setForm({ ...form, rol: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="agente">Agente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="agente">{ROL_PORTAL_LABEL.agente}</SelectItem>
+                <SelectItem value="admin">{ROL_PORTAL_LABEL.admin}</SelectItem>
               </SelectContent>
             </Select>
             <Button onClick={submit} disabled={crear.isPending || !form.nombre.trim() || !form.email.trim() || selectedId == null}>Agregar</Button>
@@ -958,7 +993,14 @@ export function BancosEquipo() {
           ) : equipo.length === 0 ? (
             <EmptyState icon={Building2} title="Sin ejecutivos" hint="Da de alta el primer ejecutivo de este banco." />
           ) : (
-            equipo.map((ej) => <EjecutivoRow key={ej.email} e={ej} canUpdate={canUpdate} />)
+            equipo.map((ej) => (
+              <EjecutivoRow
+                key={ej.email}
+                e={ej}
+                canUpdate={canUpdate}
+                esYo={!!miEmail && ej.email.trim().toLowerCase() === miEmail}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -966,10 +1008,11 @@ export function BancosEquipo() {
   );
 }
 
-function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean }) {
+function EjecutivoRow({ e, canUpdate, esYo = false }: { e: EjecutivoBanco; canUpdate: boolean; esYo?: boolean }) {
   const cambiarRol = useCambiarRolEjecutivo();
   const setActivo = useSetActivoEjecutivo();
   const editar = useEditarEjecutivo();
+  const reenviar = useReenviarConfirmacionEjecutivo();
   const [editing, setEditing] = useState(false);
   const [edit, setEdit] = useState({ nombre: e.nombre, email: e.email, telefono: e.telefono ?? "" });
 
@@ -994,11 +1037,35 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
     );
   };
 
+  const onReenviarConfirmacion = () => {
+    reenviar.mutate(
+      { email: e.email },
+      {
+        onSuccess: () => toast({ title: "Correo de confirmación reenviado", description: e.email }),
+        onError: (err: any) =>
+          toast({ title: "No se pudo reenviar", description: err?.message ?? "Error", variant: "destructive" }),
+      },
+    );
+  };
+
   const onToggleActive = () => {
+    if (esYo && e.activo) {
+      toast({
+        title: "No puedes desactivar tu propia cuenta",
+        description: "Pide a otro supervisor del banco que lo haga.",
+        variant: "destructive",
+      });
+      return;
+    }
     setActivo.mutate(
       { email: e.email, activo: !e.activo },
       {
-        onSuccess: () => toast({ title: e.activo ? "Ejecutivo desactivado" : "Ejecutivo reactivado", description: e.activo ? undefined : "Contraseña temporal: Temporal123!" }),
+        // El texto lo redacta el helper: dice "correo de confirmación" o "Temporal123!"
+        // según lo que realmente haya pasado con el rol del ejecutivo.
+        onSuccess: (resultado) => toast({
+          title: e.activo ? "Ejecutivo desactivado" : "Ejecutivo reactivado",
+          description: resultado?.mensaje,
+        }),
         onError: (err: any) => toast({ title: "No se pudo actualizar", description: err?.message ?? "Error", variant: "destructive" }),
       },
     );
@@ -1011,34 +1078,75 @@ function EjecutivoRow({ e, canUpdate }: { e: EjecutivoBanco; canUpdate: boolean 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">
             {e.nombre}
+            {esYo && (
+              <Badge className="ml-2 text-[10px] bg-primary/10 text-primary hover:bg-primary/10 border-primary/20">
+                Tú
+              </Badge>
+            )}
             {!e.activo && <Badge variant="outline" className="ml-2 text-[10px]">Inactivo</Badge>}
+            {/* Sin confirmar = todavía no tiene credenciales: las manda el trigger
+                handle_email_confirmation cuando pulsa el botón del correo. */}
+            {e.activo && !e.emailConfirmado && (
+              <Badge variant="outline" className="ml-2 text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-400">
+                Sin confirmar
+              </Badge>
+            )}
           </p>
           <p className="text-xs text-muted-foreground truncate">{[e.email, e.telefono].filter(Boolean).join(" · ") || "—"}</p>
         </div>
         {/* Cambio de rol / edición / baja: solo con permiso "actualizar". */}
         {canUpdate ? (
           <>
+            {/* Visible aunque la fila diga "confirmado": el DEFAULT true de
+                usuarios.email_confirmado dejó cuentas viejas marcadas como
+                confirmadas sin estarlo, y hay que poder reintentar el envío. Si de
+                verdad ya confirmó, la edge function responde y se avisa. */}
+            {e.activo && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onReenviarConfirmacion}
+                disabled={reenviar.isPending}
+                title="Reenviar el correo de confirmación"
+              >
+                <Mail className="h-4 w-4 mr-1" /> Reenviar correo
+              </Button>
+            )}
             <Select value={e.rolPortal} onValueChange={(v: any) => onChangeRole(v)}>
-              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="agente">Agente</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="agente">{ROL_PORTAL_LABEL.agente}</SelectItem>
+                <SelectItem value="admin">{ROL_PORTAL_LABEL.admin}</SelectItem>
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</Button>
-            <Button size="sm" variant={e.activo ? "outline" : "default"} onClick={onToggleActive} disabled={setActivo.isPending}>
+            {/* Nadie se da de baja a sí mismo: perdería el acceso al portal en el acto
+                y quedaría sin quién lo reactive si es el único supervisor. */}
+            <Button
+              size="sm"
+              variant={e.activo ? "outline" : "default"}
+              onClick={onToggleActive}
+              disabled={setActivo.isPending || (esYo && e.activo)}
+              title={esYo && e.activo ? "No puedes desactivar tu propia cuenta" : undefined}
+            >
               {e.activo ? "Desactivar" : "Reactivar"}
             </Button>
           </>
         ) : (
-          <Badge variant="outline" className="text-[10px] capitalize">{e.rolPortal === "admin" ? "Admin" : "Agente"}</Badge>
+          <Badge variant="outline" className="text-[10px]">{ROL_PORTAL_LABEL[e.rolPortal]}</Badge>
         )}
       </div>
       {canUpdate && editing && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
           <Input placeholder="Nombre" value={edit.nombre} onChange={(ev) => setEdit({ ...edit, nombre: ev.target.value })} />
           <Input placeholder="Email" type="email" value={edit.email} onChange={(ev) => setEdit({ ...edit, email: ev.target.value })} />
-          <Input placeholder="Teléfono" value={edit.telefono} onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value })} />
+          <Input
+            placeholder="Teléfono"
+            inputMode="numeric"
+            maxLength={10}
+            value={edit.telefono}
+            onChange={(ev) => setEdit({ ...edit, telefono: ev.target.value.replace(/\D/g, "").slice(0, 10) })}
+          />
           <div className="flex gap-2">
             <Button variant="outline" onClick={guardar} disabled={editar.isPending || !edit.nombre.trim() || !edit.email.trim()}>
               <Save className="h-4 w-4 mr-1" /> Guardar

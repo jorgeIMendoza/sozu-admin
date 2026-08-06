@@ -31,6 +31,7 @@ import { stripHtml } from "@/lib/crm-format";
 import { ARow } from "@/components/admin/portal-crm/ui";
 import {
   CRM_ATTACH_BUCKET, classifyAttachment, humanFileSize, saveNoteAttachments,
+  saveCommentAttachments, fetchCommentAttachments,
   NoteAttachmentsStrip, type PendingAttachment, type AttachKind,
 } from "./crm-adjuntos";
 
@@ -42,15 +43,18 @@ export function RichNoteToolbar({ editor }: { editor: ReturnType<typeof useEdito
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const ext = file.name.split(".").pop();
-      const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from(CRM_ATTACH_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
-      if (error) { toast.error("Error al subir imagen"); return; }
-      const { data: url } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
-      editor.chain().focus().setImage({ src: url.publicUrl }).run();
+      const files = Array.from(input.files ?? []);
+      if (!files.length) return;
+      for (const file of files) {
+        const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const path = `crm-notes/${crypto.randomUUID()}.${ext}`;
+        const { data, error } = await supabase.storage.from(CRM_ATTACH_BUCKET).upload(path, file, { contentType: file.type || "image/png", upsert: false });
+        if (error || !data) { toast.error(`No se pudo subir "${file.name}": ${error?.message ?? "error desconocido"}`); continue; }
+        const { data: url } = supabase.storage.from(CRM_ATTACH_BUCKET).getPublicUrl(data.path);
+        editor.chain().focus().setImage({ src: url.publicUrl }).run();
+      }
     };
     input.click();
   };
@@ -333,6 +337,8 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
+  const [cPending, setCPending] = useState<PendingAttachment[]>([]);
+  const cFileRef = useRef<HTMLInputElement | null>(null);
 
   // Comentarios (persisten en crm_notas_comentarios; tabla puede no existir aún → fallback vacío).
   const { data: comments = [] } = useQuery({
@@ -351,7 +357,8 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
         const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ids);
         nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
       }
-      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null }));
+      const attByComment = await fetchCommentAttachments(rows.map((r: any) => r.id));
+      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null, attachments: attByComment[r.id] ?? [] }));
     },
   });
 
@@ -369,14 +376,27 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
     onEdited();
   };
 
+  const addCPending = (files: File[]) => {
+    if (!files.length) return;
+    setCPending((p) => [...p, ...files.map((file) => ({ id: crypto.randomUUID(), file, tipo: classifyAttachment(file), nombre: file.name, previewUrl: URL.createObjectURL(file) }))]);
+  };
+  const removeCPending = (id: string) => {
+    setCPending((p) => { const f = p.find((x) => x.id === id); if (f) URL.revokeObjectURL(f.previewUrl); return p.filter((x) => x.id !== id); });
+  };
+  const resetCPending = () => setCPending((p) => { p.forEach((a) => URL.revokeObjectURL(a.previewUrl)); return []; });
+
   const addComment = async () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text && cPending.length === 0) return;
     setSaving(true);
-    const { error } = await (supabase as any).from("crm_notas_comentarios").insert({ id_nota: note.id, id_usuario: user?.id ?? null, contenido: text });
+    const { data, error } = await (supabase as any).from("crm_notas_comentarios")
+      .insert({ id_nota: note.id, id_usuario: user?.id ?? null, contenido: text })
+      .select("id").single();
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    if (data?.id && cPending.length) await saveCommentAttachments(data.id, user?.id, cPending);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
     setDraft("");
+    resetCPending();
     qc.invalidateQueries({ queryKey: ["nota-comentarios", note.id] });
   };
 
@@ -450,15 +470,50 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
                         <span className="text-xs font-medium text-foreground">{c.author ?? "Usuario"}</span>
                         <span className="text-[10px] text-muted-foreground tabular-nums">{relTime(c.ts)}</span>
                       </div>
-                      <div className="text-foreground">{c.text}</div>
+                      {c.text ? <div className="text-foreground whitespace-pre-wrap">{c.text}</div> : null}
+                      <NoteAttachmentsStrip attachments={c.attachments ?? []} />
                     </div>
                   ))}
                   {canEdit && (
                   <>
-                  <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Deja un comentario…" className="text-sm min-h-[60px]" />
+                  <Textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onPaste={(e) => {
+                      const imgs: File[] = [];
+                      for (const it of Array.from(e.clipboardData?.items ?? [])) {
+                        if (it.kind === "file" && it.type.startsWith("image/")) { const f = it.getAsFile(); if (f) imgs.push(f); }
+                      }
+                      if (imgs.length) { e.preventDefault(); addCPending(imgs); toast.success(imgs.length > 1 ? `${imgs.length} imágenes adjuntadas` : "Imagen adjuntada"); }
+                    }}
+                    placeholder="Deja un comentario… (puedes pegar imágenes con Ctrl+V)"
+                    className="text-sm min-h-[60px]"
+                  />
+                  <input ref={cFileRef} type="file" multiple className="hidden" onChange={(e) => { addCPending(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+                  {cPending.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {cPending.map((a) => (
+                        <div key={a.id} className="relative">
+                          {a.tipo === "image" ? (
+                            <img src={a.previewUrl} alt={a.nombre} className="h-14 w-14 object-cover rounded-md border border-border" />
+                          ) : (
+                            <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs max-w-[180px]">
+                              {a.tipo === "audio" ? <Mic className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                              <span className="truncate">{a.nombre}</span>
+                              <span className="text-[10px] text-muted-foreground/70 shrink-0">{humanFileSize(a.file.size)}</span>
+                            </div>
+                          )}
+                          <button type="button" onClick={() => removeCPending(a.id)} className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center shadow" title="Quitar"><X className="h-2.5 w-2.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={addComment} disabled={saving || !draft.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">{saving ? "Guardando…" : "Comentar"}</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setDraft(""); setShowComments(false); }}>Cancelar</Button>
+                    <button type="button" className="h-8 w-8 flex items-center justify-center rounded transition-colors text-muted-foreground hover:bg-muted hover:text-foreground" title="Adjuntar archivo" onClick={() => cFileRef.current?.click()}>
+                      <Paperclip className="h-4 w-4" />
+                    </button>
+                    <Button size="sm" onClick={addComment} disabled={saving || (!draft.trim() && cPending.length === 0)} className="bg-primary hover:bg-primary/90 text-primary-foreground">{saving ? "Guardando…" : "Comentar"}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setDraft(""); resetCPending(); setShowComments(false); }}>Cancelar</Button>
                   </div>
                   </>
                   )}
