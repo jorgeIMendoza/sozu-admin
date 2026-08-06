@@ -64,6 +64,7 @@ export default function ForgotPassword() {
                 <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: 'hsl(210 60% 50%)' }} />
                 <span>
                   Abre el enlace desde tu bandeja de entrada (revisa también la carpeta de spam) para verificar tu identidad y definir una nueva contraseña. El enlace es de un solo uso.
+                  {' '}Si pides otro, el anterior deja de funcionar: usa siempre el <strong>correo más reciente</strong>.
                 </span>
               </div>
             </div>
