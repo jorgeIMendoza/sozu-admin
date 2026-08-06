@@ -16,7 +16,8 @@ export type Ticket = {
   categoriaId: string;
   propietarios: string[]; // auth_user_id de los usuarios asignados (multi-propietario)
   creadoPorId: string | null; // auth_user_id de quien dio de alta el ticket
-  solicitante: string;
+  solicitante: string; // nombre del solicitante principal (respaldo de texto)
+  solicitantes: ContactoRef[]; // contactos CRM que reportan el ticket (multi); el primero = principal
   inmueble: string;
   descripcion: string;
   fechaCreacion: string;
@@ -39,6 +40,10 @@ export type Etapa = {
 export type Categoria = { id: string; nombre: string; pipelineId: string | null };
 // Un "agente" del módulo = usuario real de la plataforma con acceso al portal de tickets.
 export type Agente = { id: string; nombre: string; rol: string; email: string; telefono?: string | null };
+
+// Referencia a un contacto del CRM (entidad relacionada) que reporta un ticket.
+// id = entidades_relacionadas.id · telefono = número ya formateado para mostrar (con lada si aplica).
+export type ContactoRef = { id: string; nombre: string; email?: string; telefono?: string | null };
 
 export const PRIORIDADES: { id: Priority; nombre: string }[] = [
   { id: "alta", nombre: "Alta" },

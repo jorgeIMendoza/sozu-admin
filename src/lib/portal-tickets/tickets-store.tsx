@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import type {
   Agente,
   Categoria,
+  ContactoRef,
   Etapa,
   Pipeline,
   Ticket,
@@ -132,6 +133,7 @@ type NuevoTicket = {
   categoriaId: string;
   propietarios: string[];
   solicitante: string;
+  solicitantes?: ContactoRef[];
   inmueble: string;
   descripcion: string;
   fuente?: string;
@@ -253,6 +255,16 @@ export async function fetchAgentes(): Promise<Agente[]> {
     .sort((a: Agente, b: Agente) => (a.nombre ?? "").localeCompare(b.nombre ?? ""));
 }
 
+// Teléfono legible para el popover de solicitantes: prefija la lada solo si clave_pais_telefono
+// parece número (+52), no cuando es un ISO ("MX"). Devuelve null si no hay teléfono.
+function telefonoDisplay(p: { telefono?: string | null; clave_pais_telefono?: string | null }): string | null {
+  const tel = String(p.telefono ?? "").trim();
+  if (!tel) return null;
+  const clave = String(p.clave_pais_telefono ?? "").trim();
+  const lada = /^\+?\d+$/.test(clave) ? `+${clave.replace(/^\+/, "")} ` : "";
+  return `${lada}${tel}`;
+}
+
 async function fetchTickets(): Promise<Ticket[]> {
   const { data } = await sb
     .from("tickets")
@@ -277,6 +289,68 @@ async function fetchTickets(): Promise<Ticket[]> {
     nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
   }
 
+  // Solicitantes (multi): la tabla de unión tickets_solicitantes puede no existir aún en dev
+  // (migración pendiente) → se consulta aparte con fallback. Si un ticket no tiene filas en la
+  // unión, se usa el solicitante legacy (tickets.id_entidad_relacionada) para no perder el dato.
+  const ticketIds = rows.map((r: any) => r.id);
+  const solByTicket: Record<string, number[]> = {};
+  if (ticketIds.length) {
+    const { data: solRows, error: solErr } = await sb
+      .from("tickets_solicitantes")
+      .select("id_ticket, id_entidad_relacionada")
+      .in("id_ticket", ticketIds);
+    if (!solErr) {
+      for (const s of solRows ?? []) (solByTicket[String(s.id_ticket)] ||= []).push(s.id_entidad_relacionada);
+    }
+  }
+  const entIdsByTicket: Record<string, number[]> = {};
+  const entIds = new Set<number>();
+  for (const r of rows) {
+    const fromJoin = solByTicket[String(r.id)];
+    const list =
+      fromJoin && fromJoin.length
+        ? fromJoin
+        : r.id_entidad_relacionada != null
+          ? [r.id_entidad_relacionada]
+          : [];
+    entIdsByTicket[String(r.id)] = list;
+    for (const id of list) entIds.add(id);
+  }
+  let contactoMap: Record<string, ContactoRef> = {};
+  if (entIds.size) {
+    const { data: ents } = await sb
+      .from("entidades_relacionadas")
+      .select("id, id_persona")
+      .in("id", Array.from(entIds));
+    const personaIds = Array.from(new Set((ents ?? []).map((e: any) => e.id_persona).filter(Boolean)));
+    let personaMap: Record<string, { nombre: string; email: string; telefono: string | null }> = {};
+    if (personaIds.length) {
+      const { data: personas } = await sb
+        .from("personas")
+        .select("id, nombre_legal, nombre_comercial, email, telefono, clave_pais_telefono")
+        .in("id", personaIds);
+      personaMap = Object.fromEntries(
+        (personas ?? []).map((p: any) => [
+          String(p.id),
+          {
+            nombre: (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim(),
+            email: p.email ?? "",
+            telefono: telefonoDisplay(p),
+          },
+        ]),
+      );
+    }
+    contactoMap = Object.fromEntries(
+      (ents ?? []).map((e: any): [string, ContactoRef] => {
+        const p = personaMap[String(e.id_persona)];
+        return [
+          String(e.id),
+          { id: String(e.id), nombre: p?.nombre ?? "Contacto", email: p?.email ?? "", telefono: p?.telefono ?? null },
+        ];
+      }),
+    );
+  }
+
   return rows.map((r: any) => ({
     id: String(r.id),
     numero: r.numero,
@@ -288,6 +362,9 @@ async function fetchTickets(): Promise<Ticket[]> {
     propietarios: (r.tickets_propietarios ?? []).map((p: any) => p.id_usuario),
     creadoPorId: r.id_usuario_creador ?? null,
     solicitante: r.solicitante ?? "",
+    solicitantes: (entIdsByTicket[String(r.id)] ?? [])
+      .map((eid) => contactoMap[String(eid)])
+      .filter(Boolean) as ContactoRef[],
     inmueble: r.inmueble ?? "",
     descripcion: r.descripcion ?? "",
     fechaCreacion: r.fecha_creacion,
@@ -392,6 +469,8 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
 
   const crearTicket = useCallback(
     async (data: NuevoTicket) => {
+      const sols = (data.solicitantes ?? []).filter(Boolean);
+      const principal = sols[0] ?? null;
       const { data: ins, error } = await sb
         .from("tickets")
         .insert({
@@ -402,9 +481,13 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
           id_categoria: data.categoriaId ? Number(data.categoriaId) : null,
           id_usuario_propietario: data.propietarios?.[0] || null,
           id_usuario_creador: uid,
-          id_entidad_relacionada: data.entidadRelacionadaId ? Number(data.entidadRelacionadaId) : null,
+          id_entidad_relacionada: principal
+            ? Number(principal.id)
+            : data.entidadRelacionadaId
+              ? Number(data.entidadRelacionadaId)
+              : null,
           id_propiedad: data.propiedadId ? Number(data.propiedadId) : null,
-          solicitante: data.solicitante?.trim() || null,
+          solicitante: (principal ? principal.nombre : data.solicitante)?.trim() || null,
           inmueble: data.inmueble?.trim() || null,
           descripcion: data.descripcion?.trim() || null,
           fuente: data.fuente || "Portal",
@@ -417,6 +500,11 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
         return;
       }
       if (ins?.id) {
+        if (sols.length) {
+          await sb
+            .from("tickets_solicitantes")
+            .insert(sols.map((s: ContactoRef) => ({ id_ticket: ins.id, id_entidad_relacionada: Number(s.id) })));
+        }
         const props = (data.propietarios ?? []).filter(Boolean);
         if (props.length) {
           await sb
@@ -475,6 +563,18 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
             proyecto: tk?.inmueble,
             descripcion: tk?.descripcion,
           });
+      }
+      if ("solicitantes" in cambios) {
+        const sols = (cambios.solicitantes ?? []).filter(Boolean);
+        await sb.from("tickets_solicitantes").delete().eq("id_ticket", Number(id));
+        if (sols.length) {
+          await sb
+            .from("tickets_solicitantes")
+            .insert(sols.map((s) => ({ id_ticket: Number(id), id_entidad_relacionada: Number(s.id) })));
+        }
+        // Mantener el "principal" en las columnas legacy (primer solicitante).
+        patch.id_entidad_relacionada = sols[0] ? Number(sols[0].id) : null;
+        patch.solicitante = sols[0]?.nombre?.trim() || null;
       }
       if ("categoriaId" in cambios) patch.id_categoria = cambios.categoriaId ? Number(cambios.categoriaId) : null;
       if ("solicitante" in cambios) patch.solicitante = cambios.solicitante || null;
