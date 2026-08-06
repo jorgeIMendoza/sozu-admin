@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ChevronLeft, ChevronRight, Mail, Pencil, Phone } from "lucide-react";
 import { antiguedad, fechaCorta, type Ticket } from "@/lib/portal-tickets/tickets-data";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PriorityDot } from "./PriorityDot";
+import { ContactoDatos } from "./SolicitantesPicker";
 import { cn } from "@/lib/utils";
 
 export function TicketsKanban({
@@ -160,8 +162,29 @@ export function TicketsKanban({
                     <div className="mt-2 flex items-center justify-between border-t pt-2">
                       <PriorityDot prioridad={t.prioridad} />
                       <div className="flex items-center gap-2 text-primary">
-                        <Phone className="size-3.5" />
-                        <Mail className="size-3.5" />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="Datos de contacto del solicitante"
+                              className="flex items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-muted"
+                            >
+                              <Phone className="size-3.5" />
+                              <Mail className="size-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" onClick={(e) => e.stopPropagation()} className="w-64 space-y-2">
+                            <p className="text-xs font-semibold text-foreground">
+                              {t.solicitantes.length > 1 ? "Solicitantes" : "Solicitante"}
+                            </p>
+                            {t.solicitantes.length ? (
+                              t.solicitantes.map((c) => <ContactoDatos key={c.id} c={c} />)
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Sin solicitante registrado.</p>
+                            )}
+                          </PopoverContent>
+                        </Popover>
                         <Pencil className="size-3.5" />
                       </div>
                     </div>

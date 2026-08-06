@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/select";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { FUENTES, PRIORIDADES, type Priority } from "@/lib/portal-tickets/tickets-data";
-import { ContactoPicker, type ContactoRef } from "./ContactoPicker";
+import { SolicitantesPicker } from "./SolicitantesPicker";
+import type { ContactoRef } from "@/lib/portal-tickets/tickets-data";
 import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
 import { PendingEvidenciaField } from "./TicketEvidencia";
@@ -47,7 +48,7 @@ export function CreateTicketDialog({
   const [prioridad, setPrioridad] = useState<Priority>("sin");
   const [fechaCreacion, setFechaCreacion] = useState(hoyLocal());
   const [categoriaId, setCategoriaId] = useState(categorias[0]?.id ?? "");
-  const [contacto, setContacto] = useState<ContactoRef | null>(null);
+  const [solicitantes, setSolicitantes] = useState<ContactoRef[]>([]);
   const [proyecto, setProyecto] = useState("");
   const [evidencia, setEvidencia] = useState<PendingAdjunto[]>([]);
   const [saving, setSaving] = useState(false);
@@ -87,7 +88,7 @@ export function CreateTicketDialog({
     setDescripcion("");
     setFechaCreacion(hoyLocal());
     setPrioridad("sin");
-    setContacto(null);
+    setSolicitantes([]);
     setProyecto("");
     setPropietarios([]);
     evidencia.forEach((p) => URL.revokeObjectURL(p.previewUrl));
@@ -108,8 +109,9 @@ export function CreateTicketDialog({
       prioridad,
       categoriaId,
       propietarios,
-      solicitante: contacto?.nombre ?? "",
-      entidadRelacionadaId: contacto?.id ?? null,
+      solicitante: solicitantes[0]?.nombre ?? "",
+      entidadRelacionadaId: solicitantes[0]?.id ?? null,
+      solicitantes,
       inmueble: proyecto,
       descripcion,
       fuente,
@@ -197,7 +199,7 @@ export function CreateTicketDialog({
           </div>
 
           <div data-tour="ct-solicitante">
-            <ContactoPicker value={contacto} onChange={setContacto} />
+            <SolicitantesPicker value={solicitantes} onChange={setSolicitantes} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
