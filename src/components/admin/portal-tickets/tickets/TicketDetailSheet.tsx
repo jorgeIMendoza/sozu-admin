@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Mic, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +25,7 @@ import { ContactoPicker } from "./ContactoPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
 import { EvidenciaSection } from "./TicketEvidencia";
+import { VoiceRecorderButton } from "./VoiceRecorder";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -39,6 +41,7 @@ export function TicketDetailSheet({
   const { etapas, categorias, agentes, actualizarTicket, moverEtapa, agregarNota } = useTickets();
   const { profile } = useAuth();
   const [nota, setNota] = useState("");
+  const [audioNota, setAudioNota] = useState<File | null>(null);
   const isSuperAdmin =
     (profile as any)?.rol_id === 1 || (profile as any)?.rol_nombre === "Super Administrador";
 
@@ -206,17 +209,35 @@ export function TicketDetailSheet({
                 placeholder="Escribe una nota de seguimiento..."
                 onChange={(e) => setNota(e.target.value)}
               />
-              <Button
-                size="sm"
-                disabled={!nota.trim()}
-                onClick={() => {
-                  agregarNota(ticket.id, nota.trim());
-                  setNota("");
-                  toast.success("Nota agregada al ticket");
-                }}
-              >
-                Guardar nota
-              </Button>
+              {audioNota && (
+                <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+                  <Mic className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Nota de voz lista para guardar</span>
+                  <button
+                    type="button"
+                    onClick={() => setAudioNota(null)}
+                    aria-label="Quitar audio"
+                    className="ml-auto text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={!nota.trim() && !audioNota}
+                  onClick={() => {
+                    agregarNota(ticket.id, nota.trim(), audioNota ?? undefined);
+                    setNota("");
+                    setAudioNota(null);
+                    toast.success("Nota agregada al ticket");
+                  }}
+                >
+                  Guardar nota
+                </Button>
+                <VoiceRecorderButton onRecorded={(f) => setAudioNota(f)} />
+              </div>
             </div>
           )}
 
@@ -231,6 +252,9 @@ export function TicketDetailSheet({
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm text-foreground">{a.texto}</p>
+                  {a.audioUrl && (
+                    <audio controls src={a.audioUrl} className="mt-1 h-8 w-full max-w-[260px]" />
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {a.autor} · {fechaLarga(a.fecha)}
                   </p>
