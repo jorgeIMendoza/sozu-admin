@@ -18,6 +18,23 @@ const PASOS: Paso[] = [
 
 const PAD = 8;
 const TIP_W = 300;
+const TIP_H = 160; // alto aproximado del globo (para centrar/limitar)
+
+// Coloca el globo AL LADO del objetivo (izq/der) cuando hay espacio, para no tapar el
+// elemento ni un posible dropdown; si no, abajo/arriba. Centrado si no hay objetivo.
+function posicionGlobo(rect: DOMRect | null): CSSProperties {
+  if (!rect) return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
+  const GAP = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const clampTop = (t: number) => Math.min(Math.max(t, 8), Math.max(8, vh - TIP_H - 8));
+  const clampLeft = (l: number) => Math.min(Math.max(l, 8), Math.max(8, vw - TIP_W - 8));
+  const centroV = clampTop(rect.top + rect.height / 2 - TIP_H / 2);
+  if (rect.left >= TIP_W + GAP) return { top: centroV, left: rect.left - GAP - TIP_W };
+  if (vw - rect.right >= TIP_W + GAP) return { top: centroV, left: rect.right + GAP };
+  if (vh - rect.bottom >= TIP_H + GAP) return { top: rect.bottom + GAP, left: clampLeft(rect.left) };
+  return { top: rect.top - GAP, left: clampLeft(rect.left), transform: "translateY(-100%)" };
+}
 
 export function TicketsTour({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [i, setI] = useState(0);
@@ -73,16 +90,7 @@ export function TicketsTour({ open, onClose }: { open: boolean; onClose: () => v
   const primero = i === 0;
   const ultimo = i === PASOS.length - 1;
 
-  let tipStyle: CSSProperties;
-  if (rect) {
-    const left = Math.min(Math.max(rect.left, 8), window.innerWidth - TIP_W - 8);
-    const abajoHay = window.innerHeight - rect.bottom > 180;
-    tipStyle = abajoHay
-      ? { top: rect.bottom + 12, left }
-      : { top: rect.top - 12, left, transform: "translateY(-100%)" };
-  } else {
-    tipStyle = { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
-  }
+  const tipStyle = posicionGlobo(rect);
 
   return createPortal(
     <div className="fixed inset-0 z-[100]">
