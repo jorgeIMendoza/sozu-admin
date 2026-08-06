@@ -77,7 +77,7 @@ export function toPendingAdjunto(file: File): PendingAdjunto | null {
 }
 
 // Sube un archivo al bucket y devuelve sus metadatos, o null (con toast) si falla.
-async function uploadTicketFile(
+export async function uploadTicketFile(
   idTicket: number | string,
   file: File,
 ): Promise<{ url: string; tipo: AdjuntoTipo; nombre: string; mime: string | null; tamano: number } | null> {

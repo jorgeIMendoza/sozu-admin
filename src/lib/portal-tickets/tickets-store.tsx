@@ -21,7 +21,7 @@ import type {
   Pipeline,
   Ticket,
 } from "./tickets-data";
-import { saveTicketAdjuntos, type PendingAdjunto } from "./tickets-adjuntos";
+import { saveTicketAdjuntos, uploadTicketFile, type PendingAdjunto } from "./tickets-adjuntos";
 
 // Las tablas tickets_* no están en los tipos generados de Supabase → cast puntual.
 const sb = supabase as any;
@@ -153,7 +153,7 @@ type Store = {
   actualizarTicket: (id: string, cambios: Partial<Ticket>, nota?: string) => void;
   moverEtapa: (id: string, etapaId: string) => void;
   eliminarTickets: (ids: string[]) => void;
-  agregarNota: (id: string, texto: string) => void;
+  agregarNota: (id: string, texto: string, audioFile?: File) => void;
   guardarPipeline: (p: Pipeline) => void;
   eliminarPipeline: (id: string) => void;
   guardarEtapa: (e: Etapa) => void;
@@ -257,7 +257,7 @@ async function fetchTickets(): Promise<Ticket[]> {
   const { data } = await sb
     .from("tickets")
     .select(
-      "id, numero, nombre, id_pipeline, id_etapa, prioridad, id_categoria, id_usuario_creador, id_entidad_relacionada, id_propiedad, solicitante, inmueble, descripcion, fuente, fecha_creacion, fecha_cierre, tickets_propietarios(id_usuario), tickets_actividad(id, texto, id_usuario_autor, fecha_creacion)",
+      "id, numero, nombre, id_pipeline, id_etapa, prioridad, id_categoria, id_usuario_creador, id_entidad_relacionada, id_propiedad, solicitante, inmueble, descripcion, fuente, fecha_creacion, fecha_cierre, tickets_propietarios(id_usuario), tickets_actividad(id, texto, id_usuario_autor, fecha_creacion, audio_url, audio_nombre, audio_mime)",
     )
     .eq("activo", true)
     .order("fecha_creacion", { ascending: false });
@@ -301,6 +301,7 @@ async function fetchTickets(): Promise<Ticket[]> {
         fecha: a.fecha_creacion,
         autor: a.id_usuario_autor ? nameMap[a.id_usuario_autor] ?? "Usuario" : "Sistema",
         texto: a.texto,
+        audioUrl: a.audio_url ?? null,
       }))
       .sort((x: any, y: any) => new Date(x.fecha).getTime() - new Date(y.fecha).getTime()),
   }));
@@ -331,12 +332,20 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
   );
 
   const registrarActividad = useCallback(
-    async (idTicket: string, texto: string, tipo = "sistema") => {
+    async (
+      idTicket: string,
+      texto: string,
+      tipo = "sistema",
+      audio?: { url: string; nombre: string | null; mime: string | null } | null,
+    ) => {
       await sb.from("tickets_actividad").insert({
         id_ticket: Number(idTicket),
         texto,
         tipo,
         id_usuario_autor: uid,
+        audio_url: audio?.url ?? null,
+        audio_nombre: audio?.nombre ?? null,
+        audio_mime: audio?.mime ?? null,
       });
     },
     [uid],
@@ -555,8 +564,13 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
   );
 
   const agregarNota = useCallback(
-    async (id: string, texto: string) => {
-      await registrarActividad(id, texto, "nota");
+    async (id: string, texto: string, audioFile?: File) => {
+      let audio: { url: string; nombre: string | null; mime: string | null } | undefined;
+      if (audioFile) {
+        const up = await uploadTicketFile(id, audioFile);
+        if (up) audio = { url: up.url, nombre: up.nombre, mime: up.mime };
+      }
+      await registrarActividad(id, texto || "Nota de voz", "nota", audio);
       invalidate("tickets-list");
     },
     [registrarActividad, invalidate],
