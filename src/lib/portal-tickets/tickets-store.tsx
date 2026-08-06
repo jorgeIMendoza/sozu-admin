@@ -39,7 +39,7 @@ export type CorreoTicketInfo = {
   por?: string | null; // quién asignó / cerró
 };
 
-type Destinatario = { email?: string | null; nombre?: string | null };
+type Destinatario = { email?: string | null; nombre?: string | null; telefono?: string | null };
 
 const escHtml = (s?: string | number | null) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -59,16 +59,24 @@ function detallesHtml(info: CorreoTicketInfo, porLabel: string): string {
   ].join("");
 }
 
-function enviarCorreoTicket(destinatarios: Destinatario[], asunto: string, detalles: string) {
+function enviarCorreoTicket(
+  destinatarios: Destinatario[],
+  asunto: string,
+  detalles: string,
+  mensajeWA: string,
+) {
   for (const dest of destinatarios) {
-    if (!dest?.email) continue;
+    if (!dest?.email && !dest?.telefono) continue;
     const modelo = { nombre: dest.nombre || "Equipo", actividad: asunto, detalles };
+    const conWA = !!dest.telefono;
     sb.functions
       .invoke("enviar-notificacion", {
         body: {
-          tipo: "email",
+          // "ambos" = correo + WhatsApp (Evolution vía n8n); sin teléfono, solo correo.
+          tipo: conWA ? "ambos" : "email",
           from: "Notificaciones Sozu <notificaciones@sozu.com>",
           email: dest.email,
+          ...(conWA ? { telefono: dest.telefono, mensajeWA } : {}),
           asunto,
           mensaje: modelo,
           templateId: 41353048,
@@ -76,21 +84,44 @@ function enviarCorreoTicket(destinatarios: Destinatario[], asunto: string, detal
         },
       })
       .catch(() => {
-        /* fire-and-forget: el correo no debe romper el flujo */
+        /* fire-and-forget: la notificación no debe romper el flujo */
       });
   }
 }
 
-// Correo "ticket asignado" a un usuario.
-export function enviarCorreoAsignacion(destinatarios: Destinatario[], info: CorreoTicketInfo) {
-  const asunto = `Se te asignó el ticket #${info.folio}: ${info.nombre}`;
-  enviarCorreoTicket(destinatarios, asunto, detallesHtml(info, "Asignado por"));
+// Cuerpo del mensaje de WhatsApp (texto plano; admite *negritas*).
+function textoWa(info: CorreoTicketInfo, encabezado: string, porLabel: string): string {
+  return [
+    `*${encabezado} #${info.folio}*`,
+    info.nombre || "",
+    info.pipeline ? `Pipeline: ${info.pipeline}` : "",
+    info.por ? `${porLabel}: ${info.por}` : "",
+    info.proyecto ? `Proyecto: ${info.proyecto}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-// Correo "ticket cerrado" a propietarios + creador (al llegar a una etapa final).
+// Correo (+ WhatsApp si el destinatario tiene teléfono) "ticket asignado" a un usuario.
+export function enviarCorreoAsignacion(destinatarios: Destinatario[], info: CorreoTicketInfo) {
+  const asunto = `Se te asignó el ticket #${info.folio}: ${info.nombre}`;
+  enviarCorreoTicket(
+    destinatarios,
+    asunto,
+    detallesHtml(info, "Asignado por"),
+    textoWa(info, "Se te asignó el ticket", "Asignado por"),
+  );
+}
+
+// Correo (+ WhatsApp si hay teléfono) "ticket cerrado" a propietarios + creador.
 export function enviarCorreoCierre(destinatarios: Destinatario[], info: CorreoTicketInfo) {
   const asunto = `Se cerró el ticket #${info.folio}: ${info.nombre}`;
-  enviarCorreoTicket(destinatarios, asunto, detallesHtml(info, "Cerrado por"));
+  enviarCorreoTicket(
+    destinatarios,
+    asunto,
+    detallesHtml(info, "Cerrado por"),
+    textoWa(info, "Se cerró el ticket", "Cerrado por"),
+  );
 }
 
 type NuevoTicket = {
@@ -199,10 +230,17 @@ export async function fetchAgentes(): Promise<Agente[]> {
   if (!rolIds.length) rolIds = [1]; // fallback: Super Admin
 
   const [{ data: us }, { data: roles }] = await Promise.all([
-    sb.from("usuarios").select("auth_user_id, nombre, email, rol_id").eq("activo", true).in("rol_id", rolIds),
+    sb.from("usuarios").select("auth_user_id, nombre, email, rol_id, telefono, clave_pais_telefono").eq("activo", true).in("rol_id", rolIds),
     sb.from("roles").select("id, nombre"),
   ]);
   const rolMap = new Map((roles ?? []).map((r: any) => [r.id, r.nombre]));
+  // Número para WhatsApp = clave de país + teléfono (solo dígitos); null si no hay teléfono.
+  const numeroWA = (u: any): string | null => {
+    const tel = String(u.telefono ?? "").replace(/\D/g, "");
+    if (!tel) return null;
+    const lada = String(u.clave_pais_telefono ?? "").replace(/\D/g, "");
+    return `${lada}${tel}`;
+  };
   return (us ?? [])
     .filter((u: any) => u.auth_user_id)
     .map((u: any) => ({
@@ -210,6 +248,7 @@ export async function fetchAgentes(): Promise<Agente[]> {
       nombre: u.nombre,
       email: u.email,
       rol: rolMap.get(u.rol_id) ?? "",
+      telefono: numeroWA(u),
     }))
     .sort((a: Agente, b: Agente) => (a.nombre ?? "").localeCompare(b.nombre ?? ""));
 }
