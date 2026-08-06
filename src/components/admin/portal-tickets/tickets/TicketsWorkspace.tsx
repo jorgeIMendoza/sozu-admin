@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Download, LayoutGrid, List, Plus, Search, Trash2 } from "lucide-react";
+import { Download, HelpCircle, LayoutGrid, List, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +16,7 @@ import { TicketsTable, type OrdenCampo } from "./TicketsTable";
 import { TicketsKanban } from "./TicketsKanban";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { CreateTicketDialog } from "./CreateTicketDialog";
+import { TutorialDialog } from "./TutorialDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -65,6 +66,7 @@ export function TicketsWorkspace({
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [crear, setCrear] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
 
   // Guardar los filtros cada vez que cambian.
   useEffect(() => {
@@ -86,6 +88,18 @@ export function TicketsWorkspace({
       setEtapaFiltro("todas");
     }
   }, [pipelines, pipelineId]);
+
+  // Auto-abrir el tutorial la 1ª vez (por dispositivo). Después, con el botón "Tutorial".
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("tickets:tutorial-visto")) {
+        setTutorial(true);
+        localStorage.setItem("tickets:tutorial-visto", "1");
+      }
+    } catch {
+      /* localStorage no disponible: ignorar */
+    }
+  }, []);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -206,9 +220,14 @@ export function TicketsWorkspace({
             {descripcion ?? `${filtrados.length} registros`}
           </p>
         </div>
-        <Button onClick={() => setCrear(true)}>
-          <Plus className="size-4" /> Crear ticket
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setTutorial(true)}>
+            <HelpCircle className="size-4" /> Tutorial
+          </Button>
+          <Button onClick={() => setCrear(true)}>
+            <Plus className="size-4" /> Crear ticket
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -442,6 +461,7 @@ export function TicketsWorkspace({
 
       <TicketDetailSheet ticket={detalle} onOpenChange={(o) => !o && setDetalleId(null)} />
       <CreateTicketDialog open={crear} onOpenChange={setCrear} />
+      <TutorialDialog open={tutorial} onOpenChange={setTutorial} />
     </div>
   );
 }
