@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Download, LayoutGrid, List, Plus, Search, Trash2 } from "lucide-react";
+import { Download, HelpCircle, LayoutGrid, List, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -16,6 +22,8 @@ import { TicketsTable, type OrdenCampo } from "./TicketsTable";
 import { TicketsKanban } from "./TicketsKanban";
 import { TicketDetailSheet } from "./TicketDetailSheet";
 import { CreateTicketDialog } from "./CreateTicketDialog";
+import { TicketsTour } from "./TicketsTour";
+import { TicketsCreateTour } from "./TicketsCreateTour";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -65,6 +73,8 @@ export function TicketsWorkspace({
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [crear, setCrear] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
+  const [createTour, setCreateTour] = useState(false);
 
   // Guardar los filtros cada vez que cambian.
   useEffect(() => {
@@ -86,6 +96,18 @@ export function TicketsWorkspace({
       setEtapaFiltro("todas");
     }
   }, [pipelines, pipelineId]);
+
+  // Auto-abrir el tutorial la 1ª vez (por dispositivo). Después, con el botón "Tutorial".
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("tickets:tutorial-visto")) {
+        setTutorial(true);
+        localStorage.setItem("tickets:tutorial-visto", "1");
+      }
+    } catch {
+      /* localStorage no disponible: ignorar */
+    }
+  }, []);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -206,9 +228,24 @@ export function TicketsWorkspace({
             {descripcion ?? `${filtrados.length} registros`}
           </p>
         </div>
-        <Button onClick={() => setCrear(true)}>
-          <Plus className="size-4" /> Crear ticket
-        </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button data-tour="tutorial" variant="outline">
+                <HelpCircle className="size-4" /> Tutorial
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTutorial(true)}>Recorrido rápido</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCreateTour(true)}>
+                Crear un ticket (guiado)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button data-tour="crear" onClick={() => setCrear(true)}>
+            <Plus className="size-4" /> Crear ticket
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -242,7 +279,7 @@ export function TicketsWorkspace({
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
-        <div className="flex overflow-hidden rounded-md border">
+        <div data-tour="vista" className="flex overflow-hidden rounded-md border">
           <button
             onClick={() => setVista("tabla")}
             aria-label="Vista de tabla"
@@ -278,7 +315,7 @@ export function TicketsWorkspace({
             if (v === "todos") setVista("tabla"); // el Kanban necesita un pipeline concreto
           }}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger data-tour="pipeline" className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -355,6 +392,7 @@ export function TicketsWorkspace({
         <div className="relative ml-auto min-w-[220px] flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            data-tour="buscar"
             value={busqueda}
             onChange={(e) => {
               setBusqueda(e.target.value);
@@ -442,6 +480,8 @@ export function TicketsWorkspace({
 
       <TicketDetailSheet ticket={detalle} onOpenChange={(o) => !o && setDetalleId(null)} />
       <CreateTicketDialog open={crear} onOpenChange={setCrear} />
+      <TicketsTour open={tutorial} onClose={() => setTutorial(false)} />
+      <TicketsCreateTour open={createTour} onClose={() => setCreateTour(false)} dialogOpen={crear} />
     </div>
   );
 }

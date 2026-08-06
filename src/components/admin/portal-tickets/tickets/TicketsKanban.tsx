@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Mail, Pencil, Phone } from "lucide-react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+import { ChevronLeft, ChevronRight, Mail, Pencil, Phone } from "lucide-react";
 import { antiguedad, fechaCorta, type Ticket } from "@/lib/portal-tickets/tickets-data";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { PriorityDot } from "./PriorityDot";
@@ -17,28 +17,80 @@ export function TicketsKanban({
   const { etapas, agentes, categorias, moverEtapa } = useTickets();
   const [arrastrando, setArrastrando] = useState<string | null>(null);
   const [sobre, setSobre] = useState<string | null>(null);
+  const [colapsadas, setColapsadas] = useState<Set<string>>(new Set());
 
   const columnas = etapas
     .filter((e) => e.pipelineId === pipelineId)
     .sort((a, b) => a.orden - b.orden);
 
+  // La 1ª vez que hay etapas + tickets de este pipeline, colapsar las etapas SIN tickets.
+  // (Se marca por pipeline; los toggles manuales del usuario ya no se sobrescriben.)
+  const iniciado = useRef<string | null>(null);
+  useEffect(() => {
+    if (!columnas.length || !tickets.length || iniciado.current === pipelineId) return;
+    iniciado.current = pipelineId;
+    setColapsadas(new Set(columnas.filter((e) => !tickets.some((t) => t.etapaId === e.id)).map((e) => e.id)));
+  }, [pipelineId, columnas, tickets]);
+
+  const toggle = (id: string) =>
+    setColapsadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Handlers de "soltar" compartidos: la columna abierta y la colapsada aceptan drops.
+  const dropHandlers = (etapaId: string) => ({
+    onDragOver: (e: DragEvent) => {
+      e.preventDefault();
+      setSobre(etapaId);
+    },
+    onDragLeave: () => setSobre((s) => (s === etapaId ? null : s)),
+    onDrop: () => {
+      if (arrastrando) moverEtapa(arrastrando, etapaId);
+      setArrastrando(null);
+      setSobre(null);
+    },
+  });
+
   return (
     <div className="flex gap-3 overflow-x-auto pb-4">
       {columnas.map((etapa) => {
         const items = tickets.filter((t) => t.etapaId === etapa.id);
+
+        // ── Columna COLAPSADA: pestaña vertical angosta (sigue aceptando drops) ──
+        if (colapsadas.has(etapa.id)) {
+          return (
+            <div
+              key={etapa.id}
+              {...dropHandlers(etapa.id)}
+              className={cn(
+                "flex w-11 shrink-0 self-stretch flex-col items-center rounded-lg border bg-muted/30 transition-colors",
+                sobre === etapa.id && "border-primary bg-accent/60",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => toggle(etapa.id)}
+                title={`Mostrar "${etapa.nombre}"`}
+                className="flex min-h-[240px] flex-1 cursor-pointer flex-col items-center gap-2 py-2 text-muted-foreground transition-opacity hover:opacity-80"
+              >
+                <ChevronRight className="size-4 shrink-0" />
+                <span className="text-xs font-semibold [writing-mode:vertical-lr]">{etapa.nombre}</span>
+                <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                  {items.length}
+                </span>
+              </button>
+            </div>
+          );
+        }
+
+        // ── Columna ABIERTA ──
         return (
           <div
             key={etapa.id}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setSobre(etapa.id);
-            }}
-            onDragLeave={() => setSobre((s) => (s === etapa.id ? null : s))}
-            onDrop={() => {
-              if (arrastrando) moverEtapa(arrastrando, etapa.id);
-              setArrastrando(null);
-              setSobre(null);
-            }}
+            {...dropHandlers(etapa.id)}
             className={cn(
               "flex w-[300px] shrink-0 flex-col rounded-lg border bg-muted/30 transition-colors",
               sobre === etapa.id && "border-primary bg-accent/60",
@@ -49,6 +101,15 @@ export function TicketsKanban({
               <span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">
                 {items.length}
               </span>
+              <button
+                type="button"
+                onClick={() => toggle(etapa.id)}
+                title="Contraer columna"
+                aria-label={`Contraer "${etapa.nombre}"`}
+                className="ml-auto text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
+              >
+                <ChevronLeft className="size-3.5" />
+              </button>
             </div>
 
             <div className="flex max-h-[calc(100vh-330px)] flex-col gap-2 overflow-y-auto p-2">
