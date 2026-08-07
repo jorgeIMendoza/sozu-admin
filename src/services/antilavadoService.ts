@@ -213,7 +213,20 @@ export const AntilavadoService = {
       });
 
       if (error) {
-        throw new Error(`Error from Edge Function: ${error.message}`);
+        // supabase-js no expone el body cuando la Edge Function responde non-2xx:
+        // el mensaje util (RFC invalido, portal caido) viaja en `context`, que es
+        // el Response crudo. Sin esto la UI solo veria "non-2xx status code".
+        const contexto = (error as any).context;
+        let detalle = error.message;
+        if (contexto && typeof contexto.json === 'function') {
+          try {
+            const body = await contexto.json();
+            detalle = body?.message || body?.error || detalle;
+          } catch {
+            // Respuesta sin JSON: se queda el mensaje generico.
+          }
+        }
+        throw new Error(detalle);
       }
 
       if (!data) {
