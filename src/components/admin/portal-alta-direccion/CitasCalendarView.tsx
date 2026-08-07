@@ -35,6 +35,8 @@ import {
   fmtHora,
   fmtCreacion,
   getEstadoDisplay,
+  nombreAsistente,
+  nombreAgente,
 } from "@/pages/admin/portal-alta-direccion/citas-utils";
 
 /** Punto de color por estado, para los chips del calendario. */
@@ -146,7 +148,7 @@ export default function CitasCalendarView({ citas }: { citas: CitaRow[] }) {
                       key={c.id}
                       type="button"
                       onClick={() => setSelected(c)}
-                      title={`${fmtHora(c.hora_inicio)} · ${c.prospecto?.nombre_legal || "Sin cliente"} · ${label}`}
+                      title={`${fmtHora(c.hora_inicio)} · ${nombreAsistente(c)} · ${label}`}
                       className={cn(
                         "group flex items-center gap-1 rounded px-1 py-0.5 text-left text-[10.5px] transition-colors hover:bg-muted",
                         estadoKey === "cancelada" && "opacity-60",
@@ -154,7 +156,7 @@ export default function CitasCalendarView({ citas }: { citas: CitaRow[] }) {
                     >
                       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", ESTADO_DOT[estadoKey])} />
                       <span className="tabular-nums text-muted-foreground shrink-0">{fmtHora(c.hora_inicio)}</span>
-                      <span className="truncate font-medium">{c.prospecto?.nombre_legal || "—"}</span>
+                      <span className="truncate font-medium">{nombreAsistente(c)}</span>
                     </button>
                   );
                 })}
@@ -200,6 +202,7 @@ function LegendItem({ dot, label }: { dot: string; label: string }) {
 function CitaDetalleDialog({ cita, onClose }: { cita: CitaRow | null; onClose: () => void }) {
   if (!cita) return null;
   const { label, tone } = getEstadoDisplay(cita);
+  const agente = nombreAgente(cita);
   const creada = fmtCreacion(cita.fecha_creacion);
   const fechaLegible = cita.fecha
     ? format(parseFechaLocal(cita.fecha), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
@@ -222,9 +225,9 @@ function CitaDetalleDialog({ cita, onClose }: { cita: CitaRow | null; onClose: (
         <div className="space-y-3 text-sm">
           <DetalleRow icon={Clock} label="Horario" value={horario} />
           <DetalleRow icon={Hash} label="Tipo" value={cita.tipos_cita?.nombre || "—"} />
-          <DetalleRow icon={User} label="Cliente / Prospecto" value={cita.prospecto?.nombre_legal || "—"} />
+          <DetalleRow icon={User} label="Cliente / Asistente" value={nombreAsistente(cita)} />
           <DetalleRow icon={Building2} label="Desarrollo" value={cita.proyectos?.nombre || "—"} />
-          <DetalleRow icon={UserCircle} label="Agente" value={cita.agente?.nombre_legal || "—"} />
+          <DetalleRow icon={UserCircle} label="Agente" value={agente.value} muted={agente.noAplica} />
           <DetalleRow
             icon={CalendarDays}
             label="Creada"
@@ -240,17 +243,20 @@ function DetalleRow({
   icon: Icon,
   label,
   value,
+  muted = false,
 }: {
   icon: typeof Clock;
   label: string;
   value: string;
+  /** true = valor "por diseño" (p. ej. "No aplica"): se muestra atenuado e itálico. */
+  muted?: boolean;
 }) {
   return (
     <div className="flex items-start gap-3">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
         <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className="font-medium break-words">{value}</p>
+        <p className={cn("font-medium break-words", muted && "italic text-muted-foreground")}>{value}</p>
       </div>
     </div>
   );
