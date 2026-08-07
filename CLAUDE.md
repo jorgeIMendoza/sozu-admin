@@ -289,8 +289,29 @@ cuentas_cobranza (precio_final, clabe_stp, valor_uma, fecha_compra)
 **`tipos_documento`:**
 `6`=Constancia fiscal · `18`=Contrato firmado · `21`=Factura XML · `22`=Factura PDF · `24`=Acta de entrega · `44`=Archivo SAT · `48`=Carta comercialización
 
-**`roles` (usuarios.rol_id):**
-`1`=Super Admin · `2`=Admin Cobranza · `3`=Agente Interno · `4`=Inmobiliaria · `23`=Cliente
+**`roles` (usuarios.rol_id)** — verificado contra **prod** (`tzmhgfjmddkfyffkkmto`) el 2026-07-31.
+Fuente de la verdad = la BD de producción, no este documento. Entre paréntesis, usuarios activos:
+
+`1`=Super Administrador (8) · `2`=Administrador de Proyecto (2) · `3`=**Agente Inmobiliario** (326) ·
+`4`=Inmobiliaria (829) · `6`=Notario (10) · `7`=Administrador de finanzas/legal (12) ·
+`8`=Solo Lectura (1) · `9`=**Agente Interno** (1) · `10`=Administrador de data (1) ·
+`12`=**Administrador de cobranza** (3) · `14`=Representante de empresa dueña (1) ·
+`17`=Gerente general (1) · `18`=Admin Legal (2) · `19`=Directores (1) ·
+`21`=Administrador de finanzas/contabilidad (1) · `22`=Administracion de pagos interna (1) ·
+`23`=Cliente (622) · `24`=Operacion de Mantenimiento (4) · `25`=Embajador (5) ·
+`30`=Admin Soporte (2) · `31`=Supervisor agentes externos (1) · `32`=Supervisor Banco (2) ·
+`34`=Admin de clientes (1) · `37`=Supervisor Condominio (1)
+
+Sin usuarios activos hoy (existen en el catálogo): `5`=Vendedor · `11`=Documentador Escrituras ·
+`13`=Supervisor de ventas · `15`=Desarrollador · `16`=Gestion Mantenimiento · `26`=Jurídico ·
+`28`=Banco · `29`=Admin de escrituracion · `33`=Operador Banco · `35`=Usuario CRM ·
+`36`=Socio Bancario · `38`=Operador Condomino · `39`=Soporte tickets.
+Inactivo: `27`=Administrador Legal.
+
+> **Ojo:** hasta 2026-07-31 este documento decía `3`=Agente Interno y `2`=Admin Cobranza. Es
+> falso: el 3 son los **326 agentes inmobiliarios externos**, el Agente Interno es el `9` y
+> Cobranza es el `12`. Dar un permiso al `3` creyendo que es interno lo abre a todos los
+> externos. Confirmar siempre con `SELECT id, nombre FROM roles WHERE activo = true`.
 
 ---
 
@@ -527,8 +548,12 @@ menus (id IDENTITY ALWAYS, nombre, orden=100, activo)
 **Catálogo `permisos` (permiso_id):**
 `1`=leer · `2`=crear · `3`=actualizar · `4`=eliminar · `5`=aprobar · `6`=exportar · `8`=generar_oferta
 
-**Roles (rol_id):** `1`=Super Admin · `2`=Admin Cobranza · `3`=Agente Interno · `4`=Inmobiliaria · `23`=Cliente
-(consultar `SELECT id, nombre FROM roles WHERE activo=true` para roles nuevos como "Admin Condominio").
+**Roles (rol_id)** — los más usados, verificados en **prod** el 2026-07-31:
+`1`=Super Administrador · `2`=Administrador de Proyecto · `3`=**Agente Inmobiliario** (externos, 326) ·
+`4`=Inmobiliaria (829) · `9`=**Agente Interno** (1) · `12`=**Administrador de cobranza** (3) · `23`=Cliente (622).
+Lista completa en la sección "IDs fijos importantes". Antes de escribir un `rol_id` a mano,
+confirmar con `SELECT id, nombre FROM roles WHERE activo = true`: el `3` **no** es el agente
+interno, y dárselo por error abre el submenú a los 326 agentes externos.
 
 ### Plantilla de INSERT (respeta IDENTITY ALWAYS — id se autogenera)
 
