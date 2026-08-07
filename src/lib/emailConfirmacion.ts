@@ -41,3 +41,22 @@ export function vieneDeFlujoConfirmacion(email: string | null | undefined): bool
     return false;
   }
 }
+
+/**
+ * Marcador en la URL de que se llegó a `/auth/change-password` desde el enlace
+ * de un correo (alta de cuenta o "olvidé mi contraseña").
+ *
+ * Cumple el mismo papel que la señal de arriba, pero sobrevive donde aquella no:
+ * `sessionStorage` es por pestaña y por origen, así que se pierde cuando el
+ * enlace abre en el navegador embebido del correo, en una pestaña nueva, o tras
+ * un salto de host. Cuando se perdía, `/auth/change-password` veía una sesión
+ * normal con `debe_cambiar_password = false` y mandaba al usuario al portal —
+ * dentro de su cuenta, sin haber definido contraseña.
+ */
+export const MOTIVO_PARAM = 'motivo';
+export const MOTIVO_ENLACE_CORREO = 'enlace-correo';
+
+/** True si la query string trae el marcador de llegada por enlace de correo. */
+export function llegoPorEnlaceDeCorreo(search: string): boolean {
+  return new URLSearchParams(search).get(MOTIVO_PARAM) === MOTIVO_ENLACE_CORREO;
+}

@@ -5,7 +5,12 @@ import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_PUBLISHABLE_KEY } from '@/lib/config';
 import { getPortalHost, type PortalKey } from '@/lib/portalUrls';
-import { claveConfirmacionLocal, marcarConfirmacionLocal } from '@/lib/emailConfirmacion';
+import {
+  claveConfirmacionLocal,
+  marcarConfirmacionLocal,
+  MOTIVO_ENLACE_CORREO,
+  MOTIVO_PARAM,
+} from '@/lib/emailConfirmacion';
 import { useReenviarConfirmacion } from '@/components/auth/useReenviarConfirmacion';
 import { useEnlaceCambioPassword } from '@/components/auth/useEnlaceCambioPassword';
 
@@ -31,8 +36,30 @@ const portalHostFor = (portal: string | null) => getPortalHost(resolvePortalKey(
 
 const getPortalUrl = (portal: string | null, destination: string | null) => {
   const host = portalHostFor(portal);
-  const path = destination === 'login' ? '/auth/login' : '/auth/change-password';
-  return `${host}${path}`;
+  if (destination === 'login') return `${host}/auth/login`;
+  // El marcador viaja en la URL, no en sessionStorage: /auth/change-password
+  // expulsa al portal a quien ya tiene `debe_cambiar_password = false`, y quien
+  // llega por "olvidé mi contraseña" siempre lo tiene en false (el modo público
+  // de reset-user-password no toca la cuenta). La marca local que se usaba para
+  // exceptuarlo se pierde en cuanto el enlace abre en otra pestaña o en el
+  // navegador embebido del correo, y entonces el enlace dejaba al usuario dentro
+  // del portal sin haber definido contraseña. La query sobrevive a los dos casos.
+  return `${host}/auth/change-password?${MOTIVO_PARAM}=${MOTIVO_ENLACE_CORREO}`;
+};
+
+// Los dos hooks de envío (`useEnlaceCambioPassword`, `useReenviarConfirmacion`)
+// comparten estos estados. `limitado` no es un fallo: el correo no salió porque
+// ya se pidieron varios seguidos, y el enlace bueno sigue en la bandeja del
+// usuario — por eso se pinta en ámbar y, como reintentar tampoco enviaría nada,
+// retira el botón igual que un envío exitoso.
+type EstadoEnvio = 'idle' | 'enviando' | 'enviado' | 'limitado' | 'error';
+
+const enlaceResuelto = (estado: EstadoEnvio) => estado === 'enviado' || estado === 'limitado';
+
+const estiloMensajeEnlace = (estado: EstadoEnvio) => {
+  if (estado === 'error') return { background: 'hsl(0 70% 97%)', color: 'hsl(0 70% 40%)' };
+  if (estado === 'limitado') return { background: 'hsl(38 92% 95%)', color: 'hsl(38 60% 25%)' };
+  return { background: 'hsl(145 35% 96%)', color: 'hsl(145 35% 30%)' };
 };
 
 // El token de confirmación es de un solo uso: si se arrastra en un redirect, el
@@ -388,17 +415,13 @@ export default function ConfirmacionEmail() {
                 {enlacePasswordMsg && (
                   <p
                     className="text-sm mb-5 px-4 py-3 rounded-xl"
-                    style={
-                      enlacePassword === 'error'
-                        ? { background: 'hsl(0 70% 97%)', color: 'hsl(0 70% 40%)' }
-                        : { background: 'hsl(145 35% 96%)', color: 'hsl(145 35% 30%)' }
-                    }
+                    style={estiloMensajeEnlace(enlacePassword)}
                   >
                     {enlacePasswordMsg}
                   </p>
                 )}
 
-                {enlacePassword !== 'enviado' && (
+                {!enlaceResuelto(enlacePassword) && (
                   <button
                     type="button"
                     onClick={solicitarEnlacePassword}
@@ -479,19 +502,14 @@ export default function ConfirmacionEmail() {
             {(vaACambiarPassword ? enlacePasswordMsg : reenvioMsg) && (
               <p
                 className="text-sm mb-5 px-4 py-3 rounded-xl"
-                style={
-                  (vaACambiarPassword ? enlacePassword : reenvio) === 'error'
-                    ? { background: 'hsl(0 70% 97%)', color: 'hsl(0 70% 40%)' }
-                    : { background: 'hsl(145 35% 96%)', color: 'hsl(145 35% 30%)' }
-                }
+                style={estiloMensajeEnlace(vaACambiarPassword ? enlacePassword : reenvio)}
               >
                 {vaACambiarPassword ? enlacePasswordMsg : reenvioMsg}
               </p>
             )}
 
             {/* CTA */}
-            {puedeReenviar &&
-              (vaACambiarPassword ? enlacePassword !== 'enviado' : reenvio !== 'enviado') && (
+            {puedeReenviar && !enlaceResuelto(vaACambiarPassword ? enlacePassword : reenvio) && (
                 <button
                   type="button"
                   onClick={vaACambiarPassword ? solicitarEnlacePassword : reenviarConfirmacion}
@@ -512,14 +530,12 @@ export default function ConfirmacionEmail() {
             <a
               href={loginUrl}
               className={
-                puedeReenviar &&
-                (vaACambiarPassword ? enlacePassword !== 'enviado' : reenvio !== 'enviado')
+                puedeReenviar && !enlaceResuelto(vaACambiarPassword ? enlacePassword : reenvio)
                   ? 'text-sm font-semibold no-underline hover:underline'
                   : 'login-btn-primary flex items-center justify-center gap-2 no-underline'
               }
               style={
-                puedeReenviar &&
-                (vaACambiarPassword ? enlacePassword !== 'enviado' : reenvio !== 'enviado')
+                puedeReenviar && !enlaceResuelto(vaACambiarPassword ? enlacePassword : reenvio)
                   ? { color: 'hsl(0 0% 35%)' }
                   : undefined
               }
