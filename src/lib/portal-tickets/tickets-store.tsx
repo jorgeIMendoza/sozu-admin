@@ -45,7 +45,7 @@ type Destinatario = { email?: string | null; nombre?: string | null; telefono?: 
 const escHtml = (s?: string | number | null) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// Tabla del cuerpo del correo: Ticket, Nombre, Pipeline, (Asignado/Cerrado) por, Proyecto, Descripción.
+// Tabla del cuerpo del correo: Ticket, Nombre, Pipeline, (Asignado/Resuelto) por, Proyecto, Descripción.
 function detallesHtml(info: CorreoTicketInfo, porLabel: string): string {
   const row = (label: string, val: string) =>
     `<tr><td style="padding:6px 12px;color:#6b7280;white-space:nowrap;vertical-align:top;">${label}</td>` +
@@ -63,12 +63,15 @@ function detallesHtml(info: CorreoTicketInfo, porLabel: string): string {
 function enviarCorreoTicket(
   destinatarios: Destinatario[],
   asunto: string,
+  actividad: string,
   detalles: string,
   mensajeWA: string,
 ) {
   for (const dest of destinatarios) {
     if (!dest?.email && !dest?.telefono) continue;
-    const modelo = { nombre: dest.nombre || "Equipo", actividad: asunto, detalles };
+    // El template dice "Hola {nombre}, se ha realizado la {actividad}." → actividad = frase nominal
+    // (ej. "resolución del ticket #1006: …"), NO una oración completa.
+    const modelo = { nombre: dest.nombre || "Equipo", actividad, detalles };
     const conWA = !!dest.telefono;
     sb.functions
       .invoke("enviar-notificacion", {
@@ -105,23 +108,25 @@ function textoWa(info: CorreoTicketInfo, encabezado: string, porLabel: string): 
 
 // Correo (+ WhatsApp si el destinatario tiene teléfono) "ticket asignado" a un usuario.
 export function enviarCorreoAsignacion(destinatarios: Destinatario[], info: CorreoTicketInfo) {
-  const asunto = `Se te asignó el ticket #${info.folio}: ${info.nombre}`;
+  const asunto = `Ticket #${info.folio} asignado: ${info.nombre}`;
   enviarCorreoTicket(
     destinatarios,
     asunto,
+    `asignación del ticket #${info.folio}: ${info.nombre}`,
     detallesHtml(info, "Asignado por"),
-    textoWa(info, "Se te asignó el ticket", "Asignado por"),
+    textoWa(info, "Ticket asignado", "Asignado por"),
   );
 }
 
 // Correo (+ WhatsApp si hay teléfono) "ticket cerrado" a propietarios + creador.
 export function enviarCorreoCierre(destinatarios: Destinatario[], info: CorreoTicketInfo) {
-  const asunto = `Se cerró el ticket #${info.folio}: ${info.nombre}`;
+  const asunto = `Ticket #${info.folio} resuelto: ${info.nombre}`;
   enviarCorreoTicket(
     destinatarios,
     asunto,
-    detallesHtml(info, "Cerrado por"),
-    textoWa(info, "Se cerró el ticket", "Cerrado por"),
+    `resolución del ticket #${info.folio}: ${info.nombre}`,
+    detallesHtml(info, "Resuelto por"),
+    textoWa(info, "Ticket resuelto", "Resuelto por"),
   );
 }
 
@@ -236,11 +241,18 @@ export async function fetchAgentes(): Promise<Agente[]> {
     sb.from("roles").select("id, nombre"),
   ]);
   const rolMap = new Map((roles ?? []).map((r: any) => [r.id, r.nombre]));
-  // Número para WhatsApp = clave de país + teléfono (solo dígitos); null si no hay teléfono.
+  // Número para WhatsApp = lada de país + teléfono (solo dígitos). `clave_pais_telefono` puede
+  // venir como número ("+52"/"52") o como ISO ("MX"); si es ISO se mapea a lada (default México=52).
+  // Sin esto, "MX" perdía la lada al quitar los no-dígitos y el WhatsApp no se entregaba.
+  const LADA_POR_ISO: Record<string, string> = {
+    MX: "52", US: "1", CA: "1", ES: "34", CO: "57", AR: "54", PE: "51", CL: "56", GT: "502",
+  };
   const numeroWA = (u: any): string | null => {
     const tel = String(u.telefono ?? "").replace(/\D/g, "");
     if (!tel) return null;
-    const lada = String(u.clave_pais_telefono ?? "").replace(/\D/g, "");
+    const claveRaw = String(u.clave_pais_telefono ?? "").trim().toUpperCase();
+    let lada = claveRaw.replace(/\D/g, ""); // "+52" → "52"
+    if (!lada) lada = LADA_POR_ISO[claveRaw] ?? "52"; // "MX" → "52"; default México
     return `${lada}${tel}`;
   };
   return (us ?? [])
