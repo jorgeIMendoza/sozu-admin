@@ -10,8 +10,10 @@ import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Loader2, Lock, Mail, Search, EyeOff, Plus, ExternalLink, HelpCircle, MessageSquareWarning } from "lucide-react";
+import {
+  Loader2, Lock, Mail, Search, EyeOff, Plus, ExternalLink, HelpCircle, MessageSquareWarning,
+  Eye, LayoutGrid, Rows3, LayoutList, Share2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ActionButton } from "@/components/ui/action-button";
 import { toast } from "@/hooks/use-toast";
@@ -24,6 +26,13 @@ import { PipelineOfferDetailDialog } from "@/components/admin/agent-portal/Pipel
 import { OfertaNoAvanceDialog } from "@/components/admin/agent-portal/OfertaNoAvanceDialog";
 import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
 import { fetchNoAvancePorOferta } from "@/hooks/useMotivosNoAvance";
+import { IconTip } from "@/components/ui/icon-tip";
+import { IconButton } from "@/components/ui/icon-button";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
+import {
+  ETAPAS, agruparOfertasPorUnidad, etapaDeOferta, fetchEtapasCanonicas, setNegocioEtapa,
+  type EtapaClave, type EtapaDef,
+} from "@/lib/portal-agente/negocios";
 
 const STAGES = [
   { key: 'all', label: 'Todas', color: 'bg-gray-100 text-gray-800', borderColor: 'border-gray-400' },
@@ -80,6 +89,11 @@ const AgentPipeline = () => {
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { hasTrainingComplete, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId);
   const [activeStage, setActiveStage] = useState<string>('all');
+  // tabla = estándar de cobranza · tarjetas = la vista original · tablero = kanban por etapa
+  const [vista, setVista] = useState<'tabla' | 'tarjetas' | 'tablero'>('tabla');
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dropEtapa, setDropEtapa] = useState<EtapaClave | null>(null);
+  const [overrideEtapa, setOverrideEtapa] = useState<Record<number, EtapaClave>>({});
   const [searchProspecto, setSearchProspecto] = useState<string>('');
   const [selectedOferta, setSelectedOferta] = useState<any>(null);
   const [shareOferta, setShareOferta] = useState<any>(null);
@@ -128,6 +142,16 @@ const AgentPipeline = () => {
       setDescargandoPdf(false);
     }
   };
+
+  // Etapas canónicas desde la BD (pipeline `ventas_sozu`). Respaldo: el arreglo del front
+  // mientras la migración 03 no esté aplicada.
+  const { data: etapas = ETAPAS } = useQuery({
+    queryKey: ['etapas-canonicas'],
+    queryFn: fetchEtapasCanonicas,
+    staleTime: 5 * 60_000,
+  });
+  const etapaDefDb = (clave: EtapaClave): EtapaDef =>
+    etapas.find((e) => e.clave === clave) ?? ETAPAS.find((e) => e.clave === clave) ?? ETAPAS[0];
 
   const { data: ofertas = [], isLoading } = useQuery({
     queryKey: ['agent-pipeline', agentEmail],
@@ -289,6 +313,10 @@ const AgentPipeline = () => {
           no_avance: noAvanceMap.get(o.id) || null,
         };
         enriched.stage = classifyOffer(enriched);
+        // Etapa canónica del pipeline `ventas_sozu`, derivada de los mismos hechos que usarán
+        // los triggers del archivo 05. Convive con `stage` (la clasificación histórica que
+        // alimenta los filtros y el aviso de expiradas sin razón).
+        enriched.etapa = etapaDeOferta(enriched);
         return enriched;
       });
     },
@@ -296,41 +324,94 @@ const AgentPipeline = () => {
     staleTime: 30_000,
   });
 
-  const grouped = useMemo(() => {
-    const map: Record<string, any[]> = {};
-    ofertas.forEach((o: any) => {
-      if (!map[o.stage]) map[o.stage] = [];
-      map[o.stage].push(o);
-    });
-    return map;
-  }, [ofertas]);
-
-  const nonExpiredOfertas = useMemo(() => ofertas.filter((o: any) => o.stage !== 'expiradas'), [ofertas]);
-
-  // Expiradas a las que todavía nadie les capturó la razón de no avance.
-  const expiradasSinRazon = useMemo(
-    () => (grouped['expiradas'] || []).filter((o: any) => !o.no_avance),
-    [grouped],
+  // Un negocio por UNIDAD: en prod hay hasta 19 ofertas activas sobre la misma unidad
+  // (recotizaciones). Se colapsan conservando la etapa más avanzada y el conteo de versiones.
+  const negocios = useMemo(
+    () => agruparOfertasPorUnidad((ofertas as any[]).map((o) => ({ ...o, stage: o.etapa })))
+      .map((n: any) => (overrideEtapa[n.id] ? { ...n, stage: overrideEtapa[n.id] } : n)),
+    [ofertas, overrideEtapa],
   );
 
-  const displayOfertas = useMemo(() => {
-    let result = activeStage === 'all' ? ofertas : (grouped[activeStage] || []);
-    if (searchProspecto.trim()) {
-      const q = searchProspecto.trim().toLowerCase();
-      result = result.filter((o: any) => (o.lead_nombre || "").toLowerCase().includes(q));
-    }
-    return result;
-  }, [nonExpiredOfertas, grouped, activeStage, searchProspecto]);
+  const porEtapa = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    negocios.forEach((n: any) => { (map[n.stage] ||= []).push(n); });
+    return map;
+  }, [negocios]);
 
-  const totalMonto = useMemo(() => {
-    return nonExpiredOfertas.reduce((sum: number, o: any) => sum + (o.precio || 0), 0);
-  }, [nonExpiredOfertas]);
+  // Filtro por etapa canónica: se aplica igual a tabla, tarjetas y tablero, y los conteos
+  // salen de los NEGOCIOS (una unidad = un negocio), no de las ofertas sueltas. Antes el chip
+  // decía "Todas (19)" contando ofertas mientras la tabla mostraba 4 unidades.
+  const negociosVisibles = useMemo(() => {
+    const q = searchProspecto.trim().toLowerCase();
+    return negocios.filter((n: any) =>
+      (activeStage === 'all' || n.stage === activeStage) &&
+      (!q || (n.lead_nombre || '').toLowerCase().includes(q)));
+  }, [negocios, searchProspecto, activeStage]);
+
+  const opcionesEtapa: SearchableOption[] = useMemo(() => {
+    const conteo = (clave: string) => negocios.filter((n: any) => n.stage === clave).length;
+    return [
+      { value: 'all', label: `Todas las etapas (${negocios.length})` },
+      ...etapas
+        .map((e) => ({ etapa: e, n: conteo(e.clave) }))
+        .filter(({ n }) => n > 0)
+        .map(({ etapa, n }) => ({
+          value: etapa.clave,
+          label: `${etapa.label} (${n})`,
+          hint: etapa.automatica ? 'La mueve el sistema' : 'La mueves tú',
+        })),
+    ];
+  }, [negocios, etapas]);
+
+  // Solo se arrastra hacia etapas manuales: las automáticas las dispara un hecho real.
+  const moverEtapa = async (negocio: any, destino: EtapaClave) => {
+    const def = etapaDefDb(destino);
+    if (def.automatica) {
+      toast({
+        title: `"${def.label}" la mueve el sistema`,
+        description: 'Se activa con un hecho real: la oferta, el apartado aplicado o el estatus de la propiedad.',
+      });
+      return;
+    }
+    if (negocio.stage === destino) return;
+
+    const previo = negocio.stage as EtapaClave;
+    setOverrideEtapa((prev) => ({ ...prev, [negocio.id]: destino }));
+    try {
+      if (!negocio.id_negocio) {
+        throw new Error('Este negocio todavía no existe en crm_negocios: faltan las migraciones 02, 03 y 05.');
+      }
+      await setNegocioEtapa(negocio.id_negocio, destino);
+      track({ page: 'agent_pipeline', elementId: 'mover_etapa', metadata: { negocio: negocio.id_negocio, etapa: destino } });
+      toast({ title: `Movido a ${def.label}` });
+    } catch (e: any) {
+      setOverrideEtapa((prev) => ({ ...prev, [negocio.id]: previo }));
+      toast({ title: 'No se pudo mover la etapa', description: e?.message, variant: 'destructive' });
+    }
+  };
+
+  // Negocios cerrados como perdidos a los que todavía nadie les capturó la razón.
+  // Se cuenta por NEGOCIO (unidad), igual que la tabla, para que el aviso y el filtro cuadren.
+  const expiradasSinRazon = useMemo(
+    () => negocios.filter((n: any) => n.stage === 'perdido' && !n.no_avance),
+    [negocios],
+  );
+
+  // Monto de lo que sigue vivo: negocios que no están perdidos.
+  const totalMonto = useMemo(
+    () => negocios.filter((n: any) => n.stage !== 'perdido')
+      .reduce((sum: number, n: any) => sum + (n.precio || 0), 0),
+    [negocios],
+  );
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(v);
 
-  const getStageInfo = (stage: string) => {
-    return STAGES.find(s => s.key === stage) || STAGES[0];
+  // El detalle recibe la etapa CANÓNICA (la que ve el agente en la tabla/tarjeta). La
+  // clasificación legacy (`classifyOffer`) se conserva para el aviso de expiradas.
+  const getStageInfo = (clave: string) => {
+    const def = etapaDefDb(clave as EtapaClave);
+    return { key: def.clave, label: def.label, color: def.chip, borderColor: 'border-border' };
   };
 
   return (
@@ -341,10 +422,30 @@ const AgentPipeline = () => {
       <div className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-between gap-3 pt-1 pb-3">
         {!isLoading ? (
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-            {nonExpiredOfertas.length} ofertas · {mask(formatCurrency(totalMonto))} · últimos 30 días
+            {negocios.length} {negocios.length === 1 ? 'negocio' : 'negocios'} · {ofertas.length} ofertas · {mask(formatCurrency(totalMonto))} abiertos · últimos 30 días
           </p>
         ) : <span />}
-        {pipelinePerms.canCreate && (
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
+            {([
+              { v: 'tabla' as const,    icon: Rows3,      label: 'Vista de tabla' },
+              { v: 'tarjetas' as const, icon: LayoutList, label: 'Vista de tarjetas' },
+              { v: 'tablero' as const,  icon: LayoutGrid, label: 'Vista de tablero por etapa' },
+            ]).map(({ v, icon: Icono, label }) => (
+              <IconTip key={v} label={label}>
+                <button
+                  onClick={() => setVista(v)}
+                  aria-label={label}
+                  className={cn('rounded-md p-1.5 transition-colors',
+                    vista === v ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                >
+                  <Icono className="size-4" />
+                </button>
+              </IconTip>
+            ))}
+          </div>
+
+          {pipelinePerms.canCreate && (
           isAgentRole && !onboardingLoading && !hasTrainingComplete ? (
             <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground/70">
               <Lock className="h-3.5 w-3.5" /> Completa tu capacitación
@@ -360,12 +461,14 @@ const AgentPipeline = () => {
               Nueva oferta
             </ActionButton>
           )
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Búsqueda (izquierda) + filtros de etapa (derecha) en una fila */}
-      <div className="mx-auto flex max-w-[1040px] items-center gap-3 pb-3">
-        <div className="relative flex w-full max-w-[240px] shrink-0 items-center">
+      {/* Búsqueda + filtro de etapa. El filtro es una lista: con 10 etapas los chips
+          desbordaban y el texto quedaba ilegible. */}
+      <div className="mx-auto flex max-w-[1040px] flex-wrap items-center gap-2 pb-3">
+        <div className="relative flex min-w-[200px] flex-1 items-center">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground/70" />
           <Input
             placeholder="Buscar prospecto…"
@@ -374,33 +477,17 @@ const AgentPipeline = () => {
             className="h-10 rounded-md border-border bg-card pl-9 text-sm shadow-none focus-visible:ring-primary/30"
           />
         </div>
-        <ScrollArea className="min-w-0 flex-1">
-          <div className="flex w-max gap-1 rounded-lg bg-muted p-1">
-            {STAGES.map(stage => {
-              const count = stage.key === 'all' ? ofertas.length : (grouped[stage.key]?.length || 0);
-              const isActive = activeStage === stage.key;
-              if (stage.key !== 'all' && count === 0) return null;
-              return (
-                <button
-                  key={stage.key}
-                  onClick={() => {
-                    track({ page: 'agent_pipeline', elementId: 'btn_filtro_etapa', elementLabel: stage.label, metadata: { etapa: stage.key } });
-                    setActiveStage(stage.key);
-                  }}
-                  className={cn(
-                    "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors tabular-nums",
-                    isActive
-                      ? "bg-card text-primary shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {stage.label} {count > 0 && `(${count})`}
-                </button>
-              );
-            })}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+        <div className="w-[240px] shrink-0">
+          <SearchableSelect
+            value={activeStage}
+            onValueChange={(v) => {
+              track({ page: 'agent_pipeline', elementId: 'filtro_etapa', elementLabel: v });
+              setActiveStage(v);
+            }}
+            options={opcionesEtapa}
+            placeholder="Todas las etapas"
+          />
+        </div>
       </div>
 
       {/* Banner modo presentación */}
@@ -422,55 +509,272 @@ const AgentPipeline = () => {
             <MessageSquareWarning className="h-4 w-4 shrink-0 text-amber-700" />
             <span className="text-xs font-semibold text-amber-800">
               {expiradasSinRazon.length === 1
-                ? '1 oferta expirada sin razón registrada.'
-                : `${expiradasSinRazon.length} ofertas expiradas sin razón registrada.`}
+                ? '1 negocio cerrado sin razón registrada.'
+                : `${expiradasSinRazon.length} negocios cerrados sin razón registrada.`}
               {' '}Cuéntanos por qué no avanzaron para mejorar precio, esquemas y producto.
             </span>
-            {activeStage !== 'expiradas' && (
+            {activeStage !== 'perdido' && (
               <button
                 onClick={() => {
-                  track({ page: 'agent_pipeline', elementId: 'btn_ver_expiradas_sin_razon', elementLabel: 'Ver expiradas' });
-                  setActiveStage('expiradas');
+                  track({ page: 'agent_pipeline', elementId: 'btn_ver_expiradas_sin_razon', elementLabel: 'Ver perdidos' });
+                  setActiveStage('perdido');
                 }}
                 className="ml-auto shrink-0 rounded-md border border-amber-400 bg-card px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
               >
-                Ver expiradas
+                Ver cerrados
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* Offer Cards */}
+      {/* Negocios: un renglón por unidad. Tabla estándar, tarjetas o tablero por etapa. */}
       <div className="mx-auto max-w-[1040px] space-y-2.5">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
           </div>
-        ) : displayOfertas.length === 0 ? (
-          <div className="text-center py-12 text-sm text-muted-foreground">
-            No hay ofertas en esta etapa
+        ) : vista === 'tabla' ? (
+          negociosVisibles.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-card py-12 text-center text-sm text-muted-foreground">
+              No hay negocios que mostrar
+            </div>
+          ) : (
+          <div className="rounded-xl border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1118px] table-fixed text-sm whitespace-nowrap">
+                <thead className="sozu-thead [&_th]:uppercase [&_th]:tracking-wide [&_th]:px-3">
+                  <tr>
+                    <th className="w-[206px] text-left">Desarrollo · Unidad</th>
+                    <th className="w-[120px] text-center">Tipo</th>
+                    <th className="w-[190px] text-left">Prospecto</th>
+                    <th className="w-[158px] text-center">Etapa</th>
+                    <th className="w-[120px] text-center">Valor</th>
+                    <th className="w-[124px] text-center">Oferta</th>
+                    <th className="w-[184px] pr-4" aria-label="Acciones" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {negociosVisibles.map((negocio: any) => {
+                    const def = etapaDefDb(negocio.stage as EtapaClave);
+                    const ofertaLabel = negocio.is_producto
+                      ? `OP-${String(negocio.id).padStart(6, '0')}`
+                      : `O-${String(negocio.id).padStart(6, '0')}`;
+                    const unidad = negocio.is_producto
+                      ? (negocio.producto_nombre || 'Producto')
+                      : (negocio.propiedad_nombre || '—');
+                    const genDate = negocio.fecha_generacion ? new Date(negocio.fecha_generacion) : null;
+                    const ofertaUrl = negocio.reserva_token
+                      ? `${baseUrlDe(negocio)}/${negocio.reserva_token}` : baseUrlDe(negocio);
+                    const ccLabel = negocio.cuenta_cobranza_id
+                      ? formatCuentaCobranzaId(negocio.cuenta_cobranza_id, (negocio.is_producto ? 'Producto' : 'Propiedad') as any)
+                      : null;
+
+                    return (
+                      <tr key={negocio.id}
+                        className="h-[48px] cursor-pointer border-b border-border/50 transition-colors duration-100 hover:bg-muted/20"
+                        onClick={() => setSelectedOferta(negocio)}>
+                        <td className="px-3 text-left">
+                          <p className="truncate text-[13px] font-semibold text-foreground">
+                            {negocio.proyecto_nombre || 'Sin desarrollo'}
+                          </p>
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {unidad}{ccLabel ? ` · ${ccLabel}` : ''}
+                          </p>
+                        </td>
+                        <td className="px-3 text-center">
+                          <span className={cn('inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                            negocio.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-muted text-muted-foreground ring-1 ring-border/60')}>
+                            {negocio.is_producto ? 'Producto' : 'Propiedad'}
+                          </span>
+                        </td>
+                        <td className="px-3 text-left">
+                          <p className="truncate text-[12px] font-medium text-foreground">{mask(negocio.lead_nombre)}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{mask(negocio.lead_email || 'Sin correo')}</p>
+                        </td>
+                        <td className="px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <span className={cn('inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold', def.chip)}>
+                              {def.label}
+                            </span>
+                            {def.automatica && (
+                              <IconTip label="La mueve el sistema con un hecho real (oferta, apartado aplicado, estatus de la propiedad).">
+                                <Lock className="size-3 shrink-0 cursor-default text-muted-foreground/50" />
+                              </IconTip>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 text-center">
+                          <span className="text-[12px] font-semibold tabular-nums">
+                            {negocio.precio ? mask(formatCurrency(negocio.precio)) : '—'}
+                          </span>
+                        </td>
+                        <td className="px-3 text-center">
+                          <p className="truncate font-mono text-[11px] font-semibold text-primary">{ofertaLabel}</p>
+                          {genDate && (
+                            <p className="text-[10px] tabular-nums text-muted-foreground">
+                              {format(genDate, 'dd MMM yyyy', { locale: es })}
+                              {negocio.ofertas_count > 1 && ` · ${negocio.ofertas_count} versiones`}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 pr-5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            <IconButton
+                              icon={Eye}
+                              tooltip="Detalle del negocio"
+                              ariaLabel="Detalle del negocio"
+                              onClick={() => setSelectedOferta(negocio)}
+                            />
+                            <IconButton
+                              icon={Share2}
+                              tooltip="Compartir: link del cliente y demo"
+                              ariaLabel="Compartir la oferta"
+                              onClick={() => setShareOferta(negocio)}
+                            />
+                            <IconButton
+                              icon={ExternalLink}
+                              tooltip={negocio.reserva_token
+                                ? 'Abrir el link del cliente'
+                                : 'Vista previa: esta oferta no tiene link de cliente'}
+                              ariaLabel="Abrir la oferta digital"
+                              onClick={() => window.open(ofertaUrl, '_blank', 'noopener')}
+                            />
+                            {negocio.stage === 'perdido' && (
+                              <IconButton
+                                icon={MessageSquareWarning}
+                                tooltip={negocio.no_avance ? 'Editar la razón por la que no avanzó' : '¿Por qué no avanzó?'}
+                                ariaLabel="Razón de no avance"
+                                className={negocio.no_avance ? undefined : 'border-amber-300 text-amber-600 hover:bg-amber-50'}
+                                onClick={() => {
+                                  track({ page: 'agent_pipeline', elementId: 'btn_motivo_no_avance',
+                                    elementLabel: negocio.no_avance ? 'Editar razón' : '¿Por qué no avanzó?',
+                                    metadata: { id_oferta: negocio.id } });
+                                  setNoAvanceOferta(negocio);
+                                }}
+                              />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          )
+        ) : vista === 'tablero' ? (
+          <div className="overflow-x-auto pb-2">
+            <div className="flex w-max gap-3">
+              {etapas.map((etapa) => {
+                const items = (porEtapa[etapa.clave] ?? []).filter((o: any) =>
+                  !searchProspecto.trim() || (o.lead_nombre || '').toLowerCase().includes(searchProspecto.trim().toLowerCase()));
+                const monto = items.reduce((sum: number, o: any) => sum + (o.precio || 0), 0);
+                const activa = dropEtapa === etapa.clave && !etapa.automatica;
+                return (
+                  <div key={etapa.clave}
+                    onDragOver={(e) => { if (!etapa.automatica) { e.preventDefault(); setDropEtapa(etapa.clave); } }}
+                    onDragLeave={() => setDropEtapa((prev) => (prev === etapa.clave ? null : prev))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDropEtapa(null);
+                      const negocio = negocios.find((n: any) => n.id === dragId);
+                      if (negocio) moverEtapa(negocio, etapa.clave);
+                      setDragId(null);
+                    }}
+                    className={cn('w-[248px] shrink-0 rounded-xl border bg-muted/30 transition-colors',
+                      activa && 'border-primary/60 bg-primary/5',
+                      dragId != null && etapa.automatica && 'opacity-50')}>
+                    <div className="flex items-center justify-between gap-2 rounded-t-xl border-b bg-card px-3 py-2">
+                      <span className={cn('inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold', etapa.chip)}>
+                        {etapa.label}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {etapa.automatica && (
+                          <IconTip label="La mueve el sistema con un hecho real. No admite arrastre.">
+                            <Lock className="size-3 cursor-default text-muted-foreground/50" />
+                          </IconTip>
+                        )}
+                        <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{items.length}</span>
+                      </div>
+                    </div>
+                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                      {mask(formatCurrency(monto))}
+                    </div>
+                    <div className="space-y-2 p-2">
+                      {items.length === 0 ? (
+                        <p className="px-1 py-3 text-center text-[11px] text-muted-foreground/60">
+                          {etapa.automatica ? 'Sin negocios' : 'Arrastra aquí'}
+                        </p>
+                      ) : items.map((negocio: any) => (
+                        <div key={negocio.id} draggable
+                          onDragStart={() => setDragId(negocio.id)}
+                          onDragEnd={() => { setDragId(null); setDropEtapa(null); }}
+                          onClick={() => setSelectedOferta(negocio)}
+                          className={cn('w-full cursor-grab rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-primary/40 active:cursor-grabbing',
+                            dragId === negocio.id && 'opacity-40')}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-[12px] font-semibold text-foreground">
+                              {negocio.proyecto_nombre || 'Sin desarrollo'}
+                            </p>
+                            <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
+                              negocio.is_producto ? 'bg-sky-50 text-sky-700' : 'bg-muted text-muted-foreground')}>
+                              {negocio.is_producto ? 'Producto' : 'Propiedad'}
+                            </span>
+                          </div>
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {negocio.is_producto ? (negocio.producto_nombre || 'Producto') : (negocio.propiedad_nombre || '—')}
+                          </p>
+                          <p className="mt-1 truncate text-[11px] text-foreground">{mask(negocio.lead_nombre)}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{mask(negocio.lead_email || 'Sin correo')}</p>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold tabular-nums text-foreground">
+                              {negocio.precio ? mask(formatCurrency(negocio.precio)) : '—'}
+                            </span>
+                            {negocio.ofertas_count > 1 && (
+                              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                                {negocio.ofertas_count} vers.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : negociosVisibles.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-card py-12 text-center text-sm text-muted-foreground">
+            No hay negocios en esta etapa
           </div>
         ) : (
-          displayOfertas.map((oferta: any) => (
-            <OfertaCard
-              key={oferta.id}
-              oferta={oferta}
-              formatCurrency={formatCurrency}
-              getStageInfo={getStageInfo}
-              onClick={() => setSelectedOferta(oferta)}
-              onShare={() => setShareOferta(oferta)}
-              onRegistrarNoAvance={() => {
-                track({
-                  page: 'agent_pipeline',
-                  elementId: 'btn_motivo_no_avance',
-                  elementLabel: oferta.no_avance ? 'Editar razón' : '¿Por qué no avanzó?',
-                  metadata: { id_oferta: oferta.id },
-                });
-                setNoAvanceOferta(oferta);
-              }}
-            />
-          ))
+          <div className="grid gap-3 sm:grid-cols-2">
+            {negociosVisibles.map((negocio: any) => (
+              <OfertaCard
+                key={negocio.id}
+                oferta={negocio}
+                etapa={etapaDefDb(negocio.stage as EtapaClave)}
+                formatCurrency={formatCurrency}
+                onClick={() => setSelectedOferta(negocio)}
+                onShare={() => setShareOferta(negocio)}
+                onAbrir={() => window.open(
+                  negocio.reserva_token ? `${baseUrlDe(negocio)}/${negocio.reserva_token}` : baseUrlDe(negocio),
+                  '_blank', 'noopener')}
+                onRegistrarNoAvance={() => {
+                  track({
+                    page: 'agent_pipeline',
+                    elementId: 'btn_motivo_no_avance',
+                    elementLabel: negocio.no_avance ? 'Editar razón' : '¿Por qué no avanzó?',
+                    metadata: { id_oferta: negocio.id },
+                  });
+                  setNoAvanceOferta(negocio);
+                }}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -523,158 +827,108 @@ const AgentPipeline = () => {
   );
 };
 
-function OfertaCard({ oferta, formatCurrency, getStageInfo, onClick, onShare, onRegistrarNoAvance }: {
+/**
+ * Tarjeta de negocio con lectura de producto de e-commerce: cabecera con la unidad, el precio
+ * como dato dominante, la etapa como pastilla y las acciones abajo en botones con caja.
+ */
+function OfertaCard({ oferta, etapa, formatCurrency, onClick, onShare, onAbrir, onRegistrarNoAvance }: {
   oferta: any;
+  etapa: EtapaDef;
   formatCurrency: (v: number) => string;
-  getStageInfo: (s: string) => { key: string; label: string; color: string; borderColor: string };
   onClick?: () => void;
   onShare?: () => void;
+  onAbrir?: () => void;
   onRegistrarNoAvance?: () => void;
 }) {
   const { mask } = useAgentPresentation();
-  const stageInfo = getStageInfo(oferta.stage);
   const ofertaLabel = oferta.is_producto
     ? `OP-${String(oferta.id).padStart(6, '0')}`
     : `O-${String(oferta.id).padStart(6, '0')}`;
-
-  const unitLabel = oferta.is_producto
-    ? `${oferta.producto_nombre || 'Producto'} · ${oferta.propiedad_nombre}`
-    : (oferta.proyecto_nombre
-      ? `${oferta.proyecto_nombre} · ${oferta.propiedad_nombre}`
-      : oferta.propiedad_nombre);
-
-  const cuentaTipo = oferta.is_producto ? 'Producto' : 'Propiedad';
-  const hasUrl = !!oferta.url;
-  const ccLabel = oferta.cuenta_cobranza_id
-    ? formatCuentaCobranzaId(oferta.cuenta_cobranza_id, cuentaTipo as any)
-    : '';
-
-  const subParts = [mask(oferta.lead_nombre), oferta.proyecto_nombre, ccLabel].filter(Boolean);
-
+  const unidad = oferta.is_producto
+    ? (oferta.producto_nombre || 'Producto')
+    : (oferta.propiedad_nombre || '—');
   const genDate = oferta.fecha_generacion ? new Date(oferta.fecha_generacion) : null;
-  const venceDate = genDate ? new Date(genDate) : null;
-  if (venceDate) venceDate.setDate(venceDate.getDate() + 5);
-
-  // Link del cliente: solo con token puede apartar. Sin token queda el demo.
-  const ofertaBaseUrl = `${window.location.origin}/oferta/O-${String(oferta.id).padStart(6, '0')}`;
-  const ofertaUrl = oferta.reserva_token ? `${ofertaBaseUrl}/${oferta.reserva_token}` : ofertaBaseUrl;
-
-  // Reenviar: abre el popup de compartir con el link del cliente. El PDF se genera
-  // ahí mismo a demanda, ya no depende de haberlo descargado antes.
-  const handleReenviar = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onShare?.();
-  };
-
-  // Toda oferta expirada pide la razón por la que no avanzó de etapa.
-  const esExpirada = oferta.stage === 'expiradas';
-  const razon = oferta.no_avance;
+  const ccLabel = oferta.cuenta_cobranza_id
+    ? formatCuentaCobranzaId(oferta.cuenta_cobranza_id, (oferta.is_producto ? 'Producto' : 'Propiedad') as any)
+    : null;
+  const esPerdido = etapa.clave === 'perdido';
 
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer rounded-md border border-border bg-card p-4 shadow-[0_1px_3px_rgba(20,30,25,0.04)] hover:border-border"
+      className={cn(
+        'group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card',
+        // Hover sutil: solo borde y una sombra suave. Sin desplazamiento vertical, que hacía
+        // "saltar" la tarjeta y movía los botones bajo el cursor.
+        'transition-[border-color,box-shadow] duration-200 hover:border-primary/30 hover:shadow-sm',
+      )}
     >
-      {/* Row 1: label + chip / estado */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-primary">Oferta: {ofertaLabel}</span>
-          {oferta.inmobiliaria_nombre && (
-            <span
-              className={cn(
-                "rounded-md px-2 py-0.5 text-xs font-semibold",
-                oferta.inmobiliaria_nombre === 'Interno'
-                  ? "bg-muted text-muted-foreground"
-                  : "bg-primary/10 text-primary"
-              )}
-            >
-              {oferta.inmobiliaria_nombre}
+      {/* Cabecera: tipo + etapa */}
+      <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
+        <span className={cn(
+          'inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
+          oferta.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-card text-muted-foreground ring-1 ring-border',
+        )}>
+          {oferta.is_producto ? 'Producto' : 'Propiedad'}
+        </span>
+        <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold', etapa.chip)}>
+          {etapa.label}
+          {etapa.automatica && <Lock className="size-2.5 shrink-0 opacity-60" />}
+        </span>
+      </div>
+
+      {/* Cuerpo: unidad, desarrollo y precio */}
+      <div className="flex-1 px-3.5 py-3">
+        <p className="truncate text-[15px] font-bold leading-tight text-foreground">{unidad}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {oferta.proyecto_nombre || 'Sin desarrollo'}{ccLabel ? ` · ${ccLabel}` : ''}
+        </p>
+
+        <p className="mt-2.5 text-xl font-bold tabular-nums leading-none text-foreground">
+          {oferta.precio ? mask(formatCurrency(oferta.precio)) : '—'}
+        </p>
+
+        <div className="mt-3 border-t pt-2.5">
+          <p className="truncate text-[13px] font-semibold text-foreground">{mask(oferta.lead_nombre)}</p>
+          <p className="truncate text-[11px] text-muted-foreground">{mask(oferta.lead_email || 'Sin correo')}</p>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="font-mono font-semibold text-primary">{ofertaLabel}</span>
+          {genDate && <span className="tabular-nums">· {format(genDate, 'dd MMM yyyy', { locale: es })}</span>}
+          {oferta.ofertas_count > 1 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold text-muted-foreground">
+              {oferta.ofertas_count} versiones
             </span>
           )}
         </div>
-        <Badge className={cn("shrink-0 border-0 text-xs", stageInfo.color)}>
-          {stageInfo.label}
-        </Badge>
-      </div>
 
-      {/* Row 2: title + price */}
-      <div className="mt-1.5 flex items-start justify-between gap-3">
-        <p className="truncate text-base font-bold text-foreground">{unitLabel}</p>
-        {oferta.precio != null && oferta.precio > 0 && (
-          <span className="shrink-0 text-base font-bold tabular-nums text-foreground">
-            {mask(formatCurrency(oferta.precio))}
-          </span>
+        {esPerdido && !oferta.no_avance && (
+          <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-800">
+            Falta registrar por qué no avanzó
+          </p>
         )}
       </div>
 
-      {/* Row 3: subtitle */}
-      {subParts.length > 0 && (
-        <p className="mt-1 truncate text-xs font-medium text-muted-foreground/70">
-          {subParts.join(' · ')}
-        </p>
-      )}
-
-      {/* Row 4: dates */}
-      {genDate && (
-        <p className="mt-1 text-xs font-medium tabular-nums text-muted-foreground/70">
-          Generada: {format(genDate, 'dd MMM yyyy', { locale: es })}
-          {venceDate && `  ·  Vence: ${format(venceDate, 'dd MMM yyyy', { locale: es })}`}
-        </p>
-      )}
-
-      {/* Rótulo de no avance: exclusivo de las ofertas expiradas */}
-      {esExpirada && (
-        razon ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRegistrarNoAvance?.(); }}
-            title="Editar la razón registrada"
-            className="mt-2.5 flex w-full items-start gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-left hover:border-muted-foreground/30"
-          >
-            <MessageSquareWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold text-foreground">
-                No avanzó: {razon.motivo_nombre}
-              </span>
-              {razon.comentario && (
-                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {razon.comentario}
-                </span>
-              )}
-            </span>
-            <span className="shrink-0 text-xs font-semibold text-primary">Editar</span>
-          </button>
-        ) : (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRegistrarNoAvance?.(); }}
-            className="mt-2.5 flex w-full items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-left hover:bg-amber-100"
-          >
-            <HelpCircle className="h-4 w-4 shrink-0 text-amber-700" />
-            <span className="min-w-0 flex-1 text-xs font-semibold text-amber-800">
-              ¿Por qué no avanzó esta oferta? Cuéntanos la razón.
-            </span>
-            <span className="shrink-0 rounded-md border border-amber-400 bg-card px-2.5 py-1 text-xs font-semibold text-amber-800">
-              Registrar razón
-            </span>
-          </button>
-        )
-      )}
-
-      {/* Footer: acciones */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <button
-          onClick={(e) => { e.stopPropagation(); window.open(ofertaUrl, '_blank', 'noopener'); }}
-          title={oferta.reserva_token ? 'Abrir el link del cliente' : 'Vista previa: esta oferta no tiene link de cliente'}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
-        >
-          Oferta digital <ExternalLink className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={handleReenviar}
-          title="Compartir o reenviar la oferta"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
-        >
-          <Mail className="h-3.5 w-3.5" /> Reenviar
-        </button>
+      {/* Acciones */}
+      <div className="flex items-center justify-end gap-2 border-t px-3.5 py-2.5" onClick={(e) => e.stopPropagation()}>
+        <IconButton icon={Eye} tooltip="Detalle del negocio" ariaLabel="Detalle" onClick={onClick} />
+        <IconButton icon={Share2} tooltip="Compartir: link del cliente y demo" ariaLabel="Compartir" onClick={onShare} />
+        <IconButton
+          icon={ExternalLink}
+          tooltip={oferta.reserva_token ? 'Abrir el link del cliente' : 'Vista previa: esta oferta no tiene link de cliente'}
+          ariaLabel="Abrir la oferta digital"
+          onClick={onAbrir}
+        />
+        {esPerdido && (
+          <IconButton
+            icon={MessageSquareWarning}
+            tooltip={oferta.no_avance ? 'Editar la razón por la que no avanzó' : '¿Por qué no avanzó?'}
+            ariaLabel="Razón de no avance"
+            className={oferta.no_avance ? undefined : 'border-amber-300 text-amber-600 hover:bg-amber-50'}
+            onClick={onRegistrarNoAvance}
+          />
+        )}
       </div>
     </div>
   );
