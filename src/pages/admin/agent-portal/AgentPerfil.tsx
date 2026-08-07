@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AgentOnboardingStepDialog } from "@/components/admin/AgentOnboardingStepDialog";
 import { ExpedienteDocsPanel, type ExpDocDef } from "@/components/admin/expediente/ExpedienteDocsPanel";
@@ -9,6 +10,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FIELD_LABEL_CLS, MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalForm, ModalFormHeader, Req } from "@/components/ui/modal-form";
 import { OptImg } from "@/components/ui/opt-img";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,7 +27,7 @@ import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
-import { AlertTriangle, ArrowLeft, CalendarDays, Camera, Check, Eye, EyeOff, FileText, GraduationCap, Landmark, Loader2, Pencil, Plus, Receipt, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, Camera, Check, Eye, EyeOff, FileText, GraduationCap, HelpCircle, Landmark, Loader2, Lock, Pencil, Plus, Receipt, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -61,6 +63,36 @@ const ACTIVATION_BLOCKS = [
   },
 ];
 
+// Etapas que el agente dependiente (ligado a una inmobiliaria) ve pero no edita: su
+// inmobiliaria lleva el RFC y la dispersión, y las captura desde su propio portal.
+const BLOQUES_SOLO_LECTURA_DEPENDIENTE: readonly string[] = ['fiscal', 'bank-accounts'];
+
+/**
+ * Aviso de "esto lo administra tu inmobiliaria" + botón de ayuda que abre el detalle al
+ * hacer clic (no solo al pasar el cursor: en móvil el hover no existe).
+ */
+function AvisoSoloLectura({ mensaje }: { mensaje: string }) {
+  return (
+    <div className="mb-3 flex items-start gap-3 rounded-md border border-border bg-muted px-4 py-3">
+      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="flex-1 text-xs font-medium leading-relaxed text-muted-foreground">
+        Esta información la administra tu inmobiliaria, por eso no se puede editar aquí.
+      </div>
+      <Popover>
+        <PopoverTrigger
+          aria-label="¿Por qué no puedo editar?"
+          className="shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-72 text-xs font-medium leading-relaxed">
+          {mensaje}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 // Documentos del expediente del agente (tipos reales en `documentos`), definidos con
 // el contrato global de ExpedienteDocsPanel. La identidad es UN solo documento: INE
 // (frente+reverso, tipos 2+3) O pasaporte (tipo 4) — el panel resuelve el selector y
@@ -70,7 +102,7 @@ const CSF_DOC: ExpDocDef = { key: 'csf', nombre: 'Constancia de Situación Fisca
 const CARTA_DOC: ExpDocDef = { key: 'carta', nombre: 'Carta de comercialización', emisor: 'SOZU', hint: 'Se genera y firma digitalmente con SOZU', tipos: [48], kind: 'firma' };
 // Tipos que consulta el expediente del agente (fijos: la carta se oculta para los
 // dependientes pero su estatus sigue alimentando "Documentos" en Secciones).
-const AGENT_EXP_TIPOS = [2, 3, 4, 6, 48];
+const AGENT_EXP_TIPOS = [2, 3, 4, 6, 48, 63];
 
 const STEP_TO_VIEW: Record<string, 'identidad' | 'fiscal' | 'bank' | 'training'> = {
   basic: 'identidad',
@@ -84,6 +116,7 @@ const CELEBRATION_THRESHOLD = 100;
 
 // Nombre de cada subsección (se muestra en el header junto a la flecha de regreso).
 const SUBSECTION_TITLES: Record<string, string> = {
+  cuenta: 'Datos de tu cuenta',
   expediente: 'Expediente',
   identidad: 'Identidad',
   fiscal: 'Información fiscal',
@@ -331,7 +364,7 @@ const AgentPerfil = () => {
   const [bankTarget, setBankTarget] = useState<{ mode: 'create' | 'edit'; id: number | null }>({ mode: 'create', id: null });
   // Pestaña inicial del modal de paso (p. ej. 'address' para ir directo a firmar la carta).
   const [activeStepTab, setActiveStepTab] = useState<string | undefined>(undefined);
-  const [profileView, setProfileView] = useState<'overview' | 'expediente' | 'identidad' | 'fiscal' | 'bank' | 'training'>('overview');
+  const [profileView, setProfileView] = useState<'overview' | 'expediente' | 'identidad' | 'fiscal' | 'bank' | 'training' | 'cuenta'>('overview');
   const [securityOpen, setSecurityOpen] = useState(false);
   const [pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
@@ -409,6 +442,20 @@ const AgentPerfil = () => {
     () => usoCfdiCatalog.map((u: any) => ({ value: u.codigo, label: `${u.codigo} · ${u.nombre}`, keywords: u.codigo })),
     [usoCfdiCatalog]
   );
+
+  // Catálogo de régimen fiscal: la vista de lectura mostraba la clave cruda ("626").
+  const { data: regimenes = [] } = useQuery({
+    queryKey: ['regimen', 'pf'],
+    queryFn: async (): Promise<any[]> => {
+      const { data } = await (supabase as any)
+        .from('regimen')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('id');
+      return data || [];
+    },
+    staleTime: Infinity,
+  });
 
   const [savingCfdi, setSavingCfdi] = useState(false);
 
@@ -524,6 +571,42 @@ const AgentPerfil = () => {
   // la Carta) aunque su persona quede marcada como dependiente. La carta sigue
   // siendo REQUISITO solo para el agente independiente (ver docsStatus).
   const puedeVerCarta = esIndependiente || fullAccess;
+  // Información fiscal, Cuenta bancaria y CSF del dependiente las captura y corrige su
+  // inmobiliaria desde su propio portal: el agente las ve para confirmar que están bien,
+  // pero nunca las edita. El backend lo valida aparte (RLS + trigger).
+  const fiscalSoloLectura = !esIndependiente && !fullAccess;
+
+  // Nombre de la inmobiliaria dueña del agente, para decirle a quién contactar.
+  const { data: inmobiliariaNombre } = useQuery({
+    queryKey: ['agent-perfil-inmo-nombre', personaId],
+    queryFn: async (): Promise<string | null> => {
+      if (!personaId) return null;
+      const { data: rel } = await supabase
+        .from('entidades_relacionadas')
+        .select('id_persona_duena_lead')
+        .eq('id_persona', personaId)
+        .eq('id_tipo_entidad', 19)
+        .eq('activo', true)
+        .not('id_persona_duena_lead', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      const duenaId = (rel as any)?.id_persona_duena_lead;
+      if (!duenaId) return null;
+      const { data: persona } = await supabase
+        .from('personas')
+        .select('nombre_legal')
+        .eq('id', duenaId)
+        .maybeSingle();
+      return (persona as any)?.nombre_legal || null;
+    },
+    enabled: !!personaId && !esIndependiente,
+    staleTime: 60_000,
+  });
+
+  // Aviso de solo lectura: se repite en Información fiscal y en Cuenta bancaria.
+  const avisoInmobiliaria = inmobiliariaNombre
+    ? `Contacta a ${inmobiliariaNombre} para corregir esta información.`
+    : 'Contacta a tu inmobiliaria para corregir esta información.';
 
   // Estatus agregado de Documentos (para la fila "Documentos" en Secciones).
   // Identidad = INE (frente+reverso) O pasaporte — no se exigen ambos.
@@ -534,17 +617,22 @@ const AgentPerfil = () => {
       if (rows.length > 0) return 'uploaded';
       return 'none';
     };
-    const ineValidated = state([2]) === 'validated' && state([3]) === 'validated';
+    // 63 = INE completo en un solo PDF (formato vigente). 2+3 = frente y reverso del
+    // formato anterior; se siguen aceptando para quien ya los tenía cargados.
+    const ineValidated = state([63]) === 'validated'
+      || (state([2]) === 'validated' && state([3]) === 'validated');
     const pasValidated = state([4]) === 'validated';
     const identidadValidated = ineValidated || pasValidated;
     const csf = state([6]);
     const carta = state([48]);
 
-    // La carta solo se exige a agentes independientes; los dependientes no la firman.
+    // La carta y la CSF solo se exigen a agentes independientes; el dependiente no
+    // firma carta ni sube constancia (su inmobiliaria lo hace por él).
     const cartaOk = !esIndependiente || carta === 'validated';
-    const complete = identidadValidated && csf === 'validated' && cartaOk;
+    const csfOk = !esIndependiente || csf === 'validated';
+    const complete = identidadValidated && csfOk && cartaOk;
     if (complete) return 'complete';
-    const relevantTipos = esIndependiente ? [2, 3, 4, 6, 48] : [2, 3, 4, 6];
+    const relevantTipos = esIndependiente ? [2, 3, 4, 6, 48, 63] : [2, 3, 4, 63];
     const anyProgress = relevantTipos.some((t) => state([t]) !== 'none');
     return anyProgress ? 'partial' : 'pending';
   })();
@@ -601,8 +689,10 @@ const AgentPerfil = () => {
     return 'pending';
   };
 
-  const canReceivePayments = steps
-    .filter(s => ['fiscal', 'bank-accounts'].includes(s.id))
+  // El dependiente cobra por medio de su inmobiliaria: nunca se le pide completar
+  // fiscal/banco, así que tampoco se le muestra el aviso de comisiones.
+  const canReceivePayments = fiscalSoloLectura || steps
+    .filter(s => BLOQUES_SOLO_LECTURA_DEPENDIENTE.includes(s.id))
     .every(s => s.isComplete);
 
   // Estatus de las 5 secciones del perfil (Documentos + 4 etapas) → alimenta el hero.
@@ -612,10 +702,45 @@ const AgentPerfil = () => {
   const seccionesEnProceso = sectionStatuses.filter((s) => s === 'partial').length;
   const seccionesPendientes = sectionStatuses.filter((s) => s === 'pending').length;
 
+  // Skeleton con la forma real de la página (hero, progreso y secciones). Un spinner
+  // centrado dejaba la pantalla vacía y luego todo saltaba de golpe.
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div>
+        <AgentPortalHeader />
+        <div className="mx-auto max-w-[1040px] space-y-4 pt-1">
+          {/* Hero */}
+          <div className="rounded-md border border-border bg-card p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-16 w-16 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-3.5 w-64" />
+                <Skeleton className="h-3.5 w-32" />
+              </div>
+            </div>
+            <Skeleton className="mt-5 h-2 w-full rounded-full" />
+            <div className="mt-3 flex gap-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          </div>
+
+          {/* Secciones */}
+          <div className="space-y-2.5">
+            <Skeleton className="h-3 w-40" />
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3.5">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -638,7 +763,7 @@ const AgentPerfil = () => {
                 Agendar capacitación
               </ActionButton>
             )}
-            {profileView === 'bank' && perfilPerms.canUpdate && (
+            {profileView === 'bank' && !fiscalSoloLectura && perfilPerms.canUpdate && (
               <ActionButton
                 icon={Plus}
                 shortLabel="Agregar"
@@ -793,49 +918,6 @@ const AgentPerfil = () => {
           </p>
         </div>
       </div>
-
-      {/* Asignado por SOZU · solo lectura */}
-      {sozuInfo && (() => {
-        const fmtAlta = (f?: string | null) => {
-          if (!f) return '—';
-          const d = new Date(f);
-          return isNaN(d.getTime())
-            ? '—'
-            : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
-        };
-        const rows: { label: string; render: React.ReactNode }[] = [
-          { label: 'Rol / Puesto', render: (perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || 'Agente Inmobiliario' },
-          { label: 'Tipo de relación', render: sozuInfo.tipoRelacion || '—' },
-          { label: 'Esquema de comisión', render: sozuInfo.comision != null ? `${sozuInfo.comision}% sobre precio de lista` : '—' },
-          {
-            label: 'Estatus',
-            render: (
-              <span className="inline-flex items-center gap-1.5">
-                <span className={cn('h-[7px] w-[7px] rounded-full', sozuInfo.activo ? 'bg-primary' : 'bg-muted')} />
-                {sozuInfo.activo ? 'Activo' : 'Inactivo'}
-              </span>
-            ),
-          },
-          { label: 'Equipo / Líder', render: sozuInfo.lider || 'Sin asignar' },
-          { label: 'Fecha de alta', render: fmtAlta(sozuInfo.fechaAlta) },
-        ];
-        return (
-          <div>
-            <div className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wide text-muted-foreground/70">
-              Datos de tu cuenta
-            </div>
-            <div className="grid grid-cols-1 gap-x-8 gap-y-0.5 rounded-md border border-border bg-card p-5 sm:grid-cols-2 sm:p-6">
-              {rows.map((r) => (
-                <div key={r.label} className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0 sm:[&:nth-last-child(2)]:border-b-0">
-                  <span className="text-xs font-medium text-muted-foreground/70">{r.label}</span>
-                  <span className="text-right text-sm font-semibold text-foreground">{r.render}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
 
       {/* Hidden file input (outside any button) */}
       <input
@@ -1003,7 +1085,20 @@ const AgentPerfil = () => {
           Secciones de tu perfil
         </div>
         <div className="flex flex-col gap-2.5">
-          {/* Documentos - primero: todos los documentos del portal a subir */}
+          {/* Datos de tu cuenta: rol, esquema de comisión, equipo y alta. Solo consulta. */}
+          {sozuInfo && (
+            <ProfileSectionRow
+              title="Datos de tu cuenta"
+              description="Rol, esquema de comisión, equipo y fecha de alta"
+              badge={{ label: 'Solo lectura', color: 'text-muted-foreground', bg: 'bg-muted' }}
+              onClick={() => {
+                track({ page: 'agent_perfil', elementId: 'btn_seccion_datos_cuenta' });
+                setProfileView('cuenta');
+              }}
+            />
+          )}
+
+          {/* Documentos: todos los documentos del portal a subir */}
           <ProfileSectionRow
             title="Documentos"
             description="Sube y consulta todos tus documentos"
@@ -1014,18 +1109,24 @@ const AgentPerfil = () => {
             }}
           />
 
-          {ACTIVATION_BLOCKS.map((block) => (
-            <ProfileSectionRow
-              key={block.stepId}
-              title={block.label}
-              description={block.description}
-              badge={sectionBadge(getBlockStatus(block.relatedSteps))}
-              onClick={() => {
-                track({ page: 'agent_perfil', elementId: 'btn_etapa_onboarding', elementLabel: block.label, metadata: { step_id: block.stepId } });
-                setProfileView(STEP_TO_VIEW[block.stepId]);
-              }}
-            />
-          ))}
+          {ACTIVATION_BLOCKS.map((block) => {
+            // Fiscal y banco del dependiente: no son un pendiente suyo, son consulta.
+            const soloLectura = fiscalSoloLectura && BLOQUES_SOLO_LECTURA_DEPENDIENTE.includes(block.stepId);
+            return (
+              <ProfileSectionRow
+                key={block.stepId}
+                title={block.label}
+                description={soloLectura ? 'La administra tu inmobiliaria · solo consulta' : block.description}
+                badge={soloLectura
+                  ? { label: 'Solo lectura', color: 'text-muted-foreground', bg: 'bg-muted' }
+                  : sectionBadge(getBlockStatus(block.relatedSteps))}
+                onClick={() => {
+                  track({ page: 'agent_perfil', elementId: 'btn_etapa_onboarding', elementLabel: block.label, metadata: { step_id: block.stepId } });
+                  setProfileView(STEP_TO_VIEW[block.stepId]);
+                }}
+              />
+            );
+          })}
 
           {/* Seguridad */}
           {canEdit && (
@@ -1040,11 +1141,62 @@ const AgentPerfil = () => {
 
       </>)}
 
+      {/* ===== VISTA: DATOS DE TU CUENTA (asignado por SOZU · solo lectura) ===== */}
+      {profileView === 'cuenta' && sozuInfo && (() => {
+        const fmtAlta = (f?: string | null) => {
+          if (!f) return null;
+          const d = new Date(f);
+          return isNaN(d.getTime())
+            ? null
+            : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
+        };
+        // Mismo estándar que Identidad e Información fiscal: tarjeta con título, filas
+        // etiqueta/valor y divisores. Sin botón Editar: los administra SOZU.
+        const campos: { label: string; value: React.ReactNode | null }[] = [
+          { label: 'Rol / Puesto', value: (perfilExtra as any)?.roles?.nombre || profile?.rol_nombre || null },
+          { label: 'Tipo de relación', value: sozuInfo.tipoRelacion || null },
+          { label: 'Esquema de comisión', value: sozuInfo.comision != null ? `${sozuInfo.comision}% sobre precio de lista` : null },
+          {
+            label: 'Estatus',
+            value: (
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn('h-[7px] w-[7px] rounded-full', sozuInfo.activo ? 'bg-primary' : 'bg-muted-foreground/40')} />
+                {sozuInfo.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            ),
+          },
+          { label: 'Equipo / Líder', value: sozuInfo.lider || null },
+          { label: 'Fecha de alta', value: fmtAlta(sozuInfo.fechaAlta) },
+        ];
+        return (
+          <div>
+            <div className="rounded-md border border-border bg-card p-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Datos de tu cuenta</span>
+              </div>
+              <div className="divide-y divide-border">
+                {campos.map((c) => (
+                  <div key={c.label} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="text-xs font-medium text-muted-foreground/70">{c.label}</span>
+                    <span className={cn("text-right text-xs font-semibold", c.value ? "text-foreground" : "text-muted-foreground/70")}>
+                      {c.value || 'Sin registro'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="mt-3 px-0.5 text-xs font-medium leading-relaxed text-muted-foreground">
+              Estos datos los administra SOZU. Si algo no coincide, avísale a tu contacto interno.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* ===== VISTA: EXPEDIENTE ===== */}
       {profileView === 'expediente' && (
         <ExpedienteDocsPanel
           personaId={personaId}
-          docs={[IDENTIDAD_DOC, CSF_DOC, ...(puedeVerCarta ? [CARTA_DOC] : [])]}
+          docs={[IDENTIDAD_DOC, { ...CSF_DOC, soloLectura: fiscalSoloLectura }, ...(puedeVerCarta ? [CARTA_DOC] : [])]}
           canUpdate={perfilPerms.canUpdate}
           docsQueryKey={expedienteDocsQueryKey}
           queryTipos={AGENT_EXP_TIPOS}
@@ -1109,15 +1261,28 @@ const AgentPerfil = () => {
 
       {/* ===== VISTA: INFORMACIÓN FISCAL ===== */}
       {profileView === 'fiscal' && (() => {
-        const domFiscal = [personaDatos?.direccion_fiscal_calle, personaDatos?.direccion_fiscal_colonia, personaDatos?.direccion_fiscal_codigo_postal]
-          .filter(Boolean).join(', ');
+        // La lectura debe reflejar TODO lo que se captura al editar: antes solo salían RFC,
+        // régimen (en clave cruda) y el domicilio concatenado, y se veía incompleto.
+        const regimenNombre = regimenes.find((r: any) => String(r.id) === String(personaDatos?.regimen))?.nombre;
+        const usoNombre = usoCfdiOptions.find((u) => u.value === (personaDatos?.uso_cfdi || ''))?.label;
         const derivados = [
+          { label: 'Razón social / Nombre', valor: personaDatos?.nombre_legal },
           { label: 'RFC', valor: personaDatos?.rfc },
-          { label: 'Régimen fiscal', valor: personaDatos?.regimen },
-          { label: 'Domicilio fiscal', valor: domFiscal || null },
+          {
+            label: 'Régimen fiscal',
+            valor: personaDatos?.regimen
+              ? (regimenNombre ? `${personaDatos.regimen} · ${regimenNombre}` : String(personaDatos.regimen))
+              : null,
+          },
+          { label: 'Uso del CFDI', valor: usoNombre || personaDatos?.uso_cfdi || null },
+          { label: 'Calle y número', valor: personaDatos?.direccion_fiscal_calle },
+          { label: 'Colonia', valor: personaDatos?.direccion_fiscal_colonia },
+          { label: 'Código postal', valor: personaDatos?.direccion_fiscal_codigo_postal },
         ];
         return (
           <div>
+            {fiscalSoloLectura && <AvisoSoloLectura mensaje={avisoInmobiliaria} />}
+
             {/* Uso CFDI */}
             <div className="mb-3 rounded-md border border-border bg-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5">
@@ -1126,7 +1291,7 @@ const AgentPerfil = () => {
                 </div>
                 <SearchableSelect
                   value={personaDatos?.uso_cfdi || ''}
-                  disabled={!perfilPerms.canUpdate || savingCfdi}
+                  disabled={!perfilPerms.canUpdate || fiscalSoloLectura || savingCfdi}
                   onValueChange={(v) => saveUsoCfdi(v)}
                   options={usoCfdiOptions}
                   placeholder="Selecciona…"
@@ -1137,7 +1302,9 @@ const AgentPerfil = () => {
                 />
               </div>
               <div className="border-t border-border pt-3 text-xs font-medium leading-relaxed text-muted-foreground">
-                Como emites CFDI de comisiones a SOZU, tu RFC, régimen y CP fiscal deben coincidir con el SAT (CFDI 4.0).
+                {fiscalSoloLectura
+                  ? 'Tu inmobiliaria emite los CFDI de comisiones a SOZU con estos datos fiscales.'
+                  : 'Como emites CFDI de comisiones a SOZU, tu RFC, régimen y CP fiscal deben coincidir con el SAT (CFDI 4.0).'}
               </div>
             </div>
 
@@ -1145,7 +1312,7 @@ const AgentPerfil = () => {
             <div className="mb-3 rounded-md border border-border bg-card p-5">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground/70">Información fiscal</span>
-                {perfilPerms.canUpdate && (
+                {perfilPerms.canUpdate && !fiscalSoloLectura && (
                   <button
                     onClick={() => setActiveStep('fiscal')}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
@@ -1172,23 +1339,23 @@ const AgentPerfil = () => {
       {/* ===== VISTA: CUENTA DE DISPERSIÓN ===== */}
       {profileView === 'bank' && (
         <div>
-          <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 px-4 py-3">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2A6FDB" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
-            <div className="text-xs font-medium leading-relaxed text-blue-800">
-              Por tu seguridad, una cuenta nueva queda <strong>pendiente de activación</strong> hasta que validemos que es tuya.
-            </div>
-          </div>
+          {/* Sin aviso fijo: el estado de validación se lee en la pastilla de cada cuenta
+              (Pendiente de activación / Activa), que es información real y no un letrero. */}
+          {fiscalSoloLectura && <AvisoSoloLectura mensaje={avisoInmobiliaria} />}
 
           <div className="mt-4 flex flex-col gap-2.5">
             {bankAccounts.length === 0 && (
               <div className="rounded-md border border-dashed border-border bg-muted px-4 py-8 text-center text-xs font-medium text-muted-foreground/70">
-                Aún no tienes cuentas registradas.
+                {fiscalSoloLectura
+                  ? 'Tu inmobiliaria recibe las comisiones y define cómo te paga: aquí no se registran cuentas.'
+                  : 'Aún no tienes cuentas registradas.'}
               </div>
             )}
             {bankAccounts.map((c: any) => {
               const validada = c.id_estatus_verificacion === 2;
               const last4 = (c.cuenta_clabe || c.numero_cuenta || '').slice(-4);
-              const editable = perfilPerms.canUpdate;
+              // El dependiente ve la cuenta (banco, últimos 4 y titular) pero no la edita.
+              const editable = perfilPerms.canUpdate && !fiscalSoloLectura;
               return (
                 <button
                   key={c.id}
@@ -1401,7 +1568,7 @@ const AgentPerfil = () => {
       </Dialog>
 
       {/* Onboarding Step Dialog */}
-      {activeStep && personaId && (
+      {activeStep && personaId && !(fiscalSoloLectura && BLOQUES_SOLO_LECTURA_DEPENDIENTE.includes(activeStep)) && (
         <AgentOnboardingStepDialog
           step={activeStep}
           bankMode={bankTarget.mode}
