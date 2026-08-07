@@ -580,6 +580,8 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
       if ("solicitante" in cambios) patch.solicitante = cambios.solicitante || null;
       if ("inmueble" in cambios) patch.inmueble = cambios.inmueble || null;
       if ("descripcion" in cambios) patch.descripcion = cambios.descripcion || null;
+      if ("nombre" in cambios && cambios.nombre?.trim()) patch.nombre = cambios.nombre.trim();
+      if ("fuente" in cambios) patch.fuente = cambios.fuente || "Portal";
       if ("entidadRelacionadaId" in cambios)
         patch.id_entidad_relacionada = cambios.entidadRelacionadaId ? Number(cambios.entidadRelacionadaId) : null;
       if ("propiedadId" in cambios)
