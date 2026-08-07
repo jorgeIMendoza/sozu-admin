@@ -15,6 +15,18 @@ import { Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAltaDireccionFilters } from "@/contexts/AltaDireccionFiltersContext";
 import { AUDIT_EVENTS, fmtMxn } from "@/data/altaDireccion/mockData";
+import { List, CalendarRange } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import CitasCalendarView from "@/components/admin/portal-alta-direccion/CitasCalendarView";
+import {
+  type CitaRow,
+  ESTATUS_TONE,
+  fmtFolio,
+  fmtHora,
+  fmtCreacion,
+  getAgenteRol,
+  getEstadoKey,
+} from "./citas-utils";
 
 const DemoBadge = () => (
   <Pill className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Datos demo</Pill>
@@ -28,47 +40,6 @@ const LiveBadge = () => (
 export { default as AltaDireccionDashboard } from "./AltaDireccionDashboardPage";
 
 // ============================ Comercial ============================
-type CitaAgente = {
-  nombre_legal: string;
-  usuarios: { rol_id: number | null; roles: { nombre: string } | null }[] | null;
-};
-type CitaRow = {
-  id: number;
-  fecha: string;
-  hora_inicio: string | null;
-  hora_fin: string | null;
-  fecha_creacion: string | null;
-  id_estatus_cita: number | null;
-  estatus: string | null;
-  activo: boolean;
-  proyectos: { nombre: string } | null;
-  estatus_cita: { nombre: string } | null;
-  tipos_cita: { nombre: string } | null;
-  prospecto: { nombre_legal: string } | null;
-  agente: CitaAgente | null;
-};
-
-const ESTATUS_TONE: Record<number, string> = {
-  1: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
-  2: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  3: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-};
-
-const fmtFolio = (id: number) => `CITA-${String(id).padStart(4, "0")}`;
-const fmtHora = (t: string | null) => (t ? t.slice(0, 5) : "—");
-
-function fmtCreacion(ts: string | null): { fecha: string; hora: string } {
-  if (!ts) return { fecha: "—", hora: "" };
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return { fecha: "—", hora: "" };
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return { fecha: `${yyyy}-${mm}-${dd}`, hora: `${hh}:${mi}` };
-}
-
 const norm = (s: string | null | undefined) =>
   (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -96,22 +67,6 @@ function getPeriodRange(period: string | null): [Date, Date] | null {
   return null;
 }
 
-function getAgenteRol(c: CitaRow): string | null {
-  const u = c.agente?.usuarios?.[0];
-  return u?.roles?.nombre || null;
-}
-
-type EstadoKey = "agendada" | "pendiente" | "confirmada" | "asistio" | "cancelada" | "otro";
-
-function getEstadoKey(c: CitaRow): EstadoKey {
-  if (!c.activo || c.estatus === "cancelada") return "cancelada";
-  if (c.estatus === "asistio") return "asistio";
-  if (c.id_estatus_cita === 1) return "agendada";
-  if (c.id_estatus_cita === 2) return "pendiente";
-  if (c.id_estatus_cita === 3) return "confirmada";
-  return "otro";
-}
-
 const ESTADO_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "Todos los estados" },
   { value: "agendada", label: "Agendada" },
@@ -127,6 +82,7 @@ export function AltaDireccionCitas() {
   const { filters } = useAltaDireccionFilters();
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
+  const [vista, setVista] = useState<"lista" | "calendario">("lista");
   const queryClient = useQueryClient();
 
   // Filtro por fecha de CREACIÓN (citas "generadas") dirigido por URL, para
@@ -302,17 +258,32 @@ export function AltaDireccionCitas() {
   const toggleKpi = (next: KpiFilter) =>
     setKpiFilter((prev) => (prev === next ? "all" : next));
 
-  const estadoSelect = (
-    <Select value={estadoFilter} onValueChange={setEstadoFilter}>
-      <SelectTrigger className="h-8 w-[200px] text-xs">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {ESTADO_OPTIONS.map((o) => (
-          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+  const panelActions = (
+    <div className="flex items-center gap-2">
+      <Select value={estadoFilter} onValueChange={setEstadoFilter}>
+        <SelectTrigger className="h-8 w-[200px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ESTADO_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <ToggleGroup
+        type="single"
+        value={vista}
+        onValueChange={(v) => v && setVista(v as "lista" | "calendario")}
+        className="h-8"
+      >
+        <ToggleGroupItem value="lista" className="h-8 px-2" aria-label="Vista de lista" title="Vista de lista">
+          <List className="h-4 w-4" />
+        </ToggleGroupItem>
+        <ToggleGroupItem value="calendario" className="h-8 px-2" aria-label="Vista de calendario" title="Vista de calendario">
+          <CalendarRange className="h-4 w-4" />
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </div>
   );
 
   return (
@@ -357,7 +328,7 @@ export function AltaDireccionCitas() {
           active={kpiFilter === "pendientes"}
         />
       </div>
-      <Panel title="Historial de citas" description={totalDesc} action={estadoSelect}>
+      <Panel title="Historial de citas" description={totalDesc} action={panelActions}>
         {isLoading ? (
           <p className="text-sm text-muted-foreground py-6 text-center">Cargando citas…</p>
         ) : error ? (
@@ -366,6 +337,8 @@ export function AltaDireccionCitas() {
           <p className="text-sm text-muted-foreground py-6 text-center">
             {hayFiltros ? "No hay citas que coincidan con los filtros." : "No hay citas registradas."}
           </p>
+        ) : vista === "calendario" ? (
+          <CitasCalendarView citas={filtradas} />
         ) : (
           <Table>
             <TableHeader>
