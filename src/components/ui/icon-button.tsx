@@ -42,7 +42,7 @@ export function IconButton({ icon: Icon, onClick, disabled = false, tooltip, cla
     <Tooltip>
       {/* span envoltorio: permite tooltip también en botón deshabilitado */}
       <TooltipTrigger asChild>{disabled ? <span className="inline-flex">{btn}</span> : btn}</TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
+      <TooltipContent side="top" className="max-w-[240px] text-[11px] leading-snug">{tooltip}</TooltipContent>
     </Tooltip>
   );
 }
