@@ -18,14 +18,52 @@ export type CitaRow = {
   hora_fin: string | null;
   fecha_creacion: string | null;
   id_estatus_cita: number | null;
+  id_tipo_cita: number | null;
   estatus: string | null;
   activo: boolean;
   proyectos: { nombre: string } | null;
   estatus_cita: { nombre: string } | null;
   tipos_cita: { nombre: string } | null;
+  /** Cliente / prospecto de la cita (FK id_persona_prospecto). */
   prospecto: { nombre_legal: string } | null;
+  /** Quien reserva / asiste (FK id_persona). En Capacitación es el único que se llena. */
+  persona: { nombre_legal: string } | null;
   agente: CitaAgente | null;
 };
+
+/**
+ * Tipos de cita que por diseño NO tienen cliente-prospecto ni agente
+ * acompañante (p. ej. Capacitación: es un agente tomando capacitación, no una
+ * visita comercial). Para estos, un agente/cliente vacío es "No aplica", no un
+ * dato faltante. Mantener como constante nombrada — mañana pueden ser más.
+ */
+export const TIPOS_CITA_SIN_CLIENTE_NI_AGENTE = new Set<number>([
+  1, // Capacitación
+]);
+
+export function esCitaSinAgentePorDiseno(c: CitaRow): boolean {
+  return c.id_tipo_cita != null && TIPOS_CITA_SIN_CLIENTE_NI_AGENTE.has(c.id_tipo_cita);
+}
+
+/**
+ * Nombre a mostrar en la columna "Cliente / Asistente": el prospecto si existe,
+ * si no el asistente (id_persona), si no "—". Cubre las citas de Capacitación,
+ * que solo llenan id_persona.
+ */
+export function nombreAsistente(c: CitaRow): string {
+  return c.prospecto?.nombre_legal ?? c.persona?.nombre_legal ?? "—";
+}
+
+/**
+ * Nombre del agente a mostrar. Distingue "No aplica" (el tipo de cita no tiene
+ * agente por diseño) de "—" (dato faltante que alguien debe corregir).
+ * `noAplica` permite a la UI atenuar/italizar el texto.
+ */
+export function nombreAgente(c: CitaRow): { value: string; noAplica: boolean } {
+  if (c.agente?.nombre_legal) return { value: c.agente.nombre_legal, noAplica: false };
+  if (esCitaSinAgentePorDiseno(c)) return { value: "No aplica", noAplica: true };
+  return { value: "—", noAplica: false };
+}
 
 /** Tono (clases Tailwind) por id de estatus de cita. */
 export const ESTATUS_TONE: Record<number, string> = {

@@ -26,6 +26,8 @@ import {
   fmtCreacion,
   getAgenteRol,
   getEstadoKey,
+  nombreAsistente,
+  nombreAgente,
 } from "./citas-utils";
 
 const DemoBadge = () => (
@@ -105,9 +107,10 @@ export function AltaDireccionCitas() {
       const { data, error } = await (supabase as any)
         .from("reservas_citas")
         .select(
-          "id, fecha, hora_inicio, hora_fin, fecha_creacion, id_estatus_cita, estatus, activo, " +
+          "id, fecha, hora_inicio, hora_fin, fecha_creacion, id_estatus_cita, id_tipo_cita, estatus, activo, " +
           "proyectos(nombre), estatus_cita(nombre), tipos_cita(nombre), " +
           "prospecto:personas!reservas_citas_id_persona_prospecto_fkey(nombre_legal), " +
+          "persona:personas!reservas_citas_id_persona_fkey(nombre_legal), " +
           "agente:personas!reservas_citas_id_agente_fkey(nombre_legal, usuarios(rol_id, roles(nombre)))"
         )
         .order("fecha", { ascending: false })
@@ -189,6 +192,7 @@ export function AltaDireccionCitas() {
       if (searchQ) {
         const hay = [
           c.prospecto?.nombre_legal,
+          c.persona?.nombre_legal,
           c.agente?.nombre_legal,
           c.proyectos?.nombre,
           fmtFolio(c.id),
@@ -228,6 +232,7 @@ export function AltaDireccionCitas() {
       if (searchQ) {
         const hay = [
           c.prospecto?.nombre_legal,
+          c.persona?.nombre_legal,
           c.agente?.nombre_legal,
           c.proyectos?.nombre,
           fmtFolio(c.id),
@@ -343,7 +348,7 @@ export function AltaDireccionCitas() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Folio</TableHead><TableHead>Tipo</TableHead><TableHead>Cliente</TableHead>
+                <TableHead>Folio</TableHead><TableHead>Tipo</TableHead><TableHead>Cliente / Asistente</TableHead>
                 <TableHead>Cita (fecha · hora)</TableHead>
                 <TableHead>Creada (fecha · hora)</TableHead>
                 <TableHead>Desarrollo</TableHead><TableHead>Agente</TableHead><TableHead>Estado</TableHead>
@@ -370,7 +375,7 @@ export function AltaDireccionCitas() {
                         {c.tipos_cita?.nombre || "—"}
                       </Pill>
                     </TableCell>
-                    <TableCell>{c.prospecto?.nombre_legal || "—"}</TableCell>
+                    <TableCell>{nombreAsistente(c)}</TableCell>
                     <TableCell>
                       <div className="font-medium">{c.fecha}</div>
                       <div className="text-xs text-muted-foreground">{fmtHora(c.hora_inicio)}</div>
@@ -380,7 +385,14 @@ export function AltaDireccionCitas() {
                       <div className="text-xs text-muted-foreground">{creada.hora}</div>
                     </TableCell>
                     <TableCell>{c.proyectos?.nombre || "—"}</TableCell>
-                    <TableCell>{c.agente?.nombre_legal || "—"}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const ag = nombreAgente(c);
+                        return ag.noAplica
+                          ? <span className="italic text-muted-foreground">{ag.value}</span>
+                          : ag.value;
+                      })()}
+                    </TableCell>
                     <TableCell><Pill className={tone}>{estadoLabel}</Pill></TableCell>
                   </TableRow>
                 );
