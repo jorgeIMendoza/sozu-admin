@@ -112,7 +112,7 @@ export function enviarCorreoAsignacion(destinatarios: Destinatario[], info: Corr
   enviarCorreoTicket(
     destinatarios,
     asunto,
-    `asignación del ticket #${info.folio}: ${info.nombre}`,
+    `Asignación del ticket #${info.folio}: ${info.nombre}`,
     detallesHtml(info, "Asignado por"),
     textoWa(info, "Ticket asignado", "Asignado por"),
   );
@@ -124,7 +124,7 @@ export function enviarCorreoCierre(destinatarios: Destinatario[], info: CorreoTi
   enviarCorreoTicket(
     destinatarios,
     asunto,
-    `resolución del ticket #${info.folio}: ${info.nombre}`,
+    `Resolución del ticket #${info.folio}: ${info.nombre}`,
     detallesHtml(info, "Resuelto por"),
     textoWa(info, "Ticket resuelto", "Resuelto por"),
   );
