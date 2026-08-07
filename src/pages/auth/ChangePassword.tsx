@@ -9,6 +9,7 @@ import sozuLogo from '@/assets/sozu-logo-black.png';
 import { EmailNoConfirmado } from '@/components/auth/EmailNoConfirmado';
 import { PerfilNoDisponible } from '@/components/auth/PerfilNoDisponible';
 import { llegoPorEnlaceDeCorreo, vieneDeFlujoConfirmacion } from '@/lib/emailConfirmacion';
+import { mensajeErrorPassword } from '@/lib/erroresPassword';
 
 const BLOCKED_ROLE_NAMES = ['Directores'];
 
@@ -212,9 +213,11 @@ export default function ChangePassword() {
           { origen: 'cambio_password_temporal' },
           'cambiar_password_temporal',
           'error',
+          // La bitácora se queda con el texto original de Auth (en inglés): es
+          // el que sirve para diagnosticar. A la pantalla va la traducción.
           error.message
         );
-        setError(error.message);
+        setError(mensajeErrorPassword(error));
         setIsCompletingPasswordFlow(false);
         setIsLoading(false);
         return;
@@ -265,8 +268,13 @@ export default function ChangePassword() {
         <h1 className="text-2xl font-black text-center text-[hsl(0_0%_5%)] mb-1.5" style={{ letterSpacing: '-0.02em' }}>
           Cambiar Contraseña
         </h1>
+        {/* A esta pantalla se llega por dos caminos y solo uno reparte una
+            contraseña temporal. Quien viene de "olvidé mi contraseña" conserva
+            la suya —el modo público de reset-user-password no toca la cuenta—,
+            así que hablarle de "tu contraseña temporal" lo empuja a teclear la
+            que ya tenía, que es justo lo que Auth rechaza con `same_password`. */}
         <p className="text-sm text-center mb-7" style={{ color: 'hsl(0 0% 45%)' }}>
-          Por seguridad, debes cambiar tu contraseña temporal antes de continuar
+          Por seguridad, define una contraseña nueva antes de continuar
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
