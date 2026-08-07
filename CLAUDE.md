@@ -23,7 +23,7 @@ Al iniciar sesión, detecta rama activa con `git branch --show-current`. Si usua
 
 - `Ejecuciones_manuales/` — documentación operativa (ver sección "Archivos de Ejecución Manual").
 - `src/` — implementación real del frontend (y wrappers/hooks que llaman a Supabase).
-- `supabase/` — se mantiene exactamente como está (`config.toml`, `functions/`, `migrations/` con su historial de Lovable/Producción). No se crean migraciones nuevas ahí como parte de este flujo.
+- `supabase/` — se mantiene exactamente como está (`config.toml`, `migrations/` con su historial de Lovable/Producción). No se crean migraciones nuevas ahí como parte de este flujo. `supabase/functions/` está prácticamente vacío a propósito: las Edge Functions viven en el repo `sozu-edge-functions` (ver su `README.md`).
 
 **No generar archivos `.html` de prototipos, mockups o diseños.** Toda implementación de UI se realiza directamente sobre los componentes React reales del proyecto y se valida en la ruta real de la aplicación corriendo (ej. `http://localhost:8080/admin/portal-juridico/inicio`), nunca en un archivo estático aparte.
 
@@ -449,6 +449,8 @@ LEAD → OFERTA → APARTADA(4) → VENDIDA(5) → PAGADA(9) → ESCRITURACIÓN(
 ---
 
 ## Edge Functions clave (Supabase Deno)
+
+Su código fuente vive en el repo `sozu-edge-functions`, no en este. Ahí se editan y desde ahí se despliegan (`dev` → VPS, `main` → Supabase Cloud).
 
 | Función | Cuándo usarla |
 |---|---|

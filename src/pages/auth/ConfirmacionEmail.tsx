@@ -5,8 +5,14 @@ import sozuLogo from '@/assets/sozu-logo-black.png';
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_PUBLISHABLE_KEY } from '@/lib/config';
 import { getPortalHost, type PortalKey } from '@/lib/portalUrls';
-import { claveConfirmacionLocal, marcarConfirmacionLocal } from '@/lib/emailConfirmacion';
+import {
+  claveConfirmacionLocal,
+  marcarConfirmacionLocal,
+  MOTIVO_ENLACE_CORREO,
+  MOTIVO_PARAM,
+} from '@/lib/emailConfirmacion';
 import { useReenviarConfirmacion } from '@/components/auth/useReenviarConfirmacion';
+import { useEnlaceCambioPassword } from '@/components/auth/useEnlaceCambioPassword';
 
 const resolvePortalKey = (portal: string | null): PortalKey => {
   switch (portal) {
@@ -30,8 +36,30 @@ const portalHostFor = (portal: string | null) => getPortalHost(resolvePortalKey(
 
 const getPortalUrl = (portal: string | null, destination: string | null) => {
   const host = portalHostFor(portal);
-  const path = destination === 'login' ? '/auth/login' : '/auth/change-password';
-  return `${host}${path}`;
+  if (destination === 'login') return `${host}/auth/login`;
+  // El marcador viaja en la URL, no en sessionStorage: /auth/change-password
+  // expulsa al portal a quien ya tiene `debe_cambiar_password = false`, y quien
+  // llega por "olvidé mi contraseña" siempre lo tiene en false (el modo público
+  // de reset-user-password no toca la cuenta). La marca local que se usaba para
+  // exceptuarlo se pierde en cuanto el enlace abre en otra pestaña o en el
+  // navegador embebido del correo, y entonces el enlace dejaba al usuario dentro
+  // del portal sin haber definido contraseña. La query sobrevive a los dos casos.
+  return `${host}/auth/change-password?${MOTIVO_PARAM}=${MOTIVO_ENLACE_CORREO}`;
+};
+
+// Los dos hooks de envío (`useEnlaceCambioPassword`, `useReenviarConfirmacion`)
+// comparten estos estados. `limitado` no es un fallo: el correo no salió porque
+// ya se pidieron varios seguidos, y el enlace bueno sigue en la bandeja del
+// usuario — por eso se pinta en ámbar y, como reintentar tampoco enviaría nada,
+// retira el botón igual que un envío exitoso.
+type EstadoEnvio = 'idle' | 'enviando' | 'enviado' | 'limitado' | 'error';
+
+const enlaceResuelto = (estado: EstadoEnvio) => estado === 'enviado' || estado === 'limitado';
+
+const estiloMensajeEnlace = (estado: EstadoEnvio) => {
+  if (estado === 'error') return { background: 'hsl(0 70% 97%)', color: 'hsl(0 70% 40%)' };
+  if (estado === 'limitado') return { background: 'hsl(38 92% 95%)', color: 'hsl(38 60% 25%)' };
+  return { background: 'hsl(145 35% 96%)', color: 'hsl(145 35% 30%)' };
 };
 
 // El token de confirmación es de un solo uso: si se arrastra en un redirect, el
@@ -113,6 +141,10 @@ export default function ConfirmacionEmail() {
   const [errorMsg, setErrorMsg] = useState('');
   const [emailEnlace, setEmailEnlace] = useState<string | null>(null);
   const [puedeReenviar, setPuedeReenviar] = useState(false);
+  // El enlace venía de un flujo de contraseña (`destination=change-password`),
+  // no de un alta. Cambia qué se le ofrece a quien llega con el token muerto:
+  // mandarlo al login sería mandarlo a una contraseña que no conoce.
+  const [vaACambiarPassword, setVaACambiarPassword] = useState(false);
   // Se llama sin sesión válida (el enlace acaba de fallar): el reenvío va con la
   // anon key, no con el token muerto que quede en localStorage.
   const {
@@ -120,6 +152,14 @@ export default function ConfirmacionEmail() {
     mensaje: reenvioMsg,
     reenviar: reenviarConfirmacion,
   } = useReenviarConfirmacion(emailEnlace, { sinSesion: true });
+  // Para la cuenta YA confirmada, `reenviar-confirmacion-email` contesta 400
+  // ("El email ya esta confirmado"): el enlace nuevo tiene que salir del modo
+  // público de reset-user-password.
+  const {
+    estado: enlacePassword,
+    mensaje: enlacePasswordMsg,
+    solicitar: solicitarEnlacePassword,
+  } = useEnlaceCambioPassword(emailEnlace);
 
   useEffect(() => {
     if (calledRef.current) return;
@@ -139,6 +179,7 @@ export default function ConfirmacionEmail() {
     setCtaLabel(destination === 'login' ? 'Ir a Iniciar Sesión' : 'Ir a Cambiar Contraseña');
     setLoginUrl(getPortalUrl(portal, 'login'));
     setEmailEnlace(email?.toLowerCase().trim() || null);
+    setVaACambiarPassword(destination === 'change-password');
 
     if (portal && requestedHost !== currentHost) {
       const nextUrl = new URL(window.location.href);
@@ -334,39 +375,104 @@ export default function ConfirmacionEmail() {
 
         {status === 'ya-confirmado' && (
           <>
+            {/* El verde de "todo bien" solo aplica al alta ya confirmada. En el flujo
+                de contraseña el enlace falló y aún falta un paso: se pinta en ámbar. */}
             <div
               className="mx-auto mb-5 flex items-center justify-center w-16 h-16 rounded-full"
-              style={{ background: 'hsl(145 35% 95%)' }}
+              style={{ background: vaACambiarPassword ? 'hsl(43 80% 94%)' : 'hsl(145 35% 95%)' }}
             >
-              <MailCheck className="h-8 w-8" style={{ color: 'hsl(145 35% 51%)' }} />
+              {vaACambiarPassword ? (
+                <AlertCircle className="h-8 w-8" style={{ color: 'hsl(43 80% 40%)' }} />
+              ) : (
+                <MailCheck className="h-8 w-8" style={{ color: 'hsl(145 35% 51%)' }} />
+              )}
             </div>
 
             <h1 className="text-2xl font-black text-[hsl(0_0%_5%)] mb-2" style={{ letterSpacing: '-0.02em' }}>
-              Tu correo ya está confirmado
+              {vaACambiarPassword ? 'Este enlace ya no sirve' : 'Tu correo ya está confirmado'}
             </h1>
 
-            <p className="text-sm mb-6" style={{ color: 'hsl(0 0% 45%)' }}>
-              Este enlace ya se había usado, pero tu cuenta está activa. Puedes iniciar sesión con
-              las credenciales que recibiste por correo.
-            </p>
+            {/* Quien llega por un enlace de contraseña no tiene credenciales que usar:
+                mandarlo al login sin más lo deja sin salida. Se le ofrece uno nuevo. */}
+            {vaACambiarPassword ? (
+              <>
+                <p className="text-sm mb-6" style={{ color: 'hsl(0 0% 45%)' }}>
+                  Tu cuenta está activa y tu correo confirmado, pero este enlace ya se usó o fue
+                  reemplazado por uno más reciente. Pide uno nuevo para definir tu contraseña.
+                </p>
 
-            <div
-              className="flex items-start gap-3 px-5 py-4 rounded-xl text-left text-sm mb-7"
-              style={{ background: 'hsl(210 80% 97%)', color: 'hsl(210 80% 30%)' }}
-            >
-              <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" />
-              <p>
-                Si no encuentras el correo con tus credenciales, usa{' '}
-                <strong>¿Olvidaste tu contraseña?</strong> en la pantalla de inicio de sesión.
-              </p>
-            </div>
+                <div
+                  className="flex items-start gap-3 px-5 py-4 rounded-xl text-left text-sm mb-7"
+                  style={{ background: 'hsl(210 80% 97%)', color: 'hsl(210 80% 30%)' }}
+                >
+                  <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  <p>
+                    Cada solicitud invalida los enlaces anteriores: abre siempre el{' '}
+                    <strong>correo más reciente</strong>.
+                  </p>
+                </div>
 
-            <a
-              href={loginUrl}
-              className="login-btn-primary flex items-center justify-center gap-2 no-underline"
-            >
-              Ir a Iniciar Sesión
-            </a>
+                {enlacePasswordMsg && (
+                  <p
+                    className="text-sm mb-5 px-4 py-3 rounded-xl"
+                    style={estiloMensajeEnlace(enlacePassword)}
+                  >
+                    {enlacePasswordMsg}
+                  </p>
+                )}
+
+                {!enlaceResuelto(enlacePassword) && (
+                  <button
+                    type="button"
+                    onClick={solicitarEnlacePassword}
+                    disabled={enlacePassword === 'enviando'}
+                    className="login-btn-primary flex items-center justify-center gap-2 w-full mb-3 disabled:opacity-60"
+                  >
+                    {enlacePassword === 'enviando' && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {enlacePassword === 'enviando'
+                      ? 'Enviando…'
+                      : 'Enviarme un enlace nuevo'}
+                  </button>
+                )}
+
+                <a
+                  href={loginUrl}
+                  className={
+                    enlacePassword === 'enviado'
+                      ? 'login-btn-primary flex items-center justify-center gap-2 no-underline'
+                      : 'text-sm font-semibold no-underline hover:underline'
+                  }
+                  style={enlacePassword === 'enviado' ? undefined : { color: 'hsl(0 0% 35%)' }}
+                >
+                  Ir a Iniciar Sesión
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="text-sm mb-6" style={{ color: 'hsl(0 0% 45%)' }}>
+                  Este enlace ya se había usado, pero tu cuenta está activa. Puedes iniciar sesión con
+                  las credenciales que recibiste por correo.
+                </p>
+
+                <div
+                  className="flex items-start gap-3 px-5 py-4 rounded-xl text-left text-sm mb-7"
+                  style={{ background: 'hsl(210 80% 97%)', color: 'hsl(210 80% 30%)' }}
+                >
+                  <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  <p>
+                    Si no encuentras el correo con tus credenciales, usa{' '}
+                    <strong>¿Olvidaste tu contraseña?</strong> en la pantalla de inicio de sesión.
+                  </p>
+                </div>
+
+                <a
+                  href={loginUrl}
+                  className="login-btn-primary flex items-center justify-center gap-2 no-underline"
+                >
+                  Ir a Iniciar Sesión
+                </a>
+              </>
+            )}
           </>
         )}
 
@@ -389,40 +495,50 @@ export default function ConfirmacionEmail() {
               {errorMsg}
             </p>
 
-            {reenvioMsg && (
+            {/* En un enlace de contraseña el correo nuevo tiene que salir del modo
+                público de reset-user-password: `reenviar-confirmacion-email` rechaza
+                con 400 en cuanto Auth ya tiene el correo confirmado, que es el estado
+                habitual de quien solo perdió la contraseña. */}
+            {(vaACambiarPassword ? enlacePasswordMsg : reenvioMsg) && (
               <p
                 className="text-sm mb-5 px-4 py-3 rounded-xl"
-                style={
-                  reenvio === 'error'
-                    ? { background: 'hsl(0 70% 97%)', color: 'hsl(0 70% 40%)' }
-                    : { background: 'hsl(145 35% 96%)', color: 'hsl(145 35% 30%)' }
-                }
+                style={estiloMensajeEnlace(vaACambiarPassword ? enlacePassword : reenvio)}
               >
-                {reenvioMsg}
+                {vaACambiarPassword ? enlacePasswordMsg : reenvioMsg}
               </p>
             )}
 
             {/* CTA */}
-            {puedeReenviar && reenvio !== 'enviado' && (
-              <button
-                type="button"
-                onClick={reenviarConfirmacion}
-                disabled={reenvio === 'enviando'}
-                className="login-btn-primary flex items-center justify-center gap-2 w-full mb-3 disabled:opacity-60"
-              >
-                {reenvio === 'enviando' && <Loader2 className="h-4 w-4 animate-spin" />}
-                {reenvio === 'enviando' ? 'Enviando…' : 'Reenviar confirmación'}
-              </button>
-            )}
+            {puedeReenviar && !enlaceResuelto(vaACambiarPassword ? enlacePassword : reenvio) && (
+                <button
+                  type="button"
+                  onClick={vaACambiarPassword ? solicitarEnlacePassword : reenviarConfirmacion}
+                  disabled={(vaACambiarPassword ? enlacePassword : reenvio) === 'enviando'}
+                  className="login-btn-primary flex items-center justify-center gap-2 w-full mb-3 disabled:opacity-60"
+                >
+                  {(vaACambiarPassword ? enlacePassword : reenvio) === 'enviando' && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {(vaACambiarPassword ? enlacePassword : reenvio) === 'enviando'
+                    ? 'Enviando…'
+                    : vaACambiarPassword
+                      ? 'Enviarme un enlace nuevo'
+                      : 'Reenviar confirmación'}
+                </button>
+              )}
 
             <a
               href={loginUrl}
               className={
-                puedeReenviar && reenvio !== 'enviado'
+                puedeReenviar && !enlaceResuelto(vaACambiarPassword ? enlacePassword : reenvio)
                   ? 'text-sm font-semibold no-underline hover:underline'
                   : 'login-btn-primary flex items-center justify-center gap-2 no-underline'
               }
-              style={puedeReenviar && reenvio !== 'enviado' ? { color: 'hsl(0 0% 35%)' } : undefined}
+              style={
+                puedeReenviar && !enlaceResuelto(vaACambiarPassword ? enlacePassword : reenvio)
+                  ? { color: 'hsl(0 0% 35%)' }
+                  : undefined
+              }
             >
               Ir a Iniciar Sesión
             </a>

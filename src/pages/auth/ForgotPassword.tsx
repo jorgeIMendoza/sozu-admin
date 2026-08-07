@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, ArrowLeft, Mail, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { z } from 'zod';
 import sozuLogo from '@/assets/sozu-logo-black.png';
 
@@ -12,6 +12,8 @@ export default function ForgotPassword() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [limitado, setLimitado] = useState(false);
+  const [minutosEspera, setMinutosEspera] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,13 +31,21 @@ export default function ForgotPassword() {
       }
 
       // invoke SIEMPRE manda Bearer anon => cae en modo público del edge fn,
-      // que responde genérico exista o no la cuenta. Ignoramos el resultado a
-      // propósito y mostramos SIEMPRE la pantalla genérica de éxito: nunca se
-      // revela si el correo está registrado (anti-enumeración).
-      await supabase.functions
-        .invoke('reset-user-password', { body: { email: emailLower } })
-        .catch(() => {});
+      // que responde genérico exista o no la cuenta. Del resultado sólo se lee
+      // `rate_limited`: nunca se revela si el correo está registrado
+      // (anti-enumeración), pero callar el límite dejaba al usuario pidiendo
+      // enlaces que ya no salían, siempre con el mismo "revisa tu correo".
+      // El límite se evalúa antes de resolver la cuenta, así que decirlo no
+      // distingue un correo registrado de uno que no lo está.
+      const { data } = await supabase.functions
+        .invoke<{ rate_limited?: boolean; retry_after_min?: number }>(
+          'reset-user-password',
+          { body: { email: emailLower } },
+        )
+        .catch(() => ({ data: null }));
 
+      setLimitado(Boolean(data?.rate_limited));
+      setMinutosEspera(data?.retry_after_min ?? null);
       setSuccess(true);
     } finally {
       setIsLoading(false);
@@ -53,19 +63,40 @@ export default function ForgotPassword() {
         {success ? (
           <>
             <div className="text-center">
-              <CheckCircle className="h-14 w-14 mx-auto mb-4" style={{ color: 'hsl(145 40% 45%)' }} />
-              <h1 className="text-xl font-black text-[hsl(0_0%_5%)] mb-3" style={{ letterSpacing: '-0.02em' }}>
-                Revisa tu correo
-              </h1>
-              <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
-                Si existe una cuenta activa con ese correo, te enviamos un enlace para restablecer tu contraseña.
-              </p>
-              <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm text-left mt-4" style={{ color: 'hsl(210 20% 30%)', background: 'hsl(210 30% 96%)' }}>
-                <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: 'hsl(210 60% 50%)' }} />
-                <span>
-                  Abre el enlace desde tu bandeja de entrada (revisa también la carpeta de spam) para verificar tu identidad y definir una nueva contraseña. El enlace es de un solo uso.
-                </span>
-              </div>
+              {limitado ? (
+                <>
+                  <Clock className="h-14 w-14 mx-auto mb-4" style={{ color: 'hsl(38 92% 45%)' }} />
+                  <h1 className="text-xl font-black text-[hsl(0_0%_5%)] mb-3" style={{ letterSpacing: '-0.02em' }}>
+                    Ya pediste varios enlaces
+                  </h1>
+                  <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
+                    Este último no se envió. Abre el <strong>correo más reciente</strong> que ya recibiste: ese enlace sigue siendo válido.
+                  </p>
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm text-left mt-4" style={{ color: 'hsl(38 60% 25%)', background: 'hsl(38 92% 95%)' }}>
+                    <Clock className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: 'hsl(38 92% 45%)' }} />
+                    <span>
+                      Si ya no lo tienes, espera {minutosEspera ?? 15} minutos y vuelve a intentarlo. Limitamos los envíos para que nadie pueda llenar tu bandeja pidiendo enlaces a tu nombre.
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-14 w-14 mx-auto mb-4" style={{ color: 'hsl(145 40% 45%)' }} />
+                  <h1 className="text-xl font-black text-[hsl(0_0%_5%)] mb-3" style={{ letterSpacing: '-0.02em' }}>
+                    Revisa tu correo
+                  </h1>
+                  <p className="text-sm mb-2" style={{ color: 'hsl(0 0% 45%)' }}>
+                    Si existe una cuenta activa con ese correo, te enviamos un enlace para restablecer tu contraseña.
+                  </p>
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm text-left mt-4" style={{ color: 'hsl(210 20% 30%)', background: 'hsl(210 30% 96%)' }}>
+                    <Mail className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: 'hsl(210 60% 50%)' }} />
+                    <span>
+                      Abre el enlace desde tu bandeja de entrada (revisa también la carpeta de spam) para verificar tu identidad y definir una nueva contraseña. El enlace es de un solo uso.
+                      {' '}Si pides otro, el anterior deja de funcionar: usa siempre el <strong>correo más reciente</strong>.
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
             <button
               onClick={() => navigate('/auth/login')}

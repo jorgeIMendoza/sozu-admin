@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { activityLoggerService } from '@/services/activityLoggerService';
@@ -8,7 +8,8 @@ import { z } from 'zod';
 import sozuLogo from '@/assets/sozu-logo-black.png';
 import { EmailNoConfirmado } from '@/components/auth/EmailNoConfirmado';
 import { PerfilNoDisponible } from '@/components/auth/PerfilNoDisponible';
-import { vieneDeFlujoConfirmacion } from '@/lib/emailConfirmacion';
+import { llegoPorEnlaceDeCorreo, vieneDeFlujoConfirmacion } from '@/lib/emailConfirmacion';
+import { mensajeErrorPassword } from '@/lib/erroresPassword';
 
 const BLOCKED_ROLE_NAMES = ['Directores'];
 
@@ -45,10 +46,16 @@ export default function ChangePassword() {
     refreshProfile,
   } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
+  // Sin sesión no hay contraseña que cambiar. El caso típico no es una navegación
+  // manual: es el enlace de correo cuyo token ya no servía (venció, se usó, o lo
+  // reemplazó una solicitud posterior), que aterriza aquí sin que verifyOtp haya
+  // creado sesión. Rebotar al login mudo dejaba al usuario mirando un formulario
+  // cuya contraseña no conoce, así que se le pasa el motivo.
   useEffect(() => {
     if (!authLoading && !session) {
-      navigate('/auth/login', { replace: true });
+      navigate('/auth/login?reason=link-expirado', { replace: true });
     }
   }, [authLoading, session, navigate]);
 
@@ -57,6 +64,14 @@ export default function ChangePassword() {
   // toca la cuenta (no repone Temporal123! ni levanta esa bandera), justamente para que un
   // anónimo no pueda alterar la cuenta de otro. Sin esta excepción, la página lo expulsaría
   // al portal y el flujo de recuperación no tendría salida.
+  //
+  // Se mira primero el marcador de la URL y solo después la señal local: esta
+  // última vive en sessionStorage, que es por pestaña y por origen, así que se
+  // pierde cuando el enlace abre en el navegador embebido del correo o en una
+  // pestaña nueva. Cuando se perdía, el enlace terminaba metiendo al usuario al
+  // portal con su contraseña vieja intacta en vez de pedirle una nueva.
+  const vieneDeEnlaceDeCorreo = llegoPorEnlaceDeCorreo(location.search);
+
   useEffect(() => {
     if (
       !authLoading &&
@@ -64,11 +79,12 @@ export default function ChangePassword() {
       profile &&
       !profile.debe_cambiar_password &&
       !isCompletingPasswordFlow &&
+      !vieneDeEnlaceDeCorreo &&
       !vieneDeFlujoConfirmacion(profile.email)
     ) {
       navigate(profile.rol_nombre === 'Cliente' ? '/admin/portal-cliente/inicio' : '/admin', { replace: true });
     }
-  }, [authLoading, session, profile, navigate, isCompletingPasswordFlow]);
+  }, [authLoading, session, profile, navigate, isCompletingPasswordFlow, vieneDeEnlaceDeCorreo]);
 
   const handleSignOut = () => {
     supabase.auth.signOut().finally(() => {
@@ -197,9 +213,11 @@ export default function ChangePassword() {
           { origen: 'cambio_password_temporal' },
           'cambiar_password_temporal',
           'error',
+          // La bitácora se queda con el texto original de Auth (en inglés): es
+          // el que sirve para diagnosticar. A la pantalla va la traducción.
           error.message
         );
-        setError(error.message);
+        setError(mensajeErrorPassword(error));
         setIsCompletingPasswordFlow(false);
         setIsLoading(false);
         return;
@@ -250,8 +268,13 @@ export default function ChangePassword() {
         <h1 className="text-2xl font-black text-center text-[hsl(0_0%_5%)] mb-1.5" style={{ letterSpacing: '-0.02em' }}>
           Cambiar Contraseña
         </h1>
+        {/* A esta pantalla se llega por dos caminos y solo uno reparte una
+            contraseña temporal. Quien viene de "olvidé mi contraseña" conserva
+            la suya —el modo público de reset-user-password no toca la cuenta—,
+            así que hablarle de "tu contraseña temporal" lo empuja a teclear la
+            que ya tenía, que es justo lo que Auth rechaza con `same_password`. */}
         <p className="text-sm text-center mb-7" style={{ color: 'hsl(0 0% 45%)' }}>
-          Por seguridad, debes cambiar tu contraseña temporal antes de continuar
+          Por seguridad, define una contraseña nueva antes de continuar
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

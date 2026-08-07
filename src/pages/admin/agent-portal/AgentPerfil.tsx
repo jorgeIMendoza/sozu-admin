@@ -31,6 +31,7 @@ import { AlertTriangle, ArrowLeft, CalendarDays, Camera, Check, Eye, EyeOff, Fil
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { mensajeErrorPassword } from "@/lib/erroresPassword";
 
 const ACTIVATION_BLOCKS = [
   {
@@ -381,7 +382,10 @@ const AgentPerfil = () => {
       const { error: signInErr } = await supabase.auth.signInWithPassword({ email: loggedInEmail, password: pwCurrent });
       if (signInErr) { toast.error('Contraseña actual incorrecta.'); return; }
       const { error } = await supabase.auth.updateUser({ password: pwNew });
-      if (error) throw error;
+      // Auth rechaza con 422 por causas que el formulario no puede anticipar
+      // (tecleó la contraseña que ya tenía, o la política del proyecto la
+      // considera débil). Tragarlas dejaba al agente reintentando lo mismo.
+      if (error) { toast.error(mensajeErrorPassword(error)); return; }
       toast.success('Contraseña actualizada.');
       setSecurityOpen(false);
       setPwCurrent(''); setPwNew(''); setPwConfirm('');

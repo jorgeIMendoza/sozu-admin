@@ -140,6 +140,11 @@ function CreateTicketFromContactDialog({
       .select("id, numero")
       .single();
     if (!error && ins?.id) {
+      // Solicitante en la tabla de unión (multi-solicitante). No bloquea si la tabla aún no existe
+      // en el ambiente (el ticket ya guardó id_entidad_relacionada legacy como respaldo).
+      await sb
+        .from("tickets_solicitantes")
+        .insert({ id_ticket: ins.id, id_entidad_relacionada: Number(contactId) });
       if (form.propietarios.length) {
         await sb
           .from("tickets_propietarios")
@@ -312,10 +317,26 @@ export function TicketsCard({
     queryKey: ["contact-tickets", contactId],
     enabled: !!contactId,
     queryFn: async () => {
+      // El ticket se liga a UNA entidad, pero una persona tiene varias entidades ("contactos"). Para
+      // que el ticket aparezca en TODAS las fichas de esa persona: resolver persona → todas sus
+      // entidades → tickets ligados a cualquiera de ellas (si no se resuelve, cae a la entidad actual).
+      let entIds: number[] = [Number(contactId)];
+      const { data: entActual } = await sb
+        .from("entidades_relacionadas")
+        .select("id_persona")
+        .eq("id", Number(contactId))
+        .maybeSingle();
+      if (entActual?.id_persona != null) {
+        const { data: entsPersona } = await sb
+          .from("entidades_relacionadas")
+          .select("id")
+          .eq("id_persona", entActual.id_persona);
+        entIds = Array.from(new Set([Number(contactId), ...(entsPersona ?? []).map((e: any) => Number(e.id))]));
+      }
       const { data } = await sb
         .from("tickets")
         .select("id, numero, nombre, prioridad, id_etapa")
-        .eq("id_entidad_relacionada", Number(contactId))
+        .in("id_entidad_relacionada", entIds)
         .eq("activo", true)
         .order("fecha_creacion", { ascending: false });
       const etapaIds = Array.from(new Set((data ?? []).map((t: any) => t.id_etapa)));
