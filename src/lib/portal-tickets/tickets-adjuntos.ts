@@ -25,6 +25,8 @@ export const DOC_TIPOS: AdjuntoTipo[] = ["documento"];
 // `accept` de los <input type=file> por campo.
 export const ACCEPT_MEDIA = "image/*,video/*,audio/*";
 export const ACCEPT_DOCS = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp";
+// Campo unificado: multimedia + documentos en el mismo dropzone.
+export const ACCEPT_ALL = `${ACCEPT_MEDIA},${ACCEPT_DOCS}`;
 
 // Extensiones que consideramos "documento" (clasificación confiable por extensión).
 const DOC_EXTS = new Set([
