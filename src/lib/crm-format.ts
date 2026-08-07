@@ -91,11 +91,11 @@ export const PRIORIDAD_META: Record<string, { label: string; dot: string }> = {
 // recencia de su última actividad (nota/tarea/cita). Umbrales decididos por Sergio:
 // 🟢 ≤ 7 días · 🟡 8–30 días · 🔴 > 30 días · ⚪ sin actividad registrada.
 export type SemaphoreKey = "verde" | "amarillo" | "rojo" | "sin";
-export const SEMAPHORE_META: Record<SemaphoreKey, { label: string; short: string; dot: string }> = {
-  verde: { label: "Interactúa seguido (≤ 7 días)", short: "Activo", dot: "bg-emerald-500" },
-  amarillo: { label: "Interacción ocasional (8–30 días)", short: "Ocasional", dot: "bg-amber-500" },
-  rojo: { label: "No responde (> 30 días)", short: "Inactivo", dot: "bg-red-500" },
-  sin: { label: "Sin interacción registrada", short: "Sin datos", dot: "bg-muted-foreground/40" },
+export const SEMAPHORE_META: Record<SemaphoreKey, { label: string; short: string; dot: string; tint: string }> = {
+  verde: { label: "Interactúa seguido (≤ 7 días)", short: "Activo", dot: "bg-emerald-500", tint: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
+  amarillo: { label: "Interacción ocasional (8–30 días)", short: "Ocasional", dot: "bg-amber-500", tint: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
+  rojo: { label: "No responde (> 30 días)", short: "Inactivo", dot: "bg-red-500", tint: "bg-red-500/10 text-red-700 dark:text-red-400" },
+  sin: { label: "Sin interacción registrada", short: "Sin datos", dot: "bg-muted-foreground/40", tint: "bg-muted text-muted-foreground" },
 };
 export function interactionSemaphore(lastIso: string | null | undefined): SemaphoreKey {
   if (!lastIso) return "sin";

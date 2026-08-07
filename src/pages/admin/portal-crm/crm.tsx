@@ -2854,7 +2854,7 @@ export function CrmDealDetail() {
                   <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} />{PRIORIDAD_META[deal.prioridad].label}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted text-foreground/70" title={SEMAPHORE_META[semaforo].label}>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${SEMAPHORE_META[semaforo].tint}`} title={SEMAPHORE_META[semaforo].label}>
                 <span className={`h-1.5 w-1.5 rounded-full ${SEMAPHORE_META[semaforo].dot}`} />{SEMAPHORE_META[semaforo].short}
               </span>
             </div>
