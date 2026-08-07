@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_PUBLISHABLE_KEY } from '@/lib/config';
 
-export type EstadoEnlace = 'idle' | 'enviando' | 'enviado' | 'error';
+export type EstadoEnlace = 'idle' | 'enviando' | 'enviado' | 'limitado' | 'error';
 
 /**
  * Pide un enlace NUEVO para definir contraseña (`reset-user-password`, modo público).
@@ -37,7 +37,10 @@ export function useEnlaceCambioPassword(email: string | null | undefined) {
     setEstado('enviando');
     setMensaje('');
 
-    const { error } = await supabase.functions.invoke('reset-user-password', {
+    const { data, error } = await supabase.functions.invoke<{
+      rate_limited?: boolean;
+      retry_after_min?: number;
+    }>('reset-user-password', {
       body: { email: destino },
       headers: { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
     });
@@ -46,6 +49,17 @@ export function useEnlaceCambioPassword(email: string | null | undefined) {
       console.error('reset-user-password error:', error);
       setEstado('error');
       setMensaje('No pudimos enviar el enlace. Intenta de nuevo o contacta a soporte.');
+      return;
+    }
+
+    // Tras varios intentos seguidos la función deja de mandar correos. Decirlo
+    // aquí evita que el usuario siga pulsando el botón viendo siempre el mismo
+    // "te enviamos un enlace" mientras su bandeja no recibe nada.
+    if (data?.rate_limited) {
+      setEstado('limitado');
+      setMensaje(
+        `Pediste varios enlaces seguidos, así que este no se envió. Abre el correo más reciente que ya recibiste: ese enlace sigue sirviendo. Si ya no lo tienes, espera ${data.retry_after_min ?? 15} minutos.`,
+      );
       return;
     }
 
