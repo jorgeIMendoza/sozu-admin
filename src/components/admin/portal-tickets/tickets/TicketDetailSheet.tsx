@@ -198,15 +198,6 @@ export function TicketDetailSheet({
 
           <Separator />
 
-          <EvidenciaSection
-            ticketId={ticket.id}
-            canDelete={isSuperAdmin}
-            readOnly={readOnly}
-            variant="documentos"
-          />
-
-          <Separator />
-
           {!readOnly && (
             <div className="space-y-3">
               <Label>Agregar nota</Label>

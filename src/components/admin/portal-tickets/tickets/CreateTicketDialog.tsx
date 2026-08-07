@@ -70,7 +70,6 @@ export function CreateTicketDialog({
   const [solicitantes, setSolicitantes] = useState<ContactoRef[]>([]);
   const [proyecto, setProyecto] = useState("");
   const [evidencia, setEvidencia] = useState<PendingAdjunto[]>([]);
-  const [documentos, setDocumentos] = useState<PendingAdjunto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -113,8 +112,6 @@ export function CreateTicketDialog({
     setPropietarios([]);
     evidencia.forEach((p) => URL.revokeObjectURL(p.previewUrl));
     setEvidencia([]);
-    documentos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
-    setDocumentos([]);
     setError("");
   };
 
@@ -138,7 +135,7 @@ export function CreateTicketDialog({
       descripcion,
       fuente,
       fechaCreacion: fechaCreacion ? new Date(fechaCreacion).toISOString() : undefined,
-      adjuntos: [...evidencia, ...documentos],
+      adjuntos: evidencia,
     });
     setSaving(false);
     toast.success("Ticket creado correctamente");
@@ -307,9 +304,6 @@ export function CreateTicketDialog({
           <Section titulo="Archivos">
             <div data-tour="ct-evidencia">
               <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
-            </div>
-            <div data-tour="ct-documentos">
-              <PendingEvidenciaField variant="documentos" value={documentos} onChange={setDocumentos} />
             </div>
           </Section>
 
