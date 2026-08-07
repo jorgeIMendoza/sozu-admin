@@ -20,6 +20,7 @@
  * gestiona esto antes de llamar al hook.
  */
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -37,6 +38,8 @@ export interface NotariaRpPagoRow {
   validacion_documental_efectivo: boolean;
   metodo_pago: string;
   id_cuenta_cobranza: number;
+  /** Solo poblado en pagosPrincipal — alimenta el color de la columna PLD (espejo de RelacionPagos.tsx). */
+  estado_validacion?: 'coincide' | 'error' | 'no_coincide' | 'sin_evidencia' | 'monto_ilegible' | 'monto_ausente_db' | null;
 }
 
 export interface NotariaRpAplicacionRow {
@@ -220,7 +223,41 @@ export function useNotariaRelacionPagos({
     },
   });
 
-  const pagosPrincipal = pagosPrincipalRaw.map(p => toRpPagoRow(p, effectiveCuentaId));
+  // ── Paso 1.5: estado de validación CEP por pago (fuente: pago_validaciones) ──
+  // Espejo exacto de RelacionPagos.tsx (portal escrituración) — alimenta el color
+  // de la columna PLD. Ordena desc para que el primer registro por id_pago sea el
+  // más reciente (validación manual prevalece sobre automática).
+  const { data: pagoValidaciones } = useQuery({
+    queryKey: ['notaria-rp-pago-validaciones', effectiveCuentaId],
+    enabled: !!effectiveCuentaId && securityPassed && principalReady && pagosPrincipalRaw.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const ids = pagosPrincipalRaw.map(p => p.id);
+      if (!ids.length) return [];
+      const { data } = await (supabase as any)
+        .from('pago_validaciones')
+        .select('id_pago, estado, fecha_creacion')
+        .in('id_pago', ids)
+        .order('fecha_creacion', { ascending: false });
+      return (data ?? []) as Array<{ id_pago: number; estado: string; fecha_creacion: string }>;
+    },
+  });
+
+  const ESTADOS_VALIDACION = ['coincide', 'error', 'no_coincide', 'sin_evidencia', 'monto_ilegible', 'monto_ausente_db'] as const;
+  type EstadoValidacion = typeof ESTADOS_VALIDACION[number];
+
+  const pagosPrincipal = useMemo((): NotariaRpPagoRow[] => {
+    const rows = pagosPrincipalRaw.map(p => toRpPagoRow(p, effectiveCuentaId));
+    if (!pagoValidaciones?.length) return rows;
+    const validMap = new Map<number, EstadoValidacion>();
+    for (const v of pagoValidaciones) {
+      const id = Number(v.id_pago);
+      if (!validMap.has(id) && (ESTADOS_VALIDACION as readonly string[]).includes(v.estado)) {
+        validMap.set(id, v.estado as EstadoValidacion);
+      }
+    }
+    return rows.map(r => ({ ...r, estado_validacion: validMap.get(r.id) ?? null }));
+  }, [pagosPrincipalRaw, pagoValidaciones, effectiveCuentaId]);
 
   // ── Paso 2: aplicaciones de la cuenta principal ───────────────────────────
   const { data: aplicacionesPrincipalRaw = [], isLoading: isLoadingPrincipalApl } = useQuery({
