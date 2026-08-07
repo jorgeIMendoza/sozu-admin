@@ -35,7 +35,7 @@ import {
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
 } from "@/components/ui/table";
 import { DField } from "@/components/admin/portal-crm/ui";
-import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META } from "@/lib/crm-format";
+import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META, SEMAPHORE_META, interactionSemaphore } from "@/lib/crm-format";
 import { fmtMXN, fmtDate } from "@/lib/crm-lib";
 import { fetchCrmOwners } from "@/hooks/useCrmCatalogos";
 import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
@@ -696,17 +696,21 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
   const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
   const prio = deal.prioridad && PRIORIDAD_META[deal.prioridad] ? deal.prioridad : null;
+  const sem = interactionSemaphore(deal.ultima_actividad);
   const hasActions = !!(onOpen && onEdit && onDelete);
   return (
     <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
       className={`cursor-grab active:cursor-grabbing border-border hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
       <CardContent className="p-3 space-y-2">
         <div className="flex items-center justify-between gap-2 min-h-[18px]">
-          {prio ? (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[prio]}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
-            </span>
-          ) : <span />}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${SEMAPHORE_META[sem].dot}`} title={`Interacción: ${SEMAPHORE_META[sem].label}`} />
+            {prio && (
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[prio]}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-0.5 shrink-0">
             {hasActions && <DealActionsMenu deal={deal} onOpen={onOpen!} onEdit={onEdit!} onDelete={onDelete!} onBoard />}
             <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" aria-hidden="true" />
