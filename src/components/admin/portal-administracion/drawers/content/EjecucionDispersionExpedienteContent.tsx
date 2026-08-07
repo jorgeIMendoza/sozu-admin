@@ -308,6 +308,7 @@ export function EjecucionDispersionExpedienteContent({
         <ComprobantesPagoClienteList
           pagosApartado={detalle.pagos_apartado}
           pagosEnganche={detalle.pagos_enganche}
+          pagosAdicionales={detalle.pagos_adicionales}
         />
       </Section>
 

@@ -72,13 +72,23 @@ export function useMotivosNoAvance(enabled = true) {
  * Razón vigente de cada oferta. Devuelve un mapa id_oferta → registro.
  * Silencioso si la tabla no existe todavía.
  */
+export interface RegistroNoAvance {
+  id_motivo: number;
+  motivo_nombre: string;
+  motivo_clave: string;
+  comentario: string | null;
+  registrado_por: string | null;
+  fecha_creacion: string;
+  fecha_actualizacion: string | null;
+}
+
 export async function fetchNoAvancePorOferta(ofertaIds: number[]) {
-  const map = new Map<number, { id_motivo: number; motivo_nombre: string; motivo_clave: string; comentario: string | null; registrado_por: string | null; fecha_registro: string }>();
+  const map = new Map<number, RegistroNoAvance>();
   if (ofertaIds.length === 0) return map;
 
   const { data, error } = await (supabase as any)
     .from('ofertas_no_avance')
-    .select('id_oferta, id_motivo, comentario, registrado_por, fecha_registro, motivos_no_avance_oferta(nombre, clave)')
+    .select('id_oferta, id_motivo, comentario, registrado_por, fecha_creacion, fecha_actualizacion, motivos_no_avance_oferta(nombre, clave)')
     .in('id_oferta', ofertaIds)
     .eq('activo', true);
 
@@ -91,7 +101,8 @@ export async function fetchNoAvancePorOferta(ofertaIds: number[]) {
       motivo_clave: r.motivos_no_avance_oferta?.clave || '',
       comentario: r.comentario ?? null,
       registrado_por: r.registrado_por ?? null,
-      fecha_registro: r.fecha_registro,
+      fecha_creacion: r.fecha_creacion,
+      fecha_actualizacion: r.fecha_actualizacion ?? null,
     });
   });
   return map;
@@ -128,9 +139,12 @@ export function useGuardarNoAvance() {
       if (selError) throw selError;
 
       if (existente?.id) {
+        // `fecha_actualizacion` se manda explícita porque el trigger que la
+        // mantiene puede no estar creado en el ambiente. Si el trigger existe,
+        // gana él (BEFORE UPDATE pisa el valor) y no hay conflicto.
         const { error } = await (supabase as any)
           .from('ofertas_no_avance')
-          .update(payload)
+          .update({ ...payload, fecha_actualizacion: new Date().toISOString() })
           .eq('id', existente.id);
         if (error) throw error;
         return;
