@@ -9,10 +9,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Download, RefreshCw, Upload, FileCheck, AlertCircle, CheckCircle2, XCircle, Users } from "lucide-react";
+import { Loader2, Download, RefreshCw, Upload, FileCheck, AlertCircle, CheckCircle2, XCircle, Users, ShieldCheck, ShieldAlert, Ban, Search, MinusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SATNotificationService, SATNotificationStatus, CompradorSATStatus } from "@/services/satNotificationService";
+import { AntilavadoService, AntilavadoStatus, CompradorAntilavadoStatus } from "@/services/antilavadoService";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Table,
   TableBody,
@@ -37,6 +43,61 @@ interface SATNotificationDialogProps {
   onSuccess?: () => void;
 }
 
+/** Estado de la verificación antilavado de un comprador (una fila de la tabla). */
+type AmlEstado = 'sin_rfc' | 'no_consultado' | 'consultando' | 'limpio' | 'en_lista' | 'error';
+
+interface AmlRowState {
+  estado: AmlEstado;
+  fecha?: string | null;
+  url?: string | null;
+  vigente?: boolean;
+  mensaje?: string | null;
+}
+
+/** dd mmm aaaa — mismo formato de fecha que el expediente de documentos. */
+const formatFechaAml = (fecha?: string | null) =>
+  fecha
+    ? new Date(fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '';
+
+/**
+ * Deriva el estado de cada fila a partir del estado en BD, conservando los
+ * resultados en vivo que la BD no puede representar (hallazgo en lista 69-B y
+ * errores de consulta cuando aún no hay comprobante).
+ */
+const construirAmlRows = (
+  data: AntilavadoStatus,
+  previo: Record<number, AmlRowState>
+): Record<number, AmlRowState> => {
+  const next: Record<number, AmlRowState> = {};
+  for (const comprador of data.compradores) {
+    const anterior = previo[comprador.id_persona];
+    if (anterior?.estado === 'en_lista') {
+      next[comprador.id_persona] = anterior;
+      continue;
+    }
+    if (anterior?.estado === 'error' && !comprador.tieneVerificacion) {
+      next[comprador.id_persona] = anterior;
+      continue;
+    }
+    if (!comprador.rfc) {
+      next[comprador.id_persona] = { estado: 'sin_rfc' };
+      continue;
+    }
+    if (comprador.tieneVerificacion) {
+      next[comprador.id_persona] = {
+        estado: 'limpio',
+        fecha: comprador.fechaVerificacion,
+        url: comprador.urlVerificacion,
+        vigente: comprador.vigente,
+      };
+      continue;
+    }
+    next[comprador.id_persona] = { estado: 'no_consultado' };
+  }
+  return next;
+};
+
 export function SATNotificationDialog({
   isOpen,
   onClose,
@@ -50,12 +111,20 @@ export function SATNotificationDialog({
   const [isUploading, setIsUploading] = useState(false);
   const [isCompradoresOpen, setIsCompradoresOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Array<{ campo: string; correcto: boolean; valor: string }> | null>(null);
+  // Verificación antilavado (Art. 69-B) — informativa, no bloquea el flujo SAT.
+  const [antilavado, setAntilavado] = useState<AntilavadoStatus | null>(null);
+  const [amlRows, setAmlRows] = useState<Record<number, AmlRowState>>({});
+  const [isAmlRunning, setIsAmlRunning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen && cuentaCobranzaId) {
+      // Estado antilavado limpio por cuenta (no arrastrar resultados de otra).
+      setAntilavado(null);
+      setAmlRows({});
       loadStatus();
+      loadAntilavado();
     }
   }, [isOpen, cuentaCobranzaId]);
 
@@ -77,6 +146,146 @@ export function SATNotificationDialog({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Carga el estado antilavado. NO dispara ninguna consulta externa: solo lee
+   * los comprobantes ya adjuntados en el expediente.
+   */
+  const loadAntilavado = async () => {
+    try {
+      const data = await AntilavadoService.getStatus(cuentaCobranzaId);
+      setAntilavado(data);
+      setAmlRows(prev => construirAmlRows(data, prev));
+    } catch (error) {
+      console.error('Error loading antilavado status:', error);
+    }
+  };
+
+  /**
+   * Consulta antilavado de UN comprador. Devuelve el resultado para que el
+   * recorrido secuencial pueda armar el resumen.
+   */
+  const consultarComprador = async (
+    comprador: CompradorAntilavadoStatus,
+    force: boolean
+  ): Promise<'limpio' | 'en_lista' | 'error' | 'sin_rfc'> => {
+    if (!comprador.rfc) {
+      setAmlRows(prev => ({ ...prev, [comprador.id_persona]: { estado: 'sin_rfc' } }));
+      return 'sin_rfc';
+    }
+
+    setAmlRows(prev => ({
+      ...prev,
+      [comprador.id_persona]: { ...prev[comprador.id_persona], estado: 'consultando' }
+    }));
+
+    const result = await AntilavadoService.consultar({
+      rfc: comprador.rfc,
+      id_cuenta_cobranza: cuentaCobranzaId,
+      id_persona: comprador.id_persona,
+      id_propiedad: antilavado?.idPropiedad ?? undefined,
+      force,
+    });
+
+    if (!result.success) {
+      setAmlRows(prev => ({
+        ...prev,
+        [comprador.id_persona]: { estado: 'error', mensaje: result.error || 'Error en la consulta' }
+      }));
+      return 'error';
+    }
+
+    const fecha = result.comprobante?.fecha_consulta || new Date().toISOString();
+    const url = result.documento?.url || result.comprobante?.url_verificacion || null;
+
+    if (result.encontrado_en_sat) {
+      setAmlRows(prev => ({
+        ...prev,
+        [comprador.id_persona]: { estado: 'en_lista', fecha, url, vigente: true }
+      }));
+      return 'en_lista';
+    }
+
+    setAmlRows(prev => ({
+      ...prev,
+      [comprador.id_persona]: { estado: 'limpio', fecha, url, vigente: true }
+    }));
+    return 'limpio';
+  };
+
+  /** Consulta de una sola fila (botón "Consultar" / "Reconsultar"). */
+  const handleConsultarFila = async (comprador: CompradorAntilavadoStatus, force: boolean) => {
+    const resultado = await consultarComprador(comprador, force);
+    if (resultado === 'en_lista') {
+      toast({
+        title: "Comprador en lista 69-B",
+        description: `${comprador.nombre_legal} aparece en la lista del Art. 69-B del CFF.`,
+        variant: "destructive"
+      });
+    } else if (resultado === 'error') {
+      toast({
+        title: "Error en la verificación antilavado",
+        description: `No se pudo consultar a ${comprador.nombre_legal}.`,
+        variant: "destructive"
+      });
+    }
+    await loadAntilavado();
+    onSuccess?.();
+  };
+
+  /**
+   * Recorre a TODOS los compradores uno por uno con await en serie
+   * (nunca Promise.all). Un error en un comprador no aborta a los demás.
+   */
+  const handleConsultarAntilavado = async () => {
+    if (!antilavado?.compradores.length) return;
+
+    // Abrir el detalle para que se vea el avance fila por fila.
+    setIsCompradoresOpen(true);
+    setIsAmlRunning(true);
+    let verificados = 0;
+    let enLista = 0;
+    let errores = 0;
+    let sinRfc = 0;
+
+    try {
+      for (const comprador of antilavado.compradores) {
+        try {
+          const resultado = await consultarComprador(comprador, false);
+          if (resultado === 'limpio') verificados++;
+          else if (resultado === 'en_lista') enLista++;
+          else if (resultado === 'sin_rfc') sinRfc++;
+          else errores++;
+        } catch (error) {
+          console.error('Error consultando antilavado del comprador:', comprador.id_persona, error);
+          const mensaje = error instanceof Error ? error.message : 'Error en la consulta';
+          setAmlRows(prev => ({
+            ...prev,
+            [comprador.id_persona]: { estado: 'error', mensaje }
+          }));
+          errores++;
+        }
+      }
+
+      const partes = [
+        `${verificados} verificados`,
+        `${enLista} en lista 69-B`,
+        `${errores} con error`
+      ];
+      if (sinRfc > 0) partes.push(`${sinRfc} sin RFC`);
+
+      toast({
+        title: "Verificación antilavado completada",
+        description: partes.join(', '),
+        variant: enLista > 0 || errores > 0 ? "destructive" : "default"
+      });
+
+      await loadAntilavado();
+      onSuccess?.();
+    } finally {
+      setIsAmlRunning(false);
     }
   };
 
@@ -289,6 +498,135 @@ export function SATNotificationDialog({
     )
   );
 
+  /** Celda de la columna AML (verificación antilavado) de un comprador. */
+  const renderAmlCell = (idPersona: number) => {
+    const info = antilavado?.compradores.find(c => c.id_persona === idPersona);
+    const row = amlRows[idPersona];
+
+    // Aún no carga el estado antilavado
+    if (!info || !row) {
+      return <span className="text-xs text-muted-foreground">—</span>;
+    }
+
+    if (row.estado === 'consultando') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Consultando…
+        </span>
+      );
+    }
+
+    if (row.estado === 'sin_rfc') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">
+            <MinusCircle className="h-3 w-3 mr-1" />
+            Sin RFC
+          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled>
+                  <Search className="h-3 w-3" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>El comprador no tiene RFC registrado</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      );
+    }
+
+    const botonConsultar = (label: string, force: boolean) => (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        disabled={isAmlRunning}
+        onClick={() => handleConsultarFila(info, force)}
+      >
+        <Search className="h-3 w-3 mr-1" />
+        {label}
+      </Button>
+    );
+
+    if (row.estado === 'en_lista') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs">
+            <Ban className="h-3 w-3 mr-1" />
+            En lista 69-B
+          </Badge>
+          {botonConsultar('Reconsultar', true)}
+        </div>
+      );
+    }
+
+    if (row.estado === 'error') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Badge variant="outline" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Error
+                </Badge>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-[260px]">{row.mensaje || 'Error en la consulta antilavado'}</p>
+            </TooltipContent>
+          </Tooltip>
+          {botonConsultar('Reintentar', true)}
+        </div>
+      );
+    }
+
+    if (row.estado === 'limpio') {
+      const vigente = row.vigente !== false;
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <Badge
+            variant="outline"
+            className={vigente
+              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs"
+              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs"}
+          >
+            <ShieldCheck className="h-3 w-3 mr-1" />
+            {vigente ? 'Limpio' : 'Vencido'}
+            {row.fecha && (
+              row.url ? (
+                <button
+                  type="button"
+                  onClick={() => window.open(row.url as string, '_blank')}
+                  className="ml-1 underline underline-offset-2 hover:opacity-80"
+                  title="Ver comprobante"
+                >
+                  ({formatFechaAml(row.fecha)})
+                </button>
+              ) : (
+                <span className="ml-1">({formatFechaAml(row.fecha)})</span>
+              )
+            )}
+          </Badge>
+          {botonConsultar('Reconsultar', true)}
+        </div>
+      );
+    }
+
+    // no_consultado
+    return (
+      <div className="flex items-center justify-center gap-2">
+        <span className="text-xs text-muted-foreground">— No consultado</span>
+        {botonConsultar('Consultar', false)}
+      </div>
+    );
+  };
+
   const renderCompradoresTable = (compradoresStatus: CompradorSATStatus[]) => {
     if (compradoresStatus.length === 0) {
       return (
@@ -307,13 +645,18 @@ export function SATNotificationDialog({
             <TableHead className="text-center w-[60px]">XML</TableHead>
             <TableHead className="text-center w-[60px]">CSF</TableHead>
             <TableHead className="text-center w-[80px]">Estado</TableHead>
+            <TableHead className="text-center w-[230px]">AML</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {compradoresStatus.map((comprador) => (
-            <TableRow 
+            <TableRow
               key={comprador.id_persona}
-              className={!comprador.cumpleRequisitos ? "bg-red-50 dark:bg-red-950/20" : ""}
+              className={
+                amlRows[comprador.id_persona]?.estado === 'en_lista' || !comprador.cumpleRequisitos
+                  ? "bg-red-50 dark:bg-red-950/20"
+                  : ""
+              }
             >
               <TableCell className="font-medium text-sm">
                 {comprador.nombre_legal.length > 25 
@@ -340,6 +683,9 @@ export function SATNotificationDialog({
                   </Badge>
                 )}
               </TableCell>
+              <TableCell className="text-center">
+                {renderAmlCell(comprador.id_persona)}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -349,7 +695,7 @@ export function SATNotificationDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[820px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Badge variant="outline" className="font-bold text-sm px-2 py-1">SAT</Badge>
@@ -366,6 +712,51 @@ export function SATNotificationDialog({
           </div>
         ) : status ? (
           <div className="space-y-4">
+            {/* Verificación Antilavado — Lista SAT (Art. 69-B).
+                Informativa: no condiciona canGenerate ni "Validar y Generar".
+                Nada se dispara sin el click explícito en "Consultar y adjuntar". */}
+            <div className="space-y-3 p-4 rounded-lg border border-amber-200 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20">
+              <h4 className="font-medium text-sm flex items-center gap-2 text-amber-900 dark:text-amber-300">
+                <ShieldAlert className="h-4 w-4" />
+                Verificación Antilavado — Lista SAT (Art. 69-B)
+              </h4>
+              <p className="text-xs text-amber-800 dark:text-amber-200/90">
+                Antes de notificar al SAT se verifica que ningún comprador aparezca en la lista de
+                contribuyentes con operaciones presuntamente inexistentes (Art. 69-B del CFF), como
+                exige la LFPIORPI.
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-200/90">
+                Al confirmar, el sistema consultará automáticamente el RFC de cada comprador en
+                antilavado.com.mx, descargará el comprobante oficial en PDF y lo adjuntará al
+                expediente del comprador en esta cuenta de cobranza. La consulta es pública y no
+                tiene costo. Toma unos segundos por comprador.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  onClick={handleConsultarAntilavado}
+                  disabled={isAmlRunning || !antilavado?.compradores.some(c => !!c.rfc)}
+                >
+                  {isAmlRunning ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                  )}
+                  Consultar y adjuntar
+                </Button>
+                {antilavado && antilavado.totalCompradores > 0 && (
+                  <Badge
+                    variant="outline"
+                    className={antilavado.vigentes === antilavado.totalCompradores
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs"
+                      : "text-xs"}
+                  >
+                    {antilavado.vigentes}/{antilavado.totalCompradores} con comprobante vigente
+                  </Badge>
+                )}
+              </div>
+            </div>
+
             {/* General status */}
             <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
               <h4 className="font-medium text-sm mb-3">Requisitos Generales:</h4>
@@ -410,7 +801,7 @@ export function SATNotificationDialog({
                     {renderCompradoresTable(status.compradoresStatus)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    PDF = Factura PDF verificada | XML = Factura XML verificada | CSF = Constancia de Situación Fiscal verificada
+                    PDF = Factura PDF verificada | XML = Factura XML verificada | CSF = Constancia de Situación Fiscal verificada | AML = Verificación antilavado (Art. 69-B), vigencia 90 días
                   </p>
                 </CollapsibleContent>
               </Collapsible>
