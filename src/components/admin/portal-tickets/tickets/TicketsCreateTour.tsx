@@ -25,8 +25,8 @@ const PASOS: Paso[] = [
   // Sección "Personas"
   { sel: "ct-solicitante", titulo: "Solicitante", texto: "El contacto que reporta; búscalo por nombre o correo." },
   { sel: "ct-propietarios", titulo: "Responsable(s)", texto: "Quién lo atiende. Recibirá el aviso al asignarlo." },
-  // Sección "Evidencia"
-  { sel: "ct-evidencia", titulo: "Evidencia", texto: "Sube fotos, video o una nota de voz (opcional)." },
+  // Sección "Archivos"
+  { sel: "ct-evidencia", titulo: "Archivos", texto: "Sube fotos, video, voz o documentos (PDF/Word/Excel). Opcional." },
   { sel: "ct-enviar", titulo: "¡Ya está!", texto: 'Da clic en "Crear ticket" para crearlo, o "Terminar" para salir.' },
 ];
 

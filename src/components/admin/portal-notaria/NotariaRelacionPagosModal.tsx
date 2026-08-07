@@ -105,6 +105,7 @@ export function NotariaRelacionPagosModal({
       descripcion: p.descripcion,
       id_metodos_pago: p.id_metodos_pago,
       validacion_documental_efectivo: p.validacion_documental_efectivo,
+      estado_validacion: p.estado_validacion ?? null,
     }));
   }, [pagosPrincipal]);
 

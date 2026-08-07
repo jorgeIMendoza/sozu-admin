@@ -86,3 +86,37 @@ export const PRIORIDAD_META: Record<string, { label: string; dot: string }> = {
   media: { label: "Media", dot: "bg-amber-500" },
   alta: { label: "Alta", dot: "bg-red-500" },
 };
+
+// Semáforo de interacción: qué tan responsivo es el cliente al seguimiento, según la
+// recencia de su última actividad (nota/tarea/cita). Umbrales decididos por Sergio:
+// 🟢 ≤ 7 días · 🟡 8–30 días · 🔴 > 30 días · ⚪ sin actividad registrada.
+export type SemaphoreKey = "verde" | "amarillo" | "rojo" | "sin";
+export const SEMAPHORE_META: Record<SemaphoreKey, { label: string; short: string; dot: string; tint: string }> = {
+  verde: { label: "Interactúa seguido (≤ 7 días)", short: "Activo", dot: "bg-emerald-500", tint: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
+  amarillo: { label: "Interacción ocasional (8–30 días)", short: "Ocasional", dot: "bg-amber-500", tint: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
+  rojo: { label: "No responde (> 30 días)", short: "Inactivo", dot: "bg-red-500", tint: "bg-red-500/10 text-red-700 dark:text-red-400" },
+  sin: { label: "Sin interacción registrada", short: "Sin datos", dot: "bg-muted-foreground/40", tint: "bg-muted text-muted-foreground" },
+};
+export function interactionSemaphore(lastIso: string | null | undefined): SemaphoreKey {
+  if (!lastIso) return "sin";
+  const t = new Date(lastIso).getTime();
+  if (isNaN(t)) return "sin";
+  const days = Math.floor((Date.now() - t) / 86400000);
+  if (days <= 7) return "verde";
+  if (days <= 30) return "amarillo";
+  return "rojo";
+}
+// Última actividad = máx. `created_at` entre los grupos (notas/tareas/citas). ISO o null.
+export function lastActivityFrom(...groups: Array<Array<{ created_at?: string | null }> | null | undefined>): string | null {
+  let max = -Infinity;
+  let maxIso: string | null = null;
+  for (const g of groups) {
+    for (const item of g ?? []) {
+      const iso = item?.created_at;
+      if (!iso) continue;
+      const t = new Date(iso).getTime();
+      if (!isNaN(t) && t > max) { max = t; maxIso = iso; }
+    }
+  }
+  return maxIso;
+}

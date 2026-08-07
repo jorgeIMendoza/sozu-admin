@@ -1,10 +1,13 @@
-// Evidencia multimedia de un ticket. Dos usos:
+// Archivos de un ticket: evidencia multimedia (fotos/video/voz) Y documentos (PDF/Word/Excel…),
+// TODO en un mismo campo. Dos usos:
 //  • PendingEvidenciaField → al CREAR (colecciona archivos; se suben al guardar el ticket).
 //  • EvidenciaSection      → en el DETALLE (sube al instante; borrar solo Super Admin).
-// UI: dropzone (clic o arrastrar) + miniaturas uniformes (foto, video con ▶, audio con play).
-import { useRef, useState } from "react";
+// UI: dropzone (clic o arrastrar) + miniaturas uniformes (foto, video con ▶, audio con play,
+// documento con ícono). Las fotos y videos se ven en un VISOR (lightbox) en la misma pantalla.
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Upload, X, Loader2, Play, Pause, Mic } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Upload, X, Loader2, Play, Pause, Mic, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { VoiceRecorderButton } from "./VoiceRecorder";
 import {
   MAX_ADJUNTOS,
+  ACCEPT_ALL,
   toPendingAdjunto,
   fetchTicketAdjuntos,
   saveTicketAdjuntos,
@@ -21,21 +25,118 @@ import {
   type TicketAdjunto,
 } from "@/lib/portal-tickets/tickets-adjuntos";
 
-const ACCEPT = "image/*,video/*,audio/*";
-const HINT = `Fotos ≤ 10 MB · Videos ≤ 50 MB · Audio ≤ 25 MB · Máx. ${MAX_ADJUNTOS}.`;
+const HINT = `Fotos ≤ 10 MB · Videos ≤ 50 MB · Audio/Documentos ≤ 25 MB · Máx. ${MAX_ADJUNTOS}.`;
 
-// Tile uniforme (96×96) de una evidencia, con botón de quitar/borrar al hover.
+// Solo foto/video se ven en el visor (lightbox); audio se reproduce en el tile y los documentos abren aparte.
+function esVisible(tipo: AdjuntoTipo) {
+  return tipo === "foto" || tipo === "video";
+}
+
+// ── Visor (lightbox) de fotos/videos en la MISMA pantalla, con ‹ ›, Esc y clic-afuera para cerrar ──
+type VisorItem = { src: string; tipo: AdjuntoTipo; nombre?: string };
+
+function MediaLightbox({
+  items,
+  index,
+  onClose,
+  onIndex,
+}: {
+  items: VisorItem[];
+  index: number;
+  onClose: () => void;
+  onIndex: (i: number) => void;
+}) {
+  const total = items.length;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowRight") onIndex((index + 1) % total);
+      else if (e.key === "ArrowLeft") onIndex((index - 1 + total) % total);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, total, onClose, onIndex]);
+
+  const it = items[index];
+  if (!it) return null;
+  const varios = total > 1;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-label="Visor de evidencia"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Cerrar visor"
+        className="absolute right-3 top-3 grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+      >
+        <X className="size-5" />
+      </button>
+
+      {varios && (
+        <>
+          <button
+            type="button"
+            aria-label="Anterior"
+            onClick={(e) => {
+              e.stopPropagation();
+              onIndex((index - 1 + total) % total);
+            }}
+            className="absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <ChevronLeft className="size-6" />
+          </button>
+          <button
+            type="button"
+            aria-label="Siguiente"
+            onClick={(e) => {
+              e.stopPropagation();
+              onIndex((index + 1) % total);
+            }}
+            className="absolute right-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <ChevronRight className="size-6" />
+          </button>
+        </>
+      )}
+
+      <figure className="flex max-h-full max-w-full flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        {it.tipo === "foto" ? (
+          <img src={it.src} alt={it.nombre || "foto"} className="max-h-[82vh] max-w-full rounded-lg object-contain" />
+        ) : (
+          <video src={it.src} controls autoPlay className="max-h-[82vh] max-w-full rounded-lg" />
+        )}
+        {(it.nombre || varios) && (
+          <figcaption className="text-xs text-white/80">
+            {it.nombre}
+            {varios ? ` · ${index + 1}/${total}` : ""}
+          </figcaption>
+        )}
+      </figure>
+    </div>,
+    document.body,
+  );
+}
+
+// Tile uniforme (96×96). Foto/video abren el visor (onOpen); audio se reproduce en el tile;
+// documento abre/descarga en pestaña nueva. Botón de quitar/borrar al hover.
 function EvidenciaTile({
   src,
   tipo,
   nombre,
   onRemove,
+  onOpen,
   busy,
 }: {
   src: string;
   tipo: AdjuntoTipo;
   nombre?: string;
   onRemove?: () => void;
+  onOpen?: () => void;
   busy?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -56,20 +157,20 @@ function EvidenciaTile({
   return (
     <div className="group relative size-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40">
       {tipo === "foto" && (
-        <a href={src} target="_blank" rel="noopener noreferrer" className="block size-full" title={nombre}>
+        <button type="button" onClick={onOpen} title={nombre} className="block size-full">
           <img src={src} alt={nombre || "foto"} className="size-full object-cover" />
-        </a>
+        </button>
       )}
 
       {tipo === "video" && (
-        <a href={src} target="_blank" rel="noopener noreferrer" className="block size-full" title={nombre}>
+        <button type="button" onClick={onOpen} title={nombre} className="block size-full">
           <video src={src} className="size-full object-cover" muted playsInline preload="metadata" />
           <span className="pointer-events-none absolute inset-0 grid place-items-center">
             <span className="grid size-8 place-items-center rounded-full bg-black/55 text-white">
               <Play className="size-4 translate-x-px fill-current" />
             </span>
           </span>
-        </a>
+        </button>
       )}
 
       {tipo === "audio" && (
@@ -89,6 +190,19 @@ function EvidenciaTile({
         </button>
       )}
 
+      {tipo === "documento" && (
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={nombre}
+          className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <FileText className="size-7" />
+          <span className="line-clamp-2 break-all text-[9px] leading-tight">{nombre || "Documento"}</span>
+        </a>
+      )}
+
       {onRemove && (
         <button
           type="button"
@@ -104,7 +218,7 @@ function EvidenciaTile({
   );
 }
 
-// Zona de arrastrar/soltar o clic para subir. Reutilizada al crear y en el detalle.
+// Zona de arrastrar/soltar o clic para subir (multimedia + documentos, mismo campo).
 function Dropzone({ onFiles }: { onFiles: (files: File[]) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
@@ -139,13 +253,13 @@ function Dropzone({ onFiles }: { onFiles: (files: File[]) => void }) {
           <Upload className="size-4" />
         </span>
         <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Haz clic</span> o arrastra fotos, videos o audio
+          <span className="font-medium text-foreground">Haz clic</span> o arrastra fotos, videos, audio o documentos
         </p>
       </div>
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPT}
+        accept={ACCEPT_ALL}
         multiple
         hidden
         onChange={(e) => {
@@ -157,7 +271,7 @@ function Dropzone({ onFiles }: { onFiles: (files: File[]) => void }) {
   );
 }
 
-// ── CREAR: campo controlado de evidencia pendiente (se sube al guardar el ticket) ──
+// ── CREAR: campo controlado de archivos pendientes (se suben al guardar el ticket) ──
 export function PendingEvidenciaField({
   value,
   onChange,
@@ -168,6 +282,10 @@ export function PendingEvidenciaField({
   disabled?: boolean;
 }) {
   const lleno = value.length >= MAX_ADJUNTOS;
+  const [viewer, setViewer] = useState<number | null>(null);
+  const visor: VisorItem[] = value
+    .filter((p) => esVisible(p.tipo))
+    .map((p) => ({ src: p.previewUrl, tipo: p.tipo, nombre: p.nombre }));
 
   const addArchivos = (arr: File[]) => {
     if (!arr.length) return;
@@ -179,7 +297,7 @@ export function PendingEvidenciaField({
     if (arr.length > space) toast.error(`Solo se agregaron ${space}; el máximo es ${MAX_ADJUNTOS}.`);
     const nuevos = arr
       .slice(0, space)
-      .map(toPendingAdjunto)
+      .map((f) => toPendingAdjunto(f))
       .filter((p): p is PendingAdjunto => !!p);
     if (nuevos.length) onChange([...value, ...nuevos]);
   };
@@ -192,12 +310,19 @@ export function PendingEvidenciaField({
 
   return (
     <div className="space-y-2">
-      <Label>Evidencia (opcional)</Label>
+      <Label>Evidencia y documentos (opcional)</Label>
 
       {value.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {value.map((p) => (
-            <EvidenciaTile key={p.id} src={p.previewUrl} tipo={p.tipo} nombre={p.nombre} onRemove={() => remove(p.id)} />
+            <EvidenciaTile
+              key={p.id}
+              src={p.previewUrl}
+              tipo={p.tipo}
+              nombre={p.nombre}
+              onRemove={() => remove(p.id)}
+              onOpen={esVisible(p.tipo) ? () => setViewer(visor.findIndex((v) => v.src === p.previewUrl)) : undefined}
+            />
           ))}
         </div>
       )}
@@ -208,11 +333,15 @@ export function PendingEvidenciaField({
         {!disabled && !lleno ? <VoiceRecorderButton onRecorded={(f) => addArchivos([f])} /> : <span />}
         <p className="text-[11px] text-muted-foreground">{HINT}</p>
       </div>
+
+      {viewer !== null && visor[viewer] && (
+        <MediaLightbox items={visor} index={viewer} onClose={() => setViewer(null)} onIndex={setViewer} />
+      )}
     </div>
   );
 }
 
-// ── DETALLE: sección de evidencia en vivo (sube al instante; borrar solo Super Admin) ──
+// ── DETALLE: sección en vivo (sube al instante; borrar solo Super Admin) ──
 export function EvidenciaSection({
   ticketId,
   canDelete,
@@ -225,6 +354,7 @@ export function EvidenciaSection({
   const { user } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [viewer, setViewer] = useState<number | null>(null);
 
   const {
     data: adjuntos = [],
@@ -236,6 +366,9 @@ export function EvidenciaSection({
   });
 
   const lleno = adjuntos.length >= MAX_ADJUNTOS;
+  const visor: VisorItem[] = adjuntos
+    .filter((a) => esVisible(a.tipo))
+    .map((a) => ({ src: a.url, tipo: a.tipo, nombre: a.nombre }));
 
   const addArchivos = async (arr: File[]) => {
     if (!arr.length) return;
@@ -246,7 +379,7 @@ export function EvidenciaSection({
     }
     const chosen = arr
       .slice(0, space)
-      .map(toPendingAdjunto)
+      .map((f) => toPendingAdjunto(f))
       .filter((p): p is PendingAdjunto => !!p);
     if (!chosen.length) return;
     setUploading(true);
@@ -261,7 +394,7 @@ export function EvidenciaSection({
     const ok = await deleteTicketAdjunto(adj);
     setDeletingId(null);
     if (ok) {
-      toast.success("Evidencia eliminada");
+      toast.success("Archivo eliminado");
       await refetch();
     }
   };
@@ -269,7 +402,7 @@ export function EvidenciaSection({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>Evidencia</Label>
+        <Label>Evidencia y documentos</Label>
         <span className="text-xs text-muted-foreground">
           {adjuntos.length}/{MAX_ADJUNTOS}
         </span>
@@ -288,6 +421,7 @@ export function EvidenciaSection({
                   tipo={a.tipo}
                   nombre={a.nombre}
                   onRemove={canDelete ? () => remove(a) : undefined}
+                  onOpen={esVisible(a.tipo) ? () => setViewer(visor.findIndex((v) => v.src === a.url)) : undefined}
                   busy={deletingId === a.id}
                 />
               ))}
@@ -304,7 +438,7 @@ export function EvidenciaSection({
               <Dropzone onFiles={addArchivos} />
             ))}
 
-          {!adjuntos.length && readOnly && <p className="text-xs text-muted-foreground">Sin evidencia.</p>}
+          {!adjuntos.length && readOnly && <p className="text-xs text-muted-foreground">Sin archivos.</p>}
         </>
       )}
 
@@ -316,6 +450,10 @@ export function EvidenciaSection({
             {canDelete ? "" : " Solo un Super Admin puede eliminar."}
           </p>
         </div>
+      )}
+
+      {viewer !== null && visor[viewer] && (
+        <MediaLightbox items={visor} index={viewer} onClose={() => setViewer(null)} onIndex={setViewer} />
       )}
     </div>
   );

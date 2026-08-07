@@ -35,8 +35,8 @@ import {
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
 } from "@/components/ui/table";
 import { DField } from "@/components/admin/portal-crm/ui";
-import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META } from "@/lib/crm-format";
-import { fmtMXN, fmtDate } from "@/lib/crm-lib";
+import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META, SEMAPHORE_META, interactionSemaphore } from "@/lib/crm-format";
+import { fmtMXN, fmtDate, relTime } from "@/lib/crm-lib";
 import { fetchCrmOwners } from "@/hooks/useCrmCatalogos";
 import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
 
@@ -692,48 +692,83 @@ export const PRIORIDAD_PILL: Record<string, string> = {
 };
 
 // Tarjeta arrastrable del tablero.
+// Normaliza (sin acentos, minúsculas) para detectar si el contacto es "el mismo" que el
+// nombre del negocio y evitar mostrarlo dos veces (ahorra espacio en la tarjeta).
+const normName = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+function sameEntity(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const na = normName(a), nb = normName(b);
+  return !!na && !!nb && (na.includes(nb) || nb.includes(na));
+}
+
 export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { deal: any; dragging?: boolean; onOpen?: (id: number) => void; onEdit?: (d: any) => void; onDelete?: (d: any) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
   const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
   const prio = deal.prioridad && PRIORIDAD_META[deal.prioridad] ? deal.prioridad : null;
+  const sem = interactionSemaphore(deal.ultima_actividad);
+  const semMeta = SEMAPHORE_META[sem];
+  const rel = deal.ultima_actividad ? relTime(deal.ultima_actividad) : null;
   const hasActions = !!(onOpen && onEdit && onDelete);
+  const hasValor = deal.valor != null && deal.valor !== "";
+  const showContact = deal.contacto_nombre && !sameEntity(deal.contacto_nombre, deal.nombre);
+  const hasFooter = hasValor || !!prio || !!deal.fecha_cierre_estimada;
   return (
     <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
-      className={`cursor-grab active:cursor-grabbing border-border hover:shadow-md transition-shadow ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
-      <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2 min-h-[18px]">
-          {prio ? (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[prio]}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
-            </span>
-          ) : <span />}
+      className={`cursor-grab active:cursor-grabbing border-border hover:border-primary/40 hover:shadow-md transition-all ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
+      <CardContent className="p-3 space-y-1.5">
+        {/* Header: semáforo de interacción (texto) + acciones */}
+        <div className="flex items-center justify-between gap-2">
+          <span title={rel ? `${semMeta.label} · última actividad ${rel}` : semMeta.label}
+            className={`inline-flex items-center gap-1.5 rounded-full pl-1.5 pr-2 py-0.5 text-[10px] font-medium min-w-0 ${semMeta.tint}`}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${semMeta.dot}`} />
+            <span className="truncate">{semMeta.short}{rel ? ` · ${rel}` : ""}</span>
+          </span>
           <div className="flex items-center gap-0.5 shrink-0">
             {hasActions && <DealActionsMenu deal={deal} onOpen={onOpen!} onEdit={onEdit!} onDelete={onDelete!} onBoard />}
             <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" aria-hidden="true" />
           </div>
         </div>
+
+        {/* Nombre del negocio */}
         {onOpen ? (
           <button onClick={(e) => { e.stopPropagation(); onOpen(deal.id); }}
-            className="text-sm font-medium leading-snug text-left hover:text-primary hover:underline">
+            className="block text-sm font-semibold leading-snug text-left hover:text-primary hover:underline">
             {deal.nombre}
           </button>
         ) : (
-          <p className="text-sm font-medium leading-snug">{deal.nombre}</p>
+          <p className="text-sm font-semibold leading-snug">{deal.nombre}</p>
         )}
-        {deal.contacto_nombre && (
+
+        {/* Contacto asociado (solo si aporta info nueva respecto al nombre) */}
+        {showContact && (
           <div className="flex items-center gap-2">
             <span className="h-5 w-5 shrink-0 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">{dealInitials(deal.contacto_nombre)}</span>
             <span className="text-xs text-muted-foreground truncate">{deal.contacto_nombre}</span>
           </div>
         )}
-        <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
-          <span className="text-sm font-semibold tabular-nums">{deal.valor != null ? fmtMoneda(Number(deal.valor), deal.moneda) : "—"}</span>
-          {deal.fecha_cierre_estimada && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Calendar className="h-3 w-3" />{fmtDate(deal.fecha_cierre_estimada)}
-            </span>
-          )}
-        </div>
+
+        {/* Footer adaptable: monto (o propietario) + prioridad + fecha de cierre. Se omite si no hay nada. */}
+        {hasFooter && (
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-2 mt-0.5">
+            {hasValor ? (
+              <span className="text-sm font-semibold tabular-nums truncate">{fmtMoneda(Number(deal.valor), deal.moneda)}</span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground truncate">{deal.propietario_nombre && deal.propietario_nombre !== "—" ? deal.propietario_nombre : "Sin monto"}</span>
+            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {prio && (
+                <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[prio]}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[prio].dot}`} />{PRIORIDAD_META[prio].label}
+                </span>
+              )}
+              {deal.fecha_cierre_estimada && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground whitespace-nowrap">
+                  <Calendar className="h-3 w-3" />{fmtDate(deal.fecha_cierre_estimada)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
-import { FUENTES, PRIORIDADES, type Priority } from "@/lib/portal-tickets/tickets-data";
+import { FUENTES, type Priority } from "@/lib/portal-tickets/tickets-data";
 import { SolicitantesPicker } from "./SolicitantesPicker";
 import type { ContactoRef } from "@/lib/portal-tickets/tickets-data";
 import { ProyectoSelect } from "./ProyectoSelect";
@@ -20,7 +20,7 @@ import { PropietariosPicker } from "./PropietariosPicker";
 import { PendingEvidenciaField } from "./TicketEvidencia";
 import type { PendingAdjunto } from "@/lib/portal-tickets/tickets-adjuntos";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { Section, PrioridadChips } from "./TicketFormBits";
 
 // Fecha de hoy en formato YYYY-MM-DD (hora local, para el <input type="date">).
 function hoyLocal() {
@@ -29,24 +29,6 @@ function hoyLocal() {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
-
-// Sección del formulario (Detalles · Clasificación · Personas · Evidencia): encabezado + campos.
-function Section({ titulo, children }: { titulo: string; children: ReactNode }) {
-  return (
-    <section className="space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h3>
-      {children}
-    </section>
-  );
-}
-
-// Estilo de los chips de prioridad (punto de color + resaltado del activo).
-const PRIO_STYLE: Record<Priority, { dot: string; active: string }> = {
-  alta: { dot: "bg-destructive", active: "border-destructive bg-destructive/10 text-foreground" },
-  media: { dot: "bg-amber-500", active: "border-amber-500 bg-amber-500/10 text-foreground" },
-  baja: { dot: "bg-emerald-500", active: "border-emerald-500 bg-emerald-500/10 text-foreground" },
-  sin: { dot: "bg-muted-foreground/40", active: "border-muted-foreground/40 bg-muted text-foreground" },
-};
 
 export function CreateTicketDialog({
   open,
@@ -229,26 +211,8 @@ export function CreateTicketDialog({
               </div>
             </div>
 
-            <div data-tour="ct-prioridad" className="space-y-1.5">
-              <Label>Prioridad</Label>
-              <div className="flex flex-wrap gap-2">
-                {PRIORIDADES.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPrioridad(p.id)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                      prioridad === p.id
-                        ? cn(PRIO_STYLE[p.id].active, "font-medium")
-                        : "border-border text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    <span className={cn("size-2.5 rounded-full", PRIO_STYLE[p.id].dot)} aria-hidden />
-                    {p.nombre}
-                  </button>
-                ))}
-              </div>
+            <div data-tour="ct-prioridad">
+              <PrioridadChips value={prioridad} onChange={setPrioridad} />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -301,7 +265,7 @@ export function CreateTicketDialog({
             </div>
           </Section>
 
-          <Section titulo="Evidencia">
+          <Section titulo="Archivos">
             <div data-tour="ct-evidencia">
               <PendingEvidenciaField value={evidencia} onChange={setEvidencia} />
             </div>

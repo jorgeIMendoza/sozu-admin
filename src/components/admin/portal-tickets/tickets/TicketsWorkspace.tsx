@@ -128,7 +128,13 @@ export function TicketsWorkspace({
       if (categoria !== "todas" && t.categoriaId !== categoria) return false;
       if (etapaFiltro !== "todas" && t.etapaId !== etapaFiltro) return false;
       if (q) {
-        const texto = `#${t.numero} ${t.nombre} ${t.solicitante} ${t.inmueble} ${t.descripcion}`.toLowerCase();
+        // Buscar también por CADA solicitante (nombre + correo + teléfono), no solo el principal,
+        // para encontrar el ticket por el cliente/prospecto aunque no se sepa el folio (#1026).
+        const solis = (t.solicitantes ?? [])
+          .map((s) => `${s.nombre} ${s.email ?? ""} ${s.telefono ?? ""}`)
+          .join(" ");
+        const texto =
+          `#${t.numero} ${t.nombre} ${t.solicitante} ${solis} ${t.inmueble} ${t.descripcion}`.toLowerCase();
         if (!texto.includes(q)) return false;
       }
       return true;
@@ -398,7 +404,7 @@ export function TicketsWorkspace({
               setBusqueda(e.target.value);
               setPagina(1);
             }}
-            placeholder="Buscar tickets"
+            placeholder="Buscar por nombre, folio o solicitante"
             className="pl-8"
           />
         </div>

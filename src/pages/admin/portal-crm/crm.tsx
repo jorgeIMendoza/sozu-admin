@@ -63,6 +63,7 @@ import {
   fmtMoneda, stripHtml, dealInitials, etapaColorClasses,
   advanceByRecurrence, fmtDueDateTime, fmtCitaWhen,
   TIPO_NEGOCIO_OPTS, PRIORIDAD_META,
+  SEMAPHORE_META, interactionSemaphore, lastActivityFrom,
 } from "@/lib/crm-format";
 import {
   META_LEAD_STATUSES, useLeadStates, fetchCrmCategorias,
@@ -2235,6 +2236,10 @@ export function CrmDeals() {
       const ownerIds = Array.from(new Set(list.map((n: any) => n.id_usuario_propietario).filter(Boolean)));
       const erIds = Array.from(new Set(list.map((n: any) => n.id_entidad_relacionada).filter(Boolean)));
 
+      // Actividad por contacto (para el semáforo de interacción): id_entidad_relacionada + fecha_creacion.
+      const actSel = (tabla: string) => erIds.length
+        ? (supabase as any).from(tabla).select("id_entidad_relacionada, fecha_creacion").in("id_entidad_relacionada", erIds).eq("activo", true)
+        : Promise.resolve({ data: [] });
       const [etRes, pRes, oRes, erRes] = await Promise.all([
         etapaIds.length ? (supabase as any).from("crm_pipeline_etapas").select("id, nombre, probabilidad, es_ganado, es_perdido").in("id", etapaIds) : Promise.resolve({ data: [] }),
         pipeIds.length ? (supabase as any).from("crm_pipelines").select("id, nombre").in("id", pipeIds) : Promise.resolve({ data: [] }),
@@ -2253,6 +2258,25 @@ export function CrmDeals() {
       }
       const erMap = new Map((erRes.data ?? []).map((e: any) => [e.id, personaMap.get(e.id_persona) ?? null]));
 
+      // Última actividad por contacto (semáforo de interacción). Se calcula server-side con una
+      // RPC agregada (exacta a cualquier escala, sin el límite de 1000 filas). Si la RPC aún no
+      // está desplegada, cae a la agregación client-side (puede truncar con muchos negocios).
+      const lastActByEr = new Map<number, string>();
+      const addAct = (er: any, f: any) => {
+        if (!er || !f) return;
+        const prev = lastActByEr.get(er);
+        if (!prev || new Date(f).getTime() > new Date(prev).getTime()) lastActByEr.set(er, f);
+      };
+      if (erIds.length) {
+        const laRes = await (supabase as any).rpc("crm_last_activity_by_er", { p_er_ids: erIds.map(Number) });
+        if (!laRes.error && Array.isArray(laRes.data)) {
+          for (const r of laRes.data) addAct(r.id_entidad_relacionada, r.last_activity_at);
+        } else {
+          const [na, ta, ca] = await Promise.all([actSel("crm_notas"), actSel("crm_tareas"), actSel("crm_citas")]);
+          for (const res of [na, ta, ca]) for (const a of ((res as any)?.data ?? [])) addAct(a.id_entidad_relacionada, a.fecha_creacion);
+        }
+      }
+
       const rows = list.map((n: any) => {
         const et: any = etapaMap.get(n.id_etapa);
         return {
@@ -2264,6 +2288,7 @@ export function CrmDeals() {
           pipeline_nombre: pipeMap.get(n.id_pipeline) ?? "—",
           propietario_nombre: n.id_usuario_propietario ? (ownerMap.get(n.id_usuario_propietario) ?? "—") : "—",
           contacto_nombre: n.id_entidad_relacionada ? (erMap.get(n.id_entidad_relacionada) ?? null) : null,
+          ultima_actividad: n.id_entidad_relacionada ? (lastActByEr.get(n.id_entidad_relacionada) ?? null) : null,
         };
       });
       return { rows, truncated: list.length === 1000 };
@@ -2786,6 +2811,9 @@ export function CrmDealDetail() {
   const upcomingTasks = actTasks.filter((t: any) => t.status !== "completada" && t.due_date && new Date(t.due_date) >= todayStart)
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
   const pinnedNotes = actNotes.filter((n: any) => n.anclado);
+  // Semáforo de interacción: recencia de la última actividad del contacto asociado.
+  const ultimaInteraccion = lastActivityFrom(actNotes, actTasks, actCitas);
+  const semaforo = interactionSemaphore(ultimaInteraccion);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -2820,11 +2848,16 @@ export function CrmDealDetail() {
             </div>
             <h2 className="font-semibold text-sm leading-tight">{deal.nombre}</h2>
             <p className="text-lg font-semibold tabular-nums">{valorFmt}</p>
-            {deal.prioridad && PRIORIDAD_META[deal.prioridad] && (
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[deal.prioridad]}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} />{PRIORIDAD_META[deal.prioridad].label}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {deal.prioridad && PRIORIDAD_META[deal.prioridad] && (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORIDAD_PILL[deal.prioridad]}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${PRIORIDAD_META[deal.prioridad].dot}`} />{PRIORIDAD_META[deal.prioridad].label}
+                </span>
+              )}
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${SEMAPHORE_META[semaforo].tint}`} title={SEMAPHORE_META[semaforo].label}>
+                <span className={`h-1.5 w-1.5 rounded-full ${SEMAPHORE_META[semaforo].dot}`} />{SEMAPHORE_META[semaforo].short}
               </span>
-            )}
+            </div>
           </div>
 
           {/* Datos rápidos */}
@@ -2835,6 +2868,13 @@ export function CrmDealDetail() {
                 <span className="font-medium text-right truncate">{v}</span>
               </div>
             ))}
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground shrink-0">Última interacción</span>
+              <span className="inline-flex items-center gap-1.5 font-medium" title={SEMAPHORE_META[semaforo].label}>
+                <span className={`h-2 w-2 rounded-full ${SEMAPHORE_META[semaforo].dot}`} />
+                {ultimaInteraccion ? relTime(ultimaInteraccion) : "Sin actividad"}
+              </span>
+            </div>
           </div>
 
           {/* Acerca de este negocio (editable) */}
