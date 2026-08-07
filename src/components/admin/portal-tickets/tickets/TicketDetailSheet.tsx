@@ -21,7 +21,7 @@ import {
   type Ticket,
 } from "@/lib/portal-tickets/tickets-data";
 import { PriorityDot } from "./PriorityDot";
-import { ContactoPicker } from "./ContactoPicker";
+import { SolicitantesPicker } from "./SolicitantesPicker";
 import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
 import { EvidenciaSection } from "./TicketEvidencia";
@@ -155,18 +155,16 @@ export function TicketDetailSheet({
               </Select>
             </div>
 
-            <ContactoPicker
+            <SolicitantesPicker
               disabled={readOnly}
-              value={
-                ticket.entidadRelacionadaId
-                  ? { id: ticket.entidadRelacionadaId, nombre: ticket.solicitante || "Contacto" }
-                  : null
-              }
-              onChange={(c) =>
+              value={ticket.solicitantes}
+              onChange={(sols) =>
                 actualizarTicket(
                   ticket.id,
-                  { entidadRelacionadaId: c?.id ?? null, solicitante: c?.nombre ?? "" },
-                  c ? `Contacto vinculado: ${c.nombre}.` : "Contacto desvinculado.",
+                  { solicitantes: sols },
+                  sols.length
+                    ? `Solicitantes: ${sols.map((s) => s.nombre).join(", ")}.`
+                    : "Solicitantes: ninguno.",
                 )
               }
             />

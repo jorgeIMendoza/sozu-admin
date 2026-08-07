@@ -136,6 +136,14 @@ export function OfertaNoAvanceDialog({
             <div className="flex justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
+          ) : motivos.length === 0 ? (
+            <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <p className="text-xs font-medium text-amber-800">
+                No hay razones dadas de alta en el catálogo. Pide al administrador que lo
+                configure para poder registrar por qué no avanzó la oferta.
+              </p>
+            </div>
           ) : (
             <div className="space-y-1.5">
               {motivos.map((m) => {
@@ -195,10 +203,10 @@ export function OfertaNoAvanceDialog({
             )}
           </div>
 
-          {registro?.fecha_registro && (
+          {registro?.fecha_creacion && (
             <p className="text-xs text-muted-foreground">
               Registrada por {registro.registrado_por || "un usuario"} el{" "}
-              {new Date(registro.fecha_registro).toLocaleDateString("es-MX", {
+              {new Date(registro.fecha_creacion).toLocaleDateString("es-MX", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric",

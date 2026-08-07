@@ -104,6 +104,9 @@ export interface ExpedienteVentaDetalle {
   pagos_apartado: PagoCliente[];
   /** Todos los pagos del cliente aplicados al concepto Enganche (id_concepto=2). */
   pagos_enganche: PagoCliente[];
+  /** Pagos del cliente aplicados a conceptos distintos de Apartado/Enganche
+   *  (a la entrega, parcialidades) — abonos por encima del enganche. */
+  pagos_adicionales: PagoCliente[];
   oferta_comercial: {
     id_oferta: number | null;
     precio_final: number;
@@ -418,10 +421,11 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         }
       });
 
-      // Todos los pagos del cliente por concepto (Apartado=1, Enganche=2). Cada
-      // concepto puede haberse liquidado en varias parcialidades/pagos; se agrupa
-      // por (concepto, pago) sumando el monto aplicado y se toma el comprobante
-      // (url_recibo para efectivo/transferencia, url_cep para STP).
+      // Todos los pagos del cliente por concepto (Apartado=1, Enganche=2, A la
+      // entrega=3, Parcialidad=5). Cada concepto puede haberse liquidado en varias
+      // parcialidades/pagos; se agrupa por (concepto, pago) sumando el monto aplicado
+      // y se toma el comprobante (url_recibo para efectivo/transferencia, url_cep para
+      // STP). Se excluyen las aplicaciones de multa (no son pago del cliente al precio).
       const acuerdoConceptoMap = new Map<number, number>(
         (acuerdos || []).map((a: any) => [a.id, a.id_concepto as number]),
       );
@@ -430,6 +434,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         Map<number, { monto: number; fecha: string; url_recibo: string | null }>
       >();
       ((aplicacionesPago || []) as Array<any>).forEach((ap) => {
+        if (ap.es_multa) return;
         const concepto = acuerdoConceptoMap.get(ap.id_acuerdo_pago);
         const pagoId = ap.pagos?.id as number | null | undefined;
         const fecha = ap.pagos?.fecha_pago as string | null | undefined;
@@ -453,6 +458,19 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         Array.from(pagosPorConcepto.get(concepto)?.values() ?? [])
           .map((v) => ({ monto: v.monto, fecha: v.fecha, url_recibo: v.url_recibo }))
           .sort((a, b) => a.fecha.localeCompare(b.fecha));
+      // Pagos adicionales al enganche: cualquier pago del cliente aplicado a
+      // conceptos distintos de Apartado(1) y Enganche(2) — p. ej. cuando el cliente
+      // ya abonó parcialidades / pago a la entrega por encima del enganche.
+      const pagosAdicionales = (): PagoCliente[] => {
+        const out: PagoCliente[] = [];
+        for (const [concepto, inner] of pagosPorConcepto.entries()) {
+          if (concepto === 1 || concepto === 2) continue;
+          for (const v of inner.values()) {
+            out.push({ monto: v.monto, fecha: v.fecha, url_recibo: v.url_recibo });
+          }
+        }
+        return out.sort((a, b) => a.fecha.localeCompare(b.fecha));
+      };
 
       // Persona-lead (prospecto inicial)
       const idPersonaLead = (oferta as any)?.id_persona_lead ?? null;
@@ -1104,6 +1122,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         pago_enganche: pagoEnganche,
         pagos_apartado: pagosDeConcepto(1),
         pagos_enganche: pagosDeConcepto(2),
+        pagos_adicionales: pagosAdicionales(),
         oferta_comercial: (() => {
           const sumMonto = (concepto: number) =>
             (acuerdos || [])

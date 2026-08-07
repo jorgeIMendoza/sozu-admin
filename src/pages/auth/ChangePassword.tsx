@@ -46,9 +46,14 @@ export default function ChangePassword() {
   } = useAuth();
   const navigate = useNavigate();
 
+  // Sin sesión no hay contraseña que cambiar. El caso típico no es una navegación
+  // manual: es el enlace de correo cuyo token ya no servía (venció, se usó, o lo
+  // reemplazó una solicitud posterior), que aterriza aquí sin que verifyOtp haya
+  // creado sesión. Rebotar al login mudo dejaba al usuario mirando un formulario
+  // cuya contraseña no conoce, así que se le pasa el motivo.
   useEffect(() => {
     if (!authLoading && !session) {
-      navigate('/auth/login', { replace: true });
+      navigate('/auth/login?reason=link-expirado', { replace: true });
     }
   }, [authLoading, session, navigate]);
 

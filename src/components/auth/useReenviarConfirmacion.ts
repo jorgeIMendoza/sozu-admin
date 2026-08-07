@@ -67,7 +67,12 @@ export function useReenviarConfirmacion(
     }
 
     setEstado('enviado');
-    setMensaje('Te enviamos un correo nuevo. Revisa tu bandeja de entrada y la carpeta de spam.');
+    // GoTrue guarda UN solo token por usuario: cada enlace que se emite pisa al
+    // anterior. Si el usuario abre un correo viejo el token ya no existe y acaba
+    // en una pantalla de error que no sabe explicar por qué. Se avisa aquí.
+    setMensaje(
+      'Te enviamos un correo nuevo. Revisa tu bandeja de entrada y la carpeta de spam, y ábrelo desde el correo más reciente: los enlaces anteriores dejan de funcionar.',
+    );
   }, [email, sinSesion]);
 
   const reiniciar = useCallback(() => {
