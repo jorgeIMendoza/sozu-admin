@@ -4,7 +4,7 @@
 // UI: dropzone (clic o arrastrar) + miniaturas uniformes (foto, video con ▶, audio con play).
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Upload, X, Loader2, Play, Pause, Mic } from "lucide-react";
+import { Upload, X, Loader2, Play, Pause, Mic, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +12,10 @@ import { cn } from "@/lib/utils";
 import { VoiceRecorderButton } from "./VoiceRecorder";
 import {
   MAX_ADJUNTOS,
+  MEDIA_TIPOS,
+  DOC_TIPOS,
+  ACCEPT_MEDIA,
+  ACCEPT_DOCS,
   toPendingAdjunto,
   fetchTicketAdjuntos,
   saveTicketAdjuntos,
@@ -21,8 +25,29 @@ import {
   type TicketAdjunto,
 } from "@/lib/portal-tickets/tickets-adjuntos";
 
-const ACCEPT = "image/*,video/*,audio/*";
-const HINT = `Fotos ≤ 10 MB · Videos ≤ 50 MB · Audio ≤ 25 MB · Máx. ${MAX_ADJUNTOS}.`;
+// Config por variante de campo: evidencia multimedia (fotos/video/voz) vs documentos (PDF/Word/…).
+export type AdjuntoVariant = "evidencia" | "documentos";
+const VARIANTES: Record<
+  AdjuntoVariant,
+  { label: string; permitidos: AdjuntoTipo[]; accept: string; dropText: string; hint: string; voz: boolean }
+> = {
+  evidencia: {
+    label: "Evidencia",
+    permitidos: MEDIA_TIPOS,
+    accept: ACCEPT_MEDIA,
+    dropText: "fotos, videos o audio",
+    hint: `Fotos ≤ 10 MB · Videos ≤ 50 MB · Audio ≤ 25 MB · Máx. ${MAX_ADJUNTOS}.`,
+    voz: true,
+  },
+  documentos: {
+    label: "Documentos",
+    permitidos: DOC_TIPOS,
+    accept: ACCEPT_DOCS,
+    dropText: "PDF, Word, Excel, etc.",
+    hint: `PDF, Word, Excel, PowerPoint… ≤ 25 MB · Máx. ${MAX_ADJUNTOS}.`,
+    voz: false,
+  },
+};
 
 // Tile uniforme (96×96) de una evidencia, con botón de quitar/borrar al hover.
 function EvidenciaTile({
@@ -89,6 +114,19 @@ function EvidenciaTile({
         </button>
       )}
 
+      {tipo === "documento" && (
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={nombre}
+          className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <FileText className="size-7" />
+          <span className="line-clamp-2 break-all text-[9px] leading-tight">{nombre || "Documento"}</span>
+        </a>
+      )}
+
       {onRemove && (
         <button
           type="button"
@@ -105,7 +143,15 @@ function EvidenciaTile({
 }
 
 // Zona de arrastrar/soltar o clic para subir. Reutilizada al crear y en el detalle.
-function Dropzone({ onFiles }: { onFiles: (files: File[]) => void }) {
+function Dropzone({
+  onFiles,
+  accept,
+  texto,
+}: {
+  onFiles: (files: File[]) => void;
+  accept: string;
+  texto: string;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   return (
@@ -139,13 +185,13 @@ function Dropzone({ onFiles }: { onFiles: (files: File[]) => void }) {
           <Upload className="size-4" />
         </span>
         <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Haz clic</span> o arrastra fotos, videos o audio
+          <span className="font-medium text-foreground">Haz clic</span> o arrastra {texto}
         </p>
       </div>
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPT}
+        accept={accept}
         multiple
         hidden
         onChange={(e) => {
@@ -162,11 +208,14 @@ export function PendingEvidenciaField({
   value,
   onChange,
   disabled,
+  variant = "evidencia",
 }: {
   value: PendingAdjunto[];
   onChange: (next: PendingAdjunto[]) => void;
   disabled?: boolean;
+  variant?: AdjuntoVariant;
 }) {
+  const cfg = VARIANTES[variant];
   const lleno = value.length >= MAX_ADJUNTOS;
 
   const addArchivos = (arr: File[]) => {
@@ -179,7 +228,7 @@ export function PendingEvidenciaField({
     if (arr.length > space) toast.error(`Solo se agregaron ${space}; el máximo es ${MAX_ADJUNTOS}.`);
     const nuevos = arr
       .slice(0, space)
-      .map(toPendingAdjunto)
+      .map((f) => toPendingAdjunto(f, cfg.permitidos))
       .filter((p): p is PendingAdjunto => !!p);
     if (nuevos.length) onChange([...value, ...nuevos]);
   };
@@ -192,7 +241,7 @@ export function PendingEvidenciaField({
 
   return (
     <div className="space-y-2">
-      <Label>Evidencia (opcional)</Label>
+      <Label>{cfg.label} (opcional)</Label>
 
       {value.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -202,11 +251,11 @@ export function PendingEvidenciaField({
         </div>
       )}
 
-      {!disabled && !lleno && <Dropzone onFiles={addArchivos} />}
+      {!disabled && !lleno && <Dropzone onFiles={addArchivos} accept={cfg.accept} texto={cfg.dropText} />}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {!disabled && !lleno ? <VoiceRecorderButton onRecorded={(f) => addArchivos([f])} /> : <span />}
-        <p className="text-[11px] text-muted-foreground">{HINT}</p>
+        {!disabled && !lleno && cfg.voz ? <VoiceRecorderButton onRecorded={(f) => addArchivos([f])} /> : <span />}
+        <p className="text-[11px] text-muted-foreground">{cfg.hint}</p>
       </div>
     </div>
   );
@@ -217,17 +266,20 @@ export function EvidenciaSection({
   ticketId,
   canDelete,
   readOnly,
+  variant = "evidencia",
 }: {
   ticketId: string;
   canDelete: boolean;
   readOnly?: boolean;
+  variant?: AdjuntoVariant;
 }) {
   const { user } = useAuth();
+  const cfg = VARIANTES[variant];
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const {
-    data: adjuntos = [],
+    data: todos = [],
     refetch,
     isLoading,
   } = useQuery({
@@ -235,18 +287,20 @@ export function EvidenciaSection({
     queryFn: () => fetchTicketAdjuntos(ticketId),
   });
 
-  const lleno = adjuntos.length >= MAX_ADJUNTOS;
+  // La tabla guarda evidencia y documentos juntos; cada sección muestra solo su tipo.
+  const items = todos.filter((a) => cfg.permitidos.includes(a.tipo));
+  const lleno = items.length >= MAX_ADJUNTOS;
 
   const addArchivos = async (arr: File[]) => {
     if (!arr.length) return;
-    const space = MAX_ADJUNTOS - adjuntos.length;
+    const space = MAX_ADJUNTOS - items.length;
     if (space <= 0) {
       toast.error(`Máximo ${MAX_ADJUNTOS} archivos por ticket.`);
       return;
     }
     const chosen = arr
       .slice(0, space)
-      .map(toPendingAdjunto)
+      .map((f) => toPendingAdjunto(f, cfg.permitidos))
       .filter((p): p is PendingAdjunto => !!p);
     if (!chosen.length) return;
     setUploading(true);
@@ -261,7 +315,7 @@ export function EvidenciaSection({
     const ok = await deleteTicketAdjunto(adj);
     setDeletingId(null);
     if (ok) {
-      toast.success("Evidencia eliminada");
+      toast.success(`${cfg.label} eliminado`);
       await refetch();
     }
   };
@@ -269,9 +323,9 @@ export function EvidenciaSection({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>Evidencia</Label>
+        <Label>{cfg.label}</Label>
         <span className="text-xs text-muted-foreground">
-          {adjuntos.length}/{MAX_ADJUNTOS}
+          {items.length}/{MAX_ADJUNTOS}
         </span>
       </div>
 
@@ -279,9 +333,9 @@ export function EvidenciaSection({
         <p className="text-xs text-muted-foreground">Cargando…</p>
       ) : (
         <>
-          {adjuntos.length > 0 && (
+          {items.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {adjuntos.map((a) => (
+              {items.map((a) => (
                 <EvidenciaTile
                   key={a.id}
                   src={a.url}
@@ -301,18 +355,24 @@ export function EvidenciaSection({
                 <Loader2 className="size-4 animate-spin" /> Subiendo…
               </div>
             ) : (
-              <Dropzone onFiles={addArchivos} />
+              <Dropzone onFiles={addArchivos} accept={cfg.accept} texto={cfg.dropText} />
             ))}
 
-          {!adjuntos.length && readOnly && <p className="text-xs text-muted-foreground">Sin evidencia.</p>}
+          {!items.length && readOnly && (
+            <p className="text-xs text-muted-foreground">Sin {cfg.label.toLowerCase()}.</p>
+          )}
         </>
       )}
 
       {!readOnly && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {!lleno ? <VoiceRecorderButton onRecorded={(f) => addArchivos([f])} disabled={uploading} /> : <span />}
+          {!lleno && cfg.voz ? (
+            <VoiceRecorderButton onRecorded={(f) => addArchivos([f])} disabled={uploading} />
+          ) : (
+            <span />
+          )}
           <p className="text-[11px] text-muted-foreground">
-            {HINT}
+            {cfg.hint}
             {canDelete ? "" : " Solo un Super Admin puede eliminar."}
           </p>
         </div>

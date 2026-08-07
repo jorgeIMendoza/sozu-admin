@@ -14,9 +14,22 @@ export const TICKETS_ATTACH_BUCKET = "documentos";
 export const MAX_FOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB
-export const MAX_ADJUNTOS = 10; // por ticket
+export const MAX_DOC_BYTES = 25 * 1024 * 1024; // 25 MB (documentos: PDF/Word/Excel…)
+export const MAX_ADJUNTOS = 10; // por ticket, por campo (evidencia / documentos)
 
-export type AdjuntoTipo = "foto" | "video" | "audio";
+export type AdjuntoTipo = "foto" | "video" | "audio" | "documento";
+
+// Grupos de tipos por "campo" del formulario (evidencia multimedia vs documentos).
+export const MEDIA_TIPOS: AdjuntoTipo[] = ["foto", "video", "audio"];
+export const DOC_TIPOS: AdjuntoTipo[] = ["documento"];
+// `accept` de los <input type=file> por campo.
+export const ACCEPT_MEDIA = "image/*,video/*,audio/*";
+export const ACCEPT_DOCS = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp";
+
+// Extensiones que consideramos "documento" (clasificación confiable por extensión).
+const DOC_EXTS = new Set([
+  "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "rtf", "odt", "ods", "odp",
+]);
 
 // Archivo elegido pero aún NO subido (usado al CREAR el ticket, que todavía no tiene id).
 export type PendingAdjunto = {
@@ -44,30 +57,57 @@ export function humanFileSize(bytes?: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Clasifica un File como foto/video; null si no es ninguno (no permitido).
+// Clasifica un File como foto/video/audio/documento; null si no es ninguno (no permitido).
 export function classifyTicketFile(file: File): AdjuntoTipo | null {
   if (file.type.startsWith("image/")) return "foto";
   if (file.type.startsWith("video/")) return "video";
   if (file.type.startsWith("audio/")) return "audio";
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const t = file.type.toLowerCase();
+  const esDoc =
+    DOC_EXTS.has(ext) ||
+    t.includes("pdf") ||
+    t.includes("word") ||
+    t.includes("excel") ||
+    t.includes("spreadsheet") ||
+    t.includes("presentation") ||
+    t.includes("powerpoint") ||
+    t.includes("officedocument") ||
+    t.includes("opendocument") ||
+    t === "text/plain" ||
+    t === "text/csv" ||
+    t === "application/rtf";
+  if (esDoc) return "documento";
   return null;
 }
 
-// Valida tipo y tamaño. Devuelve el mensaje de error, o null si es válido.
-export function validateTicketFile(file: File): string | null {
+// Valida tipo y tamaño. `permitidos` restringe a los tipos de un campo (evidencia / documentos).
+// Devuelve el mensaje de error, o null si es válido.
+export function validateTicketFile(file: File, permitidos?: AdjuntoTipo[]): string | null {
   const tipo = classifyTicketFile(file);
-  if (!tipo) return `"${file.name}" no es una foto, video ni audio.`;
-  const max = tipo === "foto" ? MAX_FOTO_BYTES : tipo === "video" ? MAX_VIDEO_BYTES : MAX_AUDIO_BYTES;
+  if (!tipo) return `"${file.name}" no es un tipo de archivo permitido.`;
+  if (permitidos && !permitidos.includes(tipo)) {
+    return permitidos.length === 1 && permitidos[0] === "documento"
+      ? `"${file.name}" no es un documento (PDF, Word, Excel…).`
+      : `"${file.name}" no es una foto, video ni audio.`;
+  }
+  const max =
+    tipo === "foto" ? MAX_FOTO_BYTES
+    : tipo === "video" ? MAX_VIDEO_BYTES
+    : tipo === "audio" ? MAX_AUDIO_BYTES
+    : MAX_DOC_BYTES;
   if (file.size > max) {
     const lim = tipo === "foto" ? "10 MB" : tipo === "video" ? "50 MB" : "25 MB";
-    const cual = tipo === "foto" ? "fotos" : tipo === "video" ? "videos" : "audios";
+    const cual =
+      tipo === "foto" ? "fotos" : tipo === "video" ? "videos" : tipo === "audio" ? "audios" : "documentos";
     return `"${file.name}" pesa ${humanFileSize(file.size)}; el máximo para ${cual} es ${lim}.`;
   }
   return null;
 }
 
 // Convierte un File en PendingAdjunto (con preview local) o null si es inválido (avisa con toast).
-export function toPendingAdjunto(file: File): PendingAdjunto | null {
-  const err = validateTicketFile(file);
+export function toPendingAdjunto(file: File, permitidos?: AdjuntoTipo[]): PendingAdjunto | null {
+  const err = validateTicketFile(file, permitidos);
   if (err) {
     toast.error(err);
     return null;
