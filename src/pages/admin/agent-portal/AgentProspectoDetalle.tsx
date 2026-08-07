@@ -97,20 +97,44 @@ const AgentProspectoDetalle = () => {
     enabled: personaId > 0,
   });
 
-  // Entidades del prospecto (proyectos asignados) - del agente
+  // Entidades del prospecto (proyectos asignados) del agente.
+  // Se unen los DOS modelos de propiedad del lead: id_persona_duena_lead (portal) y
+  // crm_leads_atribucion.id_propietario (CRM). Sin la unión, un lead que entró por el CRM
+  // aparecía en la lista pero al abrirlo salía vacío: sin proyectos, notas, citas ni ofertas.
   const { data: entidades = [] } = useQuery({
-    queryKey: ["prospecto-entidades", personaId, agentPersonaId],
+    queryKey: ["prospecto-entidades", personaId, agentPersonaId, user?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const sel = "id, id_proyecto, proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)";
+      const base = () => supabase
         .from("entidades_relacionadas")
-        .select("id, id_proyecto, proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)")
+        .select(sel)
         .eq("id_persona", personaId)
         .eq("id_tipo_entidad", 7)
-        .eq("activo", true)
-        .eq("id_persona_duena_lead", agentPersonaId!);
-      return (data || []) as any[];
+        .eq("activo", true);
+
+      const porDueno = agentPersonaId
+        ? await base().eq("id_persona_duena_lead", agentPersonaId)
+        : { data: [] as any[] };
+
+      let porAtribucion: any[] = [];
+      if (user?.id) {
+        const { data: atr } = await (supabase as any)
+          .from("crm_leads_atribucion")
+          .select("id_entidad_relacionada")
+          .eq("id_propietario", user.id)
+          .eq("activo", true);
+        const ids = (atr ?? []).map((a: any) => a.id_entidad_relacionada).filter(Boolean);
+        if (ids.length > 0) {
+          const { data } = await base().in("id", ids);
+          porAtribucion = data ?? [];
+        }
+      }
+
+      const unicas = new Map<number, any>();
+      [...((porDueno as any).data ?? []), ...porAtribucion].forEach((e: any) => unicas.set(e.id, e));
+      return [...unicas.values()];
     },
-    enabled: personaId > 0 && !!agentPersonaId,
+    enabled: personaId > 0 && (!!agentPersonaId || !!user?.id),
   });
 
   const entidadIds = useMemo(() => entidades.map((e) => e.id), [entidades]);

@@ -368,20 +368,31 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
           personaId = persona.id;
         }
 
-        // Insert one entidad_relacionada per selected project
-        const inserts = selectedProyectoIds.map((projId) => ({
-          id_persona: personaId,
-          id_tipo_entidad: 7,
-          id_proyecto: projId,
-          id_persona_duena_lead: effectivePersonaId || null,
-          activo: true,
-        }));
+        // Una entidad_relacionada por desarrollo. Se usa el RPC de la base, que **reclama o
+        // reactiva** en vez de insertar a ciegas: si el prospecto ya tuvo interés en ese
+        // desarrollo (aunque esté inactivo) lo reactiva y le pone dueño, en lugar de crear un
+        // segundo registro. Así el prospecto queda registrado UNA sola vez por desarrollo.
+        // La fila de crm_leads_atribucion (dueño + estado) la crea el trigger de la base.
+        for (const projId of selectedProyectoIds) {
+          const rpc = await (supabase as any).rpc("agent_claim_or_reactivate_prospect_project", {
+            _persona_id: personaId,
+            _proyecto_id: projId,
+            _owner_persona_id: effectivePersonaId ?? undefined,
+          } as any);
+          if (!rpc.error) continue;
 
-        const { error: entidadError } = await supabase
-          .from("entidades_relacionadas")
-          .insert(inserts);
-
-        if (entidadError) throw entidadError;
+          // Respaldo: si el RPC no existe o rechaza el tercer argumento, se inserta directo.
+          const { error: entidadError } = await supabase
+            .from("entidades_relacionadas")
+            .insert([{
+              id_persona: personaId,
+              id_tipo_entidad: 7,
+              id_proyecto: projId,
+              id_persona_duena_lead: effectivePersonaId || null,
+              activo: true,
+            }]);
+          if (entidadError) throw entidadError;
+        }
       }
     },
     onSuccess: () => {
