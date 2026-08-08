@@ -100,6 +100,15 @@ export default function RegistrarPropiedadPage() {
     setOnb({ step: Math.max(1, step - 1) });
   }
 
+  // En el Paso 6 el solicitante ya terminó: su acción real es salir al portal.
+  // (En mock rebota a /login; con sesión real de Fase D aterriza en el portal.)
+  function goToPortal() {
+    if (!state.auth.user) {
+      state.login(onboarding.accountEmail ?? "nuevo@sozu.mx");
+    }
+    navigate(PORTAL_DESTINATION);
+  }
+
   const step7Locked = onboarding.level < 2;
 
   return (
@@ -234,11 +243,23 @@ export default function RegistrarPropiedadPage() {
                     Hay observaciones: pasarán a revisión legal.
                   </span>
                 )}
+                {step === 6 && onboarding.level < 2 && (
+                  <span>
+                    La transferencia de registro se habilitará cuando SOZU reconozca tu titularidad
+                    (Nivel 2). Te avisaremos por correo.
+                  </span>
+                )}
               </div>
-              <Button onClick={next} disabled={!canNext}>
-                {step === 7 ? "Ir al portal" : "Continuar"}{" "}
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
+              {step === 6 && onboarding.level < 2 ? (
+                <Button onClick={goToPortal}>
+                  Ir a mi portal <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button onClick={next} disabled={!canNext}>
+                  {step === 7 ? "Ir al portal" : "Continuar"}{" "}
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              )}
             </div>
 
             {/* Ayuda en móvil (rail no visible) */}

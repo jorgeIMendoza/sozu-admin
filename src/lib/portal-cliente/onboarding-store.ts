@@ -103,6 +103,8 @@ export interface VerificationCheck {
   label: string;
   status: CheckStatus;
   detail: string;
+  /** true = lo revisa una persona del área legal, no un cruce automático del front. */
+  humanReview?: boolean;
 }
 
 export type OnboardingLevel = 0 | 1 | 2;
@@ -537,28 +539,22 @@ export function getPropertyById(state: PortalState, id: string | null): Property
 export function computeVerification(state: PortalState): VerificationCheck[] {
   const { onboarding, demo } = state;
   const confirmedDoc = (t: DocType) => onboarding.docs.find((d) => d.type === t && d.confirmed);
-  const ine = confirmedDoc("id_oficial");
   const curpDoc = confirmedDoc("curp");
   const csf = confirmedDoc("csf");
   const escritura = onboarding.docs.find((d) => d.type === "escritura");
 
   const norm = (s?: string) => (s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 
-  // Cruces que SÍ podemos hacer en el front: consistencia de nombre y CURP entre
-  // los documentos con datos extraídos (CURP y CSF por PDF). La identificación
-  // oficial se sube como PDF y la revisa una persona → no aporta campos aquí.
+  // Único cruce que podemos resolver en el front: consistencia de nombre entre los
+  // documentos con datos extraídos (CURP y CSF por PDF). La identificación oficial,
+  // el predial y la escritura se suben como PDF y los revisa una persona.
   const names = [
-    { src: "INE", v: norm(findField(ine, "nombre")) },
     { src: "CURP", v: norm(findField(curpDoc, "nombre")) },
     { src: "CSF", v: norm(findField(csf, "razon_social")) },
   ].filter((n) => n.v.length > 2);
-  const curps = [findField(ine, "curp"), findField(curpDoc, "curp")]
-    .map((c) => norm(c))
-    .filter((c) => c.length > 5);
 
   const nameConsistent = names.length >= 2 && names.every((n) => n.v === names[0].v);
   const nameFail = names.length >= 2 && (demo.forceNameMismatch || !nameConsistent);
-  const curpConsistent = curps.length >= 2 && curps.every((c) => c === curps[0]);
 
   // Cruces contra el registro SOZU (RPP / dueño original) + validez de escritura:
   // los resuelve el área legal al recibir la solicitud (backend, Fase D).
@@ -567,7 +563,7 @@ export function computeVerification(state: PortalState): VerificationCheck[] {
   return [
     {
       key: "name",
-      label: "Nombre consistente entre tus documentos (INE · CURP · CSF)",
+      label: "Nombre consistente entre tus documentos (CURP · CSF)",
       status: names.length < 2 ? "idle" : nameFail ? "fail" : "ok",
       detail:
         names.length < 2
@@ -577,32 +573,24 @@ export function computeVerification(state: PortalState): VerificationCheck[] {
             : `Coincide en todas tus fuentes: ${names[0].v}`,
     },
     {
-      key: "curp",
-      label: "CURP consistente entre tus documentos",
-      status: curps.length < 2 ? "idle" : curpConsistent ? "ok" : "fail",
-      detail:
-        curps.length < 2
-          ? "Se coteja cuando haya dos documentos con CURP (INE y CURP)."
-          : curpConsistent
-            ? `Coincide: ${curps[0]}`
-            : `No coincide: ${[...new Set(curps)].join(" · ")}`,
-    },
-    {
       key: "titularidad",
       label: "Titularidad registral (inscripción en el RPP)",
       status: "idle",
+      humanReview: true,
       detail: PENDING,
     },
     {
       key: "chain",
       label: "Cadena de dominio (vendedor = dueño registrado en SOZU)",
       status: "idle",
+      humanReview: true,
       detail: PENDING,
     },
     {
       key: "escritura",
       label: "Validez de la escritura pública",
       status: "idle",
+      humanReview: true,
       detail: escritura ? PENDING : "Sube tu escritura en el paso de Documentos.",
     },
   ];
