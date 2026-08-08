@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePortal, computeVerification, requiredDocsFor } from "@/lib/portal-cliente/onboarding-store";
+import { submitSolicitudPropietario } from "@/lib/portal-cliente/onboarding-submit";
 import { BrandLogo } from "@/components/admin/portal-cliente/onboarding/BrandLogo";
 import { DemoPanel } from "@/components/admin/portal-cliente/onboarding/DemoPanel";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,7 @@ import { Step4Documents } from "@/components/admin/portal-cliente/onboarding/Ste
 import { Step5Verification } from "@/components/admin/portal-cliente/onboarding/Step5Verification";
 import { Step6Linking } from "@/components/admin/portal-cliente/onboarding/Step6Linking";
 import { Step7Transfer } from "@/components/admin/portal-cliente/onboarding/Step7Transfer";
-import { ArrowLeft, ArrowRight, Check, Lock, Phone } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Lock, Phone } from "lucide-react";
 
 const STEPS = [
   "Identifica tu propiedad",
@@ -32,6 +34,8 @@ export default function RegistrarPropiedadPage() {
   const onboarding = usePortal((s) => s.onboarding);
   const state = usePortal();
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const checks = computeVerification(state);
   const requiredDocs = requiredDocsFor(onboarding.personType);
@@ -72,7 +76,35 @@ export default function RegistrarPropiedadPage() {
     }
   })();
 
-  function next() {
+  async function next() {
+    // Paso 5 → envía la solicitud REAL (edge function) y luego avanza al 6.
+    if (step === 5) {
+      if (onboarding.caseId) {
+        setOnb({ step: 6 }); // ya enviada: solo avanza
+        return;
+      }
+      setSubmitError(null);
+      setSubmitting(true);
+      try {
+        const failing = checks.some((c) => c.status === "fail");
+        const { caseId } = await submitSolicitudPropietario(onboarding, checks);
+        setOnb({
+          step: 6,
+          caseId,
+          routedDepartments: failing
+            ? ["Legal Flow", "Escrituración"]
+            : ["Administración", "Cobranza"],
+        });
+      } catch (e) {
+        setSubmitError(
+          e instanceof Error ? e.message : "No se pudo enviar tu solicitud. Intenta de nuevo.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     if (step === 6 && onboarding.level >= 1 && !state.auth.user) {
       state.login(onboarding.accountEmail ?? "nuevo@sozu.mx");
     }
@@ -85,15 +117,6 @@ export default function RegistrarPropiedadPage() {
       setOnb({ emailVerificationSent: true });
     }
     setOnb({ step: Math.min(7, step + 1) });
-    if (step === 5 && !onboarding.caseId) {
-      const failing = checks.some((c) => c.status === "fail");
-      setOnb({
-        caseId: "SOZU-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
-        routedDepartments: failing
-          ? ["Legal Flow", "Escrituración"]
-          : ["Administración", "Cobranza"],
-      });
-    }
   }
 
   function prev() {
@@ -238,26 +261,35 @@ export default function RegistrarPropiedadPage() {
                 <ArrowLeft className="mr-1 h-4 w-4" /> Atrás
               </Button>
               <div className="hidden flex-1 px-3 text-center text-xs text-muted-foreground sm:block">
-                {step === 5 && !noFail && (
+                {step === 5 && submitError ? (
+                  <span className="text-destructive">{submitError}</span>
+                ) : step === 5 && !noFail ? (
                   <span className="text-destructive">
                     Hay observaciones: pasarán a revisión legal.
                   </span>
-                )}
-                {step === 6 && onboarding.level < 2 && (
+                ) : step === 6 && onboarding.level < 2 ? (
                   <span>
                     La transferencia de registro se habilitará cuando SOZU reconozca tu titularidad
                     (Nivel 2). Te avisaremos por correo.
                   </span>
-                )}
+                ) : null}
               </div>
               {step === 6 && onboarding.level < 2 ? (
                 <Button onClick={goToPortal}>
                   Ir a mi portal <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
               ) : (
-                <Button onClick={next} disabled={!canNext}>
-                  {step === 7 ? "Ir al portal" : "Continuar"}{" "}
-                  <ArrowRight className="ml-1 h-4 w-4" />
+                <Button onClick={next} disabled={!canNext || submitting}>
+                  {step === 5 && submitting ? (
+                    <>
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Enviando…
+                    </>
+                  ) : (
+                    <>
+                      {step === 5 ? "Enviar solicitud" : step === 7 ? "Ir al portal" : "Continuar"}{" "}
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               )}
             </div>
