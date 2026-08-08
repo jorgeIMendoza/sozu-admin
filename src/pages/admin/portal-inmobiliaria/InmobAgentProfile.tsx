@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,8 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import {
-  ArrowLeft, Users, FileText, Home, ShoppingCart, DollarSign, TrendingUp, Mail, Calendar, HelpCircle,
+  ArrowLeft, Users, FileText, Home, ShoppingCart, DollarSign, TrendingUp, Mail, Calendar, HelpCircle, Landmark,
 } from "lucide-react";
 
 const fmtCurrency = (v: number) =>
@@ -445,6 +447,26 @@ export default function InmobAgentProfile() {
 
   const getInitials = (name: string) => name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
+  // Cuenta de dispersión del agente. Él la ve en su perfil pero no la edita: la
+  // registra su inmobiliaria (por eso el alta nace validada, ver el diálogo).
+  const [bankOpen, setBankOpen] = useState(false);
+  const { data: cuentaAgente = null, refetch: refetchCuentaAgente } = useQuery({
+    queryKey: ["agent-profile-cuenta-bancaria", agent?.personaId],
+    queryFn: async () => {
+      if (!agent?.personaId) return null;
+      const { data } = await (supabase as any)
+        .from("cuentas_bancarias")
+        .select("id, cuenta_clabe, numero_cuenta, titular, id_estatus_verificacion, banco:bancos(nombre)")
+        .eq("id_persona", agent.personaId)
+        .eq("activo", true)
+        .limit(1)
+        .maybeSingle();
+      return data || null;
+    },
+    enabled: !!agent?.personaId,
+    staleTime: 30_000,
+  });
+
   const isLoading = ofertasLoading;
 
   if (!agent && agents.length > 0) {
@@ -556,6 +578,59 @@ export default function InmobAgentProfile() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cuenta bancaria del agente */}
+      <Card>
+        <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base">Cuenta bancaria</CardTitle>
+          {agent?.personaId && (
+            <Button variant="outline" size="sm" onClick={() => setBankOpen(true)}>
+              <Landmark className="h-4 w-4 mr-2" />
+              {cuentaAgente ? "Administrar" : "Registrar cuenta"}
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="pt-0">
+          {cuentaAgente ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-semibold">{cuentaAgente.banco?.nombre || "Banco"}</span>
+              <span className="text-sm tabular-nums text-muted-foreground">
+                •••• {String(cuentaAgente.cuenta_clabe || cuentaAgente.numero_cuenta || "").slice(-4)}
+              </span>
+              <Badge
+                variant={cuentaAgente.id_estatus_verificacion === 2 ? "default" : "outline"}
+                className={`text-[10px] ${cuentaAgente.id_estatus_verificacion === 2 ? "bg-emerald-600" : ""}`}
+              >
+                {cuentaAgente.id_estatus_verificacion === 2 ? "Validada" : "Pendiente"}
+              </Badge>
+              {cuentaAgente.titular && (
+                <span className="text-xs text-muted-foreground">Titular: {cuentaAgente.titular}</span>
+              )}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm py-4 text-center">
+              Sin cuenta registrada. Tu agente no puede capturarla desde su portal.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={bankOpen}
+        onOpenChange={(open) => { setBankOpen(open); if (!open) refetchCuentaAgente(); }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cuenta bancaria · {agent?.nombre}</DialogTitle>
+            <DialogDescription>
+              Tu agente ve esta cuenta en su perfil pero no puede editarla: la registras y la corriges tú.
+            </DialogDescription>
+          </DialogHeader>
+          {agent?.personaId && (
+            <BankAccountsSection personId={Number(agent.personaId)} estatusVerificacionInicial={2} />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Comisiones + Citas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -75,7 +75,7 @@ export function AgentImpersonationSelector() {
                     key={agent.email}
                     value={`${agent.nombre} ${agent.email}`}
                     onSelect={() => {
-                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre);
+                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre, agent.rolId);
                       setOpen(false);
                     }}
                   >
