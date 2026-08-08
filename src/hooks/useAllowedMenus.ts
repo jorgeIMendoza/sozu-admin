@@ -23,8 +23,14 @@ export function useAllowedMenus() {
   // Ref para evitar mostrar spinner en recargas subsecuentes
   const hasLoadedOnce = useRef(false);
 
-  // Super Admin has access to everything - only check when profile is loaded
+  // OJO: este hook resuelve AUTORIZACIÓN de rutas (lo consume `PermissionRoute`),
+  // no solo el pintado del menú. Por eso usa SIEMPRE el rol de la sesión real y
+  // nunca el del impersonado: con el rol ajeno, un admin en "Vista del usuario"
+  // perdía el acceso a la ruta, caía en `/admin/access-denied` —que vive fuera
+  // del layout del portal— y se quedaba sin forma de dejar de impersonar.
+  // La simulación de la vista fiel se hace en los hooks de menú de cada portal.
   const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
+  const effectiveRolId = profile?.rol_id ?? null;
   
   // Profile is still loading if we have a user but no profile yet
   const isProfileStillLoading = !!user && !profile && !isAuthLoading;
@@ -65,7 +71,7 @@ export function useAllowedMenus() {
   }, []);
 
   const fetchAllowedMenus = useCallback(async () => {
-    if (!profile?.rol_id) return;
+    if (!effectiveRolId) return;
     
     try {
       // Solo mostrar spinner la primera vez, recargas son silenciosas
@@ -90,7 +96,7 @@ export function useAllowedMenus() {
       const { data: permisosData, error: permisosError } = await supabase
         .from('submenus_permisos')
         .select('submenu_id')
-        .eq('rol_id', profile.rol_id)
+        .eq('rol_id', effectiveRolId)
         .eq('permiso_id', permisoData.id)
         .eq('activo', true);
 
@@ -144,7 +150,7 @@ export function useAllowedMenus() {
     } finally {
       setIsLoadingPermissions(false);
     }
-  }, [profile?.rol_id]);
+  }, [effectiveRolId]);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -168,7 +174,7 @@ export function useAllowedMenus() {
     }
 
     // If no profile (not logged in), stop loading
-    if (!profile?.rol_id) {
+    if (!effectiveRolId) {
       setIsLoadingPermissions(false);
       setIsLoadingDisabled(false);
       return;
@@ -176,7 +182,7 @@ export function useAllowedMenus() {
 
     fetchAllowedMenus();
     fetchDisabledPaths();
-  }, [profile?.rol_id, isSuperAdmin, isAuthLoading, user, profile, permissionVersion, fetchAllowedMenus, fetchDisabledPaths]);
+  }, [effectiveRolId, isSuperAdmin, isAuthLoading, user, profile, permissionVersion, fetchAllowedMenus, fetchDisabledPaths]);
 
   // ¿La ruta está apagada en BD? Se resuelve con el submenú REGISTRADO más
   // específico que cubra la ruta (match exacto o prefijo con frontera "/"), para

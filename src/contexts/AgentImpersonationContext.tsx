@@ -7,8 +7,16 @@ interface AgentImpersonationContextType {
   impersonatedAgentPersonaId: number | null;
   /** The display name of the agent being impersonated */
   impersonatedAgentName: string | null;
+  /** `usuarios.rol_id` del impersonado. Lo consume la "vista fiel" para resolver
+   *  menús y permisos con SU rol en vez del rol del admin logueado. */
+  impersonatedAgentRolId: number | null;
   /** Set the impersonated agent */
-  setImpersonatedAgent: (email: string | null, personaId: number | null, name: string | null) => void;
+  setImpersonatedAgent: (
+    email: string | null,
+    personaId: number | null,
+    name: string | null,
+    rolId?: number | null
+  ) => void;
   /** Clear impersonation */
   clearImpersonation: () => void;
   /** Whether an agent is being impersonated */
@@ -19,6 +27,7 @@ const AgentImpersonationContext = createContext<AgentImpersonationContextType>({
   impersonatedAgentEmail: null,
   impersonatedAgentPersonaId: null,
   impersonatedAgentName: null,
+  impersonatedAgentRolId: null,
   setImpersonatedAgent: () => {},
   clearImpersonation: () => {},
   isImpersonating: false,
@@ -28,17 +37,25 @@ export function AgentImpersonationProvider({ children }: { children: ReactNode }
   const [agentEmail, setAgentEmail] = useState<string | null>(null);
   const [agentPersonaId, setAgentPersonaId] = useState<number | null>(null);
   const [agentName, setAgentName] = useState<string | null>(null);
+  const [agentRolId, setAgentRolId] = useState<number | null>(null);
 
-  const setImpersonatedAgent = (email: string | null, personaId: number | null, name: string | null) => {
+  const setImpersonatedAgent = (
+    email: string | null,
+    personaId: number | null,
+    name: string | null,
+    rolId: number | null = null
+  ) => {
     setAgentEmail(email);
     setAgentPersonaId(personaId);
     setAgentName(name);
+    setAgentRolId(rolId);
   };
 
   const clearImpersonation = () => {
     setAgentEmail(null);
     setAgentPersonaId(null);
     setAgentName(null);
+    setAgentRolId(null);
   };
 
   return (
@@ -47,6 +64,7 @@ export function AgentImpersonationProvider({ children }: { children: ReactNode }
         impersonatedAgentEmail: agentEmail,
         impersonatedAgentPersonaId: agentPersonaId,
         impersonatedAgentName: agentName,
+        impersonatedAgentRolId: agentRolId,
         setImpersonatedAgent,
         clearImpersonation,
         isImpersonating: !!agentEmail,

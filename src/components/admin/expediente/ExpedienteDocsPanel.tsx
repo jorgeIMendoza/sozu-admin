@@ -14,7 +14,7 @@ import { validateCSFPdf } from '@/utils/pdfDocumentValidators';
 import { extractPdfText } from '@/utils/pdfText';
 import { matchRegimenId } from '@/utils/regimenMatch';
 import { useQuery } from '@tanstack/react-query';
-import { Eye, Loader2, PenLine, Pencil, Upload, UploadCloud } from 'lucide-react';
+import { Eye, Loader2, Lock, PenLine, Pencil, Upload, UploadCloud } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -84,6 +84,9 @@ export interface ExpDocDef {
   /** Se consulta y se descarga, pero no se sube ni se reemplaza (p. ej. la CSF del
    *  agente dependiente: la administra su inmobiliaria). */
   soloLectura?: boolean;
+  /** Quién lo carga cuando `soloLectura`. Se pinta como píldora en la fila para que
+   *  "Pendiente" sin botón no se lea como una tarea del usuario. */
+  soloLecturaNota?: string;
   /** El dato y la acción los provee el llamador. Obligatorio en 'external'; en
    *  'firma' permite colgar el documento de `firmas_digitales` en vez de `documentos`. */
   external?: {
@@ -406,6 +409,7 @@ export function ExpedienteDocsPanel({
             if (singleUrl) setViewer({ url: singleUrl, nombre });
           };
 
+          const readOnlyNota = doc.soloLecturaNota ?? 'La sube tu inmobiliaria';
           const ActionIcon = doc.kind === 'firma' ? PenLine : needsUpload ? Upload : Pencil;
           const actionTitle =
             doc.external?.actionTitle ??
@@ -426,12 +430,36 @@ export function ExpedienteDocsPanel({
                 <div className="flex flex-wrap items-center gap-2.5">
                   <span className="text-sm font-bold text-foreground">{nombre}</span>
                   <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', badge.bg, badge.color)}>{badge.label}</span>
+                  {/* Sin esta píldora, un "Pendiente" sin botón se lee como tarea
+                      propia; y es de la inmobiliaria (o de quien diga la nota). */}
+                  {doc.soloLectura && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-bold text-muted-foreground">
+                      <Lock className="h-3 w-3 shrink-0" />
+                      {readOnlyNota}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 text-xs font-medium text-muted-foreground/70">
-                  {[emisor, exists ? 'Cargado' : 'Sin cargar', hint && !exists ? hint : null].filter(Boolean).join(' · ')}
+                  {doc.soloLectura
+                    ? [emisor, exists ? 'Cargado · solo consulta' : `Aún sin cargar · ${readOnlyNota.toLowerCase()}`]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : [emisor, exists ? 'Cargado' : 'Sin cargar', hint && !exists ? hint : null]
+                        .filter(Boolean)
+                        .join(' · ')}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {/* Solo lectura y todavía sin archivo: un candado deshabilitado deja
+                    claro que no hay nada que ver ni que hacer aquí. */}
+                {doc.soloLectura && !canView && (
+                  <span
+                    title={`${readOnlyNota}. Cuando la carguen podrás consultarla aquí.`}
+                    className="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60"
+                  >
+                    <Lock className="h-4 w-4" />
+                  </span>
+                )}
                 {showAction && (
                   <button
                     title={actionTitle}
@@ -521,7 +549,11 @@ export function ExpedienteDocsPanel({
                   <DocDropzone accept=".pdf" uploading={uploading} onFile={(f) => handleDocFile(f, docDetail)} />
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    {(docDetail.tipos ?? []).some((t) => tipoRow(t)) ? 'Documento cargado.' : 'Aún no has cargado este documento.'}
+                    {(docDetail.tipos ?? []).some((t) => tipoRow(t))
+                      ? 'Documento cargado.'
+                      : docDetail.soloLectura
+                      ? `Aún no está cargado. ${docDetail.soloLecturaNota ?? 'La sube tu inmobiliaria'}.`
+                      : 'Aún no has cargado este documento.'}
                   </p>
                 )}
               </div>

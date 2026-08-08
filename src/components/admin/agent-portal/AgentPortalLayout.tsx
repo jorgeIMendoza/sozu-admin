@@ -13,9 +13,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
-import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
+import { useAgentViewRestrictions } from "@/hooks/useAgentViewRestrictions";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
+import { ImpersonationViewModeBanner } from "@/components/admin/ImpersonationViewModeToggle";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { APP_VERSION } from "@/lib/config";
@@ -23,22 +23,28 @@ import { SozuLogo } from "@/components/ui/sozu-logo";
 
 const AGENT_MENU_ID = 16;
 
-/** Toggle de Modo presentación - oculta info sensible en todo el portal. */
+/** Toggle de Modo presentación - oculta info sensible en todo el portal.
+ *  Lleva su etiqueta a la vista (sin tooltip): es un estado, no una acción
+ *  puntual, y el agente necesita ver de un golpe si está activo. */
 const PresentationToggle = () => {
   const { presentationMode, toggle } = useAgentPresentation();
   return (
     <button
       onClick={toggle}
-      title={presentationMode ? "Info sensible oculta · toca para mostrar" : "Info visible · toca para ocultar"}
+      aria-pressed={presentationMode}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
+        "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition-colors",
         presentationMode
           ? "border-amber-300 bg-orange-100 text-orange-700"
           : "border-border bg-card text-muted-foreground hover:bg-muted"
       )}
     >
-      {presentationMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-      <span className="hidden sm:inline">Modo presentación</span>
+      {presentationMode ? (
+        <EyeOff className="h-[18px] w-[18px] shrink-0" />
+      ) : (
+        <Eye className="h-[18px] w-[18px] shrink-0" />
+      )}
+      <span>Presentación</span>
     </button>
   );
 };
@@ -90,8 +96,9 @@ export const AgentPortalLayout = () => {
   const navigate  = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
   const { isPathDisabled } = useAllowedMenus();
-  const { hasInmobiliaria, isLoading: inmobLoading } = useAgentHasInmobiliaria();
-  const fullAccess = useAgentPortalFullAccess();
+  // Los recortes por dependencia ya no se calculan aquí: los resuelve el
+  // registro de reglas (`lib/impersonation/rules/agente-dependiente`).
+  const { isHidden, isLoading: inmobLoading } = useAgentViewRestrictions({ publish: true });
   const { theme, setTheme } = useTheme();
   const previousThemeRef = useRef(theme ?? "system");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -105,7 +112,7 @@ export const AgentPortalLayout = () => {
 
   // Foto + rol del usuario efectivo (usuarios.foto_perfil_url). Cubre tanto al
   // logueado como al impersonado, para que el header refleje a quién se revisa.
-  const { data: effectivePerfil } = useQuery({
+  const { data: effectivePerfil, isPending: perfilPending } = useQuery({
     queryKey: ['agent-portal-header-perfil', effectiveEmail],
     queryFn: async () => {
       if (!effectiveEmail) return null;
@@ -159,11 +166,9 @@ export const AgentPortalLayout = () => {
   // así que hasta que ambas resuelvan se muestran placeholders.
   const menuReady = !permLoading && !inmobLoading && !tabsLoading;
 
-  // Comisiones se oculta SOLO al agente DEPENDIENTE de una inmobiliaria (su
-  // comisión la cobra la inmobiliaria, no él). Ven el menú completo el agente
-  // independiente, el Super Admin y los roles con `puede_impersonar`
-  // (ver `useAgentPortalFullAccess`). Los permisos por rol siguen aplicando.
-  const hideComisiones = hasInmobiliaria && !fullAccess;
+  // Qué se oculta lo decide la regla `agente-dependiente` (Comisiones al agente
+  // ligado a una inmobiliaria). Los permisos por rol siguen aplicando aparte.
+  const hideComisiones = isHidden('/admin/agent/comisiones');
 
   const resolvedTabs = useMemo(
     () =>
@@ -232,10 +237,18 @@ export const AgentPortalLayout = () => {
     setMobileOpen(false);
   };
 
+  // Mientras `usuarios` responde no se sabe si hay foto: pintar iniciales y luego
+  // cambiarlas por la foto es justo el salto que se veía al abrir el portal o al
+  // cambiar de impersonado. Con la query en vuelo va un placeholder del MISMO
+  // tamaño, así el header nunca se recompone.
+  const perfilLoading = !!effectiveEmail && perfilPending;
+
   // Avatar: foto real del usuario si existe en usuarios.foto_perfil_url, si no iniciales.
   // Render fn (no componente inline) para evitar remontar el <img> en cada render.
   const renderAvatar = (size: string, text: string) =>
-    photoUrl ? (
+    perfilLoading ? (
+      <div className={cn(size, "rounded-full bg-muted animate-pulse shrink-0")} aria-hidden />
+    ) : photoUrl ? (
       <OptImg
         src={photoUrl}
         w={96}
@@ -257,17 +270,24 @@ export const AgentPortalLayout = () => {
           aria-label="Mi perfil"
           className="rounded-full hover:opacity-90 transition-opacity"
         >
-          {renderAvatar("w-8 h-8", "text-xs")}
+          {renderAvatar("w-9 h-9", "text-xs")}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-60 p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-border-soft bg-muted/30">
           <div className="flex items-center gap-3">
             {renderAvatar("w-9 h-9", "text-xs")}
-            <div className="min-w-0 space-y-0.5">
-              <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
-              <p className="text-xs text-muted-foreground truncate">{userRole}</p>
-            </div>
+            {perfilLoading ? (
+              <div className="min-w-0 flex-1 space-y-1.5" aria-hidden>
+                <div className="h-3.5 w-28 rounded bg-muted animate-pulse" />
+                <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+              </div>
+            ) : (
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
+                <p className="text-xs text-muted-foreground truncate">{userRole}</p>
+              </div>
+            )}
           </div>
         </div>
         <div className="p-1.5 space-y-0.5">
@@ -400,9 +420,14 @@ export const AgentPortalLayout = () => {
 
         <div className="flex-1 lg:pl-64 min-w-0">
           {/* Desktop header */}
-          <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-4 px-6 lg:px-8 bg-card border-b border-border-soft">
-            <p className="text-xl lg:text-2xl font-bold text-foreground tracking-tight truncate">{currentSection}</p>
-            <div className="ml-auto flex items-center gap-3">
+          {/* `min-w-0` en el título + `shrink-0` en los controles: sin eso el
+              título se comía el espacio y los controles quedaban aplastados
+              (título "Pe..." y toggles encimados) al impersonar. */}
+          <header className="hidden lg:flex sticky top-0 z-20 h-16 items-center gap-3 px-6 lg:px-8 bg-card border-b border-border-soft">
+            <p className="min-w-0 flex-1 truncate text-xl lg:text-2xl font-bold text-foreground tracking-tight">
+              {currentSection}
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
               {canImpersonate && <AgentPortalImpersonationSelector />}
               <PresentationToggle />
               {renderProfileMenu()}
@@ -431,6 +456,8 @@ export const AgentPortalLayout = () => {
               </div>
             )}
           </header>
+
+          {isImpersonating && <ImpersonationViewModeBanner targetName={impersonatedAgentName} />}
 
           <main className="min-h-[calc(100vh-64px)] bg-background px-4 py-4 sm:px-6 lg:px-8">
             <Outlet context={{ permissions, isAgentRole }} />

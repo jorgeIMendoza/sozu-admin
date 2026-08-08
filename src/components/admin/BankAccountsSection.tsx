@@ -14,6 +14,10 @@ import { Badge } from "@/components/ui/badge";
 
 interface BankAccountsSectionProps {
   personId: number;
+  /** Estatus con el que nace la cuenta. Por defecto la BD la deja en 1 (Pendiente).
+   *  Se pasa 2 (Validado) cuando quien la captura ya la verificó fuera del sistema
+   *  — es el caso de la inmobiliaria dando de alta la cuenta de su agente. */
+  estatusVerificacionInicial?: number;
   showStpCheckbox?: boolean;
   projectId?: number;
   onEditingStateChange?: (isEditing: boolean) => void;
@@ -21,7 +25,7 @@ interface BankAccountsSectionProps {
   onSaveAccountClick?: () => void;
 }
 
-export function BankAccountsSection({ personId, showStpCheckbox = false, projectId, onEditingStateChange, onAddAccountClick, onSaveAccountClick }: BankAccountsSectionProps) {
+export function BankAccountsSection({ personId, estatusVerificacionInicial, showStpCheckbox = false, projectId, onEditingStateChange, onAddAccountClick, onSaveAccountClick }: BankAccountsSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -185,6 +189,7 @@ export function BankAccountsSection({ personId, showStpCheckbox = false, project
         cuenta_clabe: accountData.cuenta_clabe || null,
         cuenta_swift: accountData.cuenta_swift || null,
         titular: accountData.titular.trim(),
+        ...(estatusVerificacionInicial ? { id_estatus_verificacion: estatusVerificacionInicial } : {}),
       };
       
       const { data, error } = await (supabase as any)
