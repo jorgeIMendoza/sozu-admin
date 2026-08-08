@@ -32,7 +32,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Users, TrendingUp, FileText, ShoppingCart, MoreHorizontal, Eye, Pencil, Power, KeyRound, FolderOpen, HelpCircle, ChevronDown, ChevronRight, Upload, UserPlus } from "lucide-react";
+import { Search, Users, TrendingUp, FileText, ShoppingCart, MoreHorizontal, Eye, Pencil, Power, KeyRound, FolderOpen, HelpCircle, ChevronDown, ChevronRight, Landmark, Upload, UserPlus } from "lucide-react";
+import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -93,6 +94,10 @@ export default function InmobAgentes() {
     enabled: !!personaId && !!inmobiliariaData,
     staleTime: 10 * 60_000,
   });
+
+  // Cuenta de dispersión del agente: el dependiente la consulta en su portal pero no
+  // la registra, así que la captura su inmobiliaria desde aquí.
+  const [bankAgent, setBankAgent] = useState<any | null>(null);
 
   // Edit dialog state
   const [editAgent, setEditAgent] = useState<any | null>(null);
@@ -1044,6 +1049,7 @@ export default function InmobAgentes() {
             onDeactivate={handleDeactivate}
             onResetPassword={handleResetPassword}
             onProjectAccess={setProjectAccessAgent}
+            onBankAccount={setBankAgent}
             navigate={navigate}
             isActiveTab
           />
@@ -1066,11 +1072,27 @@ export default function InmobAgentes() {
             onEdit={openEditDialog}
             onResetPassword={handleResetPassword}
             onProjectAccess={setProjectAccessAgent}
+            onBankAccount={setBankAgent}
             navigate={navigate}
             isActiveTab={false}
           />
         </TabsContent>
       </Tabs>
+
+      {/* Cuenta bancaria del agente (la administra su inmobiliaria) */}
+      <Dialog open={!!bankAgent} onOpenChange={(open) => { if (!open) setBankAgent(null); }}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cuenta bancaria · {bankAgent?.nombre}</DialogTitle>
+            <DialogDescription>
+              Tu agente ve esta cuenta en su perfil pero no puede editarla: la registras y la corriges tú.
+            </DialogDescription>
+          </DialogHeader>
+          {bankAgent?.personaId
+            ? <BankAccountsSection personId={Number(bankAgent.personaId)} estatusVerificacionInicial={2} />
+            : <p className="text-sm text-muted-foreground">Este agente todavía no tiene persona ligada, no se le puede registrar una cuenta.</p>}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Agent Dialog */}
       <Dialog open={!!editAgent} onOpenChange={(open) => { if (!open) setEditAgent(null); }}>
@@ -1173,7 +1195,7 @@ export default function InmobAgentes() {
 function AgentTable({
   agents, isLoading, search, ofertasByAgent, prospectosByAgent, ingresoByAgent, comisionByAgent,
   commissionDetails, propDetailMap, productDetailMap, getInitials, onEdit, onDeactivate, onReactivate, onResetPassword, onProjectAccess,
-  navigate, isActiveTab,
+  onBankAccount, navigate, isActiveTab,
 }: {
   agents: any[]; isLoading: boolean; search: string;
   ofertasByAgent: Map<string, any>; prospectosByAgent: Map<string, number>; ingresoByAgent: Map<string, number>; comisionByAgent: Map<string, number>;
@@ -1183,6 +1205,7 @@ function AgentTable({
   getInitials: (name: string) => string;
   onEdit: (a: any) => void; onDeactivate?: (a: any) => void; onReactivate?: (a: any) => void;
   onResetPassword: (a: any) => void; onProjectAccess: (a: any) => void;
+  onBankAccount: (a: any) => void;
   navigate: any; isActiveTab: boolean;
 }) {
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
@@ -1326,6 +1349,9 @@ function AgentTable({
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => onProjectAccess(agent)}>
                                 <FolderOpen className="h-4 w-4 mr-2" /> Acceso a proyectos
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onBankAccount(agent)}>
+                                <Landmark className="h-4 w-4 mr-2" /> Cuenta bancaria
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {isActiveTab && onDeactivate && (

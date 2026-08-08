@@ -857,7 +857,7 @@ export default function MisAgentes() {
           <p className="text-sm text-muted-foreground">
             Tu agente ve esta cuenta en su perfil pero no puede editarla: la registras y la corriges tú.
           </p>
-          {bankAgente && <BankAccountsSection personId={bankAgente.id} />}
+          {bankAgente && <BankAccountsSection personId={bankAgente.id} estatusVerificacionInicial={2} />}
         </DialogContent>
       </Dialog>
 
