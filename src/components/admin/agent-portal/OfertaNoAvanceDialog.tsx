@@ -71,6 +71,18 @@ export function OfertaNoAvanceDialog({
   const faltaComentario = comentarioRequerido && !comentario.trim();
   const puedeGuardar = disponible && canUpdate && !!selectedId && !faltaComentario && !guardar.isPending;
 
+  // Por qué está deshabilitado el guardar. Sin esto el botón se veía apagado y no había
+  // manera de saber si faltaba elegir motivo, el comentario, el permiso o el catálogo.
+  const motivoBloqueo = !canUpdate
+    ? 'No tienes permiso para editar el pipeline.'
+    : !disponible
+      ? 'El catálogo de motivos no está disponible en este ambiente todavía.'
+      : !selectedId
+        ? 'Elige una razón para guardar.'
+        : faltaComentario
+          ? 'Este motivo necesita que escribas el detalle.'
+          : null;
+
   const ofertaLabel = oferta?.is_producto
     ? `OP-${String(oferta?.id ?? "").padStart(6, "0")}`
     : `O-${String(oferta?.id ?? "").padStart(6, "0")}`;
@@ -91,7 +103,11 @@ export function OfertaNoAvanceDialog({
         },
         onError: (err: any) => {
           console.error("Error guardando el motivo de no avance:", err);
-          toast.error("No se pudo guardar la razón. Inténtalo de nuevo.");
+          // Se muestra el motivo real (RLS, columna faltante, FK…). El mensaje genérico
+          // dejaba al agente sin saber si el problema era suyo o del sistema.
+          toast.error("No se pudo guardar la razón", {
+            description: err?.message || err?.details || "Inténtalo de nuevo.",
+          });
         },
       },
     );
@@ -217,10 +233,8 @@ export function OfertaNoAvanceDialog({
         </div>
 
         <div className={cn(MODAL_FOOTER_CLS, "items-center bg-background")}>
-          {!canUpdate && (
-            <p className="mr-auto text-xs text-muted-foreground">
-              No tienes permiso para editar el pipeline.
-            </p>
+          {motivoBloqueo && (
+            <p className="mr-auto text-xs text-muted-foreground">{motivoBloqueo}</p>
           )}
           <Button variant="cancel" onClick={() => onOpenChange(false)}>
             Cerrar

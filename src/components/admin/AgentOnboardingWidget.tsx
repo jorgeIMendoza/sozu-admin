@@ -19,7 +19,7 @@ interface AgentOnboardingWidgetProps {
 }
 
 export function AgentOnboardingWidget({ personaId, variant = 'default' }: AgentOnboardingWidgetProps) {
-  const { steps, completedCount, totalSteps, percentage, isLoading } = useAgentOnboardingStatus(personaId);
+  const { steps, completedCount, totalSteps, percentage, isLoading, esDependiente } = useAgentOnboardingStatus(personaId);
   const [activeStep, setActiveStep] = useState<OnboardingStep['id'] | null>(null);
   const [expanded, setExpanded] = useState(false);
   const isInline = variant === 'inline';
@@ -66,13 +66,17 @@ export function AgentOnboardingWidget({ personaId, variant = 'default' }: AgentO
             {steps.map((step, index) => {
               const isSelected = activeStep === step.id;
               const num = STEP_NUMBERS[step.id];
+              // Fiscal y banco del agente dependiente son de consulta: las administra su
+              // inmobiliaria, así que su paso no abre el modal de captura.
+              const soloLectura = esDependiente && (step.id === 'fiscal' || step.id === 'bank-accounts');
 
               return (
                 <div key={step.id} className="flex items-center flex-1 last:flex-none">
                   <button
-                    onClick={() => setActiveStep(step.id)}
-                    className="flex flex-col items-center gap-1 group"
-                    title={step.label}
+                    onClick={() => { if (!soloLectura) setActiveStep(step.id); }}
+                    disabled={soloLectura}
+                    className={cn("flex flex-col items-center gap-1 group", soloLectura && "cursor-default")}
+                    title={soloLectura ? `${step.label} · la administra tu inmobiliaria` : step.label}
                   >
                     <div
                       className={cn(
