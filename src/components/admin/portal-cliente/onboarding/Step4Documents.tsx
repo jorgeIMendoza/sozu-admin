@@ -74,8 +74,9 @@ export function Step4Documents() {
       <header>
         <h2 className="text-xl font-semibold">Validación de titularidad</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Sube tus documentos. Extraemos los datos automáticamente para que solo tengas que
-          confirmarlos. Ningún documento se aprueba solo: son evidencia para el área legal.
+          Sube tus documentos. De algunos (CURP y constancia fiscal) extraemos los datos para
+          que solo los confirmes; los demás se suben para revisión. Ningún documento se aprueba
+          solo: son evidencia para el área legal.
         </p>
       </header>
 

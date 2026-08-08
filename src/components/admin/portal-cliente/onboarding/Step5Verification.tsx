@@ -1,5 +1,5 @@
 import { usePortal, computeVerification, type CheckStatus } from "@/lib/portal-cliente/onboarding-store";
-import { AlertTriangle, CheckCircle2, Circle, Info, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Info, UserCheck, XCircle } from "lucide-react";
 
 const ICON: Record<CheckStatus, { Icon: typeof Circle; color: string }> = {
   ok: { Icon: CheckCircle2, color: "text-primary" },
@@ -34,7 +34,15 @@ export function Step5Verification() {
             >
               <cfg.Icon className={`mt-0.5 h-5 w-5 shrink-0 ${cfg.color}`} />
               <div className="flex-1">
-                <div className="text-sm font-medium text-foreground">{c.label}</div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-sm font-medium text-foreground">{c.label}</span>
+                  {c.humanReview && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-state-review/30 bg-state-review/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-state-review">
+                      <UserCheck className="h-3 w-3" />
+                      Un asesor lo revisa
+                    </span>
+                  )}
+                </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{c.detail}</div>
               </div>
             </div>
