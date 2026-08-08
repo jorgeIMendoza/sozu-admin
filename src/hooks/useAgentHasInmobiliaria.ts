@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 
 /**
  * Devuelve true si el agente pertenece a una inmobiliaria (agente DEPENDIENTE).
@@ -13,7 +14,11 @@ import { useAuth } from "@/contexts/AuthContext";
  */
 export function useAgentHasInmobiliaria() {
   const { profile } = useAuth();
-  const personaId = profile?.id_persona;
+  const { isImpersonating, impersonatedAgentPersonaId } = useAgentImpersonation();
+  // Persona EFECTIVA: al impersonar, la del usuario que se está revisando. Así el
+  // discriminador describe a quien se ve en pantalla, no al admin. En "Vista
+  // completa" da igual: `useAgentPortalFullAccess` desactiva los recortes.
+  const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
 
   const { data: hasInmobiliaria = false, isLoading } = useQuery({
     queryKey: ["agent-has-inmobiliaria", personaId],

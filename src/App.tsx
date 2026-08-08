@@ -9,6 +9,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AgentImpersonationProvider } from "@/contexts/AgentImpersonationContext";
+import { ImpersonationViewModeProvider } from "@/contexts/ImpersonationViewModeContext";
 import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationContext";
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
@@ -551,6 +552,7 @@ const App = () => (
           <Sonner position="top-right" />
           <DevelopmentBanner />
           <AuthProvider>
+            <ImpersonationViewModeProvider>
             <AgentImpersonationProvider>
             <ClienteImpersonationProvider>
             <InmobiliariaImpersonationProvider>
@@ -1257,6 +1259,7 @@ const App = () => (
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>
             </AgentImpersonationProvider>
+            </ImpersonationViewModeProvider>
           </AuthProvider>
         </TooltipProvider>
       </ThemedShell>

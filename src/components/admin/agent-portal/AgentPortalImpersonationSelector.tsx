@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, UserSearch, X, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImpersonationViewModeToggle } from "@/components/admin/ImpersonationViewModeToggle";
 
 // Roles impersonables desde el Portal Agente. Hardcode a propósito: aún no
 // usamos una columna en BD. Incluye los roles con acceso real al portal
@@ -66,14 +67,14 @@ export function AgentPortalImpersonationSelector() {
   if (!canImpersonate) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-1.5">
       <UserSearch className="h-4 w-4 text-muted-foreground shrink-0" />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             role="combobox"
-            className="w-full sm:w-[260px] justify-between h-8 text-sm"
+            className="w-full sm:w-[190px] xl:w-[230px] justify-between h-9 text-sm"
           >
             {isImpersonating ? (
               <span className="truncate">{impersonatedAgentName}</span> ) : (
@@ -92,7 +93,7 @@ export function AgentPortalImpersonationSelector() {
                     key={agent.email}
                     value={`${agent.nombre} ${agent.email}`}
                     onSelect={() => {
-                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre);
+                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre, agent.rolId);
                       setOpen(false);
                     }}
                   >
@@ -119,9 +120,19 @@ export function AgentPortalImpersonationSelector() {
         </PopoverContent>
       </Popover>
       {isImpersonating && (
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={clearImpersonation}>
-          <X className="h-4 w-4" />
-        </Button>
+        <>
+          <ImpersonationViewModeToggle targetName={impersonatedAgentName} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            aria-label="Dejar de impersonar"
+            title="Dejar de impersonar"
+            onClick={clearImpersonation}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </>
       )}
     </div>
   );

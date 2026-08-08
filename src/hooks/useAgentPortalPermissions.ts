@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAgentImpersonation } from '@/contexts/AgentImpersonationContext';
+import { useImpersonationViewMode } from '@/contexts/ImpersonationViewModeContext';
+import { resolveEffectiveRolId, resolveIsSuperAdminView } from '@/lib/impersonation/effective-identity';
 
 /**
  * Permisos por vista del Portal Agente.
@@ -59,11 +62,33 @@ const ALL_MAP: AgentPortalPermissions = Object.fromEntries(
 
 export function useAgentPortalPermissions() {
   const { profile, permissionVersion } = useAuth();
+  const { impersonatedAgentEmail, impersonatedAgentPersonaId, impersonatedAgentName, impersonatedAgentRolId } =
+    useAgentImpersonation();
+  const { viewMode } = useImpersonationViewMode();
   const [permissions, setPermissions] = useState<AgentPortalPermissions>(DEFAULT_MAP);
   const [isLoading, setIsLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
 
-  const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
+  // "Vista fiel": los permisos se resuelven con el rol del usuario IMPERSONADO,
+  // no con el del admin logueado. Sin impersonación (o en "Vista completa") todo
+  // sigue igual que antes. La decisión vive en funciones puras con tests.
+  const identity = {
+    profileRolId: profile?.rol_id,
+    profileRolNombre: profile?.rol_nombre,
+    profilePersonaId: profile?.id_persona,
+    puedeImpersonar: profile?.puede_impersonar,
+    target: impersonatedAgentEmail
+      ? {
+          email: impersonatedAgentEmail,
+          personaId: impersonatedAgentPersonaId,
+          nombre: impersonatedAgentName,
+          rolId: impersonatedAgentRolId,
+        }
+      : null,
+    viewMode,
+  };
+  const effectiveRolId = resolveEffectiveRolId(identity);
+  const isSuperAdmin = resolveIsSuperAdminView(identity);
 
   const fetchPermissions = useCallback(async () => {
     if (isSuperAdmin) {
@@ -73,7 +98,7 @@ export function useAgentPortalPermissions() {
       return;
     }
 
-    if (!profile?.rol_id) {
+    if (!effectiveRolId) {
       setIsLoading(false);
       return;
     }
@@ -103,7 +128,7 @@ export function useAgentPortalPermissions() {
           permisos!inner ( nombre )
         `)
         .in('submenu_id', submenuIds)
-        .eq('rol_id', profile.rol_id)
+        .eq('rol_id', effectiveRolId)
         .eq('activo', true);
 
       if (permErr) {
@@ -139,7 +164,7 @@ export function useAgentPortalPermissions() {
     } finally {
       setIsLoading(false);
     }
-  }, [profile?.rol_id, isSuperAdmin]);
+  }, [effectiveRolId, isSuperAdmin]);
 
   useEffect(() => {
     fetchPermissions();

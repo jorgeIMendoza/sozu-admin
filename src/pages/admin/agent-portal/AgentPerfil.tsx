@@ -154,7 +154,13 @@ const AgentPerfil = () => {
   const displayName = isImpersonating ? impersonatedAgentName : profile?.nombre;
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
   const loggedInEmail = user?.email || profile?.email;
-  const canEdit = !!loggedInEmail && !!agentEmail && loggedInEmail === agentEmail;
+  // Foto y frase: las edita el dueño de la cuenta y, en soporte, quien lo
+  // impersona con "Vista completa" (para resolver en el momento cuando el
+  // usuario no puede o no quiere hacerlo). En "Vista fiel" `fullAccess` es
+  // false, así que el bloqueo vuelve y se ve el portal como lo ve él.
+  const canEdit =
+    (!!loggedInEmail && !!agentEmail && loggedInEmail === agentEmail) ||
+    (isImpersonating && fullAccess);
   const { steps, percentage, isLoading, missingByStep } = useAgentOnboardingStatus(personaId);
   const { appointments: trainingAppointments = [] } = useAgentTrainingAppointments(personaId);
   const { permissions } = useAgentPortalPermissions();
@@ -1200,7 +1206,17 @@ const AgentPerfil = () => {
       {profileView === 'expediente' && (
         <ExpedienteDocsPanel
           personaId={personaId}
-          docs={[IDENTIDAD_DOC, { ...CSF_DOC, soloLectura: fiscalSoloLectura }, ...(puedeVerCarta ? [CARTA_DOC] : [])]}
+          docs={[
+            IDENTIDAD_DOC,
+            {
+              ...CSF_DOC,
+              // El dependiente la ve para saber si ya está cargada, pero no la sube:
+              // la administra su inmobiliaria (con nombre cuando se conoce).
+              soloLectura: fiscalSoloLectura,
+              soloLecturaNota: inmobiliariaNombre ? `La sube ${inmobiliariaNombre}` : undefined,
+            },
+            ...(puedeVerCarta ? [CARTA_DOC] : []),
+          ]}
           canUpdate={perfilPerms.canUpdate}
           docsQueryKey={expedienteDocsQueryKey}
           queryTipos={AGENT_EXP_TIPOS}
