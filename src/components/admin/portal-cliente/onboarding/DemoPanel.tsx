@@ -11,9 +11,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePortal } from "@/lib/portal-cliente/onboarding-store";
 
+// Simulador interno — SOLO visible en desarrollo (import.meta.env.DEV). Nunca
+// aparece en un build desplegado (dev/preview/prod). Solo trae los controles
+// que afectan el flujo real actual de reventa.
 export function DemoPanel() {
   const [open, setOpen] = useState(false);
   const demo = usePortal((s) => s.demo);
@@ -21,10 +23,6 @@ export function DemoPanel() {
   const onboarding = usePortal((s) => s.onboarding);
   const setOnb = usePortal((s) => s.setOnboarding);
   const approve = usePortal((s) => s.approveLevel);
-  const properties = usePortal((s) => s.properties);
-  const transfer = usePortal((s) => s.transferOwnership);
-  const seed = usePortal((s) => s.seedOriginalOwner);
-  const user = usePortal((s) => s.auth.user);
   const reset = usePortal((s) => s.reset);
 
   if (!import.meta.env.DEV) return null;
@@ -67,10 +65,24 @@ export function DemoPanel() {
               variant="outline"
               className="w-full"
               onClick={() =>
-                setOnb({ unitId: "prop-margot-308", unitConfirmed: true })
+                setOnb({
+                  unitId: "5031",
+                  unitConfirmed: true,
+                  selectedUnit: {
+                    id: "5031", // id REAL de propiedades (Margot, proyecto 1743) con foto
+                    numero: "1007",
+                    piso: "10",
+                    modelo: null,
+                    m2Interiores: 33.23,
+                    m2Exteriores: 0,
+                    descripcion: "Departamento Margot 1007 (piso 10)",
+                    imagen:
+                      "https://api.sozu.com/storage/uploads/1620838218pB1NT7P9Amo0T6S1ID9PlYP7wwCHpt.jpeg",
+                  },
+                })
               }
             >
-              Sembrar unidad Margot 308 (Kind · piso 3)
+              Sembrar unidad Margot 1007 (real · con foto)
             </Button>
           </section>
 
@@ -81,36 +93,10 @@ export function DemoPanel() {
               checked={demo.forceNameMismatch}
               onChange={(v) => setDemo({ forceNameMismatch: v })}
             />
-            <Toggle
-              label="Mismatch de folio real"
-              checked={demo.forceFolioMismatch}
-              onChange={(v) => setDemo({ forceFolioMismatch: v })}
-            />
-            <Toggle
-              label="Mismatch cadena de dominio (vendedor ≠ dueño original)"
-              checked={demo.forceChainMismatch}
-              onChange={(v) => setDemo({ forceChainMismatch: v })}
-            />
-            <div className="flex items-center justify-between">
-              <Label>Certificado RPP</Label>
-              <Select
-                value={demo.rppState}
-                onValueChange={(v) => setDemo({ rppState: v as typeof demo.rppState })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="vigente">Vigente</SelectItem>
-                  <SelectItem value="vencido">Vencido</SelectItem>
-                  <SelectItem value="gravamen">Con gravamen</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </section>
 
           <section className="space-y-2">
-            <h4 className="font-semibold">Área legal</h4>
+            <h4 className="font-semibold">Área legal (simular aprobación)</h4>
             <div className="grid grid-cols-2 gap-2">
               <Button size="sm" variant="outline" onClick={() => approve(1)}>
                 Aprobar Nivel 1
@@ -122,47 +108,6 @@ export function DemoPanel() {
             <p className="text-xs text-muted-foreground">
               Nivel actual: <span className="font-semibold">{onboarding.level}</span>
             </p>
-          </section>
-
-          <section className="space-y-2">
-            <h4 className="font-semibold">Transferencia de registro</h4>
-            <p className="text-xs text-muted-foreground">
-              Traspasa la unidad seleccionada al usuario actual. Requiere Nivel 2 en producción.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!onboarding.unitId || !user}
-              onClick={() => onboarding.unitId && user && transfer(onboarding.unitId, user.id)}
-            >
-              Transferir unidad al usuario actual
-            </Button>
-          </section>
-
-          <section className="space-y-2">
-            <h4 className="font-semibold">Sembrar dueño original</h4>
-            {properties.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between rounded border border-border p-2 text-xs"
-              >
-                <div>
-                  <div className="font-medium">
-                    {p.project} · {p.unit}
-                  </div>
-                  <div className="num text-muted-foreground">{p.originalOwnerId}</div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    seed(p.id, "user-original-" + Math.floor(Math.random() * 900 + 100))
-                  }
-                >
-                  Regenerar
-                </Button>
-              </div>
-            ))}
           </section>
 
           <section className="border-t border-border pt-4">

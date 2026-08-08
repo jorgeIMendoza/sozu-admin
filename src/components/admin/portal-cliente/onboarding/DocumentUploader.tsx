@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, FileUp, Loader2, Pencil, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileCheck, FileUp, Loader2, Pencil, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { DOC_HELP, DOC_LABELS, usePortal, type DocField, type DocStatus, type Do
 import { extractPdfText } from "@/utils/pdfExtractText";
 import { validateCURPPdf, validateCSFPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields } from "@/utils/pdfDocumentExtractors";
+import { setDocBytes, removeDocBytes, fileToBase64 } from "@/lib/portal-cliente/onboarding-doc-bytes";
 
 interface Props {
   type: DocType;
@@ -129,7 +130,23 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         confirmed: false,
         createdAt: new Date().toISOString(),
       };
-      if (doc) removeDoc(doc.id);
+      // Guarda el contenido en memoria para enviarlo al backend al finalizar el
+      // wizard (registrar-solicitud-propietario). No se persiste en el store.
+      try {
+        const base64 = await fileToBase64(file);
+        setDocBytes(id, {
+          base64,
+          filename: file.name,
+          contentType: file.type || "application/pdf",
+        });
+      } catch {
+        // Si no se pudo leer el contenido, el doc igual queda cargado; el envío
+        // lo saltará y el área de SOZU lo pedirá aparte.
+      }
+      if (doc) {
+        removeDocBytes(doc.id);
+        removeDoc(doc.id);
+      }
       addDoc(newDoc);
     } catch (e) {
       setError(
@@ -244,68 +261,87 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         </div>
       )}
 
-      {doc && !doc.managedBySozu && (
+      {/* Documento SIN extracción (INE, escritura, predial, acta, poder): solo cargado, revisión manual */}
+      {doc && !doc.managedBySozu && doc.fields.length === 0 && (
+        <div className="rounded-md border border-border bg-secondary/30 p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              {doc.confirmed ? <CheckCircle2 className="h-4 w-4" /> : <FileCheck className="h-4 w-4" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-foreground">
+                {doc.confirmed ? "Documento confirmado" : "Documento cargado"}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {doc.filename} ·{" "}
+                {doc.confirmed
+                  ? "quedará para revisión del área de SOZU"
+                  : "revísalo y confírmalo para enviarlo a revisión"}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => removeDoc(doc.id)} type="button">
+              <Trash2 className="mr-1 h-3 w-3" /> Quitar
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => updateDoc(doc.id, { confirmed: true, status: "validado" })}
+              disabled={doc.confirmed}
+              type="button"
+            >
+              <CheckCircle2 className="mr-1 h-3 w-3" />
+              {doc.confirmed ? "Confirmado" : "Confirmar"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Documento CON datos extraídos (CURP / CSF): revisar y confirmar */}
+      {doc && !doc.managedBySozu && doc.fields.length > 0 && (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
             <CheckCircle2 className="h-4 w-4" />
             Detectamos estos datos. Revísalos y confírmalos.
           </div>
-          {doc.fields.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Documento capturado. Confírmalo para continuar.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {doc.fields.map((f) => (
-                <div key={f.key} className="grid grid-cols-3 items-center gap-2">
-                  <Label className="text-xs text-muted-foreground">{f.label}</Label>
-                  {editing ? (
-                    <Input
-                      className="col-span-2 h-8 num text-sm"
-                      value={f.value}
-                      onChange={(e) =>
-                        updateDoc(doc.id, {
-                          fields: doc.fields.map((x) =>
-                            x.key === f.key ? { ...x, value: e.target.value } : x,
-                          ),
-                        })
-                      }
-                    />
-                  ) : (
-                    <div className="col-span-2 num text-sm font-medium text-foreground">
-                      {f.value || <span className="text-muted-foreground">—</span>}
-                      <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
-                        Tomado de: {doc.filename}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="space-y-2">
+            {doc.fields.map((f) => (
+              <div key={f.key} className="grid grid-cols-3 items-center gap-2">
+                <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                {editing ? (
+                  <Input
+                    className="col-span-2 h-8 num text-sm"
+                    value={f.value}
+                    onChange={(e) =>
+                      updateDoc(doc.id, {
+                        fields: doc.fields.map((x) =>
+                          x.key === f.key ? { ...x, value: e.target.value } : x,
+                        ),
+                      })
+                    }
+                  />
+                ) : (
+                  <div className="col-span-2 num text-sm font-medium text-foreground">
+                    {f.value || <span className="text-muted-foreground">—</span>}
+                    <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                      Tomado de: {doc.filename}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="text-[11px] text-muted-foreground">
               Confianza: <span className="num">{Math.round(doc.confidence * 100)}%</span>
               {doc.confidence < 0.75 && " · marcado como Por confirmar"}
             </div>
             <div className="flex gap-2">
-              {doc.fields.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setEditing((v) => !v)}
-                  type="button"
-                >
-                  <Pencil className="mr-1 h-3 w-3" />
-                  {editing ? "Listo" : "Corregir"}
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => removeDoc(doc.id)}
-                type="button"
-              >
+              <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)} type="button">
+                <Pencil className="mr-1 h-3 w-3" />
+                {editing ? "Listo" : "Corregir"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => removeDoc(doc.id)} type="button">
                 <Trash2 className="mr-1 h-3 w-3" /> Quitar
               </Button>
               <Button

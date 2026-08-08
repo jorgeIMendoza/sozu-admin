@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePortal } from "@/lib/portal-cliente/onboarding-store";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -9,26 +9,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Eye, EyeOff, Mail, MailCheck, RefreshCw } from "lucide-react";
+import { Mail } from "lucide-react";
 
-// SWAP POINT: lista real de correos ya registrados (verificación server-side).
+// SWAP POINT: verificación real de correos ya registrados (contra auth/usuarios).
 const EXISTING_ACCOUNTS = ["cliente@sozu.mx", "demo@sozu.mx"];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+// Modelo B (decisión de producto): la cuenta y la contraseña NO se crean aquí.
+// Aquí solo se recaban correo y teléfono; la cuenta (rol Cliente) se crea cuando
+// el área de condominio aprueba el Nivel 1, con un enlace para definir contraseña.
 export function Step2CreateAccount() {
   const email = usePortal((s) => s.onboarding.accountEmail) ?? "";
   const phone = usePortal((s) => s.onboarding.accountPhone) ?? "";
   const accepted = usePortal((s) => s.onboarding.privacyAccepted);
-  const verificationSent = usePortal((s) => s.onboarding.emailVerificationSent);
   const setOnb = usePortal((s) => s.setOnboarding);
 
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
 
   const emailValid = EMAIL_RE.test(email);
   const emailTaken =
@@ -36,10 +33,6 @@ export function Step2CreateAccount() {
 
   const phoneDigits = phone.replace(/\D/g, "");
   const phoneValid = phoneDigits.length === 10;
-
-  const passValid = password.length >= 8;
-  const confirmValid = confirm.length > 0 && confirm === password;
-  const confirmMismatch = confirm.length > 0 && confirm !== password;
 
   function handlePhone(v: string) {
     const digits = v.replace(/\D/g, "").slice(0, 10);
@@ -53,35 +46,14 @@ export function Step2CreateAccount() {
     setOnb({ accountPhone: out });
   }
 
-  function resend() {
-    if (resendCooldown > 0) return;
-    // SWAP POINT: reenvío del enlace de verificación.
-    setOnb({ emailVerificationSent: true });
-    setResendCooldown(30);
-    const t = setInterval(() => {
-      setResendCooldown((s) => {
-        if (s <= 1) {
-          clearInterval(t);
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-  }
-
-  // Marca envío al pulsar continuar (lo hace el contenedor); aquí exponemos
-  // el estado "por verificar" para que el usuario reenvíe si quiere.
-  const showVerifyChip = useMemo(
-    () => verificationSent && emailValid,
-    [verificationSent, emailValid],
-  );
-
   return (
     <div className="space-y-5">
       <header>
         <h2 className="text-xl font-semibold">Crea tu cuenta</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Usaremos este correo y teléfono para tus notificaciones y acceso al portal.
+          Con estos datos te daremos acceso al portal. <strong className="text-foreground">Tu
+          contraseña la defines después</strong>, cuando SOZU apruebe tu registro; por ahora solo
+          necesitamos cómo contactarte.
         </p>
       </header>
 
@@ -110,24 +82,6 @@ export function Step2CreateAccount() {
               .
             </p>
           )}
-          {showVerifyChip && !emailTaken && (
-            <div className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-amber-300/60 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
-              <MailCheck className="h-3.5 w-3.5" />
-              <span>
-                Enlace enviado a <span className="font-medium">{email}</span> · Correo por
-                verificar
-              </span>
-              <button
-                type="button"
-                onClick={resend}
-                disabled={resendCooldown > 0}
-                className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-              >
-                <RefreshCw className="h-3 w-3" />
-                {resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : "Reenviar enlace"}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Teléfono */}
@@ -154,80 +108,14 @@ export function Step2CreateAccount() {
             </p>
           )}
         </div>
-
-        {/* Contraseña */}
-        <div className="space-y-1">
-          <Label htmlFor="password">Contraseña</Label>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPass ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 8 caracteres"
-              autoComplete="new-password"
-              className="pr-10"
-              aria-invalid={password.length > 0 && !passValid}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPass((s) => !s)}
-              aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-            >
-              {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            No introduzcas contraseñas de terceros aquí. Esta es tu cuenta personal SOZU.
-          </p>
-          {password.length > 0 && !passValid && (
-            <p className="text-xs text-destructive">Mínimo 8 caracteres.</p>
-          )}
-        </div>
-
-        {/* Confirmar contraseña */}
-        <div className="space-y-1">
-          <Label htmlFor="confirm">Confirmar contraseña</Label>
-          <div className="relative">
-            <Input
-              id="confirm"
-              type={showConfirm ? "text" : "password"}
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Repite tu contraseña"
-              autoComplete="new-password"
-              className="pr-10"
-              aria-invalid={confirmMismatch}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirm((s) => !s)}
-              aria-label={
-                showConfirm ? "Ocultar contraseña" : "Mostrar contraseña"
-              }
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-            >
-              {showConfirm ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-          {confirmMismatch && (
-            <p className="text-xs text-destructive">Las contraseñas no coinciden.</p>
-          )}
-        </div>
       </div>
 
-      {/* Info banner verificación */}
+      {/* Info: la cuenta se activa al aprobar el registro */}
       <div className="flex items-start gap-2 rounded-md border border-border bg-secondary/60 p-3 text-xs text-muted-foreground">
         <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span>
-          Para activar tu cuenta te enviaremos un enlace de verificación a tu correo.
-          Deberás confirmarlo para completar tu registro; puedes seguir avanzando mientras
-          tanto.
+          Cuando SOZU apruebe tu registro te enviaremos a este correo un enlace para definir tu
+          contraseña y entrar al portal. Puedes seguir avanzando ahora.
         </span>
       </div>
 
@@ -248,22 +136,13 @@ export function Step2CreateAccount() {
           >
             Aviso de Privacidad LFPDPPP
           </button>{" "}
-          y autorizo el tratamiento de mi identificación, escritura, certificado del RPP y
-          predial para fines de validación de titularidad.
+          y autorizo el tratamiento de mi identificación, escritura y predial para fines de
+          validación de titularidad.
         </span>
       </label>
 
       {/* Estado del formulario (para el botón Continuar del contenedor) */}
-      <FormGate
-        ready={
-          emailValid &&
-          !emailTaken &&
-          phoneValid &&
-          passValid &&
-          confirmValid &&
-          accepted
-        }
-      />
+      <FormGate ready={emailValid && !emailTaken && phoneValid && accepted} />
 
       <Dialog open={showPrivacy} onOpenChange={setShowPrivacy}>
         <DialogContent className="max-w-lg">
@@ -302,8 +181,6 @@ function FormGate({ ready }: { ready: boolean }) {
     </p>
   );
 }
-
-
 
 function useSyncReady(
   ready: boolean,

@@ -1,11 +1,9 @@
 import { usePortal } from "@/lib/portal-cliente/onboarding-store";
 import { CheckCircle2, Info, Phone } from "lucide-react";
 import { KeyValueRow } from "./KeyValueRow";
-import { Button } from "@/components/ui/button";
 
 export function Step6Linking() {
   const onb = usePortal((s) => s.onboarding);
-  const approve = usePortal((s) => s.approveLevel);
 
   return (
     <div className="space-y-5">
@@ -16,7 +14,9 @@ export function Step6Linking() {
         </div>
         <h2 className="mt-3 text-xl font-semibold">Tu solicitud está en validación</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Recibirás actualizaciones por correo y en tu Portal del Cliente.
+          <strong className="text-foreground">Ya terminaste tu parte</strong> — no necesitas hacer
+          nada más por ahora. Un asesor de SOZU revisa tu solicitud y te avisa por correo y en tu
+          Portal del Cliente. Puedes cerrar esta ventana; tu avance queda guardado.
         </p>
       </header>
 
@@ -54,14 +54,9 @@ export function Step6Linking() {
 
       {onb.level === 0 && (
         <div className="rounded-md border border-dashed border-border bg-card p-4 text-sm text-muted-foreground">
-          Nivel 1 se otorga tras revisión inicial del área de Administración SOZU (típicamente
-          en 24-48h hábiles). Puedes usar el panel <strong>DEMO</strong> para simular la
-          aprobación.
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => approve(1)}>
-              Simular aprobación Nivel 1
-            </Button>
-          </div>
+          El <strong>Nivel 1</strong> se otorga tras la revisión inicial del área de Administración
+          de SOZU (típicamente en 24-48 h hábiles). Te avisaremos por correo en cuanto quede activo;
+          no necesitas volver a esta pantalla.
         </div>
       )}
     </div>

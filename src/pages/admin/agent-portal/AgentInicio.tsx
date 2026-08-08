@@ -31,7 +31,7 @@ const AgentInicio = () => {
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const agentEmail = isImpersonating ? impersonatedAgentEmail : (user?.email || profile?.email);
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
-  const { percentage, isLoading: onboardingLoading, hasTrainingComplete, hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
+  const { percentage, isLoading: onboardingLoading, hasTrainingComplete, hasBasicIdentityComplete, esDependiente } = useAgentOnboardingStatus(personaId);
   const { permissions } = useAgentPortalPermissions();
   const inicioPerms = permissions['/admin/agent/inicio'];
   const { presentationMode, mask } = useAgentPresentation();
@@ -311,7 +311,10 @@ const AgentInicio = () => {
             {!hasTrainingComplete
               ? 'Completa tu capacitación para generar ofertas.'
               : !hasBasicIdentityComplete
-              ? 'Completa tu identidad para incluir datos bancarios en ofertas.'
+              ? esDependiente
+                // El dependiente no lleva datos bancarios: su inmobiliaria le paga.
+                ? 'Completa tu identidad para generar ofertas.'
+                : 'Completa tu identidad para incluir datos bancarios en ofertas.'
               : 'Completa tu perfil para recibir comisiones.'}
           </p>
           <Progress value={percentage} className="h-2 bg-amber-100 [&>*]:bg-amber-500" />

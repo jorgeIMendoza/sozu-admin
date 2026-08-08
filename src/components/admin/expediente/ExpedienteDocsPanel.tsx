@@ -1,12 +1,11 @@
-import { ClienteINECameraCapture } from '@/components/admin/portal-cliente/ClienteINECameraCapture';
+import { DocPdfDialog } from '@/components/admin/expediente/DocPdfDialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { FIELD_LABEL_CLS, MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalFormHeader } from '@/components/ui/modal-form';
+import { FIELD_LABEL_CLS, MODAL_BODY_CLS, ModalFormHeader } from '@/components/ui/modal-form';
 import { ModalViewer } from '@/components/ui/modal-viewer';
 import { OptImg } from '@/components/ui/opt-img';
 import { SearchableSelect, type SearchableOption } from '@/components/ui/searchable-select';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useExpedienteDocs, type ExpDocEstado } from '@/hooks/useExpedienteDocs';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -15,7 +14,7 @@ import { validateCSFPdf } from '@/utils/pdfDocumentValidators';
 import { extractPdfText } from '@/utils/pdfText';
 import { matchRegimenId } from '@/utils/regimenMatch';
 import { useQuery } from '@tanstack/react-query';
-import { Camera, Eye, Loader2, PenLine, Pencil, Upload, UploadCloud } from 'lucide-react';
+import { Eye, Loader2, PenLine, Pencil, Upload, UploadCloud } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -32,6 +31,8 @@ import { toast } from 'sonner';
  */
 
 export const INE_TIPOS = [2, 3];
+/** INE completo: frente y reverso en un solo PDF. Es el tipo que se usa desde 2026-08. */
+export const INE_COMPLETO_TIPO = 63;
 export const PASAPORTE_TIPO = 4;
 export const CSF_TIPO = 6;
 
@@ -39,9 +40,25 @@ export const CSF_TIPO = 6;
 const NO_REGIMEN = '__none__';
 
 const IDENTITY_META = {
-  ine: { nombre: 'INE', emisor: 'INE', hint: 'Frente y reverso', tipos: INE_TIPOS },
+  ine: { nombre: 'INE', emisor: 'INE', hint: 'Frente y reverso', tipos: [...INE_TIPOS, INE_COMPLETO_TIPO] },
   pasaporte: { nombre: 'Pasaporte', emisor: 'SRE', hint: 'Página de datos (vigente)', tipos: [PASAPORTE_TIPO] },
 } as const;
+
+/** Opciones del modal de identificación oficial (mismo texto que el Portal Cliente). */
+const IDENTIDAD_OPCIONES = [
+  {
+    value: 'ine',
+    label: 'INE',
+    hint: 'Frente y reverso en un solo PDF',
+    aviso: 'Sube un solo archivo PDF que contenga el frente y el reverso de tu INE. El documento debe estar escaneado, completo y legible. Si no cumple estas condiciones, la revisión se rechazará y deberás cargarlo nuevamente.',
+  },
+  {
+    value: 'pasaporte',
+    label: 'Pasaporte',
+    hint: 'Página de datos',
+    aviso: 'Sube un PDF con la página de datos de tu pasaporte vigente, escaneada completa y legible. Si no cumple estas condiciones, la revisión se rechazará y deberás cargarlo nuevamente.',
+  },
+];
 
 export type ExpDocKind =
   /** INE (frente+reverso) o pasaporte, con selector y captura por cámara. */
@@ -64,6 +81,9 @@ export interface ExpDocDef {
   kind: ExpDocKind;
   /** PDF de la Constancia: extrae y confirma datos fiscales antes de guardar. */
   csf?: boolean;
+  /** Se consulta y se descarga, pero no se sube ni se reemplaza (p. ej. la CSF del
+   *  agente dependiente: la administra su inmobiliaria). */
+  soloLectura?: boolean;
   /** El dato y la acción los provee el llamador. Obligatorio en 'external'; en
    *  'firma' permite colgar el documento de `firmas_digitales` en vez de `documentos`. */
   external?: {
@@ -155,7 +175,6 @@ export function ExpedienteDocsPanel({
   onChanged,
   className,
 }: Props) {
-  const isMobile = useIsMobile();
 
   const hasIdentity = docs.some((d) => d.kind === 'identity');
   const tipos = useMemo(() => {
@@ -174,9 +193,12 @@ export function ExpedienteDocsPanel({
     queryKey: docsQueryKey,
   });
 
-  const [identitySel, setIdentitySel] = useState<'ine' | 'pasaporte'>('ine');
-  const [ineCaptureOpen, setIneCaptureOpen] = useState(false);
-  const [cameraMode, setCameraMode] = useState<'ine' | 'pasaporte'>('ine');
+  // Documento PDF que se está adjuntando (Constancia u otro): abre el modal con vista previa.
+  const [pdfDoc, setPdfDoc] = useState<ExpDocDef | null>(null);
+  const [savingPdfDoc, setSavingPdfDoc] = useState(false);
+  const [identidadOpen, setIdentidadOpen] = useState(false);
+  const [identidadTipo, setIdentidadTipo] = useState<'ine' | 'pasaporte'>('ine');
+  const [savingIdentidad, setSavingIdentidad] = useState(false);
   const [docDetail, setDocDetail] = useState<ExpDocDef | null>(null);
   const [viewer, setViewer] = useState<{ url: string; nombre: string } | null>(null);
   const [ineViewer, setIneViewer] = useState<{ frente: string | null; reverso: string | null } | null>(null);
@@ -185,10 +207,20 @@ export function ExpedienteDocsPanel({
   const [csfConfirm, setCsfConfirm] = useState<{
     file: File;
     tipo: number;
+    /** blob: URL del PDF elegido, para verlo ANTES de subirlo. */
+    previewUrl: string;
+    /** 'validado' = se extrajeron los datos · 'revision' = no se pudo leer el PDF. */
+    modo: 'validado' | 'revision';
+    /** Por qué queda a revisión (solo en modo 'revision'). */
+    motivo?: string;
     fields: { key: string; label: string; value: string; personaCol: string | null; kind?: 'text' | 'regimen' }[];
   } | null>(null);
   const [csfEdit, setCsfEdit] = useState<Record<string, string>>({});
   const [savingCsf, setSavingCsf] = useState(false);
+  // Cierra la confirmación liberando el blob de la previsualización.
+  const cerrarCsf = () => {
+    setCsfConfirm((prev) => { if (prev) URL.revokeObjectURL(prev.previewUrl); return null; });
+  };
   useEffect(() => {
     if (csfConfirm) {
       const init: Record<string, string> = {};
@@ -221,7 +253,8 @@ export function ExpedienteDocsPanel({
   const pasEstado = tipoEstado(PASAPORTE_TIPO);
   const hasPasaporte = pasEstado !== 'pendiente';
   const identityVigente = (hasINE && !ineEstados.includes('expirado')) || (hasPasaporte && pasEstado !== 'expirado');
-  const identityMode: 'ine' | 'pasaporte' = hasPasaporte ? 'pasaporte' : hasINE ? 'ine' : identitySel;
+  // Tipo con el que abre el modal: el que ya tenga cargado, o INE por defecto.
+  const identityMode: 'ine' | 'pasaporte' = hasPasaporte ? 'pasaporte' : 'ine';
 
   const docEstado = (tiposDoc: number[]): ExpDocEstado => {
     const estados = tiposDoc.map(tipoEstado);
@@ -257,15 +290,13 @@ export function ExpedienteDocsPanel({
     const legible = (text || '').trim().length >= 20;
     const v = legible ? validateCSFPdf(text) : null;
     if (!v?.ok) {
-      const motivo = v && !v.ok
+      const motivo = v !== null && v.ok === false
         ? v.reason
-        : 'No se pudo leer el texto del PDF (parece un escaneo o imagen).';
-      const ok = await uploadDocFile(file, tipo, { silent: true });
-      if (ok) {
-        setDocDetail(null);
-        afterChange();
-        toast.warning(`${motivo} Tu Constancia se guardó y queda pendiente de validación.`, { duration: 9000 });
-      }
+        : 'No se pudo leer el texto del PDF (parece un escaneo o una imagen).';
+      // Nunca se sube a ciegas: se muestra el PDF para que la persona confirme que es el
+      // archivo correcto. Al aceptar se guarda con el estatus por defecto (pendiente).
+      setDocDetail(null);
+      setCsfConfirm({ file, tipo, previewUrl: URL.createObjectURL(file), modo: 'revision', motivo, fields: [] });
       return;
     }
     const f = extractCSFFields(text);
@@ -273,6 +304,8 @@ export function ExpedienteDocsPanel({
     setCsfConfirm({
       file,
       tipo,
+      previewUrl: URL.createObjectURL(file),
+      modo: 'validado',
       fields: [
         { key: 'rfc',          label: 'RFC',                   value: f.rfc ?? '',          personaCol: 'rfc' },
         { key: 'curp',         label: 'CURP',                  value: f.curp ?? '',         personaCol: 'curp' },
@@ -291,6 +324,16 @@ export function ExpedienteDocsPanel({
     if (!csfConfirm) return;
     setSavingCsf(true);
     try {
+      if (csfConfirm.modo === 'revision') {
+        // Sin datos extraídos: se guarda con el estatus por defecto (pendiente) y se avisa.
+        const ok = await uploadDocFile(csfConfirm.file, csfConfirm.tipo, { silent: true });
+        if (ok) {
+          cerrarCsf();
+          afterChange();
+          toast.warning(`${csfConfirm.motivo} Tu Constancia se guardó y queda pendiente de validación.`, { duration: 9000 });
+        }
+        return;
+      }
       const personaUpdates: Record<string, string | null> = {};
       for (const fld of csfConfirm.fields) {
         const val = (csfEdit[fld.key] ?? fld.value).trim();
@@ -299,7 +342,7 @@ export function ExpedienteDocsPanel({
         if (fld.personaCol && val) personaUpdates[fld.personaCol] = val;
       }
       const ok = await uploadDocFile(csfConfirm.file, csfConfirm.tipo, { estatus: 2, personaUpdates });
-      if (ok) { setCsfConfirm(null); afterChange(); }
+      if (ok) { cerrarCsf(); afterChange(); }
     } finally {
       setSavingCsf(false);
     }
@@ -311,27 +354,10 @@ export function ExpedienteDocsPanel({
       {hasIdentity && showIdentityNotice && !identityVigente && !isLoading && (
         <div className="mb-2.5 rounded-md border border-amber-100 bg-amber-50 px-4 py-3">
           <p className="text-xs font-medium leading-relaxed text-amber-700">
-            Aún no has registrado tu identificación oficial. Elige y captura tu <span className="font-bold">INE</span> (frente y reverso) o tu{' '}
-            <span className="font-bold">pasaporte</span> para completar tu expediente.
+            Aún no has registrado tu identificación oficial. Sube el PDF de tu{' '}
+            <span className="font-bold">INE</span> (frente y reverso en un solo archivo) o de tu{' '}
+            <span className="font-bold">pasaporte</span>. El tipo se elige al adjuntarlo.
           </p>
-        </div>
-      )}
-
-      {/* Selector INE | Pasaporte (solo hasta subir una identidad vigente) */}
-      {hasIdentity && !identityVigente && canUpdate && (
-        <div className="mb-2.5 inline-flex rounded-md border border-border bg-muted p-1">
-          {([['ine', 'INE'], ['pasaporte', 'Pasaporte']] as const).map(([m, label]) => (
-            <button
-              key={m}
-              onClick={() => setIdentitySel(m)}
-              className={cn(
-                'rounded px-4 py-1.5 text-xs font-bold transition-colors',
-                identitySel === m ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
         </div>
       )}
 
@@ -363,12 +389,16 @@ export function ExpedienteDocsPanel({
           const needsUpload = !exists || estado === 'expirado' || estado === 'rechazado';
           const showAction =
             canUpdate &&
+            !doc.soloLectura &&
             (doc.kind !== 'firma' ? true : doc.external ? estado !== 'validado' : !exists);
 
           const handleAction = () => {
             if (doc.external) { doc.external.onAction(); return; }
             if (doc.kind === 'firma') { onFirma?.(doc); return; }
-            if (isIdentity) { setCameraMode(identityMode); setIneCaptureOpen(true); return; }
+            if (isIdentity) { setIdentidadTipo(identityMode); setIdentidadOpen(true); return; }
+            // Los PDF (Constancia incluida) usan el mismo modal partido con vista previa:
+            // se adjunta, se revisa a la derecha y hasta entonces se guarda.
+            if (doc.kind === 'pdf' && canUpdate && !doc.soloLectura) { setPdfDoc(doc); return; }
             setDocDetail(doc);
           };
           const handleView = () => {
@@ -376,7 +406,7 @@ export function ExpedienteDocsPanel({
             if (singleUrl) setViewer({ url: singleUrl, nombre });
           };
 
-          const ActionIcon = doc.kind === 'firma' ? PenLine : needsUpload ? (isIdentity ? Camera : Upload) : Pencil;
+          const ActionIcon = doc.kind === 'firma' ? PenLine : needsUpload ? Upload : Pencil;
           const actionTitle =
             doc.external?.actionTitle ??
             (doc.kind === 'firma'
@@ -426,6 +456,8 @@ export function ExpedienteDocsPanel({
         })}
       </div>
 
+
+
       {/* Visor de documento (in-app). ModalViewer resuelve buckets privados y Mifiel. */}
       <ModalViewer
         open={!!viewer}
@@ -434,17 +466,32 @@ export function ExpedienteDocsPanel({
         title={viewer?.nombre || 'Documento'}
       />
 
-      {/* Captura por cámara de identidad (INE frente+reverso o pasaporte) */}
-      {personaId && (
-        <ClienteINECameraCapture
-          open={ineCaptureOpen}
-          onOpenChange={setIneCaptureOpen}
-          personaId={personaId}
-          isDesktop={!isMobile}
-          mode={cameraMode}
-          onCompleted={() => { setIneCaptureOpen(false); afterChange(); }}
-        />
-      )}
+      {/* Identificación oficial en PDF. Ya no se captura con cámara: por temas legales se
+          adjunta el documento escaneado (INE completo en un solo archivo, o pasaporte).
+          Queda SIEMPRE en revisión: no se autovalida. */}
+      <DocPdfDialog
+        open={identidadOpen}
+        onOpenChange={(v) => { if (!savingIdentidad) setIdentidadOpen(v); }}
+        title="Identificación oficial"
+        subtitle="Elige el tipo de documento, adjunta el PDF y revísalo antes de guardar"
+        opciones={IDENTIDAD_OPCIONES}
+        opcion={identidadTipo}
+        onOpcionChange={(v) => setIdentidadTipo(v as 'ine' | 'pasaporte')}
+        selectLabel="Tipo de identificación"
+        saving={savingIdentidad}
+        nota="Con una identificación es suficiente: INE o pasaporte. El documento queda En revisión y lo valida nuestro equipo; si sustituye a uno anterior, el previo se marca como reemplazado."
+        onSave={async (file) => {
+          if (!file) return;
+          setSavingIdentidad(true);
+          try {
+            const tipo = identidadTipo === 'ine' ? INE_COMPLETO_TIPO : PASAPORTE_TIPO;
+            const ok = await uploadDocFile(file, tipo);
+            if (ok) { setIdentidadOpen(false); afterChange(); }
+          } finally {
+            setSavingIdentidad(false);
+          }
+        }}
+      />
 
       {/* Visor del INE: frente y reverso apilados vertical (como dos hojas). */}
       <Dialog open={!!ineViewer} onOpenChange={(o) => { if (!o) setIneViewer(null); }}>
@@ -470,7 +517,7 @@ export function ExpedienteDocsPanel({
               {/* Solo carga del archivo. Los datos leídos se confirman en la modal
                   "Confirma tus datos fiscales" al subir la Constancia. */}
               <div className={MODAL_BODY_CLS}>
-                {canUpdate ? (
+                {canUpdate && !docDetail.soloLectura ? (
                   <DocDropzone accept=".pdf" uploading={uploading} onFile={(f) => handleDocFile(f, docDetail)} />
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -483,45 +530,80 @@ export function ExpedienteDocsPanel({
         </DialogContent>
       </Dialog>
 
-      {/* Modal confirmar datos de la Constancia (CSF) */}
-      <Dialog open={!!csfConfirm} onOpenChange={(o) => { if (!o && !savingCsf) setCsfConfirm(null); }}>
-        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-md p-0">
-          <ModalFormHeader
-            title="Confirma tus datos fiscales"
-            subtitle="Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal; se guardarán en tu perfil y el documento quedará validado."
-          />
-          <div className={cn(MODAL_BODY_CLS, 'max-h-[52vh] gap-3')}>
-            {csfConfirm?.fields.map((f) => (
-              <div key={f.key}>
-                <div className={FIELD_LABEL_CLS}>{f.label}</div>
-                {f.kind === 'regimen' ? (
-                  /* Régimen: solo valores del catálogo SAT en BD. Si la Constancia
-                     trae uno que no existe, queda vacío y lo elige la persona. */
-                  <SearchableSelect
-                    value={csfEdit[f.key] ?? f.value ?? ''}
-                    onValueChange={(v) => setCsfEdit((prev) => ({ ...prev, [f.key]: v === NO_REGIMEN ? '' : v }))}
-                    options={regimenOptions}
-                    placeholder="Selecciona tu régimen"
-                    itemsLabel="regímenes"
-                    searchPlaceholder="Buscar por clave o nombre…"
-                    aria-label="Régimen fiscal"
-                  />
-                ) : (
-                  <Input value={csfEdit[f.key] ?? f.value} onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))} />
-                )}
-              </div>
-            ))}
+      {/* Adjuntar un PDF del expediente (Constancia u otro) con vista previa a la derecha.
+          Para la Constancia, al guardar se intenta la extracción: si se leen los datos se
+          abre la confirmación y queda validada; si no, queda pendiente de revisión. */}
+      <DocPdfDialog
+        open={!!pdfDoc}
+        onOpenChange={(v) => { if (!v && !savingPdfDoc) setPdfDoc(null); }}
+        title={pdfDoc?.nombre ?? 'Adjuntar documento'}
+        subtitle={pdfDoc?.csf
+          ? 'Adjunta el PDF del SAT y revísalo antes de guardar'
+          : [pdfDoc?.emisor, pdfDoc?.hint].filter(Boolean).join(' · ')}
+        aviso={pdfDoc?.csf
+          ? 'Debe ser el PDF original que descargas del SAT, con no más de 3 meses. Si subes un escaneo o una foto, la Constancia queda pendiente de validación manual.'
+          : undefined}
+        saving={savingPdfDoc}
+        saveLabel="Guardar"
+        nota={pdfDoc?.csf
+          ? 'Si el PDF es el original del SAT, extraemos tus datos fiscales y la Constancia queda validada al instante.'
+          : undefined}
+        onSave={async (file) => {
+          if (!file || !pdfDoc) return;
+          setSavingPdfDoc(true);
+          try {
+            const doc = pdfDoc;
+            setPdfDoc(null);
+            await handleDocFile(file, doc);
+          } finally {
+            setSavingPdfDoc(false);
+          }
+        }}
+      />
+
+      {/* Constancia de Situación Fiscal: mismo modal partido que la identificación, con la
+          vista previa del PDF a la derecha. Si se pudieron extraer los datos, se confirman
+          aquí y el documento queda validado; si no, se sube y queda pendiente. */}
+      <DocPdfDialog
+        open={!!csfConfirm}
+        onOpenChange={(v) => { if (!v && !savingCsf) cerrarCsf(); }}
+        title={csfConfirm?.modo === 'revision' ? 'Revisa tu Constancia' : 'Confirma tus datos fiscales'}
+        subtitle={csfConfirm?.modo === 'revision'
+          ? 'No pudimos leer los datos de este PDF. Revísalo antes de subirlo: quedará pendiente de validación manual.'
+          : 'Extrajimos estos datos de tu Constancia. Verifica o corrige lo que esté mal antes de guardar.'}
+        aviso={csfConfirm?.modo === 'revision'
+          ? csfConfirm?.motivo
+          : 'Estos datos se guardarán en tu perfil fiscal y el documento quedará validado.'}
+        archivoOpcional
+        saving={savingCsf}
+        saveLabel={csfConfirm?.modo === 'revision' ? 'Subir de todos modos' : 'Sí, es correcta'}
+        onSave={() => handleConfirmCsf()}
+        nota={csfConfirm?.modo === 'revision'
+          ? 'El equipo de SOZU la revisará manualmente. Si el PDF no es el original del SAT, la revisión puede rechazarse.'
+          : 'Si algún dato no coincide con tu Constancia, corrígelo aquí antes de guardar.'}
+      >
+        {csfConfirm?.fields.map((f) => (
+          <div key={f.key}>
+            <div className={FIELD_LABEL_CLS}>{f.label}</div>
+            {f.kind === 'regimen' ? (
+              /* Régimen: solo valores del catálogo SAT en BD. Si la Constancia
+                 trae uno que no existe, queda vacío y lo elige la persona. */
+              <SearchableSelect
+                value={csfEdit[f.key] ?? f.value ?? ''}
+                onValueChange={(v) => setCsfEdit((prev) => ({ ...prev, [f.key]: v === NO_REGIMEN ? '' : v }))}
+                options={regimenOptions}
+                placeholder="Selecciona tu régimen"
+                itemsLabel="regímenes"
+                searchPlaceholder="Buscar por clave o nombre…"
+                aria-label="Régimen fiscal"
+              />
+            ) : (
+              <Input value={csfEdit[f.key] ?? f.value} onChange={(e) => setCsfEdit((v) => ({ ...v, [f.key]: e.target.value }))} />
+            )}
           </div>
-          <div className={MODAL_FOOTER_CLS}>
-            <Button variant="cancel" onClick={() => setCsfConfirm(null)} disabled={savingCsf}>
-              Cancelar
-            </Button>
-            <Button variant="primary-outline" onClick={handleConfirmCsf} disabled={savingCsf}>
-              {savingCsf ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Sí, es correcta
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        ))}
+      </DocPdfDialog>
+
     </div>
   );
 }

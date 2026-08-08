@@ -21,6 +21,11 @@ interface OnboardingStatus {
   canAccessComisiones: boolean;
   missingForComisiones: string[];
   missingByStep: Record<string, string[]>;
+  /**
+   * El agente está ligado a una inmobiliaria: ella factura y le paga, así que su
+   * expediente no incluye información fiscal, cuenta bancaria ni CSF.
+   */
+  esDependiente: boolean;
 }
 
 export function useAgentOnboardingStatus(personaId: number | null | undefined): OnboardingStatus {
@@ -65,7 +70,7 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
         .select('id_tipo_documento, id_estatus_verificacion')
         .eq('id_persona', personaId)
         .eq('activo', true)
-        .in('id_tipo_documento', [2, 3, 4, 6, 48]);
+        .in('id_tipo_documento', [2, 3, 4, 6, 48, 63]);
       if (error) throw error;
       return data || [];
     },
@@ -140,7 +145,8 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     const addressPartial = !addressComplete && !!(persona?.direccion_calle || persona?.direccion_num_ext || persona?.direccion_colonia || persona?.direccion_codigo_postal);
 
     const docTypes = new Set(documentos.map((d: any) => d.id_tipo_documento));
-    const hasINE = docTypes.has(2) && docTypes.has(3);
+    // 63 = INE completo (un solo PDF); 2+3 = formato anterior por separado.
+    const hasINE = docTypes.has(63) || (docTypes.has(2) && docTypes.has(3));
     const hasPasaporte = docTypes.has(4);
     const hasIdentityDoc = hasINE || hasPasaporte;
 
@@ -164,6 +170,9 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     const documentsMissing: string[] = [];
     if (!hasIdentityDoc) documentsMissing.push('INE o Pasaporte');
 
+    // Fiscal y cuenta bancaria las administra la inmobiliaria: para el dependiente no
+    // son pendientes suyos, así que cuentan como completos y en el perfil se muestran
+    // en solo lectura.
     const inmoSteps: OnboardingStep[] = [
       { id: 'basic', label: 'Identidad', isComplete: identityComplete, hasPartialData: identityPartial },
       { id: 'fiscal', label: 'Información fiscal', isComplete: true, hasPartialData: false },
@@ -175,14 +184,15 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     return {
       steps: inmoSteps,
       completedCount: inmoCompleted,
-      totalSteps: 4,
-      percentage: Math.round((inmoCompleted / 4) * 100),
+      totalSteps: inmoSteps.length,
+      percentage: Math.round((inmoCompleted / inmoSteps.length) * 100),
       isLoading: false,
       hasTrainingComplete: trainingComplete,
       hasBasicIdentityComplete: identityComplete,
       canAccessComisiones: true,
       missingForComisiones: [],
       missingByStep: { basic: basicMissing, fiscal: [], 'bank-accounts': [], training: trainingMissing, documents: documentsMissing },
+      esDependiente: true,
     };
   }
 
@@ -214,7 +224,9 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
   const fiscalPartial = !fiscalComplete && !!(persona?.rfc || persona?.regimen || persona?.uso_cfdi);
 
   const docTypes = new Set(documentos.map((d: any) => d.id_tipo_documento));
-  const hasINE = docTypes.has(2) && docTypes.has(3);
+  // 63 = INE completo (frente y reverso en un solo PDF), el formato vigente desde
+  // 2026-08. Los tipos 2+3 se conservan para quienes ya lo tenían por separado.
+  const hasINE = docTypes.has(63) || (docTypes.has(2) && docTypes.has(3));
   const hasPasaporte = docTypes.has(4);
   const hasIdentityDoc = hasINE || hasPasaporte;
   const hasCartaCumplimiento = docTypes.has(48) || cartaFirmada;
@@ -306,5 +318,6 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
     canAccessComisiones: basicStageComplete && documentsComplete && fiscalStageComplete && bankComplete,
     missingForComisiones,
     missingByStep,
+    esDependiente: !!hasInmobiliaria,
   };
 }

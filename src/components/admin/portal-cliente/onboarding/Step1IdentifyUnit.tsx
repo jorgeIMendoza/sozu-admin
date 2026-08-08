@@ -75,16 +75,29 @@ async function fetchMargotUnits(): Promise<Unit[]> {
     .in("id_edificio_modelo", emIds)
     .eq("activo", true);
 
-  return (props ?? []).map((p: any) => ({
-    id: String(p.id),
-    numero: p.numero_propiedad ?? "",
-    piso: p.numero_piso ?? "",
-    modelo: emModelo.get(p.id_edificio_modelo) ?? null,
-    m2Int: p.m2_interiores != null ? Number(p.m2_interiores) : null,
-    m2Ext: p.m2_exteriores != null ? Number(p.m2_exteriores) : null,
-    descripcion: p.descripcion ?? null,
-    imagen: p.url_imagen_portada ?? null,
-  }));
+  return (props ?? [])
+    .map((p: any) => ({
+      id: String(p.id),
+      numero: p.numero_propiedad ?? "",
+      piso: p.numero_piso ?? "",
+      modelo: emModelo.get(p.id_edificio_modelo) ?? null,
+      m2Int: p.m2_interiores != null ? Number(p.m2_interiores) : null,
+      m2Ext: p.m2_exteriores != null ? Number(p.m2_exteriores) : null,
+      descripcion: p.descripcion ?? null,
+      imagen: cleanImageUrl(p.url_imagen_portada),
+    }))
+    // Piso 1 en Margot son oficinas, no departamentos: fuera del onboarding de propietarios.
+    .filter((u) => String(u.piso).trim() !== "1");
+}
+
+// url_imagen_portada a veces trae el string "null"/"undefined" o vacío (dato
+// sucio en la BD): eso NO es una imagen. Se normaliza a null para caer al
+// fallback (degradado + wordmark) en vez de intentar cargar <img src="null">.
+function cleanImageUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  if (!t || t.toLowerCase() === "null" || t.toLowerCase() === "undefined") return null;
+  return t;
 }
 
 export function Step1IdentifyUnit() {
