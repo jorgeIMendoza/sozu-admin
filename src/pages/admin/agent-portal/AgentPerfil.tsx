@@ -19,6 +19,7 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useAgentOnboardingStatus, type OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
+import { useAgentViewRestrictions } from "@/hooks/useAgentViewRestrictions";
 import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
@@ -556,36 +557,6 @@ const AgentPerfil = () => {
     queryKey: expedienteDocsQueryKey,
   });
 
-  // ¿El agente pertenece a una inmobiliaria (dependiente)? Discriminador:
-  // entidades_relacionadas tipo 19 con id_persona_duena_lead NO nulo. La Carta de
-  // comercialización (tipo 48) SOLO aplica a agentes independientes (sin inmobiliaria).
-  const { data: hasInmobiliaria = false } = useQuery({
-    queryKey: ['agent-perfil-inmo', personaId],
-    queryFn: async () => {
-      if (!personaId) return false;
-      const { data } = await supabase
-        .from('entidades_relacionadas')
-        .select('id')
-        .eq('id_persona', personaId)
-        .eq('id_tipo_entidad', 19)
-        .eq('activo', true)
-        .not('id_persona_duena_lead', 'is', null)
-        .limit(1);
-      return (data && data.length > 0) || false;
-    },
-    enabled: !!personaId,
-    staleTime: 60_000,
-  });
-  const esIndependiente = !hasInmobiliaria;
-  // Super Admin / roles con `puede_impersonar` ven el expediente completo (incluida
-  // la Carta) aunque su persona quede marcada como dependiente. La carta sigue
-  // siendo REQUISITO solo para el agente independiente (ver docsStatus).
-  const puedeVerCarta = esIndependiente || fullAccess;
-  // Información fiscal, Cuenta bancaria y CSF del dependiente las captura y corrige su
-  // inmobiliaria desde su propio portal: el agente las ve para confirmar que están bien,
-  // pero nunca las edita. El backend lo valida aparte (RLS + trigger).
-  const fiscalSoloLectura = !esIndependiente && !fullAccess;
-
   // Nombre de la inmobiliaria dueña del agente, para decirle a quién contactar.
   const { data: inmobiliariaNombre } = useQuery({
     queryKey: ['agent-perfil-inmo-nombre', personaId],
@@ -609,9 +580,23 @@ const AgentPerfil = () => {
         .maybeSingle();
       return (persona as any)?.nombre_legal || null;
     },
-    enabled: !!personaId && !esIndependiente,
+    // La query ya filtra por `id_persona_duena_lead not null`, así que para el
+    // agente independiente devuelve null sin necesidad de saberlo de antemano.
+    enabled: !!personaId,
     staleTime: 60_000,
   });
+
+  // Qué se recorta al agente dependiente lo decide la regla `agente-dependiente`
+  // (ver `lib/impersonation/rules/`), no esta página. Aquí solo se consulta.
+  const { hasInmobiliaria, readOnlyNote: viewNote } = useAgentViewRestrictions({ inmobiliariaNombre });
+  const esIndependiente = !hasInmobiliaria;
+  // La Carta de comercialización (tipo 48) solo aplica al agente independiente;
+  // el Super Admin y los roles de soporte la ven igual (`fullAccess` en la regla).
+  const puedeVerCarta = !viewNote('carta');
+  // Información fiscal, Cuenta bancaria y CSF del dependiente las captura y corrige
+  // su inmobiliaria: el agente las ve para confirmar que están bien, pero nunca las
+  // edita. El backend lo valida aparte (RLS + trigger).
+  const fiscalSoloLectura = !!viewNote('fiscal');
 
   // Aviso de solo lectura: se repite en Información fiscal y en Cuenta bancaria.
   const avisoInmobiliaria = inmobiliariaNombre
@@ -1213,7 +1198,7 @@ const AgentPerfil = () => {
               // El dependiente la ve para saber si ya está cargada, pero no la sube:
               // la administra su inmobiliaria (con nombre cuando se conoce).
               soloLectura: fiscalSoloLectura,
-              soloLecturaNota: inmobiliariaNombre ? `La sube ${inmobiliariaNombre}` : undefined,
+              soloLecturaNota: viewNote('csf') ?? undefined,
             },
             ...(puedeVerCarta ? [CARTA_DOC] : []),
           ]}

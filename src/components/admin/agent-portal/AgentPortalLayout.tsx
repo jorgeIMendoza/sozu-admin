@@ -13,8 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useCanReturnToAdmin } from "@/hooks/useCanReturnToAdmin";
 import { PortalTrackingProvider } from "@/contexts/PortalTrackingContext";
-import { useAgentHasInmobiliaria } from "@/hooks/useAgentHasInmobiliaria";
-import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
+import { useAgentViewRestrictions } from "@/hooks/useAgentViewRestrictions";
 import { AgentPortalImpersonationSelector } from "./AgentPortalImpersonationSelector";
 import { ImpersonationViewModeBanner } from "@/components/admin/ImpersonationViewModeToggle";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -97,8 +96,9 @@ export const AgentPortalLayout = () => {
   const navigate  = useNavigate();
   const { permissions, isLoading: permLoading } = useAgentPortalPermissions();
   const { isPathDisabled } = useAllowedMenus();
-  const { hasInmobiliaria, isLoading: inmobLoading } = useAgentHasInmobiliaria();
-  const fullAccess = useAgentPortalFullAccess();
+  // Los recortes por dependencia ya no se calculan aquí: los resuelve el
+  // registro de reglas (`lib/impersonation/rules/agente-dependiente`).
+  const { isHidden, isLoading: inmobLoading } = useAgentViewRestrictions();
   const { theme, setTheme } = useTheme();
   const previousThemeRef = useRef(theme ?? "system");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -166,11 +166,9 @@ export const AgentPortalLayout = () => {
   // así que hasta que ambas resuelvan se muestran placeholders.
   const menuReady = !permLoading && !inmobLoading && !tabsLoading;
 
-  // Comisiones se oculta SOLO al agente DEPENDIENTE de una inmobiliaria (su
-  // comisión la cobra la inmobiliaria, no él). Ven el menú completo el agente
-  // independiente, el Super Admin y los roles con `puede_impersonar`
-  // (ver `useAgentPortalFullAccess`). Los permisos por rol siguen aplicando.
-  const hideComisiones = hasInmobiliaria && !fullAccess;
+  // Qué se oculta lo decide la regla `agente-dependiente` (Comisiones al agente
+  // ligado a una inmobiliaria). Los permisos por rol siguen aplicando aparte.
+  const hideComisiones = isHidden('/admin/agent/comisiones');
 
   const resolvedTabs = useMemo(
     () =>
