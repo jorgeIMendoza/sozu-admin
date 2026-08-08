@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Edit, Trash2, FileSpreadsheet, RotateCcw, UserX, Plus, Upload } from "lucide-react";
+import { Search, Edit, Trash2, FileSpreadsheet, Landmark, RotateCcw, UserX, Plus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 import { InmobiliariaHeader } from "@/components/admin/InmobiliariaHeader";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { BulkUploadMisAgentesDialog } from "@/components/admin/BulkUploadMisAgentesDialog";
+import { BankAccountsSection } from "@/components/admin/BankAccountsSection";
 
 type Agente = {
   id: number;
@@ -49,6 +50,9 @@ export default function MisAgentes() {
   const [activeTab, setActiveTab] = useState("activos");
   const [selectedInmobiliariaId, setSelectedInmobiliariaId] = useState<number | null>(null);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  // Agente cuya cuenta de dispersión se está administrando (el dependiente no la
+  // captura desde su portal: la lleva su inmobiliaria).
+  const [bankAgente, setBankAgente] = useState<Agente | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canCreate, canUpdate, canDelete, canExport, canApprove } = usePagePermissions('/admin/inmobiliarias/mis-agentes');
@@ -446,6 +450,33 @@ export default function MisAgentes() {
     currentPage * ITEMS_PER_PAGE
   );
 
+  // Cuenta de dispersión de los agentes de la página: el dependiente la consulta en su
+  // portal pero no la registra, así que la inmobiliaria necesita ver quién ya tiene una.
+  const paginatedIds = useMemo(() => paginatedAgentes.map(a => a.id), [paginatedAgentes]);
+  const { data: cuentasPorAgente = {} } = useQuery({
+    queryKey: ['mis-agentes-cuentas', paginatedIds],
+    queryFn: async (): Promise<Record<number, { ultimos4: string; validada: boolean }>> => {
+      if (paginatedIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from('cuentas_bancarias')
+        .select('id_persona, cuenta_clabe, numero_cuenta, id_estatus_verificacion')
+        .in('id_persona', paginatedIds)
+        .eq('activo', true);
+      if (error) throw error;
+      const map: Record<number, { ultimos4: string; validada: boolean }> = {};
+      for (const c of (data || []) as any[]) {
+        // Se muestran solo los últimos 4: en el listado no hace falta la CLABE completa.
+        map[c.id_persona] = {
+          ultimos4: String(c.cuenta_clabe || c.numero_cuenta || '').slice(-4),
+          validada: c.id_estatus_verificacion === 2,
+        };
+      }
+      return map;
+    },
+    enabled: paginatedIds.length > 0,
+    staleTime: 30_000,
+  });
+
   // Count helpers for tab display
   const filteredActivosCount = useMemo(() => {
     if (!searchTerm) return agentesActivos.length;
@@ -576,13 +607,14 @@ export default function MisAgentes() {
                       <TableHead>Email</TableHead>
                       <TableHead>Teléfono</TableHead>
                       <TableHead>RFC</TableHead>
+                      <TableHead>Cuenta bancaria</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedAgentes.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           No se encontraron agentes
                         </TableCell>
                       </TableRow>
@@ -610,8 +642,32 @@ export default function MisAgentes() {
                             />
                           </TableCell>
                           <TableCell>{agente.rfc || '-'}</TableCell>
+                          <TableCell>
+                            {cuentasPorAgente[agente.id] ? (
+                              <span className="inline-flex items-center gap-2">
+                                <span className="text-xs tabular-nums text-muted-foreground">•••• {cuentasPorAgente[agente.id].ultimos4}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cuentasPorAgente[agente.id].validada
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                  : 'bg-muted text-muted-foreground'}`}>
+                                  {cuentasPorAgente[agente.id].validada ? 'Validada' : 'Pendiente'}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Sin cuenta</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              {canUpdate && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Cuenta bancaria del agente"
+                                  onClick={() => setBankAgente(agente)}
+                                >
+                                  <Landmark className="h-4 w-4" />
+                                </Button>
+                              )}
                               {canUpdate && (
                                 <Button
                                   variant="ghost"
@@ -782,6 +838,28 @@ export default function MisAgentes() {
         </DialogContent>
       </Dialog>
 
+
+      {/* Cuenta bancaria del agente dependiente (la administra su inmobiliaria) */}
+      <Dialog
+        open={!!bankAgente}
+        onOpenChange={(open) => {
+          if (open) return;
+          setBankAgente(null);
+          // BankAccountsSection solo invalida ['bankAccounts']; el listado tiene su
+          // propia query, así que se refresca al cerrar.
+          queryClient.invalidateQueries({ queryKey: ['mis-agentes-cuentas'] });
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cuenta bancaria · {bankAgente?.nombre_legal}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tu agente ve esta cuenta en su perfil pero no puede editarla: la registras y la corriges tú.
+          </p>
+          {bankAgente && <BankAccountsSection personId={bankAgente.id} />}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
