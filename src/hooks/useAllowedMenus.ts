@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useImpersonationTarget } from '@/contexts/ImpersonationTargetContext';
-import { useImpersonationViewMode } from '@/contexts/ImpersonationViewModeContext';
-import { resolveEffectiveRolId, resolveIsSuperAdminView } from '@/lib/impersonation/effective-identity';
 
 interface AllowedMenu {
   path: string;
@@ -26,24 +23,14 @@ export function useAllowedMenus() {
   // Ref para evitar mostrar spinner en recargas subsecuentes
   const hasLoadedOnce = useRef(false);
 
-  // Rol con el que se resuelven los permisos. Sin impersonación (o en "Vista
-  // completa") es el del perfil logueado, igual que siempre; solo la "Vista del
-  // usuario" usa el rol del impersonado. Si el portal aún no publica su rol, se
-  // cae al perfil: migrar un portal a medias nunca apaga menús por accidente.
-  const target = useImpersonationTarget();
-  const { viewMode } = useImpersonationViewMode();
-  const identity = {
-    profileRolId: profile?.rol_id,
-    profileRolNombre: profile?.rol_nombre,
-    profilePersonaId: profile?.id_persona,
-    puedeImpersonar: profile?.puede_impersonar,
-    target,
-    viewMode,
-  };
-  const effectiveRolId = resolveEffectiveRolId(identity);
-
-  // Super Admin has access to everything - only check when profile is loaded
-  const isSuperAdmin = resolveIsSuperAdminView(identity);
+  // OJO: este hook resuelve AUTORIZACIÓN de rutas (lo consume `PermissionRoute`),
+  // no solo el pintado del menú. Por eso usa SIEMPRE el rol de la sesión real y
+  // nunca el del impersonado: con el rol ajeno, un admin en "Vista del usuario"
+  // perdía el acceso a la ruta, caía en `/admin/access-denied` —que vive fuera
+  // del layout del portal— y se quedaba sin forma de dejar de impersonar.
+  // La simulación de la vista fiel se hace en los hooks de menú de cada portal.
+  const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
+  const effectiveRolId = profile?.rol_id ?? null;
   
   // Profile is still loading if we have a user but no profile yet
   const isProfileStillLoading = !!user && !profile && !isAuthLoading;
