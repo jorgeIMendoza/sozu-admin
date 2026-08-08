@@ -10,6 +10,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AgentImpersonationProvider } from "@/contexts/AgentImpersonationContext";
 import { ImpersonationViewModeProvider } from "@/contexts/ImpersonationViewModeContext";
+import { ImpersonationTargetProvider } from "@/contexts/ImpersonationTargetContext";
 import { ClienteImpersonationProvider } from "@/contexts/ClienteImpersonationContext";
 import { InmobiliariaImpersonationProvider } from "@/contexts/InmobiliariaImpersonationContext";
 import { CobranzaImpersonationProvider } from "@/contexts/CobranzaImpersonationContext";
@@ -553,6 +554,7 @@ const App = () => (
           <DevelopmentBanner />
           <AuthProvider>
             <ImpersonationViewModeProvider>
+            <ImpersonationTargetProvider>
             <AgentImpersonationProvider>
             <ClienteImpersonationProvider>
             <InmobiliariaImpersonationProvider>
@@ -1259,6 +1261,7 @@ const App = () => (
             </InmobiliariaImpersonationProvider>
             </ClienteImpersonationProvider>
             </AgentImpersonationProvider>
+            </ImpersonationTargetProvider>
             </ImpersonationViewModeProvider>
           </AuthProvider>
         </TooltipProvider>

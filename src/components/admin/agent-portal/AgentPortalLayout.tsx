@@ -98,7 +98,7 @@ export const AgentPortalLayout = () => {
   const { isPathDisabled } = useAllowedMenus();
   // Los recortes por dependencia ya no se calculan aquí: los resuelve el
   // registro de reglas (`lib/impersonation/rules/agente-dependiente`).
-  const { isHidden, isLoading: inmobLoading } = useAgentViewRestrictions();
+  const { isHidden, isLoading: inmobLoading } = useAgentViewRestrictions({ publish: true });
   const { theme, setTheme } = useTheme();
   const previousThemeRef = useRef(theme ?? "system");
   const [mobileOpen, setMobileOpen] = useState(false);

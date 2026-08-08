@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useImpersonationViewMode } from '@/contexts/ImpersonationViewModeContext';
+import { useImpersonationTarget } from '@/contexts/ImpersonationTargetContext';
 import { evaluateViewRules, isPathHidden, readOnlyNote, viewRuleRegistry } from '@/lib/impersonation/rules';
 import type { ImpersonationTarget, ViewRestrictions } from '@/lib/impersonation/types';
 // Carga el registro completo antes de evaluar. Import con efecto: cada archivo
@@ -8,8 +9,9 @@ import type { ImpersonationTarget, ViewRestrictions } from '@/lib/impersonation/
 import '@/lib/impersonation/rules/index';
 
 interface Input {
-  /** Usuario impersonado en este portal, o null. */
-  target: ImpersonationTarget | null;
+  /** Usuario impersonado en este portal. Si se omite, se toma el que haya
+   *  publicado el portal montado (`ImpersonationTargetContext`). */
+  target?: ImpersonationTarget | null;
   /** ¿El usuario ve el portal completo? Lo resuelve cada portal con el núcleo. */
   fullAccess: boolean;
   /** Datos que declaró necesitar cada regla, indexados por `rule.id`. */
@@ -34,9 +36,11 @@ export interface ViewRestrictionsApi {
  * Los portales NO escriben aquí sus condiciones: escriben una regla. Este hook
  * está cerrado a modificación.
  */
-export function useViewRestrictions({ target, fullAccess, facts }: Input): ViewRestrictionsApi {
+export function useViewRestrictions({ target: targetProp, fullAccess, facts }: Input): ViewRestrictionsApi {
   const { pathname } = useLocation();
   const { viewMode } = useImpersonationViewMode();
+  const publishedTarget = useImpersonationTarget();
+  const target = targetProp === undefined ? publishedTarget : targetProp;
 
   const restrictions = useMemo(
     () =>

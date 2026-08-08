@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useImpersonationTarget } from '@/contexts/ImpersonationTargetContext';
+import { useImpersonationViewMode } from '@/contexts/ImpersonationViewModeContext';
+import { resolveEffectiveRolId, resolveIsSuperAdminView } from '@/lib/impersonation/effective-identity';
 
 interface AllowedMenu {
   path: string;
@@ -23,8 +26,24 @@ export function useAllowedMenus() {
   // Ref para evitar mostrar spinner en recargas subsecuentes
   const hasLoadedOnce = useRef(false);
 
+  // Rol con el que se resuelven los permisos. Sin impersonación (o en "Vista
+  // completa") es el del perfil logueado, igual que siempre; solo la "Vista del
+  // usuario" usa el rol del impersonado. Si el portal aún no publica su rol, se
+  // cae al perfil: migrar un portal a medias nunca apaga menús por accidente.
+  const target = useImpersonationTarget();
+  const { viewMode } = useImpersonationViewMode();
+  const identity = {
+    profileRolId: profile?.rol_id,
+    profileRolNombre: profile?.rol_nombre,
+    profilePersonaId: profile?.id_persona,
+    puedeImpersonar: profile?.puede_impersonar,
+    target,
+    viewMode,
+  };
+  const effectiveRolId = resolveEffectiveRolId(identity);
+
   // Super Admin has access to everything - only check when profile is loaded
-  const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
+  const isSuperAdmin = resolveIsSuperAdminView(identity);
   
   // Profile is still loading if we have a user but no profile yet
   const isProfileStillLoading = !!user && !profile && !isAuthLoading;
@@ -65,7 +84,7 @@ export function useAllowedMenus() {
   }, []);
 
   const fetchAllowedMenus = useCallback(async () => {
-    if (!profile?.rol_id) return;
+    if (!effectiveRolId) return;
     
     try {
       // Solo mostrar spinner la primera vez, recargas son silenciosas
@@ -90,7 +109,7 @@ export function useAllowedMenus() {
       const { data: permisosData, error: permisosError } = await supabase
         .from('submenus_permisos')
         .select('submenu_id')
-        .eq('rol_id', profile.rol_id)
+        .eq('rol_id', effectiveRolId)
         .eq('permiso_id', permisoData.id)
         .eq('activo', true);
 
@@ -144,7 +163,7 @@ export function useAllowedMenus() {
     } finally {
       setIsLoadingPermissions(false);
     }
-  }, [profile?.rol_id]);
+  }, [effectiveRolId]);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -168,7 +187,7 @@ export function useAllowedMenus() {
     }
 
     // If no profile (not logged in), stop loading
-    if (!profile?.rol_id) {
+    if (!effectiveRolId) {
       setIsLoadingPermissions(false);
       setIsLoadingDisabled(false);
       return;
@@ -176,7 +195,7 @@ export function useAllowedMenus() {
 
     fetchAllowedMenus();
     fetchDisabledPaths();
-  }, [profile?.rol_id, isSuperAdmin, isAuthLoading, user, profile, permissionVersion, fetchAllowedMenus, fetchDisabledPaths]);
+  }, [effectiveRolId, isSuperAdmin, isAuthLoading, user, profile, permissionVersion, fetchAllowedMenus, fetchDisabledPaths]);
 
   // ¿La ruta está apagada en BD? Se resuelve con el submenú REGISTRADO más
   // específico que cubra la ruta (match exacto o prefijo con frontera "/"), para

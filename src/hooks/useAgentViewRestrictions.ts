@@ -3,12 +3,18 @@ import { useAgentImpersonation } from '@/contexts/AgentImpersonationContext';
 import { useAgentHasInmobiliaria } from '@/hooks/useAgentHasInmobiliaria';
 import { useAgentPortalFullAccess } from '@/hooks/useAgentPortalFullAccess';
 import { useViewRestrictions, type ViewRestrictionsApi } from '@/hooks/useViewRestrictions';
+import { usePublishImpersonationTarget } from '@/contexts/ImpersonationTargetContext';
 import { AGENTE_DEPENDIENTE_RULE_ID } from '@/lib/impersonation/rules/agente-dependiente';
 
 interface Options {
   /** Nombre de la inmobiliaria dueña, si la página ya lo consultó. Solo cambia
    *  el texto de las notas, nunca qué se oculta. */
   inmobiliariaNombre?: string | null;
+  /** Publica el impersonado al contexto global para que `useAllowedMenus` y el
+   *  resto resuelvan con su rol. Lo activa SOLO el layout del portal: si lo
+   *  hicieran también las páginas, al desmontar una se limpiaría el target de
+   *  la otra. */
+  publish?: boolean;
 }
 
 interface Result extends ViewRestrictionsApi {
@@ -26,7 +32,7 @@ interface Result extends ViewRestrictionsApi {
  * La condición ("si es dependiente, oculta Comisiones y bloquea fiscal") NO vive
  * aquí: vive en la regla, que está cubierta por tests.
  */
-export function useAgentViewRestrictions({ inmobiliariaNombre }: Options = {}): Result {
+export function useAgentViewRestrictions({ inmobiliariaNombre, publish = false }: Options = {}): Result {
   const { impersonatedAgentEmail, impersonatedAgentPersonaId, impersonatedAgentName, impersonatedAgentRolId } =
     useAgentImpersonation();
   const { hasInmobiliaria, isLoading } = useAgentHasInmobiliaria();
@@ -53,6 +59,8 @@ export function useAgentViewRestrictions({ inmobiliariaNombre }: Options = {}): 
     }),
     [hasInmobiliaria, isLoading, inmobiliariaNombre]
   );
+
+  usePublishImpersonationTarget(publish ? target : null);
 
   const api = useViewRestrictions({ target, fullAccess, facts });
 
