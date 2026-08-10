@@ -16,6 +16,7 @@ import type {
   SolicitudTitularidad,
 } from "./types";
 import { MOCK_SOLICITUDES } from "./mockData";
+import { cargarSolicitudesTitularidad } from "./loadSolicitudes";
 
 function nuevaEntrada(usuario: string, accion: string, detalle: string): EntradaAuditoria {
   return {
@@ -33,6 +34,13 @@ interface TitularidadState {
   usuario: string; // revisor actual (para la bitácora)
   setUsuario: (nombre: string) => void;
   getById: (id: string) => SolicitudTitularidad | undefined;
+
+  // Carga real desde `solicitudes_propietario` (Fase 1: solo lectura). Las
+  // acciones de decisión de abajo siguen mutando en memoria hasta la Fase 2.
+  cargando: boolean;
+  errorCarga: string | null;
+  cargar: () => Promise<void>;
+  hidratar: (list: SolicitudTitularidad[]) => void;
 
   // Documentos / datos extraídos
   setDocumentoEstado: (
@@ -97,6 +105,23 @@ export const useTitularidadStore = create<TitularidadState>()(
         usuario: "Revisor (demo)",
         setUsuario: (nombre) => set({ usuario: nombre || "Revisor (demo)" }),
         getById: (id) => get().solicitudes.find((s) => s.id === id),
+
+        cargando: false,
+        errorCarga: null,
+        hidratar: (list) => set({ solicitudes: list }),
+        cargar: async () => {
+          set({ cargando: true, errorCarga: null });
+          try {
+            const list = await cargarSolicitudesTitularidad();
+            set({ solicitudes: list, cargando: false });
+          } catch (e) {
+            set({
+              cargando: false,
+              errorCarga:
+                e instanceof Error ? e.message : "No se pudieron cargar las solicitudes.",
+            });
+          }
+        },
 
         setDocumentoEstado: (solicitudId, documentoId, estado, motivo) => {
           let docNombre = documentoId;
@@ -184,10 +209,11 @@ export const useTitularidadStore = create<TitularidadState>()(
       };
     },
     {
-      // version bump: descarta el estado persistido con solicitudes semilla
-      // (datos hardcodeados eliminados) y rehidrata desde el estado vacío.
+      // Solo se persiste el nombre del revisor. Las solicitudes NO se persisten:
+      // son datos reales que se recargan de la BD en cada montaje (cargar()).
       name: "sozu-titularidad-demo",
-      version: 2,
+      version: 3,
+      partialize: (s) => ({ usuario: s.usuario }),
     },
   ),
 );

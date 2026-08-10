@@ -488,7 +488,9 @@ export const usePortal = create<PortalState>()(
     }),
     {
       name: "sozu-onboarding",
-      version: 2,
+      // v3: descarta el avance persistido de versiones previas (traía un caseId
+      // mock que hacía que el Paso 5 saltara el envío real a la Edge Function).
+      version: 3,
       // No persistimos catálogos estáticos (proyectos/propiedades) — se toman siempre del código.
       partialize: (s) => {
         const { projects: _p, properties: _pr, ...rest } = s as PortalState & {

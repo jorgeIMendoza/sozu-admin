@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Eye, ChevronsUpDown, FileCheck } from "lucide-react";
+import { Search, Eye, ChevronsUpDown, FileCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,10 +24,18 @@ export default function BandejaTitularidad() {
   const { profile } = useAuth();
   const solicitudes = useTitularidadStore((s) => s.solicitudes);
   const setUsuario = useTitularidadStore((s) => s.setUsuario);
+  const cargar = useTitularidadStore((s) => s.cargar);
+  const cargando = useTitularidadStore((s) => s.cargando);
+  const errorCarga = useTitularidadStore((s) => s.errorCarga);
 
   useEffect(() => {
     if (profile?.nombre) setUsuario(`${profile.nombre} (revisor)`);
   }, [profile?.nombre, setUsuario]);
+
+  // Carga real de solicitudes_propietario al montar.
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
 
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState("todos");
@@ -241,8 +249,19 @@ export default function BandejaTitularidad() {
             {filtradas.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">
-                  <FileCheck className="h-6 w-6 mx-auto mb-2 opacity-40" />
-                  Sin solicitudes para los filtros aplicados.
+                  {cargando ? (
+                    <>
+                      <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin opacity-60" />
+                      Cargando solicitudes…
+                    </>
+                  ) : errorCarga ? (
+                    <span className="text-destructive">{errorCarga}</span>
+                  ) : (
+                    <>
+                      <FileCheck className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                      Sin solicitudes para los filtros aplicados.
+                    </>
+                  )}
                 </td>
               </tr>
             )}
