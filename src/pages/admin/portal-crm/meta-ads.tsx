@@ -388,19 +388,66 @@ function AtribucionPanel() {
 }
 
 // ============================================================
-// Panel: Conexión / Lead Sync
+// Panel: Conexión / Salud (estado real de la integración)
+// Entrada (Meta→CRM, webhook) + Salida (CRM→Meta, CAPI), con datos vivos.
 // ============================================================
 function ConexionPanel() {
-  const { data: sync } = useQuery({
-    queryKey: ["crm-meta-leadsync"],
+  // Cuenta publicitaria (reusa el queryKey de insights → comparte caché con Campañas/Atribución).
+  const { data: insights } = useQuery<InsightsResp, { message: string }>({
+    queryKey: ["meta-ads-insights"],
     queryFn: async () => {
-      const { count } = await (supabase as any)
+      const { data, error } = await (supabase as any).functions.invoke("meta-ads-insights", { body: {} });
+      if (error) throw { message: error.message };
+      if (data?.error) throw { message: data.error };
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  // Salud de la sincronización (entrada) y de la señal CAPI (salida).
+  const { data: health, isLoading } = useQuery({
+    queryKey: ["crm-meta-conexion-salud"],
+    queryFn: async () => {
+      const since7 = new Date(Date.now() - 7 * 864e5).toISOString();
+      const leadBase = () => (supabase as any)
         .from("crm_leads_atribucion")
         .select("id", { count: "exact", head: true })
-        .not("meta_leadgen_id", "is", null);
-      return { count: count ?? 0 };
+        .not("meta_leadgen_id", "is", null)
+        .eq("activo", true);
+      const [totalLeads, leads7, lastLead, capiSent7, capiErr7, lastSent] = await Promise.all([
+        leadBase(),
+        leadBase().gte("fecha_creacion", since7),
+        (supabase as any).from("crm_leads_atribucion")
+          .select("fecha_creacion").not("meta_leadgen_id", "is", null).eq("activo", true)
+          .order("fecha_creacion", { ascending: false }).limit(1).maybeSingle(),
+        (supabase as any).from("crm_meta_capi_eventos")
+          .select("id", { count: "exact", head: true }).eq("status", "sent").gte("fecha_creacion", since7),
+        (supabase as any).from("crm_meta_capi_eventos")
+          .select("id", { count: "exact", head: true }).eq("status", "error").gte("fecha_creacion", since7),
+        (supabase as any).from("crm_meta_capi_eventos")
+          .select("fecha_creacion").eq("status", "sent")
+          .order("fecha_creacion", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      return {
+        totalLeads: totalLeads.count ?? 0,
+        leads7: leads7.count ?? 0,
+        lastLead: lastLead.data?.fecha_creacion ?? null,
+        capiSent7: capiSent7.count ?? 0,
+        capiErr7: capiErr7.count ?? 0,
+        lastSent: lastSent.data?.fecha_creacion ?? null,
+      };
     },
   });
+
+  const account = insights?.account ?? null;
+  const datasetOk = !!health?.lastSent;
+
+  const fmtDate = (iso: string | null) => {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); }
+    catch { return iso; }
+  };
 
   const Cell = ({ icon: Icon, label, value, hint }: any) => (
     <Card><CardContent className="p-4">
@@ -409,27 +456,55 @@ function ConexionPanel() {
       {hint && <div className="text-[11px] text-muted-foreground mt-0.5 font-mono">{hint}</div>}
     </CardContent></Card>
   );
+  const Stat = ({ value, label, small }: any) => (
+    <div className="rounded-md bg-muted/50 p-3">
+      <div className={small ? "text-sm font-bold" : "text-lg font-bold"}>{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
-      <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-300/60">Configuración · conexión con Meta</Badge>
+      <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-300/60">Configuración · estado de la conexión</Badge>
+
       <div className="grid gap-3 md:grid-cols-3">
-        <Cell icon={Plug} label="Cuenta publicitaria" value="Por configurar" hint="act_…" />
-        <Cell icon={Database} label="Dataset / Pixel" value="Por configurar" hint="dataset id" />
+        <Cell icon={Plug} label="Cuenta publicitaria"
+          value={account ? account.name : "Sin conexión"}
+          hint={account ? `${account.id}${account.currency ? " · " + account.currency : ""}` : "revisa META_AD_ACCOUNT_ID"} />
+        <Cell icon={Database} label="Dataset / CAPI"
+          value={datasetOk ? "Conectado" : "Sin envíos aún"}
+          hint={datasetOk ? `último envío ${fmtDate(health?.lastSent ?? null)}` : "aún no manda eventos"} />
         <Cell icon={Zap} label="Token" value="Server-side" hint="nunca sale al navegador" />
       </div>
+
       <Card><CardContent className="p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Sincronización de leads (Meta → CRM)</span>
+          <span className="text-sm font-medium">Entrada · leads de Meta → CRM</span>
           <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent">Webhook activo</Badge>
         </div>
         <div className="grid grid-cols-3 gap-3 mt-3">
-          <div className="rounded-md bg-muted/50 p-3"><div className="text-lg font-bold">{sync?.count ?? "…"}</div><div className="text-xs text-muted-foreground">leads sincronizados</div></div>
-          <div className="rounded-md bg-muted/50 p-3"><div className="text-lg font-bold">—</div><div className="text-xs text-muted-foreground">último lead</div></div>
-          <div className="rounded-md bg-muted/50 p-3"><div className="text-lg font-bold">0</div><div className="text-xs text-muted-foreground">errores 24h</div></div>
+          <Stat value={isLoading ? "…" : int(health?.totalLeads ?? 0)} label="leads sincronizados" />
+          <Stat value={isLoading ? "…" : int(health?.leads7 ?? 0)} label="últimos 7 días" />
+          <Stat value={isLoading ? "…" : fmtDate(health?.lastLead ?? null)} label="último lead" small />
         </div>
       </CardContent></Card>
-      <p className="text-xs text-muted-foreground">La conexión completa (guardar cuenta/pixel) llega en Fase 2 con la tabla <code>crm_meta_config</code>.</p>
+
+      <Card><CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Salida · señal CRM → Meta (Conversions API)</span>
+          {health?.capiErr7 ? (
+            <Badge className="bg-red-500/15 text-red-700 dark:text-red-400 border-transparent">{int(health.capiErr7)} error(es) 7d</Badge>
+          ) : (
+            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent">Sin errores 7d</Badge>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          <Stat value={isLoading ? "…" : int(health?.capiSent7 ?? 0)} label="enviados (7 días)" />
+          <Stat value={isLoading ? "…" : int(health?.capiErr7 ?? 0)} label="errores (7 días)" />
+          <Stat value={isLoading ? "…" : fmtDate(health?.lastSent ?? null)} label="último envío" small />
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">Detalle evento por evento en la pestaña <b>Registro de envíos</b>.</p>
+      </CardContent></Card>
     </div>
   );
 }
