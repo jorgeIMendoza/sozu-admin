@@ -269,3 +269,96 @@ export async function updateMotorConfigRemoto(config: MotorConfig, idProyecto: n
     columnMissing: isColumnMissing(error),
   };
 }
+
+// ================================================================
+// Canales POR PROYECTO — membresía y porcentajes propios
+// (`comisiones_canal_config`, columnas del Anexo 7)
+//
+// `comisiones_canales` sigue siendo el catálogo maestro global (nombre, código,
+// categoría, banderas). Aquí vive lo que varía por desarrollo: si el canal
+// aplica y con qué porcentajes. Los porcentajes NULL heredan del catálogo.
+// ================================================================
+
+/** Configuración de un canal para un proyecto. `null` = hereda del catálogo. */
+export interface CanalConfigProyecto {
+  idCanal: string;
+  /** Membresía: si el canal aplica a este proyecto. */
+  aplica: boolean;
+  comisionTotalPct: number;
+  comisionExternaPct: number | null;
+  comisionMinPct: number | null;
+  comisionMaxPct: number | null;
+}
+
+/**
+ * Lee la configuración de todos los canales del proyecto, incluidos los que se
+ * quitaron (`aplica = false`): la pantalla necesita mostrarlos para poder
+ * volver a habilitarlos.
+ *
+ * Devuelve `null` si la tabla no existe (DDL del Anexo 5 pendiente). Si existe
+ * pero le faltan las columnas del Anexo 7, relee sin ellas y todo queda como
+ * heredado — la pantalla sigue funcionando.
+ */
+export async function fetchCanalesConfigProyecto(idProyecto: number): Promise<CanalConfigProyecto[] | null> {
+  const completo = await (supabase as any)
+    .from("comisiones_canal_config")
+    .select("id_canal, activo, comision_total_pct, comision_externa_pct, comision_min_pct, comision_max_pct")
+    .eq("id_proyecto", idProyecto);
+
+  if (!completo.error && completo.data) {
+    return (completo.data as any[]).map(mapCanalConfig);
+  }
+  if (!isColumnMissing(completo.error)) return null;
+
+  const parcial = await (supabase as any)
+    .from("comisiones_canal_config")
+    .select("id_canal, activo, comision_total_pct")
+    .eq("id_proyecto", idProyecto);
+  if (parcial.error || !parcial.data) return null;
+  return (parcial.data as any[]).map(mapCanalConfig);
+}
+
+function mapCanalConfig(row: any): CanalConfigProyecto {
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  return {
+    idCanal: String(row.id_canal),
+    aplica: row.activo ?? true,
+    comisionTotalPct: Number(row.comision_total_pct ?? 0),
+    comisionExternaPct: num(row.comision_externa_pct),
+    comisionMinPct: num(row.comision_min_pct),
+    comisionMaxPct: num(row.comision_max_pct),
+  };
+}
+
+/**
+ * Alta, baja o modificación de un canal en un proyecto, en una sola operación.
+ *
+ * Es un upsert sobre `(id_proyecto, id_canal)`: agregar un canal que nunca se
+ * configuró crea la fila, y quitarlo solo cambia `activo` — así no se pierde el
+ * porcentaje capturado ni el contexto de las reglas ya registradas.
+ */
+export async function guardarCanalConfigProyecto(
+  idProyecto: number,
+  config: CanalConfigProyecto,
+): Promise<SyncResult> {
+  const fila: Record<string, unknown> = {
+    id_proyecto: idProyecto,
+    id_canal: Number(config.idCanal),
+    activo: config.aplica,
+    comision_total_pct: config.comisionTotalPct,
+    comision_externa_pct: config.comisionExternaPct,
+    comision_min_pct: config.comisionMinPct,
+    comision_max_pct: config.comisionMaxPct,
+    fecha_actualizacion: new Date().toISOString(),
+  };
+
+  const { error } = await (supabase as any)
+    .from("comisiones_canal_config")
+    .upsert(fila, { onConflict: "id_proyecto,id_canal" });
+
+  return {
+    ok: !error,
+    tableMissing: error?.code === TABLE_MISSING_CODE,
+    columnMissing: isColumnMissing(error),
+  };
+}

@@ -16,6 +16,10 @@ import {
   type ComisionistaReal, type RolComisionista,
 } from '@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador';
 import { useEnviarPropuesta, type MotorSnapshot } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
+import {
+  useCanalesConfigProyecto, resolverCanalesDeProyecto, canalesAplicables,
+} from '@/hooks/usePortalEstructuraComisiones/useCanalesPorProyecto';
+import { useProyectosSozuReales } from '@/hooks/usePortalEstructuraComisiones/useProyectosTallwoodReales';
 
 interface SyncHistoryEntry {
   id: string;
@@ -32,7 +36,7 @@ const saveHistory = (h: SyncHistoryEntry[]) => localStorage.setItem(SYNC_HISTORY
 
 export default function CommissionsTab() {
   const {
-    channels, roles, roleAssignments, motorConfig, updateMotorConfig, motorProjectId, setMotorProjectId,
+    channels: catalogoCanales, roles, roleAssignments, motorConfig, updateMotorConfig, motorProjectId, setMotorProjectId,
     motorLoading, motorDirty, motorSaving, saveMotorComisiones,
     commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
   } = useSimulator();
@@ -44,6 +48,27 @@ export default function CommissionsTab() {
 
   const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
   const proyectoActual = proyectosMotor.find(p => p.id === motorProjectId);
+
+  /**
+   * Precio promedio ponderado por unidad disponible del proyecto seleccionado
+   * —el mismo que muestra el menú Proyectos—. Sirve de base para estimar en
+   * pesos lo que cobra cada comisionista. `0` = el proyecto no tiene inventario
+   * disponible o no está en el universo comercializado por SOZU.
+   */
+  const { proyectos: proyectosSozu } = useProyectosSozuReales();
+  const precioPromUnidad = useMemo(
+    () => proyectosSozu.find(p => p.id === motorProjectId)?.precioPromedioUnidad ?? 0,
+    [proyectosSozu, motorProjectId],
+  );
+
+  // Solo los canales que aplican al proyecto, con su comisión externa vigente:
+  // un canal puede estar quitado de este desarrollo o cobrar distinto que en
+  // otro. Se configura en Canales de Venta eligiendo el proyecto.
+  const { data: canalesConfig } = useCanalesConfigProyecto(motorProjectId);
+  const channels = useMemo(
+    () => canalesAplicables(resolverCanalesDeProyecto(catalogoCanales, canalesConfig)),
+    [catalogoCanales, canalesConfig],
+  );
 
   // Enviar a validar (Portal Alta Dirección) — para el proyecto seleccionado.
   const { profile, user } = useAuth();
@@ -338,6 +363,18 @@ export default function CommissionsTab() {
               {' '}Todavía no hay personal con rol vinculado, así que no hay a quién dar de alta.
             </span>
           )}
+          {precioPromUnidad > 0 ? (
+            <span>
+              {' '}El valor estimado se calcula sobre el precio promedio ponderado por unidad
+              disponible de {proyectoActual?.nombre ?? 'este proyecto'}:{' '}
+              <strong>{formatCurrency(precioPromUnidad)}</strong>.
+            </span>
+          ) : (
+            <span className="text-amber-600">
+              {' '}Sin unidades disponibles en {proyectoActual?.nombre ?? 'este proyecto'} no hay
+              precio promedio con el que estimar el valor de comisión.
+            </span>
+          )}
         </span>
       </div>
 
@@ -434,6 +471,17 @@ export default function CommissionsTab() {
                       </Tooltip>
                     </th>
                     <th>
+                      Valor comisión estimado
+                      <Tooltip>
+                        <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          % sobre precio de venta final × precio promedio ponderado por unidad
+                          disponible del proyecto{precioPromUnidad > 0 ? ` (${formatCurrency(precioPromUnidad)})` : ''}.
+                          Es lo que cobraría el comisionista por vender una unidad al precio promedio.
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th>
                       % de la comisión a dispersar
                       <Tooltip>
                         <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
@@ -524,6 +572,11 @@ export default function CommissionsTab() {
                             value={rule.percentage}
                             onChange={e => updateRule(rule.id, { percentage: Math.max(0, +e.target.value) })}
                           />
+                        </td>
+                        <td className="font-semibold font-mono text-sm whitespace-nowrap">
+                          {precioPromUnidad > 0
+                            ? formatCurrency(rule.percentage / 100 * precioPromUnidad)
+                            : <span className="font-normal text-muted-foreground">—</span>}
                         </td>
                         <td>
                           <Input

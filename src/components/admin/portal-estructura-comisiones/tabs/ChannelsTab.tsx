@@ -21,11 +21,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Info, AlertTriangle, FileText, Plus, Search, MoreHorizontal, Pencil, Copy, Trash2, History,
-  ArrowUpDown, Power, PowerOff,
+  ArrowUpDown, Power, PowerOff, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ChannelDetailDrawer from '../shared/ChannelDetailDrawer';
 import type { Channel } from '@/lib/portal-estructura-comisiones/types/simulator';
+import {
+  useCanalesConfigProyecto, useGuardarCanalDeProyecto, useProyectosSozuCanales,
+  resolverCanalesDeProyecto, type CanalDeProyecto,
+} from '@/hooks/usePortalEstructuraComisiones/useCanalesPorProyecto';
+import type { CanalConfigProyecto } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
 
 const CATEGORIES = [
   'Externo', 'Interno', 'Referido', 'Institucional', 'Patrimonial', 'Internacional',
@@ -56,6 +61,10 @@ const emptyChannel = (): Channel => ({
 
 export default function ChannelsTab() {
   const { channels, addChannel, updateChannel, duplicateChannel, deleteChannel, getChannelDependencies } = useSimulator();
+
+  /** Proyecto cuyos canales se están administrando. `null` = catálogo maestro. */
+  const [proyectoSel, setProyectoSel] = useState<number | null>(null);
+  const { data: proyectosSozu = [], isLoading: cargandoProyectos } = useProyectosSozuCanales();
 
   // UI state
   const [search, setSearch] = useState('');
@@ -204,10 +213,39 @@ export default function ChannelsTab() {
             Catálogo maestro dinámico. Los canales creados aquí se integran automáticamente al motor de comisiones, escenarios, simuladores y reportes.
           </p>
         </div>
-        <Button onClick={openCreate} className="shrink-0">
-          <Plus className="h-4 w-4 mr-1" /> Agregar Canal
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Elegir un proyecto pasa a administrar sus canales; sin proyecto se
+              administra el catálogo maestro, como antes. */}
+          <div className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Select
+              value={proyectoSel != null ? String(proyectoSel) : 'catalogo'}
+              onValueChange={(v) => setProyectoSel(v === 'catalogo' ? null : Number(v))}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder={cargandoProyectos ? 'Cargando proyectos…' : 'Catálogo maestro'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="catalogo">Catálogo maestro (todos)</SelectItem>
+                {proyectosSozu.map(p => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-1" /> Agregar Canal
+          </Button>
+        </div>
       </div>
+
+      {proyectoSel != null && (
+        <CanalesDeProyectoPanel
+          idProyecto={proyectoSel}
+          nombreProyecto={proyectosSozu.find(p => p.id === proyectoSel)?.nombre ?? ''}
+          catalogo={channels}
+        />
+      )}
 
       {/* Counters */}
       <div className="grid grid-cols-3 gap-3">
@@ -564,6 +602,207 @@ export default function ChannelsTab() {
       </Sheet>
 
       <ChannelDetailDrawer channelId={detailId} open={!!detailId} onClose={() => setDetailId(null)} />
+    </div>
+  );
+}
+
+/**
+ * Administración de canales **para un proyecto**: qué canales aplican y sus
+ * porcentajes propios.
+ *
+ * Los porcentajes vacíos heredan del catálogo maestro, así que cambiar el
+ * maestro sigue propagándose a los proyectos que no capturaron su propio valor.
+ * Se muestra con un badge cuál está heredado y cuál es propio del proyecto.
+ */
+function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
+  idProyecto: number;
+  nombreProyecto: string;
+  catalogo: Channel[];
+}) {
+  const { data: config, isLoading } = useCanalesConfigProyecto(idProyecto);
+  const guardar = useGuardarCanalDeProyecto(idProyecto);
+
+  const resueltos = useMemo(
+    () => resolverCanalesDeProyecto(catalogo.filter(c => c.active !== false), config),
+    [catalogo, config],
+  );
+  const aplican = resueltos.filter(c => c.aplica).length;
+
+  const commit = (c: CanalDeProyecto, cambios: Partial<CanalConfigProyecto>) => {
+    guardar.mutate(
+      {
+        idCanal: c.canal.id,
+        aplica: c.aplica,
+        comisionTotalPct: c.comisionTotalPct,
+        // Solo viaja como override lo que el proyecto capturó; lo heredado
+        // sigue siendo null para no congelar el valor del catálogo.
+        comisionExternaPct: c.overrides.externa ? c.comisionExternaPct : null,
+        comisionMinPct: c.overrides.min ? c.comisionMinPct : null,
+        comisionMaxPct: c.overrides.max ? c.comisionMaxPct : null,
+        ...cambios,
+      },
+      { onError: (e) => toast.error(e instanceof Error ? e.message : 'No se pudo guardar') },
+    );
+  };
+
+  return (
+    <div className="rounded-xl border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 className="font-semibold">Canales de {nombreProyecto}</h3>
+          <p className="text-xs text-muted-foreground">
+            {aplican} de {resueltos.length} canales aplican a este desarrollo. Los porcentajes
+            vacíos heredan del catálogo maestro.
+          </p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground italic">Cargando configuración…</p>
+      ) : resueltos.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">
+          No hay canales activos en el catálogo maestro.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Aplica</th>
+                <th>Canal</th>
+                <th>Comisión Externa %</th>
+                <th>Mín %</th>
+                <th>Máx %</th>
+                <th>Comisión Total %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {resueltos.map(c => (
+                <tr key={c.canal.id} className={c.aplica ? '' : 'opacity-55'}>
+                  <td>
+                    <Switch
+                      checked={c.aplica}
+                      onCheckedChange={(v) => commit(c, { aplica: v })}
+                    />
+                  </td>
+                  <td>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium">{c.canal.name}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {c.canal.category ?? 'Sin categoría'}
+                        {c.sinConfigurar && ' · sin configurar'}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <PctPorProyecto
+                      valor={c.comisionExternaPct}
+                      esOverride={c.overrides.externa}
+                      heredado={c.canal.externalCommissionPct}
+                      disabled={!c.aplica}
+                      onCommit={(v) => commit(c, { comisionExternaPct: v })}
+                    />
+                  </td>
+                  <td>
+                    <PctPorProyecto
+                      valor={c.comisionMinPct}
+                      esOverride={c.overrides.min}
+                      heredado={c.canal.minCommissionPct}
+                      disabled={!c.aplica}
+                      onCommit={(v) => commit(c, { comisionMinPct: v })}
+                    />
+                  </td>
+                  <td>
+                    <PctPorProyecto
+                      valor={c.comisionMaxPct}
+                      esOverride={c.overrides.max}
+                      heredado={c.canal.maxCommissionPct}
+                      disabled={!c.aplica}
+                      onCommit={(v) => commit(c, { comisionMaxPct: v })}
+                    />
+                  </td>
+                  <td>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      disabled={!c.aplica}
+                      className="w-24 h-8 text-sm font-mono"
+                      defaultValue={c.comisionTotalPct}
+                      onBlur={e => {
+                        const v = Number(e.target.value);
+                        if (!Number.isFinite(v) || v < 0 || v > 100) {
+                          toast.error('La comisión total debe estar entre 0 y 100');
+                          e.target.value = String(c.comisionTotalPct);
+                          return;
+                        }
+                        if (v !== c.comisionTotalPct) commit(c, { comisionTotalPct: v });
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Quitar un canal no borra su configuración: se conserva el porcentaje capturado por si
+        se vuelve a habilitar, y las comisiones ya registradas mantienen su contexto.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Porcentaje que puede ser propio del proyecto o heredado del catálogo.
+ * Vaciar el campo devuelve la herencia; escribir un valor crea el override.
+ */
+function PctPorProyecto({ valor, esOverride, heredado, disabled, onCommit }: {
+  valor: number;
+  esOverride: boolean;
+  heredado: number;
+  disabled?: boolean;
+  onCommit: (v: number | null) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        type="number"
+        step="0.01"
+        min="0"
+        max="100"
+        disabled={disabled}
+        placeholder={String(heredado)}
+        className="w-24 h-8 text-sm font-mono"
+        defaultValue={esOverride ? valor : ''}
+        onBlur={e => {
+          const raw = e.target.value.trim();
+          if (raw === '') {
+            if (esOverride) onCommit(null);
+            return;
+          }
+          const v = Number(raw);
+          if (!Number.isFinite(v) || v < 0 || v > 100) {
+            toast.error('El porcentaje debe estar entre 0 y 100');
+            e.target.value = esOverride ? String(valor) : '';
+            return;
+          }
+          if (!esOverride || v !== valor) onCommit(v);
+        }}
+      />
+      {!esOverride && (
+        <Tooltip>
+          <TooltipTrigger>
+            <Badge variant="outline" className="text-[10px]">hereda</Badge>
+          </TooltipTrigger>
+          <TooltipContent className="text-xs">
+            Usa {heredado}% del catálogo maestro. Escribe un valor para fijarlo solo en este proyecto.
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }
