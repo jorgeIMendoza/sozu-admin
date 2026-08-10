@@ -28,7 +28,7 @@ import { saveTicketAdjuntos, uploadTicketFile, type PendingAdjunto } from "./tic
 const sb = supabase as any;
 
 // ─── Correos de tickets (fire-and-forget) ───────────────────────────────────────
-// Estándar del ecosistema SOZU: enviar-notificacion (proxy n8n) + template Postmark
+// Estándar del ecosistema SOZU: notificar-tickets -> enviar-notificacion (n8n) + template Postmark
 // 41353048 — mismo patrón que crm-recordatorios-tareas. Nunca bloquea ni hace fallar
 // la operación. Reutilizados por el store (Portal Tickets) y por la ficha del CRM.
 export type CorreoTicketInfo = {
@@ -74,7 +74,7 @@ function enviarCorreoTicket(
     const modelo = { nombre: dest.nombre || "Equipo", actividad, detalles };
     const conWA = !!dest.telefono;
     sb.functions
-      .invoke("enviar-notificacion", {
+      .invoke("notificar-tickets", {
         body: {
           // "ambos" = correo + WhatsApp (Evolution vía n8n); sin teléfono, solo correo.
           tipo: conWA ? "ambos" : "email",
