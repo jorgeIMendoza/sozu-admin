@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import type { AppState, Project, Role, Channel, Scenario, RoleAssignment, CommercialPoliciesConfig, CommissionRule, MotorConfig } from '../types/simulator';
 import {
@@ -11,6 +11,9 @@ import {
   updateReglaComisionRemota, deleteReglaComisionRemota,
   fetchMotorConfigReal, updateMotorConfigRemoto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
+import {
+  useEstructuraRealRaw, derivarEstructura, type EstructuraDerivada,
+} from '@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador';
 
 const DEFAULT_MOTOR_CONFIG: MotorConfig = { totalCommissionPct: 6 };
 
@@ -60,6 +63,12 @@ interface SimulatorContextType extends AppState {
   updateMotorConfig: (config: MotorConfig) => void;
   /** Persiste en el servidor todos los cambios locales acumulados (reglas agregadas/editadas/eliminadas + Comisión Total) para el proyecto seleccionado. */
   saveMotorComisiones: () => Promise<boolean>;
+  /**
+   * Diagnóstico de la derivación de `roleAssignments` desde el Directorio real
+   * ("Roles y Sueldos"). `null` cuando todavía no hay personal capturado y la
+   * estructura sigue siendo la local del simulador.
+   */
+  estructuraReal: EstructuraDerivada | null;
 }
 
 const SimulatorContext = createContext<SimulatorContextType | null>(null);
@@ -174,6 +183,17 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     })();
   }, [motorProjectId]);
 
+  // La estructura organizacional dejó de teclearse aparte: se deriva del
+  // Directorio real de personal ("Roles y Sueldos"). Mientras no haya personal
+  // capturado —o falte el DDL— `estructuraReal` es null y se conserva la
+  // estructura local previa, así ninguna pantalla se queda sin datos.
+  const { data: estructuraRaw } = useEstructuraRealRaw();
+  const estructuraReal = useMemo(
+    () => derivarEstructura(estructuraRaw, state.roles, state.projects),
+    [estructuraRaw, state.roles, state.projects],
+  );
+  const roleAssignments = estructuraReal?.roleAssignments ?? state.roleAssignments;
+
   const update = useCallback((fn: (s: AppState) => AppState) => setState(prev => fn(prev)), []);
 
   const getChannelDependencies = useCallback((id: string): string[] => {
@@ -199,6 +219,8 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   const ctx: SimulatorContextType = {
     ...state,
     scenarios: scenariosWithRules,
+    roleAssignments,
+    estructuraReal,
     motorProjectId,
     setMotorProjectId,
     addProject: (p) => update(s => ({ ...s, projects: [...s.projects, p] })),
