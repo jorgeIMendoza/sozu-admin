@@ -117,9 +117,18 @@ export interface CommissionRule {
   pool: 'sozu' | 'project';
 }
 
-/** Config real del Motor de Comisiones — única y global, independiente de escenarios de simulación. Siempre Modo A (sobre venta); solo los Escenarios de Simulación permiten Modo B. */
+/**
+ * Config real del Motor de Comisiones para el proyecto seleccionado,
+ * independiente de los escenarios de simulación. Siempre Modo A (sobre venta);
+ * solo los Escenarios de Simulación permiten Modo B.
+ *
+ * La comisión total **es por canal**: cada Canal de Venta define su propio
+ * porcentaje sobre el precio de venta final, y puede diferir entre desarrollos.
+ * Antes era un único valor que afectaba por igual a todos los canales.
+ */
 export interface MotorConfig {
-  totalCommissionPct: number;
+  /** Comisión total por canal, en % sobre el precio de venta final. Clave = `channelId`. */
+  channelTotals: Record<string, number>;
 }
 
 export interface Scenario {
