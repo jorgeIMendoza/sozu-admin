@@ -26,7 +26,17 @@ export interface MotorSnapshot {
   channels: Array<{ id: string; name: string; externalCommissionPct: number; active: boolean }>;
   roles: Array<{ id: string; name: string; belongsTo: string }>;
   roleAssignments: Array<{ roleId: string; baseSalary: number }>;
-  commissionRules: Array<{ channelId: string; roleId: string; percentage: number; pool: "sozu" | "project" }>;
+  /**
+   * `comisionista` es opcional a propósito: los snapshots enviados a validar antes
+   * de que la comisión pasara de rol a persona no lo traen.
+   */
+  commissionRules: Array<{
+    channelId: string;
+    roleId: string;
+    percentage: number;
+    pool: "sozu" | "project";
+    comisionista?: string | null;
+  }>;
 }
 
 export interface ComisionPropuesta {
