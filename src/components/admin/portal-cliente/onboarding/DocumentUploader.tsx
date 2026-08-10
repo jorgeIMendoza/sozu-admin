@@ -8,7 +8,7 @@ import { DOC_HELP, DOC_LABELS, usePortal, type DocField, type DocStatus, type Do
 import { extractPdfText } from "@/utils/pdfExtractText";
 import { validateCURPPdf, validateCSFPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields } from "@/utils/pdfDocumentExtractors";
-import { setDocBytes, removeDocBytes, fileToBase64 } from "@/lib/portal-cliente/onboarding-doc-bytes";
+import { setDocBytes, removeDocBytes } from "@/lib/portal-cliente/onboarding-doc-bytes";
 
 interface Props {
   type: DocType;
@@ -130,19 +130,13 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         confirmed: false,
         createdAt: new Date().toISOString(),
       };
-      // Guarda el contenido en memoria para enviarlo al backend al finalizar el
+      // Guarda el archivo en memoria para subirlo a Storage al finalizar el
       // wizard (registrar-solicitud-propietario). No se persiste en el store.
-      try {
-        const base64 = await fileToBase64(file);
-        setDocBytes(id, {
-          base64,
-          filename: file.name,
-          contentType: file.type || "application/pdf",
-        });
-      } catch {
-        // Si no se pudo leer el contenido, el doc igual queda cargado; el envío
-        // lo saltará y el área de SOZU lo pedirá aparte.
-      }
+      setDocBytes(id, {
+        blob: file,
+        filename: file.name,
+        contentType: file.type || "application/pdf",
+      });
       if (doc) {
         removeDocBytes(doc.id);
         removeDoc(doc.id);

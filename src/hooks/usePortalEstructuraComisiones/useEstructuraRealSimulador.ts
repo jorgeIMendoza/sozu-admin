@@ -35,7 +35,14 @@ export interface EstructuraRealRaw {
     id_rol: number | null;
     asignacion_pct: number;
   }>;
-  rolesReales: Array<{ id: number; nombre: string; participa_comision: boolean }>;
+  rolesReales: Array<{
+    id: number;
+    nombre: string;
+    tipo: string;
+    pertenece_a: string;
+    participa_comision: boolean;
+    activo: boolean;
+  }>;
   proyectosReales: Array<{ id: number; nombre: string }>;
 }
 
@@ -77,7 +84,8 @@ export function useEstructuraRealRaw() {
 
       const { data: rolesReales } = await (supabase as any)
         .from("roles_organizacionales")
-        .select("id, nombre, participa_comision");
+        .select("id, nombre, tipo, pertenece_a, participa_comision, activo")
+        .order("nombre");
 
       const idsProyecto = Array.from(
         new Set(((asignaciones ?? []) as Array<{ id_proyecto: number }>).map(a => a.id_proyecto)),
@@ -211,29 +219,101 @@ export function derivarEstructura(
   };
 }
 
-/** Persona elegible como comisionista, con su rol resuelto al catálogo del simulador. */
+
+/* ------------------------------------------------------------------ */
+/* Catálogo de roles del simulador, derivado del catálogo real         */
+/* ------------------------------------------------------------------ */
+
+const TIPOS_ROL = ["strategic", "operative", "support"] as const;
+
+/** Id estable para un rol real que no existe en el catálogo semilla. */
+const idSimuladorDerivado = (idRolReal: number) => `rol-org-${idRolReal}`;
+
+/**
+ * Catálogo de roles del simulador **derivado de `roles_organizacionales`**.
+ *
+ * Antes el simulador se quedaba con su semilla local de 7 roles y el puente por
+ * nombre descartaba a todo el personal cuyo rol real no coincidiera. Con 11
+ * roles reales de los que solo uno coincidía, en Comisiones aparecía una sola
+ * persona elegible.
+ *
+ * Los ids se asignan así:
+ * - Si el nombre del rol real coincide con uno de la semilla, **se conserva el
+ *   id semilla** (`role-asesor`, …). Es imprescindible: `comisiones_reglas.id_rol`
+ *   guarda esos ids como texto y ya hay reglas capturadas apuntando a ellos.
+ * - Si no coincide, se genera `rol-org-<id_real>`, estable en el tiempo.
+ */
+export function derivarRolesSimulador(
+  raw: EstructuraRealRaw | null | undefined,
+  rolesSemilla: Role[],
+): Role[] | null {
+  if (!raw || raw.rolesReales.length === 0) return null;
+
+  const semillaPorNombre = new Map(rolesSemilla.map(r => [norm(r.name), r]));
+
+  return raw.rolesReales
+    .filter(r => r.activo)
+    .map(r => {
+      const semilla = semillaPorNombre.get(norm(r.nombre));
+      const tipo = (TIPOS_ROL as readonly string[]).includes(r.tipo)
+        ? (r.tipo as Role["type"])
+        : "operative";
+      return {
+        id: semilla?.id ?? idSimuladorDerivado(r.id),
+        name: r.nombre,
+        type: tipo,
+        belongsTo: r.pertenece_a === "sozu_central" ? "sozu_central" : "project",
+        participatesInCommission: r.participa_comision,
+      } as Role;
+    });
+}
+
+/** Rol real (`id` numérico) → id del catálogo del simulador. */
+export function mapaRolRealASimulador(
+  raw: EstructuraRealRaw | null | undefined,
+  rolesSimulador: Role[],
+): Map<number, string> {
+  const mapa = new Map<number, string>();
+  if (!raw) return mapa;
+  const simPorNombre = new Map(rolesSimulador.map(r => [norm(r.name), r.id]));
+  for (const r of raw.rolesReales) {
+    mapa.set(r.id, simPorNombre.get(norm(r.nombre)) ?? idSimuladorDerivado(r.id));
+  }
+  return mapa;
+}
+
+/* ------------------------------------------------------------------ */
+/* Comisionistas                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Un rol que la persona puede ejercer, ya resuelto al catálogo del simulador. */
+export interface RolComisionista {
+  roleId: string;
+  rolNombre: string;
+  belongsTo: "sozu_central" | "project";
+  participaComision: boolean;
+  /** De dónde sale: su rol base o el que asume en un proyecto concreto. */
+  origen: "base" | "proyecto";
+  /** Nombre del proyecto cuando `origen === 'proyecto'`. */
+  proyectoNombre?: string;
+}
+
 export interface ComisionistaReal {
   personalId: string;
   nombre: string;
-  rolNombre: string;
-  roleId: string;
-  belongsTo: "sozu_central" | "project";
-  participaComision: boolean;
-  /** true si el rol viene del override del proyecto y no del rol base. */
-  esRolDeProyecto: boolean;
+  /** Todos los roles que la persona puede ejercer. Nunca vacío. */
+  roles: RolComisionista[];
 }
 
 /**
- * Personal activo que puede darse de alta como comisionista en un canal.
+ * Personal activo elegible como comisionista, **sin filtrar por catálogo**: con
+ * los roles derivados del real, todo rol tiene equivalencia, así que aparece
+ * toda la organización.
  *
- * Solo entra quien tiene rol vinculado y ese rol existe en el catálogo del
- * simulador: la regla de comisión guarda `id_rol` (texto) porque el motor
- * agrupa los pagos por rol, así que sin equivalencia no hay dónde imputarla.
- *
- * `idProyecto` es el desarrollo que el motor está configurando. Se usa para
- * resolver el **rol efectivo** de cada persona en ese proyecto: la misma
- * persona puede comisionar como *Asesor de Ventas* en un desarrollo y como
- * *Admin Comercial* en otro. Sin proyecto, se usa el rol base.
+ * Cada persona trae **todos** los roles que puede ejercer — su rol base y los
+ * que asume en cada proyecto — para poder elegir con cuál comisiona. `idProyecto`
+ * (el desarrollo del motor) solo ordena la lista: el rol de ese proyecto va
+ * primero, porque es el que aplica por defecto ahí.
  */
 export function comisionistasDisponibles(
   raw: EstructuraRealRaw | null | undefined,
@@ -241,36 +321,52 @@ export function comisionistasDisponibles(
   idProyecto?: number | null,
 ): ComisionistaReal[] {
   if (!raw) return [];
-  const rolSimPorNombre = new Map(rolesSimulador.map(r => [norm(r.name), r]));
+  const mapaRol = mapaRolRealASimulador(raw, rolesSimulador);
   const rolRealPorId = new Map(raw.rolesReales.map(r => [r.id, r]));
+  const nombreProyecto = new Map(raw.proyectosReales.map(p => [p.id, p.nombre]));
 
-  // Override de rol de cada persona para el proyecto que se está configurando.
-  const overridePorPersona = new Map<number, number>();
-  if (idProyecto != null) {
-    for (const a of raw.asignaciones) {
-      if (a.id_proyecto === idProyecto && a.id_rol != null) {
-        overridePorPersona.set(a.id_personal, a.id_rol);
-      }
-    }
+  const asignacionesPorPersona = new Map<number, EstructuraRealRaw["asignaciones"]>();
+  for (const a of raw.asignaciones) {
+    const lista = asignacionesPorPersona.get(a.id_personal);
+    if (lista) lista.push(a);
+    else asignacionesPorPersona.set(a.id_personal, [a]);
   }
 
   const lista: ComisionistaReal[] = [];
   for (const persona of raw.personal) {
-    const idRol = overridePorPersona.get(persona.id) ?? persona.id_rol;
-    if (idRol === null) continue;
-    const rolReal = rolRealPorId.get(idRol);
-    if (!rolReal) continue;
-    const rolSim = rolSimPorNombre.get(norm(rolReal.nombre));
-    if (!rolSim) continue;
-    lista.push({
-      personalId: String(persona.id),
-      nombre: persona.nombre,
-      rolNombre: rolReal.nombre,
-      roleId: rolSim.id,
-      belongsTo: rolSim.belongsTo,
-      participaComision: rolReal.participa_comision,
-      esRolDeProyecto: overridePorPersona.has(persona.id),
-    });
+    const roles: RolComisionista[] = [];
+    const vistos = new Set<string>();
+
+    const agregar = (idRolReal: number, origen: "base" | "proyecto", proyectoNombre?: string) => {
+      const rolReal = rolRealPorId.get(idRolReal);
+      const roleId = mapaRol.get(idRolReal);
+      if (!rolReal || !roleId || vistos.has(roleId)) return;
+      vistos.add(roleId);
+      roles.push({
+        roleId,
+        rolNombre: rolReal.nombre,
+        belongsTo: rolReal.pertenece_a === "sozu_central" ? "sozu_central" : "project",
+        participaComision: rolReal.participa_comision,
+        origen,
+        proyectoNombre,
+      });
+    };
+
+    const links = asignacionesPorPersona.get(persona.id) ?? [];
+    // El rol del proyecto que el motor está configurando va primero.
+    for (const link of links) {
+      if (link.id_proyecto === idProyecto && link.id_rol != null) {
+        agregar(link.id_rol, "proyecto", nombreProyecto.get(link.id_proyecto));
+      }
+    }
+    if (persona.id_rol !== null) agregar(persona.id_rol, "base");
+    for (const link of links) {
+      if (link.id_rol != null) agregar(link.id_rol, "proyecto", nombreProyecto.get(link.id_proyecto));
+    }
+
+    // Sin rol vinculado no hay nada que imputar: la regla guarda un rol.
+    if (roles.length === 0) continue;
+    lista.push({ personalId: String(persona.id), nombre: persona.nombre, roles });
   }
   return lista;
 }

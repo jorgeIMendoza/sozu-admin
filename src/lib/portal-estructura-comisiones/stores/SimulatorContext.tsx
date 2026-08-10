@@ -12,7 +12,7 @@ import {
   fetchMotorConfigReal, updateMotorConfigRemoto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
 import {
-  useEstructuraRealRaw, derivarEstructura, type EstructuraDerivada,
+  useEstructuraRealRaw, derivarEstructura, derivarRolesSimulador, type EstructuraDerivada,
 } from '@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador';
 
 /**
@@ -211,9 +211,19 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   // capturado —o falte el DDL— `estructuraReal` es null y se conserva la
   // estructura local previa, así ninguna pantalla se queda sin datos.
   const { data: estructuraRaw } = useEstructuraRealRaw();
+
+  // El catálogo de roles también se deriva del real: si se quedara en la semilla
+  // local, todo rol dado de alta en "Roles y Sueldos" que no coincidiera de
+  // nombre quedaría fuera del motor y su personal no podría comisionar.
+  // Los roles que sí coinciden conservan el id semilla, porque
+  // `comisiones_reglas.id_rol` ya tiene reglas apuntando a ellos.
+  const roles = useMemo(
+    () => derivarRolesSimulador(estructuraRaw, state.roles) ?? state.roles,
+    [estructuraRaw, state.roles],
+  );
   const estructuraReal = useMemo(
-    () => derivarEstructura(estructuraRaw, state.roles, state.projects),
-    [estructuraRaw, state.roles, state.projects],
+    () => derivarEstructura(estructuraRaw, roles, state.projects),
+    [estructuraRaw, roles, state.projects],
   );
   const roleAssignments = estructuraReal?.roleAssignments ?? state.roleAssignments;
 
@@ -242,6 +252,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   const ctx: SimulatorContextType = {
     ...state,
     scenarios: scenariosWithRules,
+    roles,
     roleAssignments,
     estructuraReal,
     motorProjectId,

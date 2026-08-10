@@ -12,7 +12,8 @@ import SyncCommissionsDialog from '../shared/SyncCommissionsDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProyectosMotorComisiones } from '@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones';
 import {
-  useEstructuraRealRaw, comisionistasDisponibles, type ComisionistaReal,
+  useEstructuraRealRaw, comisionistasDisponibles,
+  type ComisionistaReal, type RolComisionista,
 } from '@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador';
 import { useEnviarPropuesta, type MotorSnapshot } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
 
@@ -59,12 +60,24 @@ export default function CommissionsTab() {
     () => comisionistasDisponibles(estructuraRaw, roles, motorProjectId),
     [estructuraRaw, roles, motorProjectId],
   );
-  const comisionistasComision = useMemo(
-    () => comisionistas.filter(c => c.participaComision),
-    [comisionistas],
-  );
   const comisionistaPorId = useMemo(
     () => new Map(comisionistas.map(c => [c.personalId, c])),
+    [comisionistas],
+  );
+  /**
+   * Para "Sincronizar comisionistas" se toma el rol primario de cada persona —el
+   * del proyecto del motor si lo tiene, si no su rol base— y solo si ese rol
+   * participa en comisión. Elegir otro rol es una decisión manual.
+   */
+  const comisionistasComision = useMemo(
+    () => comisionistas
+      .filter(c => c.roles[0]?.participaComision)
+      .map(c => ({
+        personalId: c.personalId,
+        nombre: c.nombre,
+        roleId: c.roles[0].roleId,
+        belongsTo: c.roles[0].belongsTo,
+      })),
     [comisionistas],
   );
 
@@ -156,18 +169,21 @@ export default function CommissionsTab() {
     return { role, assignment };
   };
 
-  /** Alta de comisionista: se elige la persona en un selector, no se asume. */
-  const altaComisionista = (channelId: string, persona: ComisionistaReal) => {
+  /** Alta de comisionista: se eligen persona y rol en el selector, no se asumen. */
+  const altaComisionista = (channelId: string, persona: ComisionistaReal, rol: RolComisionista) => {
     addCommissionRule(
       channelId,
-      persona.roleId,
-      persona.belongsTo === 'sozu_central' ? 'sozu' : 'project',
+      rol.roleId,
+      rol.belongsTo === 'sozu_central' ? 'sozu' : 'project',
       persona.personalId,
     );
-    toast.success(`${persona.nombre} agregado como comisionista.`);
+    toast.success(`${persona.nombre} agregado como comisionista (${rol.rolNombre}).`);
   };
 
-  /** Cambiar el comisionista de un renglón arrastra su rol: el rol no se teclea. */
+  /**
+   * Cambiar la persona de un renglón arrastra su rol primario. Si esa persona
+   * ejerce varios roles, se puede afinar después con el selector de rol.
+   */
   const cambiarComisionista = (ruleId: string, personalId: string) => {
     const persona = comisionistaPorId.get(personalId);
     if (!persona) return;
@@ -177,7 +193,21 @@ export default function CommissionsTab() {
       toast.error(`${persona.nombre} ya está dado de alta como comisionista en este canal.`);
       return;
     }
-    updateCommissionRule({ ...rule, personalId, roleId: persona.roleId });
+    // Si el rol actual sigue siendo uno de los que ejerce, se conserva.
+    const rol = persona.roles.find(r => r.roleId === rule.roleId) ?? persona.roles[0];
+    updateCommissionRule({ ...rule, personalId, roleId: rol.roleId });
+  };
+
+  /** Cambiar el rol con el que comisiona una persona, entre los que ejerce. */
+  const cambiarRolComisionista = (ruleId: string, roleId: string) => {
+    const rule = commissionRules.find(r => r.id === ruleId);
+    if (!rule) return;
+    const rol = roles.find(r => r.id === roleId);
+    updateCommissionRule({
+      ...rule,
+      roleId,
+      pool: rol?.belongsTo === 'sozu_central' ? 'sozu' : 'project',
+    });
   };
 
   const updateRule = (ruleId: string, updates: Partial<typeof commissionRules[0]>) => {
@@ -439,7 +469,8 @@ export default function CommissionsTab() {
                                 .filter(c => !yaEnCanal.has(c.personalId))
                                 .map(c => (
                                   <option key={c.personalId} value={c.personalId}>
-                                    {c.nombre} — {c.rolNombre}
+                                    {c.nombre} — {c.roles[0].rolNombre}
+                                    {c.roles.length > 1 ? ` (+${c.roles.length - 1})` : ''}
                                   </option>
                                 ))}
                             </select>
@@ -451,14 +482,38 @@ export default function CommissionsTab() {
                           </div>
                         </td>
                         <td>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm">{persona?.rolNombre ?? role?.name ?? '—'}</span>
-                            {role && (
+                          {/* Con más de un rol se elige cuál aplica; con uno solo
+                              se muestra, porque no hay nada que decidir. */}
+                          {persona && persona.roles.length > 1 ? (
+                            <div className="flex flex-col gap-0.5">
+                              <select
+                                value={rule.roleId}
+                                onChange={e => cambiarRolComisionista(rule.id, e.target.value)}
+                                className="rounded border bg-transparent px-2 py-1 text-sm"
+                              >
+                                {persona.roles.map(r => (
+                                  <option key={r.roleId} value={r.roleId}>
+                                    {r.rolNombre}
+                                    {r.origen === 'proyecto' && r.proyectoNombre ? ` · en ${r.proyectoNombre}` : ''}
+                                  </option>
+                                ))}
+                              </select>
                               <span className="text-[11px] text-muted-foreground">
-                                {role.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
+                                {persona.roles.length} roles disponibles
                               </span>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-sm">
+                                {persona?.roles[0]?.rolNombre ?? role?.name ?? '—'}
+                              </span>
+                              {role && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {role.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <Input
@@ -579,9 +634,9 @@ export default function CommissionsTab() {
           commissionRules.filter(r => r.channelId === altaCanal).map(r => r.personalId).filter(Boolean) as string[],
         )}
         onClose={() => setAltaCanal(null)}
-        onAgregar={(persona) => {
+        onAgregar={(persona, rol) => {
           if (!altaCanal) return;
-          altaComisionista(altaCanal, persona);
+          altaComisionista(altaCanal, persona, rol);
         }}
       />
 
@@ -617,31 +672,38 @@ export default function CommissionsTab() {
   );
 }
 
+
 /**
- * Selector de alta: muestra el personal dado de alta en "Roles y Sueldos" con su
- * rol, en vez de asumir a quién agregar. Quien ya comisiona en el canal aparece
- * marcado y deshabilitado, para que se vea por qué no está disponible.
+ * Selector de alta: lista el personal dado de alta en "Roles y Sueldos" con sus
+ * roles. Quien ejerce más de un rol —porque asume roles distintos según el
+ * proyecto— permite elegir con cuál comisiona en este canal.
  */
 function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAgregar }: {
   canal: { id: string; name: string } | null;
   comisionistas: ComisionistaReal[];
   yaEnCanal: Set<string>;
   onClose: () => void;
-  onAgregar: (persona: ComisionistaReal) => void;
+  onAgregar: (persona: ComisionistaReal, rol: RolComisionista) => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
+  /** Rol elegido por persona cuando ejerce varios. */
+  const [rolElegido, setRolElegido] = useState<Record<string, string>>({});
+
+  const cerrar = () => { setBusqueda(''); setRolElegido({}); onClose(); };
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (!q) return comisionistas;
-    return comisionistas.filter(c => `${c.nombre} ${c.rolNombre}`.toLowerCase().includes(q));
+    return comisionistas.filter(c =>
+      `${c.nombre} ${c.roles.map(r => r.rolNombre).join(' ')}`.toLowerCase().includes(q),
+    );
   }, [comisionistas, busqueda]);
 
   const disponibles = filtrados.filter(c => !yaEnCanal.has(c.personalId)).length;
 
   return (
-    <Dialog open={canal !== null} onOpenChange={(open) => { if (!open) { setBusqueda(''); onClose(); } }}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={canal !== null} onOpenChange={(open) => { if (!open) cerrar(); }}>
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Agregar comisionista</DialogTitle>
           <DialogDescription>
@@ -662,37 +724,70 @@ function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAg
               placeholder="Buscar por nombre o rol..."
               className="h-9 text-sm"
             />
-            <div className="max-h-80 overflow-y-auto -mx-1 px-1 space-y-1">
+            <div className="max-h-96 overflow-y-auto -mx-1 px-1 space-y-1">
               {filtrados.length === 0 ? (
                 <p className="text-sm text-muted-foreground italic py-4">Ningún resultado para la búsqueda.</p>
               ) : filtrados.map(persona => {
                 const yaEsta = yaEnCanal.has(persona.personalId);
+                const multiRol = persona.roles.length > 1;
+                const rolId = rolElegido[persona.personalId] ?? persona.roles[0].roleId;
+                const rol = persona.roles.find(r => r.roleId === rolId) ?? persona.roles[0];
+
                 return (
-                  <button
+                  <div
                     key={persona.personalId}
-                    disabled={yaEsta}
-                    onClick={() => { onAgregar(persona); setBusqueda(''); onClose(); }}
-                    className={`w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
-                      yaEsta ? 'opacity-55 cursor-not-allowed bg-muted/40' : 'hover:bg-muted'
-                    }`}
+                    className={`rounded-lg border px-3 py-2 ${yaEsta ? 'opacity-55 bg-muted/40' : ''}`}
                   >
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-medium truncate">{persona.nombre}</span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {persona.rolNombre} · {persona.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
-                      </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">{persona.nombre}</span>
+                        {!multiRol && (
+                          <span className="text-xs text-muted-foreground truncate">
+                            {rol.rolNombre} · {rol.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!rol.participaComision && (
+                          <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">
+                            Rol sin comisión
+                          </Badge>
+                        )}
+                        {yaEsta ? (
+                          <Badge variant="secondary" className="text-[10px]">Ya en el canal</Badge>
+                        ) : (
+                          <Button size="sm" variant="outline" className="h-7 gap-1"
+                            onClick={() => { onAgregar(persona, rol); cerrar(); }}>
+                            <Plus className="h-3 w-3" /> Agregar
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {!persona.participaComision && (
-                        <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">
-                          Rol sin comisión
-                        </Badge>
-                      )}
-                      {yaEsta
-                        ? <Badge variant="secondary" className="text-[10px]">Ya en el canal</Badge>
-                        : <Plus className="h-3.5 w-3.5 text-muted-foreground" />}
-                    </div>
-                  </button>
+
+                    {/* Solo quien ejerce varios roles necesita elegir. */}
+                    {multiRol && !yaEsta && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-[11px] text-muted-foreground shrink-0">Comisiona como</span>
+                        <select
+                          value={rolId}
+                          onChange={e => setRolElegido(prev => ({ ...prev, [persona.personalId]: e.target.value }))}
+                          className="flex-1 rounded border bg-transparent px-2 py-1 text-xs"
+                        >
+                          {persona.roles.map(r => (
+                            <option key={r.roleId} value={r.roleId}>
+                              {r.rolNombre}
+                              {r.origen === 'proyecto' && r.proyectoNombre ? ` · en ${r.proyectoNombre}` : ' · rol base'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {multiRol && yaEsta && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Ejerce {persona.roles.length} roles: {persona.roles.map(r => r.rolNombre).join(', ')}
+                      </p>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -705,7 +800,7 @@ function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAg
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => { setBusqueda(''); onClose(); }}>Cerrar</Button>
+          <Button variant="ghost" onClick={cerrar}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
