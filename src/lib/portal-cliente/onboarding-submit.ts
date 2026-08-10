@@ -1,10 +1,18 @@
 // Envío de la solicitud del onboarding de propietarios a la Edge Function
-// `registrar-solicitud-propietario` (persistencia real, pre-login con la anon
-// key). Sustituye al caseId mock que antes se generaba en localStorage.
+// `registrar-solicitud-propietario`. Los PDFs NO viajan en el JSON (el gateway
+// rechaza bodies > ~1 MB con 413): se suben directo a Storage por URL firmada.
+//
+// Flujo:
+//   1) action:"urls"  → pide una URL de subida firmada por documento.
+//   2) uploadToSignedUrl → sube cada PDF directo a Storage (sin límite del gateway).
+//   3) action:"crear" → crea persona/entidad/solicitud + registra las rutas subidas.
 
 import { supabase } from "@/integrations/supabase/client";
 import { getDocBytes } from "./onboarding-doc-bytes";
 import type { OnboardingState, UploadedDoc, VerificationCheck } from "./onboarding-store";
+
+const FN = "registrar-solicitud-propietario";
+const BUCKET = "documentos";
 
 /** Valor de un campo extraído de un documento (CURP/CSF), o undefined. */
 function field(doc: UploadedDoc | undefined, key: string): string | undefined {
@@ -18,8 +26,25 @@ export interface SubmitResult {
   docsErrores: string[];
 }
 
+interface UploadSlot {
+  tipo: string;
+  path: string;
+  token: string;
+}
+
+/** Extrae el código de error del cuerpo de una FunctionsHttpError, si se puede. */
+async function codigoError(error: unknown): Promise<string | undefined> {
+  try {
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") return (await ctx.json())?.error;
+  } catch {
+    /* usa el genérico */
+  }
+  return undefined;
+}
+
 /**
- * Arma el payload desde el estado del onboarding y llama a la Edge Function.
+ * Arma el payload desde el estado del onboarding y crea la solicitud.
  * Lanza Error con mensaje legible si falta la unidad o si el backend falla.
  */
 export async function submitSolicitudPropietario(
@@ -44,22 +69,45 @@ export async function submitSolicitudPropietario(
     sexo: field(curpDoc, "sexo"),
   };
 
-  // Documentos confirmados con contenido disponible en memoria.
-  const documentos = onb.docs
+  // Documentos con contenido disponible en memoria (uno por tipo).
+  const docsConBytes = onb.docs
     .map((d) => {
       const b = getDocBytes(d.id);
-      if (!b) return null;
-      return {
-        tipo: d.type,
-        nombreArchivo: b.filename,
-        archivoBase64: b.base64,
-        contentType: b.contentType,
-      };
+      return b ? { tipo: d.type as string, blob: b.blob, contentType: b.contentType } : null;
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  const { data, error } = await supabase.functions.invoke("registrar-solicitud-propietario", {
+  // 1) Pedir URLs firmadas + 2) subir cada PDF a Storage.
+  const rutas: { tipo: string; path: string }[] = [];
+  if (docsConBytes.length > 0) {
+    const { data: urlsData, error: urlsErr } = await supabase.functions.invoke(FN, {
+      body: { action: "urls", documentos: docsConBytes.map((d) => ({ tipo: d.tipo })) },
+    });
+    if (urlsErr) {
+      throw new Error(mensajeError(await codigoError(urlsErr)) ?? "No se pudo preparar la subida de documentos.");
+    }
+    const uploads: UploadSlot[] = (urlsData as { uploads?: UploadSlot[] })?.uploads ?? [];
+
+    for (const slot of uploads) {
+      const doc = docsConBytes.find((d) => d.tipo === slot.tipo);
+      if (!doc) continue;
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET)
+        .uploadToSignedUrl(slot.path, slot.token, doc.blob, { contentType: doc.contentType });
+      if (upErr) {
+        // No abortamos por un doc: el resto sube y el área de SOZU pide el faltante.
+        // eslint-disable-next-line no-console
+        console.warn(`[onboarding] subida falló (${slot.tipo}):`, upErr.message);
+        continue;
+      }
+      rutas.push({ tipo: slot.tipo, path: slot.path });
+    }
+  }
+
+  // 3) Crear la solicitud con las rutas ya subidas.
+  const { data, error } = await supabase.functions.invoke(FN, {
     body: {
+      action: "crear",
       idPropiedad,
       email: onb.accountEmail,
       tipoPersona: onb.personType,
@@ -68,20 +116,12 @@ export async function submitSolicitudPropietario(
       persona,
       verificacion: checks.map((c) => ({ key: c.key, status: c.status, label: c.label })),
       consentimiento: onb.privacyAccepted,
-      documentos,
+      documentos: rutas,
     },
   });
 
   if (error) {
-    // functions.invoke da un mensaje genérico en no-2xx; intenta leer el cuerpo.
-    let code: string | undefined;
-    try {
-      const ctx = (error as unknown as { context?: Response }).context;
-      if (ctx && typeof ctx.json === "function") code = (await ctx.json())?.error;
-    } catch {
-      /* ignora: usa el mensaje genérico */
-    }
-    throw new Error(mensajeError(code) ?? "No se pudo enviar tu solicitud. Intenta de nuevo.");
+    throw new Error(mensajeError(await codigoError(error)) ?? "No se pudo enviar tu solicitud. Intenta de nuevo.");
   }
 
   const caseId = (data as { caseId?: string })?.caseId;
@@ -103,6 +143,8 @@ function mensajeError(code?: string): string | undefined {
       return "Falta seleccionar la unidad (Paso 1).";
     case "email_requerido":
       return "Falta el correo de tu cuenta (Paso 2).";
+    case "signed_url_failed":
+      return "No se pudo preparar la subida de tus documentos. Intenta de nuevo.";
     case "tipo_entidad_propietario_ausente":
       return "Configuración pendiente en el sistema. Avísale a SOZU (falta el tipo de entidad Propietario).";
     default:

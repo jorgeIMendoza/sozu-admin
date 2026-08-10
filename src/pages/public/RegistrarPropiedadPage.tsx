@@ -267,14 +267,24 @@ export default function RegistrarPropiedadPage() {
                   <span className="text-destructive">
                     Hay observaciones: pasarán a revisión legal.
                   </span>
-                ) : step === 6 && onboarding.level < 2 ? (
+                ) : step === 6 && onboarding.level === 0 ? (
+                  <span>
+                    Tu solicitud quedó registrada. Te avisaremos por correo cuando SOZU la revise;
+                    ahí crearás tu contraseña y entrarás al portal.
+                  </span>
+                ) : step === 6 && onboarding.level === 1 ? (
                   <span>
                     La transferencia de registro se habilitará cuando SOZU reconozca tu titularidad
                     (Nivel 2). Te avisaremos por correo.
                   </span>
                 ) : null}
               </div>
-              {step === 6 && onboarding.level < 2 ? (
+              {step === 6 && onboarding.level === 0 ? (
+                // Modelo B: aún no hay cuenta/portal (se crea al aprobar Nivel 1).
+                <Button onClick={() => navigate("/login")}>
+                  Entendido <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              ) : step === 6 && onboarding.level === 1 ? (
                 <Button onClick={goToPortal}>
                   Ir a mi portal <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
