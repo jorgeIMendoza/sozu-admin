@@ -63,7 +63,7 @@ function MediaLightbox({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+      className="pointer-events-auto fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
       onClick={onClose}
       role="dialog"
       aria-label="Visor de evidencia"
