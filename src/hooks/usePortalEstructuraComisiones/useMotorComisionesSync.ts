@@ -135,7 +135,7 @@ function ruleFromRow(row: any): CommissionRule {
  * No incluye `id` — la BD lo asigna (IDENTITY). Válido para insert y update.
  *
  * `id_rol` es `text`, no `bigint`: identifica un rol de "Puestos y Sueldos"
- * (`StructureTab.tsx` / `useSimulator().roles`, ej. 'role-dir-sozu'), que es
+ * (`useSimulator().roles`, ej. 'role-dir-sozu'), que es
  * 100% local (localStorage) y no tiene tabla propia — es un catálogo
  * distinto de `roles_organizacionales` (Directorio de Personal).
  */

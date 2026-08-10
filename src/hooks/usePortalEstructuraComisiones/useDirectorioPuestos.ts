@@ -2,16 +2,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Directorio de Personal — catálogo real de roles de empresa (Director, Asesor,
- * etc., tabla `roles_organizacionales`) y de los puestos ocupados por usuarios
- * reales (`puestos_organizacionales`), independiente del catálogo `roles` /
- * `usuarios.rol_id` de autenticación y permisos, y también independiente del
- * simulador abstracto de "Roles y Sueldos" (`SimulatorContext`/`localStorage`),
- * que sigue funcionando igual.
+ * Directorio de Personal — administración de recurso humano del Portal Estructura
+ * de Comisiones, en tres pasos:
+ *
+ *   1. Alta / baja / modificación de la PERSONA        → `personal_organizacional`
+ *   2. Vinculación de la persona con un ROL            → `personal_organizacional.id_rol`
+ *      sobre el catálogo `roles_organizacionales`
+ *   3. Vinculación con los PROYECTOS que atiende       → `personal_proyectos`
+ *
+ * La compensación es atributo de la persona; el costo por proyecto se deriva del
+ * `asignacion_pct` de cada vinculación.
+ *
+ * Este catálogo es independiente del catálogo `roles` / `usuarios.rol_id` de
+ * autenticación y permisos, y también del simulador abstracto de "Puestos y Sueldos"
+ * (`SimulatorContext` / localStorage), que sigue funcionando igual.
  *
  * Probe graceful: si las tablas aún no existen (DDL pendiente, ver
- * `Ejecuciones_manuales/directorio_personal_estructura_comisiones.md`), las
- * consultas devuelven `[]` en vez de romper la UI.
+ * `Ejecuciones_manuales/20260809_directorio_personal_rrhh.md`), las consultas devuelven
+ * `[]` y `useDirectorioSchemaReady()` reporta `false` para que la UI avise en vez de
+ * romperse.
  */
 
 export type RoleType = "strategic" | "operative" | "support";
@@ -23,35 +32,101 @@ export interface RolOrganizacional {
   tipo: RoleType;
   pertenece_a: RoleBelongsTo;
   participa_comision: boolean;
+  /** Para qué existe el rol: el resultado que debe producir. */
+  objetivo: string | null;
+  /** Actividades concretas y responsabilidades. */
+  descripcion_labores: string | null;
   activo: boolean;
 }
 
-export interface PuestoOrganizacional {
+export interface PersonalOrganizacional {
   id: number;
-  id_rol: number;
-  id_proyecto: number | null;
+  nombre: string;
   email_usuario: string | null;
-  nombre_ocupante: string | null;
-  sueldo_base: number;
-  bono_fijo: number;
-  prestaciones_pct: number;
+  email_contacto: string | null;
+  telefono: string | null;
+  id_rol: number | null;
+  /** Parte del costo que va en nómina formal. */
+  costo_nominal: number;
+  /** Parte pagada fuera de nómina (asimilados, honorarios, facturación). */
+  costo_externo: number;
+  /** Cargas patronales: IMSS, INFONAVIT, SAR, impuesto sobre nómina. */
+  costo_social: number;
+  /** Columna generada en BD = nominal + externo + social. Solo lectura. */
+  costo_total: number;
+  /** Neto que recibe la persona. Capturado; `null` = aún no capturado. */
+  sueldo_base_recibido: number | null;
+  fecha_ingreso: string | null;
+  fecha_baja: string | null;
+  motivo_baja: string | null;
+  activo: boolean;
+}
+
+export interface AsignacionProyecto {
+  id: number;
+  id_personal: number;
+  id_proyecto: number;
+  asignacion_pct: number;
   fecha_inicio: string | null;
+  fecha_fin: string | null;
   activo: boolean;
 }
 
 const ROLES_KEY = "roles-organizacionales";
-const PUESTOS_KEY = "puestos-organizacionales";
+const PERSONAL_KEY = "personal-organizacional";
+const ASIGNACIONES_KEY = "personal-proyectos";
+const SCHEMA_KEY = "directorio-personal-schema";
 
-export function useRolesOrganizacionales() {
+const PERSONAL_COLS =
+  "id, nombre, email_usuario, email_contacto, telefono, id_rol, costo_nominal, " +
+  "costo_externo, costo_social, costo_total, sueldo_base_recibido, fecha_ingreso, " +
+  "fecha_baja, motivo_baja, activo";
+
+const ASIGNACION_COLS =
+  "id, id_personal, id_proyecto, asignacion_pct, fecha_inicio, fecha_fin, activo";
+
+/**
+ * Costo real total de la persona para la empresa.
+ *
+ * En BD `costo_total` es una columna generada, así que basta leerla. Esta función
+ * existe para calcular el total en formularios, donde el usuario aún está tecleando
+ * las partes y no hay fila que consultar.
+ */
+export function costoTotal(p: Pick<PersonalOrganizacional, "costo_nominal" | "costo_externo" | "costo_social">): number {
+  return Number(p.costo_nominal) + Number(p.costo_externo) + Number(p.costo_social);
+}
+
+/** ¿Ya existe el esquema RRHH en la BD? (patrón DDL probe de CLAUDE.md) */
+export function useDirectorioSchemaReady() {
+  return useQuery<boolean>({
+    queryKey: [SCHEMA_KEY],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const probe = await (supabase as any).from("personal_organizacional").select("id").limit(0);
+      return !probe.error;
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Catálogo de roles de la empresa                                     */
+/* ------------------------------------------------------------------ */
+
+const ROL_COLS =
+  "id, nombre, tipo, pertenece_a, participa_comision, objetivo, descripcion_labores, activo";
+
+/** Catálogo de roles. `incluirInactivos` trae también los dados de baja. */
+export function useRolesOrganizacionales(incluirInactivos = false) {
   return useQuery<RolOrganizacional[]>({
-    queryKey: [ROLES_KEY],
+    queryKey: [ROLES_KEY, incluirInactivos],
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from("roles_organizacionales")
-        .select("id, nombre, tipo, pertenece_a, participa_comision, activo")
-        .eq("activo", true)
+        .select(ROL_COLS)
         .order("nombre");
+      if (!incluirInactivos) query = query.eq("activo", true);
+      const { data, error } = await query;
       if (error || !data) return [];
       return data as RolOrganizacional[];
     },
@@ -63,6 +138,19 @@ export interface NuevoRolInput {
   tipo: RoleType;
   pertenece_a: RoleBelongsTo;
   participa_comision: boolean;
+  objetivo?: string | null;
+  descripcion_labores?: string | null;
+}
+
+/** Traduce la violación del índice único de nombre a un mensaje entendible. */
+function traducirErrorRol(error: { code?: string; message?: string }, nombre: string): Error {
+  if (error.code === "23505") {
+    return new Error(`Ya existe un rol activo llamado "${nombre}".`);
+  }
+  if (error.code === "23514") {
+    return new Error("El nombre del rol no puede estar vacío.");
+  }
+  return new Error(error.message ?? "No se pudo guardar el rol");
 }
 
 export function useCrearRolOrganizacional() {
@@ -70,7 +158,22 @@ export function useCrearRolOrganizacional() {
   return useMutation({
     mutationFn: async (input: NuevoRolInput) => {
       const { error } = await (supabase as any).from("roles_organizacionales").insert(input);
-      if (error) throw error;
+      if (error) throw traducirErrorRol(error, input.nombre);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ROLES_KEY] }),
+  });
+}
+
+export function useActualizarRolOrganizacional() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: Partial<NuevoRolInput> & { id: number }) => {
+      const { id, ...rest } = input;
+      const { error } = await (supabase as any)
+        .from("roles_organizacionales")
+        .update(rest)
+        .eq("id", id);
+      if (error) throw traducirErrorRol(error, rest.nombre ?? "");
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: [ROLES_KEY] }),
   });
@@ -80,6 +183,18 @@ export function useDesactivarRolOrganizacional() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
+      // Un rol en uso no puede darse de baja: primero se reasigna al personal.
+      // Si la tabla aún no existe (DDL pendiente) no hay personal que proteger.
+      const { count, error: countError } = await (supabase as any)
+        .from("personal_organizacional")
+        .select("id", { count: "exact", head: true })
+        .eq("id_rol", id)
+        .eq("activo", true);
+      if (!countError && (count ?? 0) > 0) {
+        throw new Error(
+          `El rol está asignado a ${count} persona(s) activa(s). Reasígnalas antes de darlo de baja.`,
+        );
+      }
       const { error } = await (supabase as any)
         .from("roles_organizacionales")
         .update({ activo: false })
@@ -90,79 +205,265 @@ export function useDesactivarRolOrganizacional() {
   });
 }
 
-export function usePuestosOrganizacionales() {
-  return useQuery<PuestoOrganizacional[]>({
-    queryKey: [PUESTOS_KEY],
+export function useReactivarRolOrganizacional() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, nombre }: { id: number; nombre: string }) => {
+      const { error } = await (supabase as any)
+        .from("roles_organizacionales")
+        .update({ activo: true })
+        .eq("id", id);
+      // El índice único es parcial sobre activos: reactivar puede chocar con
+      // un rol creado con el mismo nombre mientras este estaba de baja.
+      if (error) throw traducirErrorRol(error, nombre);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ROLES_KEY] }),
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Paso 1 — Personal: alta, baja y modificación                        */
+/* ------------------------------------------------------------------ */
+
+/** Personal de la organización. `incluirBajas` agrega a quienes ya no están activos. */
+export function usePersonal(incluirBajas = false) {
+  return useQuery<PersonalOrganizacional[]>({
+    queryKey: [PERSONAL_KEY, incluirBajas],
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("puestos_organizacionales")
-        .select(
-          "id, id_rol, id_proyecto, email_usuario, nombre_ocupante, sueldo_base, bono_fijo, prestaciones_pct, fecha_inicio, activo",
-        )
-        .eq("activo", true)
-        .order("fecha_creacion");
+      let query = (supabase as any)
+        .from("personal_organizacional")
+        .select(PERSONAL_COLS)
+        .order("nombre");
+      if (!incluirBajas) query = query.eq("activo", true);
+      const { data, error } = await query;
       if (error || !data) return [];
-      return data as PuestoOrganizacional[];
+      return data as PersonalOrganizacional[];
     },
   });
 }
 
-export type NuevoPuestoInput = Omit<PuestoOrganizacional, "id" | "activo">;
+/**
+ * Campos escribibles de una persona. `costo_total` queda deliberadamente fuera:
+ * es una columna generada y PostgreSQL rechaza escribirla (SQLSTATE 428C9).
+ */
+export interface NuevaPersonaInput {
+  nombre: string;
+  email_usuario?: string | null;
+  email_contacto?: string | null;
+  telefono?: string | null;
+  id_rol?: number | null;
+  costo_nominal?: number;
+  costo_externo?: number;
+  costo_social?: number;
+  sueldo_base_recibido?: number | null;
+  fecha_ingreso?: string | null;
+}
 
-export function useCrearPuesto() {
+/** Alta de persona. `proyectos` la vincula de una vez con los proyectos que atiende. */
+export function useCrearPersona() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: NuevoPuestoInput) => {
-      const { error } = await (supabase as any).from("puestos_organizacionales").insert(input);
+    mutationFn: async ({ proyectos = [], ...persona }: NuevaPersonaInput & { proyectos?: number[] }) => {
+      const { data, error } = await (supabase as any)
+        .from("personal_organizacional")
+        .insert(persona)
+        .select("id")
+        .single();
       if (error) throw error;
+
+      if (proyectos.length > 0) {
+        const { error: linkError } = await (supabase as any).from("personal_proyectos").insert(
+          proyectos.map(id_proyecto => ({ id_personal: data.id, id_proyecto, asignacion_pct: 100 })),
+        );
+        if (linkError) throw linkError;
+      }
+      return data.id as number;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [PUESTOS_KEY] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [PERSONAL_KEY] });
+      qc.invalidateQueries({ queryKey: [ASIGNACIONES_KEY] });
+    },
   });
 }
 
-export function useActualizarPuesto() {
+export function useActualizarPersona() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Partial<NuevoPuestoInput> & { id: number }) => {
+    mutationFn: async (input: Partial<NuevaPersonaInput> & { id: number }) => {
       const { id, ...rest } = input;
-      const { error } = await (supabase as any).from("puestos_organizacionales").update(rest).eq("id", id);
+      const { error } = await (supabase as any)
+        .from("personal_organizacional")
+        .update(rest)
+        .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [PUESTOS_KEY] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [PERSONAL_KEY] }),
   });
 }
 
-export function useEliminarPuesto() {
+/** Baja lógica: conserva la ficha y su histórico de costo. */
+export function useDarBajaPersona() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, fecha_baja, motivo_baja }: { id: number; fecha_baja: string; motivo_baja: string | null }) => {
+      const { error } = await (supabase as any)
+        .from("personal_organizacional")
+        .update({ activo: false, fecha_baja, motivo_baja })
+        .eq("id", id);
+      if (error) throw error;
+      // Sus vinculaciones a proyectos dejan de estar vigentes.
+      const { error: linkError } = await (supabase as any)
+        .from("personal_proyectos")
+        .update({ activo: false, fecha_fin: fecha_baja })
+        .eq("id_personal", id)
+        .eq("activo", true);
+      if (linkError) throw linkError;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [PERSONAL_KEY] });
+      qc.invalidateQueries({ queryKey: [ASIGNACIONES_KEY] });
+    },
+  });
+}
+
+export function useReactivarPersona() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
       const { error } = await (supabase as any)
-        .from("puestos_organizacionales")
-        .update({ activo: false })
+        .from("personal_organizacional")
+        .update({ activo: true, fecha_baja: null, motivo_baja: null })
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [PUESTOS_KEY] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [PERSONAL_KEY] }),
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Paso 3 — Vinculación con proyectos                                  */
+/* ------------------------------------------------------------------ */
+
+export function useAsignacionesProyecto() {
+  return useQuery<AsignacionProyecto[]>({
+    queryKey: [ASIGNACIONES_KEY],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_proyectos")
+        .select(ASIGNACION_COLS)
+        .eq("activo", true);
+      if (error || !data) return [];
+      return data as AsignacionProyecto[];
+    },
+  });
+}
+
+export function useVincularProyecto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id_personal, id_proyecto, asignacion_pct = 100 }: {
+      id_personal: number;
+      id_proyecto: number;
+      asignacion_pct?: number;
+    }) => {
+      // Reutiliza la vinculación previa si la persona ya había atendido el proyecto.
+      const { data: previa, error: findError } = await (supabase as any)
+        .from("personal_proyectos")
+        .select("id")
+        .eq("id_personal", id_personal)
+        .eq("id_proyecto", id_proyecto)
+        .eq("activo", false)
+        .limit(1);
+      if (findError) throw findError;
+
+      if (previa && previa.length > 0) {
+        const { error } = await (supabase as any)
+          .from("personal_proyectos")
+          .update({ activo: true, fecha_fin: null, asignacion_pct })
+          .eq("id", previa[0].id);
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await (supabase as any)
+        .from("personal_proyectos")
+        .insert({ id_personal, id_proyecto, asignacion_pct });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ASIGNACIONES_KEY] }),
+  });
+}
+
+export function useDesvincularProyecto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await (supabase as any)
+        .from("personal_proyectos")
+        .update({ activo: false, fecha_fin: new Date().toISOString().slice(0, 10) })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ASIGNACIONES_KEY] }),
+  });
+}
+
+export function useActualizarAsignacion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, asignacion_pct }: { id: number; asignacion_pct: number }) => {
+      const { error } = await (supabase as any)
+        .from("personal_proyectos")
+        .update({ asignacion_pct })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ASIGNACIONES_KEY] }),
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Catálogos de apoyo                                                  */
+/* ------------------------------------------------------------------ */
 
 export interface ProyectoActivo {
   id: number;
   nombre: string;
 }
 
-/** Proyectos activos y publicados, para agrupar el directorio por proyecto. */
+/** Entidad relacionada tipo 5 = SOZU (ver "IDs fijos importantes" en CLAUDE.md). */
+const TIPO_ENTIDAD_SOZU = 5;
+
+/**
+ * Proyectos a los que el personal puede dar servicio: los **comercializados por
+ * SOZU** — existe una `entidades_relacionadas` de tipo 5 apuntando al proyecto —
+ * y activos. Misma definición que `usePortalAltaDireccion/proyectosSozu.ts`.
+ *
+ * Waterfall explícito en dos pasos (patrón #1 de CLAUDE.md): el triple join de
+ * PostgREST falla en silencio.
+ */
 export function useProyectosActivosDirectorio() {
   return useQuery<ProyectoActivo[]>({
-    queryKey: ["proyectos-activos-directorio"],
+    queryKey: ["proyectos-sozu-directorio"],
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      const { data: rels, error: relError } = await supabase
+        .from("entidades_relacionadas")
+        .select("id_proyecto")
+        .eq("id_tipo_entidad", TIPO_ENTIDAD_SOZU)
+        .eq("activo", true)
+        .not("id_proyecto", "is", null);
+      if (relError || !rels?.length) return [];
+
+      const ids = Array.from(new Set(rels.map(r => r.id_proyecto as number)));
+
       const { data, error } = await supabase
         .from("proyectos")
         .select("id, nombre")
+        .in("id", ids)
         .eq("activo", true)
-        .eq("publicar", true)
         .order("nombre");
       if (error || !data) return [];
       return data as ProyectoActivo[];
