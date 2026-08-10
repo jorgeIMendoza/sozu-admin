@@ -13,6 +13,7 @@ import {
   ScrollText,
   History,
   Building2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -70,12 +71,28 @@ export default function DetalleTitularidad() {
 
   const solicitud = useTitularidadStore((s) => s.solicitudes.find((x) => x.id === id));
   const setUsuario = useTitularidadStore((s) => s.setUsuario);
+  const cargar = useTitularidadStore((s) => s.cargar);
+  const cargando = useTitularidadStore((s) => s.cargando);
+  const totalSolicitudes = useTitularidadStore((s) => s.solicitudes.length);
 
   useEffect(() => {
     if (profile?.nombre) setUsuario(`${profile.nombre} (revisor)`);
   }, [profile?.nombre, setUsuario]);
 
+  // Deep-link a /titularidad/:id sin pasar por la bandeja: cargar si está vacío.
+  useEffect(() => {
+    if (totalSolicitudes === 0) void cargar();
+  }, [totalSolicitudes, cargar]);
+
   if (!solicitud) {
+    if (cargando) {
+      return (
+        <div className="py-16 text-center text-muted-foreground">
+          <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin opacity-60" />
+          <p>Cargando solicitud…</p>
+        </div>
+      );
+    }
     return (
       <div className="py-16 text-center text-muted-foreground">
         <p>No se encontró la solicitud.</p>

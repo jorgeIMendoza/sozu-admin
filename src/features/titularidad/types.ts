@@ -108,7 +108,7 @@ export interface SolicitudTitularidad {
   unidad: string; // "#201"
   folioReal: Campo<string>; // tabular-nums en UI
   direccion: string;
-  modelo: "Breath" | "Heart" | "Joy" | "Kind" | "Soft";
+  modelo: string; // nombre del modelo (Margot: Breath/Heart/Joy/Kind/Soft…), o "" si no aplica
   // SWAP POINT: duenoOriginalRegistrado debe leerse de la fuente única de
   // titularidad (registros SOZU / Legal Flow), NO de una tabla local del
   // Portal Condominio. Hoy en Margot muchas unidades figuran a nombre de
