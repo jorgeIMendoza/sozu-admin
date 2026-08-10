@@ -193,7 +193,6 @@ const PECExecutiveDashboard = lazyRetry(() => import("./components/admin/portal-
 const PECProjects = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/ProjectsTab"));
 const PECChannels = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/ChannelsTab"));
 const PECOrgChart = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/OrgChartTab"));
-const PECStructure = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/StructureTab"));
 const PECDirectorio = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/DirectorioPuestosTab"));
 const PECCommissions = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/CommissionsTab"));
 const PECPaymentPolicies = lazyRetry(() => import("./components/admin/portal-estructura-comisiones/tabs/PaymentPoliciesTab"));
@@ -968,7 +967,13 @@ const App = () => (
                   <Route path="portal-estructura-comisiones/projects" element={<PECProjects />} />
                   <Route path="portal-estructura-comisiones/channels" element={<PECChannels />} />
                   <Route path="portal-estructura-comisiones/org-chart" element={<PECOrgChart />} />
-                  <Route path="portal-estructura-comisiones/structure" element={<PECStructure />} />
+                  {/* "Puestos y Sueldos" se homologó con el Directorio en un solo
+                      menú, "Roles y Sueldos". La ruta vieja se conserva como
+                      redirect para no romper enlaces guardados. */}
+                  <Route
+                    path="portal-estructura-comisiones/structure"
+                    element={<Navigate to="/admin/portal-estructura-comisiones/directorio" replace />}
+                  />
                   <Route path="portal-estructura-comisiones/directorio" element={<PECDirectorio />} />
                   <Route path="portal-estructura-comisiones/commissions" element={<PECCommissions />} />
                   <Route path="portal-estructura-comisiones/payment-policies" element={<PECPaymentPolicies />} />
