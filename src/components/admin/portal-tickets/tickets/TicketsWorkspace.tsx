@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Download, HelpCircle, LayoutGrid, List, Plus, Search, Trash2 } from "lucide-react";
+import { CheckCircle2, CircleDot, Download, Flame, HelpCircle, LayoutGrid, List, Plus, Search, Ticket as TicketIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -178,7 +178,7 @@ export function TicketsWorkspace({
     return {
       total: filtrados.length,
       abiertos: abiertos.length,
-      sinAsignar: filtrados.filter((t) => t.propietarios.length === 0).length,
+      resueltos: filtrados.length - abiertos.length,
       altaPrioridad: abiertos.filter((t) => t.prioridad === "alta").length,
     };
   }, [filtrados, etapas]);
@@ -219,10 +219,30 @@ export function TicketsWorkspace({
   };
 
   const kpiCards = [
-    { label: "Tickets", valor: kpis.total },
-    { label: "Abiertos", valor: kpis.abiertos },
-    { label: "Sin asignar", valor: kpis.sinAsignar },
-    { label: "Prioridad alta", valor: kpis.altaPrioridad },
+    {
+      label: "Tickets",
+      valor: kpis.total,
+      icon: TicketIcon,
+      tint: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    },
+    {
+      label: "Abiertos",
+      valor: kpis.abiertos,
+      icon: CircleDot,
+      tint: "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+    },
+    {
+      label: "Resueltos",
+      valor: kpis.resueltos,
+      icon: CheckCircle2,
+      tint: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400",
+    },
+    {
+      label: "Prioridad alta",
+      valor: kpis.altaPrioridad,
+      icon: Flame,
+      tint: "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+    },
   ];
 
   return (
@@ -255,14 +275,22 @@ export function TicketsWorkspace({
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {kpiCards.map((k) => (
-          <div key={k.label} className="rounded-lg border bg-card p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {k.label}
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{k.valor}</p>
-          </div>
-        ))}
+        {kpiCards.map((k) => {
+          const Icon = k.icon;
+          return (
+            <div key={k.label} className="flex items-center gap-3 rounded-xl border bg-card p-4">
+              <div className={cn("grid size-10 shrink-0 place-items-center rounded-lg", k.tint)}>
+                <Icon className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {k.label}
+                </p>
+                <p className="text-2xl font-semibold leading-tight text-foreground">{k.valor}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {vistas.length > 0 && (
