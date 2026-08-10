@@ -53,9 +53,11 @@ export default function CommissionsTab() {
   // en el catálogo del simulador. La regla guarda el rol porque el motor agrupa
   // los pagos por rol, pero quien se da de alta es la persona.
   const { data: estructuraRaw } = useEstructuraRealRaw();
+  // El rol se resuelve para el proyecto del motor: la misma persona puede
+  // comisionar con roles distintos en desarrollos distintos.
   const comisionistas = useMemo(
-    () => comisionistasDisponibles(estructuraRaw, roles),
-    [estructuraRaw, roles],
+    () => comisionistasDisponibles(estructuraRaw, roles, motorProjectId),
+    [estructuraRaw, roles, motorProjectId],
   );
   const comisionistasComision = useMemo(
     () => comisionistas.filter(c => c.participaComision),
@@ -112,8 +114,14 @@ export default function CommissionsTab() {
   };
 
   const buildSnapshot = (): MotorSnapshot => ({
-    totalCommissionPct: motorConfig.totalCommissionPct,
-    channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
+    // Ya no hay un total único: viaja el de cada canal.
+    channels: channels.map((c) => ({
+      id: c.id,
+      name: c.name,
+      externalCommissionPct: c.externalCommissionPct,
+      active: c.active,
+      totalCommissionPct: motorConfig.channelTotals[c.id] ?? 0,
+    })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
     roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
     commissionRules: commissionRules.map((r) => ({
@@ -253,16 +261,6 @@ export default function CommissionsTab() {
                   </TooltipContent>
                 )}
               </Tooltip>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">Comisión total</span>
-                <Input
-                  type="number"
-                  step="0.1"
-                  className="w-20 h-9 text-sm font-mono"
-                  value={motorConfig.totalCommissionPct}
-                  onChange={(e) => updateMotorConfig({ ...motorConfig, totalCommissionPct: +e.target.value })}
-                />
-              </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span>
@@ -313,17 +311,15 @@ export default function CommissionsTab() {
         </span>
       </div>
 
-      <div className="text-sm font-medium">
-        Comisión total: <span className="font-bold text-accent">{motorConfig.totalCommissionPct}%</span>
-      </div>
-
       {/* Channel cards */}
       {channels.map(ch => {
         const channelRules = commissionRules.filter(r => r.channelId === ch.id);
         const extPct = ch.externalCommissionPct;
 
-        // Real-time channel summary calculations (siempre Modo A: sobre venta)
-        const comisionTotal = motorConfig.totalCommissionPct;
+        // Real-time channel summary calculations (siempre Modo A: sobre venta).
+        // La comisión total es de ESTE canal: cada uno define la suya.
+        const totalDefinido = motorConfig.channelTotals[ch.id] !== undefined;
+        const comisionTotal = motorConfig.channelTotals[ch.id] ?? 0;
         const comisionExterna = extPct;
         const comisionInterna = comisionTotal - comisionExterna;
         const sumaDispersada = channelRules.reduce((sum, r) => sum + r.percentage, 0);
@@ -347,12 +343,33 @@ export default function CommissionsTab() {
 
         return (
           <div key={ch.id} className="rounded-xl border bg-card p-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
                 <h3 className="font-semibold">{ch.name}</h3>
                 <Badge variant="outline" className="text-[10px]">Ext: {extPct}%</Badge>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* La comisión total se define por canal, no una sola para todos. */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Comisión total</span>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    placeholder="Sin definir"
+                    className={`w-24 h-9 text-sm font-mono ${totalDefinido ? '' : 'border-amber-500'}`}
+                    value={totalDefinido ? comisionTotal : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const next = { ...motorConfig.channelTotals };
+                      if (raw === '') delete next[ch.id];
+                      else next[ch.id] = Math.min(100, Math.max(0, +raw));
+                      updateMotorConfig({ channelTotals: next });
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
                 <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md border ${statusColor}`}>
                   {statusIcon}
                   {statusText}
@@ -362,6 +379,12 @@ export default function CommissionsTab() {
                 </Button>
               </div>
             </div>
+
+            {!totalDefinido && (
+              <p className="mb-3 text-xs text-amber-600">
+                Define la comisión total de este canal para poder repartirla entre sus comisionistas.
+              </p>
+            )}
 
             {channelRules.length === 0 ? (
               <p className="text-sm text-muted-foreground italic">Sin comisionistas dados de alta en este canal</p>

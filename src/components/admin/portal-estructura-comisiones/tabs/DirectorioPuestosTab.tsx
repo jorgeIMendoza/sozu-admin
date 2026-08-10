@@ -93,14 +93,27 @@ export default function DirectorioPuestosTab() {
   const rolesAsignables = useMemo(() => roles.filter(r => r.activo), [roles]);
 
   const activos = useMemo(() => personal.filter(p => p.activo), [personal]);
+  /**
+   * Personas por rol contando las dos formas de uso: el rol base y los roles
+   * que asumen por proyecto. Se cuentan personas distintas, no asignaciones.
+   */
   const personasPorRol = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const p of personal) {
-      if (!p.activo || p.id_rol === null) continue;
-      map.set(p.id_rol, (map.get(p.id_rol) ?? 0) + 1);
+    const porRol = new Map<number, Set<number>>();
+    const agregar = (idRol: number, idPersona: number) => {
+      const set = porRol.get(idRol);
+      if (set) set.add(idPersona);
+      else porRol.set(idRol, new Set([idPersona]));
+    };
+    const activosById = new Map(personal.filter(p => p.activo).map(p => [p.id, p]));
+    for (const p of activosById.values()) {
+      if (p.id_rol !== null) agregar(p.id_rol, p.id);
     }
-    return map;
-  }, [personal]);
+    for (const a of asignaciones) {
+      if (a.id_rol === null || !activosById.has(a.id_personal)) continue;
+      agregar(a.id_rol, a.id_personal);
+    }
+    return new Map(Array.from(porRol.entries()).map(([idRol, set]) => [idRol, set.size]));
+  }, [personal, asignaciones]);
   const costoEmpresa = useMemo(() => activos.reduce((s, p) => s + Number(p.costo_total), 0), [activos]);
   const sinRol = activos.filter(p => p.id_rol === null).length;
   const sinProyecto = activos.filter(p => (asignacionesByPersona.get(p.id)?.length ?? 0) === 0).length;
@@ -656,6 +669,17 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, on
   // Si el rol asignado fue dado de baja, se sigue mostrando para no perder el dato.
   const opcionesRol = rol && !rol.activo ? [...rolesAsignables, rol] : rolesAsignables;
 
+  // Roles distintos al base que la persona asume en algún proyecto.
+  const rolesPorProyecto = useMemo(() => {
+    const nombres = new Set<string>();
+    for (const a of asignaciones) {
+      if (a.id_rol === null || a.id_rol === persona.id_rol) continue;
+      const nombre = rolesAsignables.find(r => r.id === a.id_rol)?.nombre;
+      if (nombre) nombres.add(nombre);
+    }
+    return Array.from(nombres);
+  }, [asignaciones, persona.id_rol, rolesAsignables]);
+
   return (
     <tr className={cn(!persona.activo && 'opacity-55')}>
       <td>
@@ -685,11 +709,15 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, on
             ))}
           </SelectContent>
         </Select>
-        {rol?.objetivo && (
+        {rolesPorProyecto.length > 0 ? (
+          <p className="text-[11px] text-accent mt-1 max-w-52 truncate" title={rolesPorProyecto.join(' · ')}>
+            + {rolesPorProyecto.length} rol{rolesPorProyecto.length === 1 ? '' : 'es'} por proyecto
+          </p>
+        ) : rol?.objetivo ? (
           <p className="text-[11px] text-muted-foreground mt-1 max-w-52 truncate" title={rol.objetivo}>
             {rol.objetivo}
           </p>
-        )}
+        ) : null}
       </td>
       <td>
         <ProyectosPicker
@@ -697,6 +725,7 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, on
           proyectos={proyectos}
           asignaciones={asignaciones}
           rol={rol}
+          rolesAsignables={rolesAsignables}
         />
       </td>
       <td>
@@ -802,11 +831,12 @@ function NumberCell<T extends number | null>({ value, width, onCommit, nullable,
 /* Paso 3 — vinculación con proyectos                                  */
 /* ------------------------------------------------------------------ */
 
-function ProyectosPicker({ idPersonal, proyectos, asignaciones, rol }: {
+function ProyectosPicker({ idPersonal, proyectos, asignaciones, rol, rolesAsignables }: {
   idPersonal: number;
   proyectos: ProyectoActivo[];
   asignaciones: AsignacionProyecto[];
   rol: RolOrganizacional | null;
+  rolesAsignables: RolOrganizacional[];
 }) {
   const [open, setOpen] = useState(false);
   const vincular = useVincularProyecto();
@@ -858,36 +888,61 @@ function ProyectosPicker({ idPersonal, proyectos, asignaciones, rol }: {
             {proyectos.map(proy => {
               const asignacion = asignadoPorProyecto.get(proy.id);
               return (
-                <div key={proy.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`proy-${idPersonal}-${proy.id}`}
-                    checked={!!asignacion}
-                    onCheckedChange={() => toggle(proy.id)}
-                  />
-                  <Label htmlFor={`proy-${idPersonal}-${proy.id}`} className="flex-1 text-xs font-normal cursor-pointer">
-                    {proy.nombre}
-                  </Label>
+                <div key={proy.id} className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`proy-${idPersonal}-${proy.id}`}
+                      checked={!!asignacion}
+                      onCheckedChange={() => toggle(proy.id)}
+                    />
+                    <Label htmlFor={`proy-${idPersonal}-${proy.id}`} className="flex-1 text-xs font-normal cursor-pointer">
+                      {proy.nombre}
+                    </Label>
+                    {asignacion && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          className="h-7 w-16 text-xs"
+                          defaultValue={Number(asignacion.asignacion_pct)}
+                          onBlur={e => {
+                            const pct = Number(e.target.value);
+                            if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+                              toast.error('El % de asignación debe estar entre 1 y 100');
+                              e.target.value = String(Number(asignacion.asignacion_pct));
+                              return;
+                            }
+                            if (pct !== Number(asignacion.asignacion_pct)) {
+                              actualizarPct.mutate({ id: asignacion.id, asignacion_pct: pct }, { onError: notifyError });
+                            }
+                          }}
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Rol que la persona asume en ESTE proyecto. Puede diferir del base. */}
                   {asignacion && (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        min={1}
-                        max={100}
-                        className="h-7 w-16 text-xs"
-                        defaultValue={Number(asignacion.asignacion_pct)}
-                        onBlur={e => {
-                          const pct = Number(e.target.value);
-                          if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-                            toast.error('El % de asignación debe estar entre 1 y 100');
-                            e.target.value = String(Number(asignacion.asignacion_pct));
-                            return;
-                          }
-                          if (pct !== Number(asignacion.asignacion_pct)) {
-                            actualizarPct.mutate({ id: asignacion.id, asignacion_pct: pct }, { onError: notifyError });
-                          }
-                        }}
-                      />
-                      <span className="text-xs text-muted-foreground">%</span>
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-[11px] text-muted-foreground shrink-0">Rol aquí</span>
+                      <Select
+                        value={asignacion.id_rol !== null ? String(asignacion.id_rol) : 'base'}
+                        onValueChange={(v) => actualizarPct.mutate(
+                          { id: asignacion.id, id_rol: v === 'base' ? null : Number(v) },
+                          { onError: notifyError },
+                        )}
+                      >
+                        <SelectTrigger className="h-7 flex-1 text-[11px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="base">
+                            Mismo que el base{rol ? ` (${rol.nombre})` : ''}
+                          </SelectItem>
+                          {rolesAsignables.map(r => (
+                            <SelectItem key={r.id} value={String(r.id)}>{r.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </div>

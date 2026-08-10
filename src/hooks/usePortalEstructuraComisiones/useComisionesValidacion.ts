@@ -22,8 +22,22 @@ export type EstadoValidacion = "validada" | "rechazada";
 
 /** Siempre Modo A (sobre venta) — el Motor de Comisiones real no permite elegir modo. */
 export interface MotorSnapshot {
-  totalCommissionPct: number;
-  channels: Array<{ id: string; name: string; externalCommissionPct: number; active: boolean }>;
+  /**
+   * Total único del motor. Opcional: solo lo traen los snapshots enviados antes
+   * de que la comisión total pasara a definirse por canal.
+   */
+  totalCommissionPct?: number;
+  /**
+   * `totalCommissionPct` por canal. Opcional por la misma razón: los snapshots
+   * viejos caen al total único de arriba.
+   */
+  channels: Array<{
+    id: string;
+    name: string;
+    externalCommissionPct: number;
+    active: boolean;
+    totalCommissionPct?: number;
+  }>;
   roles: Array<{ id: string; name: string; belongsTo: string }>;
   roleAssignments: Array<{ roleId: string; baseSalary: number }>;
   /**

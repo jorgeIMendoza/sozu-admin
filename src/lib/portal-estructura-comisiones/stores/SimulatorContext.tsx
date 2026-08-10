@@ -15,7 +15,12 @@ import {
   useEstructuraRealRaw, derivarEstructura, type EstructuraDerivada,
 } from '@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador';
 
-const DEFAULT_MOTOR_CONFIG: MotorConfig = { totalCommissionPct: 6 };
+/**
+ * Sin config guardada, no hay total por canal: cada canal arranca sin definir y
+ * la pantalla lo pide. Antes el default era un 6% global que se aplicaba a
+ * todos los canales por igual y que nunca se persistía.
+ */
+const DEFAULT_MOTOR_CONFIG: MotorConfig = { channelTotals: {} };
 
 const STORAGE_KEY = 'sozu-ec-simulator-state';
 
@@ -116,7 +121,10 @@ function loadState(): AppState {
         parsed.projects = [...parsed.projects, ...missingDefaults];
       }
       if (!parsed.commissionRules) parsed.commissionRules = [];
-      if (!parsed.motorConfig) parsed.motorConfig = DEFAULT_MOTOR_CONFIG;
+      // El localStorage puede traer el formato viejo `{ totalCommissionPct }`,
+      // de cuando el total era único para todos los canales. Se descarta: el
+      // total por canal se lee del servidor al seleccionar proyecto.
+      if (!parsed.motorConfig?.channelTotals) parsed.motorConfig = DEFAULT_MOTOR_CONFIG;
       return parsed;
     }
   } catch { /* ignore */ }

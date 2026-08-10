@@ -26,7 +26,12 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
         <div>
           <p className="text-xs text-muted-foreground">
             Modo: A · Sobre Venta · Comisión total{" "}
-            <span className="font-semibold text-accent">{snapshot.totalCommissionPct}%</span>
+            {/* Los snapshots nuevos traen el total en cada canal; los previos, uno solo. */}
+            <span className="font-semibold text-accent">
+              {snapshot.totalCommissionPct != null
+                ? `${snapshot.totalCommissionPct}%`
+                : "definida por canal"}
+            </span>
           </p>
         </div>
       </div>
@@ -34,7 +39,7 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
       {channels.map((ch) => {
         const channelRules = commissionRules.filter((r) => r.channelId === ch.id);
         const extPct = ch.externalCommissionPct;
-        const comisionTotal = snapshot.totalCommissionPct;
+        const comisionTotal = ch.totalCommissionPct ?? snapshot.totalCommissionPct ?? 0;
         const comisionExterna = extPct;
         const comisionInterna = comisionTotal - comisionExterna;
         const sumaDispersada = channelRules.reduce((s, r) => s + (r.percentage || 0), 0);

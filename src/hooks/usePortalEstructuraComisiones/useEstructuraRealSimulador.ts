@@ -28,7 +28,13 @@ export interface EstructuraRealRaw {
     costo_externo: number;
     costo_social: number;
   }>;
-  asignaciones: Array<{ id_personal: number; id_proyecto: number; asignacion_pct: number }>;
+  /** `id_rol` es el rol que la persona asume en ese proyecto; `null` = su rol base. */
+  asignaciones: Array<{
+    id_personal: number;
+    id_proyecto: number;
+    id_rol: number | null;
+    asignacion_pct: number;
+  }>;
   rolesReales: Array<{ id: number; nombre: string; participa_comision: boolean }>;
   proyectosReales: Array<{ id: number; nombre: string }>;
 }
@@ -51,11 +57,23 @@ export function useEstructuraRealRaw() {
       // Tabla inexistente (DDL pendiente) o sin personal: el simulador sigue con lo suyo.
       if (error || !personal?.length) return null;
 
-      const { data: asignaciones } = await (supabase as any)
+      const idsPersonal = personal.map((p: { id: number }) => p.id);
+      let asignaciones = (await (supabase as any)
         .from("personal_proyectos")
-        .select("id_personal, id_proyecto, asignacion_pct")
+        .select("id_personal, id_proyecto, id_rol, asignacion_pct")
         .eq("activo", true)
-        .in("id_personal", personal.map((p: { id: number }) => p.id));
+        .in("id_personal", idsPersonal)).data;
+
+      // Sin la columna `id_rol` (DDL pendiente) se relee sin ella: todos
+      // resuelven a su rol base, igual que antes de que existiera el override.
+      if (!asignaciones) {
+        const { data } = await (supabase as any)
+          .from("personal_proyectos")
+          .select("id_personal, id_proyecto, asignacion_pct")
+          .eq("activo", true)
+          .in("id_personal", idsPersonal);
+        asignaciones = (data ?? []).map((a: Record<string, unknown>) => ({ ...a, id_rol: null }));
+      }
 
       const { data: rolesReales } = await (supabase as any)
         .from("roles_organizacionales")
@@ -112,7 +130,7 @@ export function derivarEstructura(
   const nombreRolReal = new Map(raw.rolesReales.map(r => [r.id, r.nombre]));
   const nombreProyReal = new Map(raw.proyectosReales.map(p => [p.id, p.nombre]));
 
-  const asignacionesPorPersona = new Map<number, Array<{ id_proyecto: number; asignacion_pct: number }>>();
+  const asignacionesPorPersona = new Map<number, Array<{ id_proyecto: number; id_rol: number | null; asignacion_pct: number }>>();
   for (const a of raw.asignaciones) {
     const lista = asignacionesPorPersona.get(a.id_personal);
     if (lista) lista.push(a);
@@ -135,18 +153,22 @@ export function derivarEstructura(
     grupos.set(clave, grupo);
   };
 
+  /** Resuelve un id de rol real al id del catálogo del simulador, reportando lo que no cruza. */
+  const resolverRol = (idRolReal: number | null): string | undefined => {
+    if (idRolReal === null) return undefined;
+    const nombreRol = nombreRolReal.get(idRolReal);
+    const roleId = nombreRol ? rolSimPorNombre.get(norm(nombreRol)) : undefined;
+    if (!roleId && nombreRol) rolesNoMapeados.add(nombreRol);
+    return roleId;
+  };
+
   for (const persona of raw.personal) {
     if (persona.id_rol === null) { personasSinRol++; continue; }
 
-    const nombreRol = nombreRolReal.get(persona.id_rol);
-    const roleId = nombreRol ? rolSimPorNombre.get(norm(nombreRol)) : undefined;
-    if (!roleId) {
-      if (nombreRol) rolesNoMapeados.add(nombreRol);
-      continue;
-    }
-
+    const rolBase = resolverRol(persona.id_rol);
     const links = asignacionesPorPersona.get(persona.id) ?? [];
     let pctAsignado = 0;
+
     for (const link of links) {
       const nombreProy = nombreProyReal.get(link.id_proyecto);
       const projectId = nombreProy ? proySimPorNombre.get(norm(nombreProy)) : undefined;
@@ -159,12 +181,16 @@ export function derivarEstructura(
         if (nombreProy) proyectosNoMapeados.add(nombreProy);
         continue;
       }
+      // Rol efectivo: manda el del proyecto; si no hay, el rol base.
+      const roleId = resolverRol(link.id_rol) ?? rolBase;
+      if (!roleId) continue;
       acumular(roleId, projectId, peso, persona);
     }
 
-    // Lo no asignado a ningún proyecto es estructura de SOZU Central.
+    // Lo no asignado a ningún proyecto es estructura de SOZU Central, y ahí
+    // siempre aplica el rol base.
     const restante = 1 - pctAsignado;
-    if (restante > 0.0001) acumular(roleId, null, restante, persona);
+    if (restante > 0.0001 && rolBase) acumular(rolBase, null, restante, persona);
   }
 
   const roleAssignments: RoleAssignment[] = Array.from(grupos.entries()).map(([clave, g]) => ({
@@ -193,6 +219,8 @@ export interface ComisionistaReal {
   roleId: string;
   belongsTo: "sozu_central" | "project";
   participaComision: boolean;
+  /** true si el rol viene del override del proyecto y no del rol base. */
+  esRolDeProyecto: boolean;
 }
 
 /**
@@ -201,19 +229,36 @@ export interface ComisionistaReal {
  * Solo entra quien tiene rol vinculado y ese rol existe en el catálogo del
  * simulador: la regla de comisión guarda `id_rol` (texto) porque el motor
  * agrupa los pagos por rol, así que sin equivalencia no hay dónde imputarla.
+ *
+ * `idProyecto` es el desarrollo que el motor está configurando. Se usa para
+ * resolver el **rol efectivo** de cada persona en ese proyecto: la misma
+ * persona puede comisionar como *Asesor de Ventas* en un desarrollo y como
+ * *Admin Comercial* en otro. Sin proyecto, se usa el rol base.
  */
 export function comisionistasDisponibles(
   raw: EstructuraRealRaw | null | undefined,
   rolesSimulador: Role[],
+  idProyecto?: number | null,
 ): ComisionistaReal[] {
   if (!raw) return [];
   const rolSimPorNombre = new Map(rolesSimulador.map(r => [norm(r.name), r]));
   const rolRealPorId = new Map(raw.rolesReales.map(r => [r.id, r]));
 
+  // Override de rol de cada persona para el proyecto que se está configurando.
+  const overridePorPersona = new Map<number, number>();
+  if (idProyecto != null) {
+    for (const a of raw.asignaciones) {
+      if (a.id_proyecto === idProyecto && a.id_rol != null) {
+        overridePorPersona.set(a.id_personal, a.id_rol);
+      }
+    }
+  }
+
   const lista: ComisionistaReal[] = [];
   for (const persona of raw.personal) {
-    if (persona.id_rol === null) continue;
-    const rolReal = rolRealPorId.get(persona.id_rol);
+    const idRol = overridePorPersona.get(persona.id) ?? persona.id_rol;
+    if (idRol === null) continue;
+    const rolReal = rolRealPorId.get(idRol);
     if (!rolReal) continue;
     const rolSim = rolSimPorNombre.get(norm(rolReal.nombre));
     if (!rolSim) continue;
@@ -224,6 +269,7 @@ export function comisionistasDisponibles(
       roleId: rolSim.id,
       belongsTo: rolSim.belongsTo,
       participaComision: rolReal.participa_comision,
+      esRolDeProyecto: overridePorPersona.has(persona.id),
     });
   }
   return lista;

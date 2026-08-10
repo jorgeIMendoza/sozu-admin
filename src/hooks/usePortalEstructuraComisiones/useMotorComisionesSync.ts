@@ -221,29 +221,51 @@ export async function deleteReglaComisionRemota(id: string): Promise<SyncResult>
 }
 
 // ================================================================
-// Config del Motor de Comisiones por proyecto — Comisión Total
-// (`comisiones_motor_config`, una fila por `id_proyecto`). Siempre Modo A
-// (sobre venta) — no hay campo `modo` que elegir en el motor real.
+// Comisión total POR CANAL y por proyecto (`comisiones_canal_config`)
+//
+// Sustituye a `comisiones_motor_config`, que el front consultaba pero que
+// nunca existió en la BD: el total se leía como `null`, caía a un default de
+// 6% y ningún cambio se persistía. Ahora cada Canal de Venta define su propio
+// porcentaje sobre el precio de venta final, y puede diferir entre desarrollos.
 // ================================================================
 
-function motorConfigFromRow(row: any): MotorConfig {
-  return {
-    totalCommissionPct: Number(row.comision_total_pct ?? 0),
-  };
-}
-
+/** Devuelve el mapa `channelId -> comisión total %` del proyecto. */
 export async function fetchMotorConfigReal(idProyecto: number): Promise<MotorConfig | null> {
-  const { data, error } = await (supabase as any).from("comisiones_motor_config").select("*").eq("id_proyecto", idProyecto).eq("activo", true).maybeSingle();
+  const { data, error } = await (supabase as any)
+    .from("comisiones_canal_config")
+    .select("id_canal, comision_total_pct")
+    .eq("id_proyecto", idProyecto)
+    .eq("activo", true);
   if (error || !data) return null;
-  return motorConfigFromRow(data);
+  const channelTotals: Record<string, number> = {};
+  for (const row of data as any[]) {
+    channelTotals[String(row.id_canal)] = Number(row.comision_total_pct ?? 0);
+  }
+  return { channelTotals };
 }
 
+/**
+ * Persiste el total de cada canal con un solo upsert.
+ *
+ * `onConflict` apunta a `comisiones_canal_config_proyecto_canal_uq`, que es un
+ * índice único NO parcial justamente para que PostgREST pueda inferirlo.
+ */
 export async function updateMotorConfigRemoto(config: MotorConfig, idProyecto: number): Promise<SyncResult> {
-  const { error } = await (supabase as any).from("comisiones_motor_config").upsert({
+  const filas = Object.entries(config.channelTotals).map(([channelId, pct]) => ({
     id_proyecto: idProyecto,
-    comision_total_pct: config.totalCommissionPct,
+    id_canal: Number(channelId),
+    comision_total_pct: pct,
     activo: true,
     fecha_actualizacion: new Date().toISOString(),
-  }, { onConflict: "id_proyecto" });
-  return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE };
+  }));
+  if (!filas.length) return { ok: true, tableMissing: false };
+
+  const { error } = await (supabase as any)
+    .from("comisiones_canal_config")
+    .upsert(filas, { onConflict: "id_proyecto,id_canal" });
+  return {
+    ok: !error,
+    tableMissing: error?.code === TABLE_MISSING_CODE,
+    columnMissing: isColumnMissing(error),
+  };
 }
