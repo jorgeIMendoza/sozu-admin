@@ -85,7 +85,16 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
                       <tr key={`${rule.channelId}-${rule.roleId}-${i}`}>
                         <td>
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-medium">{role?.name ?? "—"}</span>
+                            {/* Los snapshots previos al modelo por persona no traen
+                                `comisionista`: ahí el rol sigue siendo el encabezado. */}
+                            <span className="text-sm font-medium">
+                              {rule.comisionista ?? role?.name ?? "—"}
+                            </span>
+                            {rule.comisionista && (
+                              <span className="pl-0.5 text-[11px] text-muted-foreground">
+                                {role?.name ?? "Sin rol"}
+                              </span>
+                            )}
                             {assignment && role && (
                               <span className="pl-0.5 text-[11px] text-muted-foreground">
                                 {fmtCurrency(assignment.baseSalary)} / mes · {role.belongsTo === "sozu_central" ? "SOZU" : "Proyecto"}

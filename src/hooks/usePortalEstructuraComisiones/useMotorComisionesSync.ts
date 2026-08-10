@@ -28,12 +28,24 @@ const TABLE_MISSING_CODE = "PGRST205";
 /** Código Postgres de violación de constraint UNIQUE. */
 const DUPLICATE_KEY_CODE = "23505";
 
+/**
+ * La columna existe en el código pero no en la BD: falta ejecutar el DDL.
+ * `42703` lo devuelve Postgres; `PGRST204` lo devuelve PostgREST cuando la
+ * columna tampoco está en su schema cache. Reintentar nunca lo resuelve, así
+ * que se distingue para poder decirlo en el mensaje.
+ */
+const COLUMN_MISSING_CODES = ["42703", "PGRST204"];
+const isColumnMissing = (error?: { code?: string } | null) =>
+  !!error?.code && COLUMN_MISSING_CODES.includes(error.code);
+
 export interface SyncResult {
   ok: boolean;
   /** true cuando el fallo es porque la tabla todavía no existe (DDL pendiente) — no debe mostrarse como error al usuario. */
   tableMissing: boolean;
-  /** true cuando el fallo es porque ya existe una fila con la misma combinación canal×rol×proyecto — error de negocio, no técnico. */
+  /** true cuando el fallo es porque ya existe una fila con la misma combinación canal×persona×proyecto — error de negocio, no técnico. */
   duplicate?: boolean;
+  /** true cuando falta una columna en la BD (DDL pendiente). Reintentar no sirve. */
+  columnMissing?: boolean;
 }
 
 // ================================================================
@@ -126,6 +138,7 @@ function ruleFromRow(row: any): CommissionRule {
     scenarioId: "",
     channelId: String(row.id_canal),
     roleId: row.id_rol,
+    personalId: row.id_personal != null ? String(row.id_personal) : null,
     percentage: Number(row.porcentaje ?? 0),
     pool: row.pool,
   };
@@ -144,6 +157,7 @@ function ruleToRow(rule: CommissionRule, idProyecto: number) {
     id_proyecto: idProyecto,
     id_canal: Number(rule.channelId),
     id_rol: rule.roleId,
+    id_personal: rule.personalId != null ? Number(rule.personalId) : null,
     porcentaje: rule.percentage,
     pool: rule.pool,
     fecha_actualizacion: new Date().toISOString(),
@@ -161,21 +175,26 @@ export async function fetchReglasComisionReales(idProyecto: number): Promise<Com
  * comisiones" y por "Guardar cambios" del Motor de Comisiones).
  *
  * Usa `upsert` (no `insert` puro) sobre la unique key real de la tabla
- * (`id_canal, id_rol, id_proyecto`, ver `comisiones_reglas_canal_rol_proyecto_key`).
+ * (`id_proyecto, id_canal, id_personal`, ver `comisiones_reglas_persona_uq`).
  * Necesario porque el estado local (`commissionRules`) puede quedar
  * momentáneamente desfasado de la BD al cambiar de proyecto (fetch en vuelo)
  * o por dos sesiones sincronizando a la vez — con `insert` puro, intentar
- * crear una fila que ya existe para ese canal×rol×proyecto revienta con
+ * crear una fila que ya existe para esa persona×canal×proyecto revienta con
  * `23505 duplicate key`. Con `upsert` esa misma fila simplemente se
  * actualiza en vez de fallar.
+ *
+ * Antes la unicidad era por rol (`id_canal, id_rol, id_proyecto`), lo que
+ * impedía tener dos personas del mismo rol comisionando en un canal.
  */
-export async function insertReglasComisionRemotas(rules: CommissionRule[], idProyecto: number): Promise<{ rules: CommissionRule[]; tableMissing: boolean }> {
-  if (!rules.length) return { rules: [], tableMissing: false };
+export async function insertReglasComisionRemotas(rules: CommissionRule[], idProyecto: number): Promise<{ rules: CommissionRule[]; tableMissing: boolean; columnMissing: boolean }> {
+  if (!rules.length) return { rules: [], tableMissing: false, columnMissing: false };
   const { data, error } = await (supabase as any).from("comisiones_reglas")
-    .upsert(rules.map((r) => ruleToRow(r, idProyecto)), { onConflict: "id_canal,id_rol,id_proyecto" })
+    .upsert(rules.map((r) => ruleToRow(r, idProyecto)), { onConflict: "id_proyecto,id_canal,id_personal" })
     .select();
-  if (error) return { rules: [], tableMissing: error.code === TABLE_MISSING_CODE };
-  return { rules: (data as any[]).map(ruleFromRow), tableMissing: false };
+  if (error) {
+    return { rules: [], tableMissing: error.code === TABLE_MISSING_CODE, columnMissing: isColumnMissing(error) };
+  }
+  return { rules: (data as any[]).map(ruleFromRow), tableMissing: false, columnMissing: false };
 }
 
 /** Update/delete operan por `id` (PK única global) — no necesitan el proyecto. */
@@ -183,11 +202,17 @@ export async function updateReglaComisionRemota(rule: CommissionRule): Promise<S
   const { error } = await (supabase as any).from("comisiones_reglas").update({
     id_canal: Number(rule.channelId),
     id_rol: rule.roleId,
+    id_personal: rule.personalId != null ? Number(rule.personalId) : null,
     porcentaje: rule.percentage,
     pool: rule.pool,
     fecha_actualizacion: new Date().toISOString(),
   }).eq("id", Number(rule.id));
-  return { ok: !error, tableMissing: error?.code === TABLE_MISSING_CODE, duplicate: error?.code === DUPLICATE_KEY_CODE };
+  return {
+    ok: !error,
+    tableMissing: error?.code === TABLE_MISSING_CODE,
+    duplicate: error?.code === DUPLICATE_KEY_CODE,
+    columnMissing: isColumnMissing(error),
+  };
 }
 
 export async function deleteReglaComisionRemota(id: string): Promise<SyncResult> {

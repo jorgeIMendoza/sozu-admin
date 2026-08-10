@@ -22,13 +22,14 @@ import type { Project, Role, RoleAssignment } from "@/lib/portal-estructura-comi
 export interface EstructuraRealRaw {
   personal: Array<{
     id: number;
+    nombre: string;
     id_rol: number | null;
     costo_nominal: number;
     costo_externo: number;
     costo_social: number;
   }>;
   asignaciones: Array<{ id_personal: number; id_proyecto: number; asignacion_pct: number }>;
-  rolesReales: Array<{ id: number; nombre: string }>;
+  rolesReales: Array<{ id: number; nombre: string; participa_comision: boolean }>;
   proyectosReales: Array<{ id: number; nombre: string }>;
 }
 
@@ -44,8 +45,9 @@ export function useEstructuraRealRaw() {
     queryFn: async () => {
       const { data: personal, error } = await (supabase as any)
         .from("personal_organizacional")
-        .select("id, id_rol, costo_nominal, costo_externo, costo_social")
-        .eq("activo", true);
+        .select("id, nombre, id_rol, costo_nominal, costo_externo, costo_social")
+        .eq("activo", true)
+        .order("nombre");
       // Tabla inexistente (DDL pendiente) o sin personal: el simulador sigue con lo suyo.
       if (error || !personal?.length) return null;
 
@@ -57,7 +59,7 @@ export function useEstructuraRealRaw() {
 
       const { data: rolesReales } = await (supabase as any)
         .from("roles_organizacionales")
-        .select("id, nombre");
+        .select("id, nombre, participa_comision");
 
       const idsProyecto = Array.from(
         new Set(((asignaciones ?? []) as Array<{ id_proyecto: number }>).map(a => a.id_proyecto)),
@@ -181,4 +183,48 @@ export function derivarEstructura(
     proyectosNoMapeados: Array.from(proyectosNoMapeados),
     rolesNoMapeados: Array.from(rolesNoMapeados),
   };
+}
+
+/** Persona elegible como comisionista, con su rol resuelto al catálogo del simulador. */
+export interface ComisionistaReal {
+  personalId: string;
+  nombre: string;
+  rolNombre: string;
+  roleId: string;
+  belongsTo: "sozu_central" | "project";
+  participaComision: boolean;
+}
+
+/**
+ * Personal activo que puede darse de alta como comisionista en un canal.
+ *
+ * Solo entra quien tiene rol vinculado y ese rol existe en el catálogo del
+ * simulador: la regla de comisión guarda `id_rol` (texto) porque el motor
+ * agrupa los pagos por rol, así que sin equivalencia no hay dónde imputarla.
+ */
+export function comisionistasDisponibles(
+  raw: EstructuraRealRaw | null | undefined,
+  rolesSimulador: Role[],
+): ComisionistaReal[] {
+  if (!raw) return [];
+  const rolSimPorNombre = new Map(rolesSimulador.map(r => [norm(r.name), r]));
+  const rolRealPorId = new Map(raw.rolesReales.map(r => [r.id, r]));
+
+  const lista: ComisionistaReal[] = [];
+  for (const persona of raw.personal) {
+    if (persona.id_rol === null) continue;
+    const rolReal = rolRealPorId.get(persona.id_rol);
+    if (!rolReal) continue;
+    const rolSim = rolSimPorNombre.get(norm(rolReal.nombre));
+    if (!rolSim) continue;
+    lista.push({
+      personalId: String(persona.id),
+      nombre: persona.nombre,
+      rolNombre: rolReal.nombre,
+      roleId: rolSim.id,
+      belongsTo: rolSim.belongsTo,
+      participaComision: rolReal.participa_comision,
+    });
+  }
+  return lista;
 }

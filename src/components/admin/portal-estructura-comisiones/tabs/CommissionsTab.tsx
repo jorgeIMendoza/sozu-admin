@@ -11,6 +11,9 @@ import { toast } from 'sonner';
 import SyncCommissionsDialog from '../shared/SyncCommissionsDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProyectosMotorComisiones } from '@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones';
+import {
+  useEstructuraRealRaw, comisionistasDisponibles, type ComisionistaReal,
+} from '@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador';
 import { useEnviarPropuesta, type MotorSnapshot } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
 
 interface SyncHistoryEntry {
@@ -33,6 +36,8 @@ export default function CommissionsTab() {
     commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
   } = useSimulator();
   const [syncOpen, setSyncOpen] = useState(false);
+  /** Canal para el que está abierto el selector de "Agregar comisionista". */
+  const [altaCanal, setAltaCanal] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SyncHistoryEntry[]>(loadHistory);
 
@@ -44,7 +49,22 @@ export default function CommissionsTab() {
   const enviarPropuesta = useEnviarPropuesta();
   const [validarOpen, setValidarOpen] = useState(false);
 
-  const commRoles = roles.filter(r => r.participatesInCommission);
+  // Comisionistas elegibles: personal activo de "Roles y Sueldos" cuyo rol existe
+  // en el catálogo del simulador. La regla guarda el rol porque el motor agrupa
+  // los pagos por rol, pero quien se da de alta es la persona.
+  const { data: estructuraRaw } = useEstructuraRealRaw();
+  const comisionistas = useMemo(
+    () => comisionistasDisponibles(estructuraRaw, roles),
+    [estructuraRaw, roles],
+  );
+  const comisionistasComision = useMemo(
+    () => comisionistas.filter(c => c.participaComision),
+    [comisionistas],
+  );
+  const comisionistaPorId = useMemo(
+    () => new Map(comisionistas.map(c => [c.personalId, c])),
+    [comisionistas],
+  );
 
   // La matriz canal×puesto es del proyecto seleccionado — se sincroniza cada
   // vez que cambia el proyecto. Espera a que `motorLoading` termine: si esto
@@ -52,9 +72,9 @@ export default function CommissionsTab() {
   // en vuelo, calcularía "faltantes" contra datos todavía del proyecto
   // anterior (o vacíos) y agregaría filas duplicadas.
   useEffect(() => {
-    if (motorProjectId != null && !motorLoading) syncMissingCommissionRules();
+    if (motorProjectId != null && !motorLoading) syncMissingCommissionRules(comisionistasComision);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [motorProjectId, motorLoading]);
+  }, [motorProjectId, motorLoading, comisionistasComision]);
 
   // Ya no autoguarda: avisa antes de cerrar/recargar si hay cambios sin guardar.
   useEffect(() => {
@@ -67,15 +87,15 @@ export default function CommissionsTab() {
   const rolesToAdd = useMemo(() => {
     let n = 0;
     channels.forEach(ch => {
-      commRoles.forEach(role => {
-        if (!commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id)) n++;
+      comisionistasComision.forEach(c => {
+        if (!commissionRules.some(r => r.channelId === ch.id && r.personalId === c.personalId)) n++;
       });
     });
     return n;
-  }, [commissionRules, channels, commRoles]);
+  }, [commissionRules, channels, comisionistasComision]);
 
   const handleConfirmSync = async () => {
-    const added = await syncMissingCommissionRules();
+    const added = await syncMissingCommissionRules(comisionistasComision);
 
     const entry: SyncHistoryEntry = {
       id: crypto.randomUUID(),
@@ -87,7 +107,7 @@ export default function CommissionsTab() {
     setHistory(next);
     saveHistory(next);
 
-    toast.success('Roles agregados. Presiona "Guardar cambios" para persistirlos.');
+    toast.success('Comisionistas agregados. Presiona "Guardar cambios" para persistirlos.');
     setSyncOpen(false);
   };
 
@@ -96,7 +116,13 @@ export default function CommissionsTab() {
     channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
     roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
-    commissionRules: commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
+    commissionRules: commissionRules.map((r) => ({
+      channelId: r.channelId,
+      roleId: r.roleId,
+      percentage: r.percentage,
+      pool: r.pool,
+      comisionista: r.personalId ? comisionistaPorId.get(r.personalId)?.nombre ?? null : null,
+    })),
   });
 
   const handleEnviarValidar = async () => {
@@ -122,16 +148,28 @@ export default function CommissionsTab() {
     return { role, assignment };
   };
 
-  const addRule = (channelId: string) => {
-    if (roles.length === 0) return;
-    // Find a role not yet in this channel
-    const channelRules = commissionRules.filter(r => r.channelId === channelId);
-    const unusedRole = roles.find(r => !channelRules.some(cr => cr.roleId === r.id));
-    if (!unusedRole) {
-      toast.info('Todos los roles ya están agregados a este canal.');
+  /** Alta de comisionista: se elige la persona en un selector, no se asume. */
+  const altaComisionista = (channelId: string, persona: ComisionistaReal) => {
+    addCommissionRule(
+      channelId,
+      persona.roleId,
+      persona.belongsTo === 'sozu_central' ? 'sozu' : 'project',
+      persona.personalId,
+    );
+    toast.success(`${persona.nombre} agregado como comisionista.`);
+  };
+
+  /** Cambiar el comisionista de un renglón arrastra su rol: el rol no se teclea. */
+  const cambiarComisionista = (ruleId: string, personalId: string) => {
+    const persona = comisionistaPorId.get(personalId);
+    if (!persona) return;
+    const rule = commissionRules.find(r => r.id === ruleId);
+    if (!rule) return;
+    if (commissionRules.some(r => r.id !== ruleId && r.channelId === rule.channelId && r.personalId === personalId)) {
+      toast.error(`${persona.nombre} ya está dado de alta como comisionista en este canal.`);
       return;
     }
-    addCommissionRule(channelId, unusedRole.id, 'project');
+    updateCommissionRule({ ...rule, personalId, roleId: persona.roleId });
   };
 
   const updateRule = (ruleId: string, updates: Partial<typeof commissionRules[0]>) => {
@@ -154,11 +192,11 @@ export default function CommissionsTab() {
         <div>
           <h2 className="text-xl font-bold">Motor de Comisiones</h2>
           <p className="text-sm text-muted-foreground">
-            Configura cómo se distribuye la comisión por canal y rol
+            Da de alta a los comisionistas de cada canal y su % sobre el precio de venta final
             <Tooltip>
               <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
               <TooltipContent className="max-w-sm text-xs">
-                El % de cada rol se aplica sobre el valor de venta del canal (Modo A: sobre venta). La suma de los roles + la comisión externa debe ser igual a la Comisión Total.
+                El % de cada comisionista se aplica sobre el precio de venta final de la unidad. La suma de los comisionistas + la comisión externa debe ser igual a la Comisión Total.
               </TooltipContent>
             </Tooltip>
           </p>
@@ -185,11 +223,11 @@ export default function CommissionsTab() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} className="gap-1.5">
-                    <RefreshCw className="h-3.5 w-3.5" /> Sincronizar roles y comisiones
+                    <RefreshCw className="h-3.5 w-3.5" /> Sincronizar comisionistas
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs text-xs">
-                  Agrega al motor los roles nuevos que falten desde Roles y Sueldos.
+                  Da de alta en cada canal al personal de Roles y Sueldos cuyo rol participa en comisión y aún no esté.
                 </TooltipContent>
               </Tooltip>
               <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
@@ -265,7 +303,13 @@ export default function CommissionsTab() {
       <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground flex items-start gap-2">
         <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
         <span>
-          Los roles se cargan automáticamente desde la sección <strong>Roles y Sueldos</strong>. Puedes eliminarlos o modificar su comisión.
+          Los comisionistas son el personal dado de alta en <strong>Roles y Sueldos</strong>; su rol se muestra
+          y no se teclea aquí. Puedes darlos de alta, de baja o modificar su porcentaje por canal.
+          {comisionistas.length === 0 && (
+            <span className="text-amber-600">
+              {' '}Todavía no hay personal con rol vinculado, así que no hay a quién dar de alta.
+            </span>
+          )}
         </span>
       </div>
 
@@ -313,53 +357,82 @@ export default function CommissionsTab() {
                   {statusIcon}
                   {statusText}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => addRule(ch.id)}>
-                  <Plus className="h-3 w-3 mr-1" /> Agregar Rol
+                <Button variant="outline" size="sm" onClick={() => setAltaCanal(ch.id)}>
+                  <Plus className="h-3 w-3 mr-1" /> Agregar comisionista
                 </Button>
               </div>
             </div>
 
             {channelRules.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">Sin reglas de comisión definidas</p>
+              <p className="text-sm text-muted-foreground italic">Sin comisionistas dados de alta en este canal</p>
             ) : (
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th>Comisionista</th>
                     <th>Rol</th>
                     <th>
-                      % sobre Comisión a Dispersar
+                      % sobre precio de venta final
                       <Tooltip>
                         <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
                         <TooltipContent className="max-w-xs text-xs">
-                          % del rol respecto a la Comisión a Dispersar del canal (Interna esperada: {comisionInterna.toFixed(2)}%). El % sobre venta se calcula solo.
+                          Porcentaje de comisión a dispersar a esta persona, calculado sobre el precio de venta final de la unidad.
                         </TooltipContent>
                       </Tooltip>
                     </th>
-                    <th>% sobre venta</th>
+                    <th>
+                      % de la comisión a dispersar
+                      <Tooltip>
+                        <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          Qué parte de la Comisión a Dispersar del canal ({comisionInterna.toFixed(2)}%) se lleva esta persona. Se calcula solo.
+                        </TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th>Pool</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {channelRules.map(rule => {
-                    const { role, assignment } = getRoleInfo(rule.roleId);
+                    const { role } = getRoleInfo(rule.roleId);
+                    const persona = rule.personalId ? comisionistaPorId.get(rule.personalId) : undefined;
                     const sharePct = comisionInterna > 0 ? (rule.percentage / comisionInterna) * 100 : 0;
+                    // Personas ya dadas de alta en este canal: no se ofrecen de nuevo.
+                    const yaEnCanal = new Set(
+                      channelRules.filter(r => r.id !== rule.id).map(r => r.personalId).filter(Boolean) as string[],
+                    );
                     return (
                       <tr key={rule.id}>
                         <td>
                           <div className="flex flex-col gap-0.5">
                             <select
-                              value={rule.roleId}
-                              onChange={e => updateRule(rule.id, { roleId: e.target.value })}
-                              className="rounded border bg-transparent px-2 py-1 text-sm font-medium"
+                              value={rule.personalId ?? ''}
+                              onChange={e => cambiarComisionista(rule.id, e.target.value)}
+                              className={`rounded border bg-transparent px-2 py-1 text-sm font-medium ${rule.personalId ? '' : 'border-amber-500 text-amber-600'}`}
                             >
-                              {roles.filter(r => r.participatesInCommission || r.id === rule.roleId).map(r => (
-                                <option key={r.id} value={r.id}>{r.name}</option>
-                              ))}
+                              {!rule.personalId && <option value="">Sin comisionista asignado</option>}
+                              {comisionistas
+                                .filter(c => !yaEnCanal.has(c.personalId))
+                                .map(c => (
+                                  <option key={c.personalId} value={c.personalId}>
+                                    {c.nombre} — {c.rolNombre}
+                                  </option>
+                                ))}
                             </select>
-                            {assignment && role && (
-                              <span className="text-[11px] text-muted-foreground pl-2">
-                                {formatCurrency(assignment.baseSalary)} / mes · {role.belongsTo === 'sozu_central' ? 'SOZU' : 'Proyecto'}
+                            {!rule.personalId && (
+                              <span className="text-[11px] text-amber-600 pl-2">
+                                Regla heredada por rol — asigna una persona o elimínala
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm">{persona?.rolNombre ?? role?.name ?? '—'}</span>
+                            {role && (
+                              <span className="text-[11px] text-muted-foreground">
+                                {role.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
                               </span>
                             )}
                           </div>
@@ -368,13 +441,10 @@ export default function CommissionsTab() {
                           <Input
                             type="number"
                             step="0.01"
-                            className="w-24 h-8 text-sm font-mono"
-                            value={Number.isFinite(sharePct) ? +sharePct.toFixed(4) : 0}
-                            onChange={e => {
-                              const newShare = +e.target.value;
-                              const newPercentage = comisionInterna > 0 ? (newShare / 100) * comisionInterna : 0;
-                              updateRule(rule.id, { percentage: newPercentage });
-                            }}
+                            min="0"
+                            className="w-28 h-8 text-sm font-mono"
+                            value={rule.percentage}
+                            onChange={e => updateRule(rule.id, { percentage: Math.max(0, +e.target.value) })}
                           />
                         </td>
                         <td>
@@ -382,9 +452,9 @@ export default function CommissionsTab() {
                             type="number"
                             step="0.01"
                             className="w-24 h-8 text-sm font-mono"
-                            value={rule.percentage}
+                            value={Number.isFinite(sharePct) ? +sharePct.toFixed(2) : 0}
                             disabled
-                            onChange={e => updateRule(rule.id, { percentage: +e.target.value })}
+                            readOnly
                           />
                         </td>
                         <td>
@@ -441,7 +511,7 @@ export default function CommissionsTab() {
                     <Tooltip>
                       <TooltipTrigger><Info className="h-3 w-3 opacity-50" /></TooltipTrigger>
                       <TooltipContent className="max-w-xs text-xs">
-                        El remanente es la comisión interna disponible aún no asignada a roles. Se calcula como la comisión total menos la comisión externa del canal y menos la suma de los porcentajes capturados.
+                        El remanente es la comisión interna disponible aún no asignada a comisionistas. Se calcula como la comisión total menos la comisión externa del canal y menos la suma de los porcentajes capturados.
                       </TooltipContent>
                     </Tooltip>
                   </p>
@@ -470,7 +540,7 @@ export default function CommissionsTab() {
                     <span className="text-muted-foreground">{new Date(h.date).toLocaleString('es-MX')} · {h.user}</span>
                   </div>
                   <div className="text-muted-foreground">
-                    Roles agregados: <strong>{h.rolesAdded}</strong>
+                    Comisionistas agregados: <strong>{h.rolesAdded}</strong>
                   </div>
                 </div>
               ))}
@@ -478,6 +548,19 @@ export default function CommissionsTab() {
           )}
         </div>
       )}
+
+      <AltaComisionistaDialog
+        canal={channels.find(c => c.id === altaCanal) ?? null}
+        comisionistas={comisionistas}
+        yaEnCanal={new Set(
+          commissionRules.filter(r => r.channelId === altaCanal).map(r => r.personalId).filter(Boolean) as string[],
+        )}
+        onClose={() => setAltaCanal(null)}
+        onAgregar={(persona) => {
+          if (!altaCanal) return;
+          altaComisionista(altaCanal, persona);
+        }}
+      />
 
       <SyncCommissionsDialog
         open={syncOpen}
@@ -508,5 +591,100 @@ export default function CommissionsTab() {
       </>
       )}
     </div>
+  );
+}
+
+/**
+ * Selector de alta: muestra el personal dado de alta en "Roles y Sueldos" con su
+ * rol, en vez de asumir a quién agregar. Quien ya comisiona en el canal aparece
+ * marcado y deshabilitado, para que se vea por qué no está disponible.
+ */
+function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAgregar }: {
+  canal: { id: string; name: string } | null;
+  comisionistas: ComisionistaReal[];
+  yaEnCanal: Set<string>;
+  onClose: () => void;
+  onAgregar: (persona: ComisionistaReal) => void;
+}) {
+  const [busqueda, setBusqueda] = useState('');
+
+  const filtrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return comisionistas;
+    return comisionistas.filter(c => `${c.nombre} ${c.rolNombre}`.toLowerCase().includes(q));
+  }, [comisionistas, busqueda]);
+
+  const disponibles = filtrados.filter(c => !yaEnCanal.has(c.personalId)).length;
+
+  return (
+    <Dialog open={canal !== null} onOpenChange={(open) => { if (!open) { setBusqueda(''); onClose(); } }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Agregar comisionista</DialogTitle>
+          <DialogDescription>
+            Personal de la organización dado de alta en <strong>Roles y Sueldos</strong>.
+            Se agregará al canal <strong>{canal?.name}</strong> con 0% para que captures su porcentaje.
+          </DialogDescription>
+        </DialogHeader>
+
+        {comisionistas.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic py-4">
+            No hay personal con rol vinculado. Da de alta personal y asígnale un rol en Roles y Sueldos.
+          </p>
+        ) : (
+          <>
+            <Input
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre o rol..."
+              className="h-9 text-sm"
+            />
+            <div className="max-h-80 overflow-y-auto -mx-1 px-1 space-y-1">
+              {filtrados.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic py-4">Ningún resultado para la búsqueda.</p>
+              ) : filtrados.map(persona => {
+                const yaEsta = yaEnCanal.has(persona.personalId);
+                return (
+                  <button
+                    key={persona.personalId}
+                    disabled={yaEsta}
+                    onClick={() => { onAgregar(persona); setBusqueda(''); onClose(); }}
+                    className={`w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
+                      yaEsta ? 'opacity-55 cursor-not-allowed bg-muted/40' : 'hover:bg-muted'
+                    }`}
+                  >
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium truncate">{persona.nombre}</span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {persona.rolNombre} · {persona.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!persona.participaComision && (
+                        <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">
+                          Rol sin comisión
+                        </Badge>
+                      )}
+                      {yaEsta
+                        ? <Badge variant="secondary" className="text-[10px]">Ya en el canal</Badge>
+                        : <Plus className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {disponibles === 0
+                ? 'Todo el personal listado ya comisiona en este canal.'
+                : `${disponibles} persona(s) disponible(s) para agregar.`}
+            </p>
+          </>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => { setBusqueda(''); onClose(); }}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

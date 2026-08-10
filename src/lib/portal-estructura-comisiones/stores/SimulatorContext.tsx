@@ -54,11 +54,15 @@ interface SimulatorContextType extends AppState {
    * Estas 3 acciones son 100% locales — no tocan el servidor. Los cambios se
    * acumulan en memoria hasta llamar `saveMotorComisiones`.
    */
-  addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project') => void;
+  addCommissionRule: (channelId: string, roleId: string, pool: 'sozu' | 'project', personalId: string | null) => void;
   updateCommissionRule: (rule: CommissionRule) => void;
   deleteCommissionRule: (id: string) => void;
-  /** Agrega localmente las combinaciones canal×puesto que falten para los roles que participan en comisión. No persiste — requiere `saveMotorComisiones`. */
-  syncMissingCommissionRules: () => number;
+  /**
+   * Agrega localmente los comisionistas que falten: cada persona activa cuyo rol
+   * participa en comisión, en cada canal donde aún no esté. No persiste —
+   * requiere `saveMotorComisiones`.
+   */
+  syncMissingCommissionRules: (comisionistas: ComisionistaDisponible[]) => number;
   /** Config real del Motor de Comisiones (Modo A/B + Comisión Total) del proyecto seleccionado. Local únicamente. */
   updateMotorConfig: (config: MotorConfig) => void;
   /** Persiste en el servidor todos los cambios locales acumulados (reglas agregadas/editadas/eliminadas + Comisión Total) para el proyecto seleccionado. */
@@ -69,6 +73,17 @@ interface SimulatorContextType extends AppState {
    * estructura sigue siendo la local del simulador.
    */
   estructuraReal: EstructuraDerivada | null;
+}
+
+/**
+ * Persona elegible como comisionista: su rol ya resuelto al catálogo del
+ * simulador (`roleId`), para que la regla siga agrupando pagos por rol.
+ */
+export interface ComisionistaDisponible {
+  personalId: string;
+  nombre: string;
+  roleId: string;
+  belongsTo: 'sozu_central' | 'project';
 }
 
 const SimulatorContext = createContext<SimulatorContextType | null>(null);
@@ -301,9 +316,11 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     // un request). Solo marcan `motorDirty` y acumulan el cambio en memoria;
     // `saveMotorComisiones` es quien persiste todo junto cuando el usuario
     // presiona "Guardar cambios".
-    addCommissionRule: (channelId, roleId, pool) => {
+    addCommissionRule: (channelId, roleId, pool, personalId) => {
       if (motorProjectId == null) return;
-      const draft: CommissionRule = { id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId, roleId, percentage: 0, pool };
+      const draft: CommissionRule = {
+        id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId, roleId, personalId, percentage: 0, pool,
+      };
       update(s => ({ ...s, commissionRules: [...s.commissionRules, draft] }));
       setMotorDirty(true);
     },
@@ -325,17 +342,19 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     // proyecto nuevo, y el INSERT completo fallaba con `23505 duplicate key`.
     // Al ser ahora 100% local, ese fetch en vuelo ya no puede reventar nada;
     // el usuario guarda con el botón cuando quiere persistir.
-    syncMissingCommissionRules: () => {
+    syncMissingCommissionRules: (comisionistas) => {
       if (motorProjectId == null) return 0;
-      const commRoles = state.roles.filter(r => r.participatesInCommission);
       const missing: CommissionRule[] = [];
       state.channels.forEach(ch => {
-        commRoles.forEach(role => {
-          const exists = state.commissionRules.some(r => r.channelId === ch.id && r.roleId === role.id);
+        comisionistas.forEach(c => {
+          const exists = state.commissionRules.some(
+            r => r.channelId === ch.id && r.personalId === c.personalId,
+          );
           if (!exists) {
             missing.push({
-              id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId: ch.id, roleId: role.id, percentage: 0,
-              pool: role.belongsTo === 'sozu_central' ? 'sozu' : 'project',
+              id: `local-${crypto.randomUUID()}`, scenarioId: '', channelId: ch.id,
+              roleId: c.roleId, personalId: c.personalId, percentage: 0,
+              pool: c.belongsTo === 'sozu_central' ? 'sozu' : 'project',
             });
           }
         });
@@ -358,6 +377,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
         const toUpdate = state.commissionRules.filter(r => !r.id.startsWith('local-'));
         let hadError = false;
         let hadDuplicate = false;
+        let hadColumnMissing = false;
 
         const [deleteResults, updateResults, insertResult, motorConfigResult] = await Promise.all([
           Promise.all(pendingDeletes.map(id => deleteReglaComisionRemota(id))),
@@ -367,18 +387,32 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
         ]);
 
         deleteResults.forEach(({ ok, tableMissing }) => { if (!ok && !tableMissing) hadError = true; });
-        updateResults.forEach(({ ok, tableMissing, duplicate }) => {
-          if (!ok && !tableMissing) { hadError = true; if (duplicate) hadDuplicate = true; }
+        updateResults.forEach(({ ok, tableMissing, duplicate, columnMissing }) => {
+          if (!ok && !tableMissing) {
+            hadError = true;
+            if (duplicate) hadDuplicate = true;
+            if (columnMissing) hadColumnMissing = true;
+          }
         });
         if (toInsert.length > 0 && insertResult.rules.length !== toInsert.length && !insertResult.tableMissing) {
           hadError = true;
+          if (insertResult.columnMissing) hadColumnMissing = true;
         }
         if (!motorConfigResult.ok && !motorConfigResult.tableMissing) hadError = true;
 
         if (hadError) {
+          // Falta el DDL: reintentar no sirve, hay que decir qué ejecutar.
+          if (hadColumnMissing) {
+            toast.error(
+              'La base de datos aún no tiene la columna de comisionistas (id_personal). ' +
+              'Ejecuta el DDL "Comisionistas por canal" en Ejecuciones_manuales antes de guardar.',
+              { duration: 10000 },
+            );
+            return false;
+          }
           toast.error(
             hadDuplicate
-              ? 'No se pudo guardar: dos reglas quedaron con el mismo rol para el mismo canal. Ajusta el rol duplicado e inténtalo de nuevo.'
+              ? 'No se pudo guardar: esa persona ya está dada de alta como comisionista en el mismo canal. Quita el duplicado e inténtalo de nuevo.'
               : 'No se pudieron guardar todos los cambios del Motor de Comisiones. Intenta de nuevo.'
           );
           return false;
@@ -390,7 +424,9 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
             ...s,
             commissionRules: s.commissionRules.map(r => {
               if (!r.id.startsWith('local-')) return r;
-              const created = insertResult.rules.find(c => c.channelId === r.channelId && c.roleId === r.roleId);
+              const created = insertResult.rules.find(
+                c => c.channelId === r.channelId && c.personalId === r.personalId && c.roleId === r.roleId,
+              );
               return created ?? r;
             }),
           }));

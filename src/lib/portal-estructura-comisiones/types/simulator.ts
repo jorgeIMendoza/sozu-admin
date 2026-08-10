@@ -102,7 +102,17 @@ export interface CommissionRule {
   id: string;
   scenarioId: string;
   channelId: string;
+  /**
+   * Rol del comisionista. Se deriva del rol de la persona; se conserva porque
+   * el motor de cálculo agrupa los pagos por rol.
+   */
   roleId: string;
+  /**
+   * Comisionista: persona de `personal_organizacional` que cobra en este canal.
+   * `null` = fila heredada del modelo por rol, sin persona asignada todavía.
+   */
+  personalId: string | null;
+  /** % de comisión a dispersar al comisionista sobre el precio de venta final. */
   percentage: number;
   pool: 'sozu' | 'project';
 }
