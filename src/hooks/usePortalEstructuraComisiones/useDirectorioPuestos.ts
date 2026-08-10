@@ -66,11 +66,33 @@ export interface AsignacionProyecto {
   id: number;
   id_personal: number;
   id_proyecto: number;
+  /**
+   * Rol que la persona asume **en este proyecto**. `null` = asume su rol base
+   * (`PersonalOrganizacional.id_rol`). Permite roles distintos por desarrollo.
+   */
+  id_rol: number | null;
   asignacion_pct: number;
   fecha_inicio: string | null;
   fecha_fin: string | null;
   activo: boolean;
 }
+
+/**
+ * Regla de resolución del rol, única en todo el sistema: manda el rol del
+ * proyecto y, si no hay, el rol base de la persona.
+ */
+export function rolEfectivo(
+  persona: Pick<PersonalOrganizacional, "id_rol">,
+  asignacion?: Pick<AsignacionProyecto, "id_rol"> | null,
+): number | null {
+  return asignacion?.id_rol ?? persona.id_rol;
+}
+
+/**
+ * La columna existe en el código pero no en la BD: falta ejecutar el DDL.
+ * `42703` lo devuelve Postgres; `PGRST204`, PostgREST desde su schema cache.
+ */
+const COLUMN_MISSING_CODES = ["42703", "PGRST204"];
 
 const ROLES_KEY = "roles-organizacionales";
 const PERSONAL_KEY = "personal-organizacional";
@@ -83,7 +105,7 @@ const PERSONAL_COLS =
   "fecha_baja, motivo_baja, activo";
 
 const ASIGNACION_COLS =
-  "id, id_personal, id_proyecto, asignacion_pct, fecha_inicio, fecha_fin, activo";
+  "id, id_personal, id_proyecto, id_rol, asignacion_pct, fecha_inicio, fecha_fin, activo";
 
 /**
  * Costo real total de la persona para la empresa.
@@ -184,16 +206,32 @@ export function useDesactivarRolOrganizacional() {
   return useMutation({
     mutationFn: async (id: number) => {
       // Un rol en uso no puede darse de baja: primero se reasigna al personal.
-      // Si la tabla aún no existe (DDL pendiente) no hay personal que proteger.
-      const { count, error: countError } = await (supabase as any)
-        .from("personal_organizacional")
-        .select("id", { count: "exact", head: true })
-        .eq("id_rol", id)
-        .eq("activo", true);
-      if (!countError && (count ?? 0) > 0) {
-        throw new Error(
-          `El rol está asignado a ${count} persona(s) activa(s). Reasígnalas antes de darlo de baja.`,
-        );
+      // Hay que mirar las DOS formas de uso — si solo se contara el rol base,
+      // un rol usado únicamente como override por proyecto podría darse de baja
+      // y dejar vinculaciones apuntando a un rol inactivo.
+      // Si las tablas aún no existen (DDL pendiente) no hay nada que proteger.
+      const [base, override] = await Promise.all([
+        (supabase as any)
+          .from("personal_organizacional")
+          .select("id", { count: "exact", head: true })
+          .eq("id_rol", id)
+          .eq("activo", true),
+        (supabase as any)
+          .from("personal_proyectos")
+          .select("id", { count: "exact", head: true })
+          .eq("id_rol", id)
+          .eq("activo", true),
+      ]);
+
+      const usosBase = base.error ? 0 : base.count ?? 0;
+      const usosOverride = override.error ? 0 : override.count ?? 0;
+
+      if (usosBase > 0 || usosOverride > 0) {
+        const partes = [
+          usosBase > 0 ? `${usosBase} persona(s) con este rol base` : null,
+          usosOverride > 0 ? `${usosOverride} asignación(es) a proyecto con este rol` : null,
+        ].filter(Boolean).join(' y ');
+        throw new Error(`El rol está en uso: ${partes}. Reasígnalos antes de darlo de baja.`);
       }
       const { error } = await (supabase as any)
         .from("roles_organizacionales")
@@ -354,8 +392,16 @@ export function useAsignacionesProyecto() {
         .from("personal_proyectos")
         .select(ASIGNACION_COLS)
         .eq("activo", true);
-      if (error || !data) return [];
-      return data as AsignacionProyecto[];
+      if (!error && data) return data as AsignacionProyecto[];
+
+      // Sin la columna `id_rol` (DDL del rol por proyecto pendiente) se relee
+      // sin ella: todos resuelven a su rol base, como antes.
+      const fallback = await (supabase as any)
+        .from("personal_proyectos")
+        .select("id, id_personal, id_proyecto, asignacion_pct, fecha_inicio, fecha_fin, activo")
+        .eq("activo", true);
+      if (fallback.error || !fallback.data) return [];
+      return (fallback.data as Omit<AsignacionProyecto, "id_rol">[]).map(a => ({ ...a, id_rol: null }));
     },
   });
 }
@@ -413,12 +459,20 @@ export function useDesvincularProyecto() {
 export function useActualizarAsignacion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, asignacion_pct }: { id: number; asignacion_pct: number }) => {
+    mutationFn: async ({ id, ...campos }: { id: number; asignacion_pct?: number; id_rol?: number | null }) => {
       const { error } = await (supabase as any)
         .from("personal_proyectos")
-        .update({ asignacion_pct })
+        .update(campos)
         .eq("id", id);
-      if (error) throw error;
+      if (error) {
+        if (COLUMN_MISSING_CODES.includes(error.code)) {
+          throw new Error(
+            'La base de datos aún no tiene la columna de rol por proyecto. ' +
+            'Ejecuta el DDL "Rol distinto por proyecto" en Ejecuciones_manuales.',
+          );
+        }
+        throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: [ASIGNACIONES_KEY] }),
   });

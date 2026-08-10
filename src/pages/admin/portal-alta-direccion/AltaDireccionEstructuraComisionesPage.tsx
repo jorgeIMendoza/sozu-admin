@@ -70,11 +70,22 @@ function MotorConsulta() {
   const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
 
   const snapshot: MotorSnapshot = {
-    totalCommissionPct: motorConfig.totalCommissionPct,
-    channels: channels.map((c) => ({ id: c.id, name: c.name, externalCommissionPct: c.externalCommissionPct, active: c.active })),
+    // La comisión total viaja por canal: cada Canal de Venta define la suya.
+    channels: channels.map((c) => ({
+      id: c.id,
+      name: c.name,
+      externalCommissionPct: c.externalCommissionPct,
+      active: c.active,
+      totalCommissionPct: motorConfig.channelTotals[c.id] ?? 0,
+    })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
     roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
-    commissionRules: commissionRules.map((r) => ({ channelId: r.channelId, roleId: r.roleId, percentage: r.percentage, pool: r.pool })),
+    commissionRules: commissionRules.map((r) => ({
+      channelId: r.channelId,
+      roleId: r.roleId,
+      percentage: r.percentage,
+      pool: r.pool,
+    })),
   };
 
   return (
