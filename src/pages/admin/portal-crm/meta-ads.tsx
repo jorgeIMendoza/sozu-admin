@@ -25,6 +25,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { CrmMetaAds } from "./marketing";
+import { type MetaCampaign } from "@/lib/meta-ads-client";
 
 const LIFECYCLE_ORDER = ["lead", "mql", "sql", "opportunity", "customer", "evangelist"];
 
@@ -194,53 +195,192 @@ function EventosPanel() {
 }
 
 // ============================================================
-// Panel: Atribución / embudo (real desde crm_leads_atribucion)
+// Panel: Atribución / embudo + ROI
+// Cruza el GASTO real de Meta (Edge Function meta-ads-insights) con los
+// LEADS que ya entraron al CRM (crm_leads_atribucion), por campaña.
 // ============================================================
+type InsightsResp = {
+  configured: boolean;
+  campaigns: MetaCampaign[];
+  account: { name: string; currency: string; id: string } | null;
+  error?: string;
+};
+type CrmAtrRow = { meta_campaign_id: string | null; etapa_ciclo_vida: string };
+
+const MQL_IDX = LIFECYCLE_ORDER.indexOf("mql");
+const FUNNEL_STAGES = LIFECYCLE_ORDER.filter((s) => s !== "evangelist");
+const mxn0 = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+const int = (n: number) => n.toLocaleString("es-MX");
+
 function AtribucionPanel() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["crm-meta-atribucion"],
+  // Gasto de campañas (mismo queryKey/queryFn que la pestaña Campañas → comparte caché, no re-llama al edge).
+  const { data: insights, isLoading: loadingSpend, error: spendError } = useQuery<InsightsResp, { message: string }>({
+    queryKey: ["meta-ads-insights"],
     queryFn: async () => {
+      const { data, error } = await (supabase as any).functions.invoke("meta-ads-insights", { body: {} });
+      if (error) throw { message: error.message };
+      if (data?.error) throw { message: data.error };
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  // Leads de Meta que ya entraron al CRM (etapa actual del ciclo de vida).
+  const { data: crm, isLoading: loadingCrm } = useQuery({
+    queryKey: ["crm-meta-atribucion"],
+    queryFn: async (): Promise<{ rows: CrmAtrRow[]; missing: boolean }> => {
       const { data, error } = await (supabase as any)
         .from("crm_leads_atribucion")
         .select("meta_campaign_id, etapa_ciclo_vida")
         .not("meta_leadgen_id", "is", null)
         .eq("activo", true);
       if (error) return { rows: [], missing: true };
-      return { rows: (data ?? []) as { meta_campaign_id: string | null; etapa_ciclo_vida: string }[], missing: false };
+      return { rows: (data ?? []) as CrmAtrRow[], missing: false };
     },
   });
 
-  const rows = data?.rows ?? [];
-  const funnel = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const r of rows) counts[r.etapa_ciclo_vida] = (counts[r.etapa_ciclo_vida] ?? 0) + 1;
-    return LIFECYCLE_ORDER.filter((s) => s !== "evangelist").map((s) => ({ stage: s, count: counts[s] ?? 0 }));
-  }, [rows]);
-  const total = rows.length;
+  const isLoading = loadingSpend || loadingCrm;
+  const crmRows = crm?.rows ?? [];
+  const campaigns = insights?.campaigns ?? [];
+
+  const { rows, totals, funnel } = useMemo(() => {
+    // Agregar CRM por campaña + embudo acumulado (un lead en etapa i cuenta en todas las etapas <= i).
+    const byCampaign = new Map<string, { leadsCrm: number; mql: number }>();
+    const funnelCounts: Record<string, number> = {};
+    for (const r of crmRows) {
+      const key = r.meta_campaign_id ?? "__none__";
+      const idx = Math.max(0, LIFECYCLE_ORDER.indexOf(r.etapa_ciclo_vida));
+      const agg = byCampaign.get(key) ?? { leadsCrm: 0, mql: 0 };
+      agg.leadsCrm += 1;
+      if (idx >= MQL_IDX) agg.mql += 1;
+      byCampaign.set(key, agg);
+      for (let j = 0; j <= idx; j++) funnelCounts[LIFECYCLE_ORDER[j]] = (funnelCounts[LIFECYCLE_ORDER[j]] ?? 0) + 1;
+    }
+
+    const campMap = new Map(campaigns.map((c) => [c.id, c]));
+    const ids = new Set<string>([...campMap.keys(), ...[...byCampaign.keys()].filter((k) => k !== "__none__")]);
+
+    const out = [...ids].map((id) => {
+      const c = campMap.get(id);
+      const agg = byCampaign.get(id) ?? { leadsCrm: 0, mql: 0 };
+      const spend = c ? c.spend : null;
+      const metaLeads = c ? c.leads : null;
+      return {
+        id,
+        name: c?.name ?? id,
+        spend,
+        metaLeads,
+        leadsCrm: agg.leadsCrm,
+        mql: agg.mql,
+        cpl: spend != null && metaLeads ? spend / metaLeads : null,
+        costPerMql: spend != null && agg.mql > 0 ? spend / agg.mql : null,
+      };
+    });
+
+    const none = byCampaign.get("__none__");
+    if (none && none.leadsCrm > 0) {
+      out.push({ id: "__none__", name: "Sin campaña / orgánico", spend: null, metaLeads: null, leadsCrm: none.leadsCrm, mql: none.mql, cpl: null, costPerMql: null });
+    }
+    out.sort((a, b) => (b.spend ?? 0) - (a.spend ?? 0) || b.leadsCrm - a.leadsCrm);
+
+    const tSpend = out.reduce((s, r) => s + (r.spend ?? 0), 0);
+    const tMetaLeads = out.reduce((s, r) => s + (r.metaLeads ?? 0), 0);
+    const tLeadsCrm = out.reduce((s, r) => s + r.leadsCrm, 0);
+    const tMql = out.reduce((s, r) => s + r.mql, 0);
+    const totals = {
+      spend: tSpend, metaLeads: tMetaLeads, leadsCrm: tLeadsCrm, mql: tMql,
+      cpl: tMetaLeads ? tSpend / tMetaLeads : null,
+      costPerMql: tMql ? tSpend / tMql : null,
+    };
+
+    const top = funnelCounts[LIFECYCLE_ORDER[0]] ?? 0;
+    const funnelOut = FUNNEL_STAGES.map((s) => {
+      const count = funnelCounts[s] ?? 0;
+      return { stage: s, count, pct: top ? (count / top) * 100 : 0 };
+    });
+
+    return { rows: out, totals, funnel: funnelOut };
+  }, [crmRows, campaigns]);
+
+  const spendUnavailable = !!spendError || insights?.configured === false;
+  const nothing = !isLoading && rows.length === 0;
 
   return (
     <div className="space-y-4">
-      <Badge variant="outline" className="text-primary border-primary/40">Real · desde crm_leads_atribucion</Badge>
+      <Badge variant="outline" className="text-primary border-primary/40">ROI · gasto de Meta × etapas del CRM</Badge>
+
+      {spendUnavailable && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-amber-800 dark:text-amber-400">
+            Aún sin conexión al gasto de Meta (columnas de gasto en "—"). El embudo del CRM sí se muestra.
+          </p>
+        </div>
+      )}
+
       {isLoading ? (
-        <Skeleton className="h-40 w-full" />
-      ) : total === 0 ? (
+        <Skeleton className="h-56 w-full" />
+      ) : nothing ? (
         <Card><CardContent className="py-10 text-center text-muted-foreground text-sm">
-          Aún no hay leads de Meta en este ambiente. Cuando entren leads por el webhook, aquí verás el embudo y la atribución por campaña.
+          Aún no hay campañas ni leads de Meta que mostrar. En cuanto haya gasto en campañas y entren leads por el webhook, aquí verás el ROI por campaña y el embudo.
         </CardContent></Card>
       ) : (
         <>
-          <div className="space-y-2">
-            {funnel.map((f) => (
-              <div key={f.stage}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="font-medium">{lifecycleLabel[f.stage] ?? f.stage}</span>
-                  <span className="text-muted-foreground">{f.count}{total ? ` · ${Math.round((f.count / total) * 100)}%` : ""}</span>
-                </div>
-                <Progress value={total ? (f.count / total) * 100 : 0} className="h-2" />
-              </div>
-            ))}
+          <div className="rounded-md border bg-card overflow-x-auto">
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead>Campaña</TableHead>
+                <TableHead className="text-right">Gasto</TableHead>
+                <TableHead className="text-right">Leads (Meta)</TableHead>
+                <TableHead className="text-right">CPL</TableHead>
+                <TableHead className="text-right">En CRM</TableHead>
+                <TableHead className="text-right">MQL</TableHead>
+                <TableHead className="text-right">Costo/MQL</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium max-w-[240px] truncate" title={r.name}>{r.name}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.spend != null ? mxn0(r.spend) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.metaLeads != null ? int(r.metaLeads) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.cpl != null ? mxn0(r.cpl) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{int(r.leadsCrm)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{int(r.mql)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium text-primary">{r.costPerMql != null ? mxn0(r.costPerMql) : "—"}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="border-t-2 font-semibold bg-muted/30">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right tabular-nums">{mxn0(totals.spend)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{int(totals.metaLeads)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{totals.cpl != null ? mxn0(totals.cpl) : "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums">{int(totals.leadsCrm)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{int(totals.mql)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-primary">{totals.costPerMql != null ? mxn0(totals.costPerMql) : "—"}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </div>
-          <p className="text-xs text-muted-foreground">{total} leads de Meta · por etapa actual del ciclo de vida</p>
+
+          <div>
+            <h4 className="text-sm font-medium mb-2">Embudo · leads de Meta en el CRM</h4>
+            <div className="space-y-2">
+              {funnel.map((f) => (
+                <div key={f.stage}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="font-medium">{lifecycleLabel[f.stage] ?? f.stage}</span>
+                    <span className="text-muted-foreground">{int(f.count)} · {Math.round(f.pct)}%</span>
+                  </div>
+                  <Progress value={f.pct} className="h-2" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            <b>Gasto</b>, <b>Leads (Meta)</b> y <b>CPL</b> = reportado por Meta (últimos 30 días). <b>En CRM</b>, <b>MQL</b> y <b>Costo/MQL</b> = leads de Meta que ya entraron al CRM; se llenan conforme lleguen los leads reales.
+          </p>
         </>
       )}
     </div>
