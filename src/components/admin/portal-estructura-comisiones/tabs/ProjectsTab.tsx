@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
-import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight, TrendingUp, Database } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, ChevronRight, Database } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/lib/portal-estructura-comisiones/utils/calculations';
-import { useForecastTotalGlobal } from '@/hooks/usePortalAltaDireccion/useForecastIngresos';
-import { useProyectosTallwoodReales, type RealProjectData } from '@/hooks/usePortalEstructuraComisiones/useProyectosTallwoodReales';
+import {
+  useProyectosSozuReales, normalizeProjectName, type RealProjectData,
+} from '@/hooks/usePortalEstructuraComisiones/useProyectosTallwoodReales';
 import type { Project } from '@/lib/portal-estructura-comisiones/types/simulator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,8 +15,7 @@ import PricingStrategy from '../shared/PricingStrategy';
 
 export default function ProjectsTab() {
   const { projects, addProject, updateProject, deleteProject } = useSimulator();
-  const { total: forecastTotal, isLoading: forecastLoading } = useForecastTotalGlobal();
-  const { getRealData } = useProyectosTallwoodReales();
+  const { proyectos: proyectosSozu, getRealData } = useProyectosSozuReales();
   const [editing, setEditing] = useState<Project | null>(null);
   const [open, setOpen] = useState(false);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
@@ -42,6 +42,38 @@ export default function ProjectsTab() {
   const toggleExpand = (id: string) => {
     setExpandedProject(prev => prev === id ? null : id);
   };
+
+  /**
+   * El universo son los proyectos **comercializados por SOZU**, no el catálogo
+   * local del simulador. Para cada uno se busca su ficha de simulación por
+   * nombre; si no existe, se muestra igual con su inventario real y una ficha
+   * mínima, para que ningún desarrollo quede invisible.
+   */
+  const filas = useMemo(() => {
+    const porNombre = new Map(projects.map(p => [normalizeProjectName(p.name), p]));
+    return proyectosSozu.map(real => {
+      const project = porNombre.get(normalizeProjectName(real.nombre));
+      return {
+        real,
+        // Sin ficha de simulación se arma una mínima solo para pintar la tarjeta;
+        // no se puede editar ni expandir porque no existe en el catálogo.
+        project: project ?? {
+          id: `sozu-${real.id}`, name: real.nombre,
+          totalUnits: real.totalUnits, averagePrice: real.averagePrice,
+          stage: real.stage ?? 'Preventa',
+          startDate: real.salesStartDate ?? '', endDate: real.deliveryDate ?? '',
+          salesStartDate: real.salesStartDate ?? '', deliveryDate: real.deliveryDate ?? '',
+          monthlyAbsorption: real.monthlyAbsorption ?? 0,
+          totalCommissionPct: real.totalCommissionPct ?? 0,
+          channelMix: {}, monthlyForecast: Array(12).fill(0),
+        } as Project,
+        /** true = existe ficha de simulación editable. */
+        enCatalogo: project !== undefined,
+      };
+    });
+  }, [projects, proyectosSozu]);
+
+  const proyectosSinCatalogo = filas.filter(f => !f.enCatalogo).map(f => f.real);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -70,44 +102,48 @@ export default function ProjectsTab() {
         </Dialog>
       </div>
 
-      {/* Forecast de Ingresos Totales — mismo número global del Forecast de
-          Ingresos del Portal Alta Dirección (cuentas con flujo + inventario
-          disponible, todos los tipos). */}
-      <div className="metric-card flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">Forecast de Ingresos Totales</p>
-          <p className="text-2xl font-bold tabular-nums">
-            {forecastLoading ? '—' : formatCurrency(forecastTotal)}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Cuentas con flujo + inventario disponible (Propiedad, Producto y Servicio)
-          </p>
+      {proyectosSinCatalogo.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <AlertCircle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+          <div>
+            <p className="font-medium">
+              {proyectosSinCatalogo.length} proyecto(s) comercializado(s) por SOZU sin ficha de simulación
+            </p>
+            <p className="text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {proyectosSinCatalogo.map(p => p.nombre).join(', ')}
+              </span>
+              {' '}— se muestran con su inventario real, pero no tienen mezcla de canales ni forecast
+              capturados. Créalos con el mismo nombre en "Nuevo Proyecto" para incluirlos en los escenarios.
+            </p>
+          </div>
         </div>
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
-          <TrendingUp className="h-5 w-5" />
-        </span>
-      </div>
+      )}
 
       <div className="space-y-4">
-        {projects.map(project => {
-          const real = getRealData(project.name);
+        {filas.map(({ project, real, enCatalogo }) => {
+          // Absorción, comisión total, inicio de venta y entrega ya no se
+          // muestran aquí; siguen existiendo en la ficha de simulación porque
+          // los consumen el Dashboard Ejecutivo y los escenarios.
           const display = {
             totalUnits: real ? real.totalUnits : project.totalUnits,
             averagePrice: real ? real.averagePrice : project.averagePrice,
-            monthlyAbsorption: real ? real.monthlyAbsorption : project.monthlyAbsorption,
-            totalCommissionPct: real ? real.totalCommissionPct : project.totalCommissionPct,
-            salesStartDate: real ? real.salesStartDate : project.salesStartDate,
-            deliveryDate: real ? real.deliveryDate : project.deliveryDate,
             stage: real?.stage ?? project.stage,
           };
           return (
           <div key={project.id} className="metric-card">
             {/* Project Header */}
             <div className="flex items-start justify-between">
-              <button onClick={() => toggleExpand(project.id)} className="flex items-start gap-2 text-left group">
-                {expandedProject === project.id
-                  ? <ChevronDown className="h-4 w-4 mt-1 text-muted-foreground" />
-                  : <ChevronRight className="h-4 w-4 mt-1 text-muted-foreground" />
+              <button
+                onClick={() => { if (enCatalogo) toggleExpand(project.id); }}
+                disabled={!enCatalogo}
+                className="flex items-start gap-2 text-left group disabled:cursor-default"
+              >
+                {!enCatalogo
+                  ? <span className="w-4 mt-1" />
+                  : expandedProject === project.id
+                    ? <ChevronDown className="h-4 w-4 mt-1 text-muted-foreground" />
+                    : <ChevronRight className="h-4 w-4 mt-1 text-muted-foreground" />
                 }
                 <div>
                   <h3 className="font-bold text-lg flex items-center gap-1.5">
@@ -119,46 +155,87 @@ export default function ProjectsTab() {
                   </span>
                 </div>
               </button>
-              <div className="flex gap-1">
-                <button onClick={() => { setEditing(project); setOpen(true); }} className="rounded-md p-1.5 hover:bg-muted">
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-                <button onClick={() => deleteProject(project.id)} className="rounded-md p-1.5 hover:bg-destructive/10">
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </button>
-              </div>
+              {/* Sin ficha de simulación no hay nada que editar ni borrar: se
+                  ofrece crearla, prellenada con el nombre real. */}
+              {enCatalogo ? (
+                <div className="flex gap-1">
+                  <button onClick={() => { setEditing(project); setOpen(true); }} className="rounded-md p-1.5 hover:bg-muted">
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                  <button onClick={() => deleteProject(project.id)} className="rounded-md p-1.5 hover:bg-destructive/10">
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                  onClick={() => { setEditing({ ...project, id: '' }); setOpen(true); }}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Crear ficha
+                </Button>
+              )}
             </div>
 
             {/* Summary Grid */}
-            <div className="mt-4 grid grid-cols-3 sm:grid-cols-6 gap-3 text-sm">
+            <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Unidades</p>
-                <p className="font-semibold">{formatNumber(display.totalUnits)}</p>
+                <p className="font-semibold tabular-nums">{formatNumber(display.totalUnits)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Unidades vendidas</p>
+                <p className="font-semibold tabular-nums">
+                  {real ? formatNumber(real.unidadesVendidas) : '—'}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Precio Prom.</p>
-                <p className="font-semibold">{formatCurrency(display.averagePrice)}</p>
+                <p className="font-semibold tabular-nums">{formatCurrency(display.averagePrice)}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Absorción/mes</p>
-                <p className="font-semibold">
-                  {display.monthlyAbsorption != null ? `${display.monthlyAbsorption.toFixed(1)} uds` : '—'}
+            </div>
+
+            {/* Inventario disponible: lo que queda por colocar. Los promedios son
+                ponderados —monto entre unidades y entre m² totales—, no el
+                promedio de los precios de cada unidad. */}
+            <div className="mt-4 rounded-lg border bg-muted/30 p-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Inventario disponible a venta
+              </p>
+              {!real ? (
+                <p className="text-sm text-muted-foreground italic">
+                  Sin datos de inventario para este desarrollo.
                 </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Comisión Total</p>
-                <p className="font-semibold">
-                  {display.totalCommissionPct != null ? `${display.totalCommissionPct.toFixed(1)}%` : '—'}
+              ) : real.unidadesDisponibles === 0 ? (
+                <p className="text-sm text-muted-foreground italic">
+                  No hay unidades con estatus Disponible.
                 </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Inicio de Venta</p>
-                <p className="font-semibold text-xs">{display.salesStartDate || '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Entrega</p>
-                <p className="font-semibold text-xs">{display.deliveryDate || '—'}</p>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Unidades disponibles</p>
+                    <p className="font-semibold tabular-nums">{formatNumber(real.unidadesDisponibles)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Monto total a colocar</p>
+                    <p className="font-semibold tabular-nums">{formatCurrency(real.montoDisponible)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Precio prom. ponderado / unidad</p>
+                    <p className="font-semibold tabular-nums">{formatCurrency(real.precioPromedioUnidad)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Precio prom. ponderado / m²</p>
+                    <p className="font-semibold tabular-nums">
+                      {real.precioPromedioM2 > 0 ? formatCurrency(real.precioPromedioM2) : '—'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {formatNumber(Math.round(real.m2Disponibles))} m² totales
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Expanded: Inventory & Pricing */}
