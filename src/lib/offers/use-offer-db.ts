@@ -626,13 +626,16 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   }
 
   // 9c. Desglose financiero AUTORITATIVO server-side (RPC get_oferta_financials).
-  //     Fuente de verdad no manipulable desde consola: apartado $20k, enganche neto,
-  //     parcialidades (hoy→entrega−1 mes), pago a escrituración y vigencia.
+  //     Fuente de verdad no manipulable desde consola: apartado del proyecto, enganche
+  //     neto, parcialidades (hoy→entrega−1 mes), pago a escrituración y vigencia.
   //     Si el RPC aún no existe en la BD (DDL pendiente) → se conservan los montos
   //     calculados en TS arriba (fallback graceful).
   let vigenciaHasta: string | null = null;
   let mesesRestantes: number | null = null;
   let finAgente: any = null;
+  // `proyectos.monto_apartado` resuelto server-side. Viaja en la oferta para que el
+  // flujo de pago cobre exactamente lo que se le mostró al cliente.
+  let apartadoAmount: number | null = null;
   try {
     const { data: fin, error: finErr } = await (supabase as any).rpc("get_oferta_financials", {
       p_oferta_id: numId,
@@ -640,6 +643,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     if (!finErr && fin) {
       // Datos del creador vía RPC (usuarios tiene RLS que bloquea anon en la oferta pública)
       finAgente = fin.agente ?? null;
+      const ap = Number(fin.apartado);
+      if (Number.isFinite(ap) && ap > 0) apartadoAmount = ap;
     }
     if (!finErr && fin && Array.isArray(fin.planes)) {
       const finById = new Map<string, any>(fin.planes.map((p: any) => [String(p.esquema_id), p]));
@@ -960,6 +965,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     planoUbicacionRegiones,
     unitDepto,
     ...(mesesRestantes != null ? { mesesRestantes } : {}),
+    ...(apartadoAmount != null ? { apartadoAmount } : {}),
   } as unknown as OfertaComercial;
 
   // Construir Agent inline. SIEMPRE se arma una tarjeta (nunca null) con los datos

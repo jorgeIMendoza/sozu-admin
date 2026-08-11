@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -63,6 +63,12 @@ const formSchema = z.object({
       message: "El monto debe ser entre 0 y 5000"
     }),
   monto_garantia_renta: z.string().optional(),
+  // Monto del apartado de la oferta digital (proyectos.monto_apartado).
+  monto_apartado: z.string()
+    .optional()
+    .refine((val) => !val || parseFloat(val) >= 0, {
+      message: "El monto no puede ser negativo",
+    }),
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
   mostrar_piso_en_oferta: z.boolean().default(true),
   mostrar_seccion_efectivo_en_oferta: z.boolean().default(true),
@@ -95,6 +101,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
   const [firmanteOpen, setFirmanteOpen] = useState(false);
   // Foto real de cada amenidad EN ESTE proyecto (id_amenidad → url_imagen)
   const [amenityImages, setAmenityImages] = useState<Record<string, string>>({});
+  // `proyectos.monto_apartado` es columna nueva: hasta que el DDL esté aplicado en el
+  // ambiente, el campo no se pinta ni se manda en el update (patrón de DDL probe).
+  const [hasMontoApartado, setHasMontoApartado] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -123,6 +132,7 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
       costo_mantenimiento_m2: "",
       monto_mensual_cuota_extraordinaria: "",
       monto_garantia_renta: "",
+      monto_apartado: "",
       mostrar_precio_m2_en_oferta: true,
       mostrar_piso_en_oferta: true,
       mostrar_seccion_efectivo_en_oferta: true,
@@ -416,6 +426,33 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
     enabled: !!form.watch("direccion_id_estado") && selectedCountry === "MX",
   });
 
+  // `monto_apartado` se lee aparte del SELECT grande: si la columna todavía no existe
+  // en este ambiente, meterla en esa lista tumbaría la carga completa del proyecto.
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from("proyectos")
+        .select("monto_apartado")
+        .eq("id", projectId)
+        .maybeSingle();
+      if (cancelado) return;
+      if (error) {
+        setHasMontoApartado(false);
+        return;
+      }
+      setHasMontoApartado(true);
+      form.setValue(
+        "monto_apartado",
+        (data as any)?.monto_apartado != null ? String((data as any).monto_apartado) : "",
+      );
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [open, projectId, form]);
+
   // Populate form when project data is loaded
   useEffect(() => {
     if (project) {
@@ -448,6 +485,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         costo_mantenimiento_m2: project.costo_mantenimiento_m2?.toString() || "",
         monto_mensual_cuota_extraordinaria: (project as any).monto_mensual_cuota_extraordinaria?.toString() || "",
         monto_garantia_renta: (project as any).monto_garantia_renta?.toString() || "",
+        // No viene en `project` (se lee en su propio efecto): conservar lo ya cargado
+        // para que este reset no lo borre.
+        monto_apartado: form.getValues("monto_apartado") || "",
         mostrar_precio_m2_en_oferta: project.mostrar_precio_m2_en_oferta ?? true,
         mostrar_piso_en_oferta: project.mostrar_piso_en_oferta ?? true,
         mostrar_seccion_efectivo_en_oferta: project.mostrar_seccion_efectivo_en_oferta ?? true,
@@ -497,6 +537,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         costo_mantenimiento_m2: values.costo_mantenimiento_m2 ? parseFloat(values.costo_mantenimiento_m2) : null,
         monto_mensual_cuota_extraordinaria: values.monto_mensual_cuota_extraordinaria ? parseFloat(values.monto_mensual_cuota_extraordinaria) : null,
         monto_garantia_renta: values.monto_garantia_renta ? parseFloat(values.monto_garantia_renta) : null,
+        // Solo viaja si la columna ya existe: si no, el update completo fallaría.
+        ...(hasMontoApartado
+          ? { monto_apartado: values.monto_apartado ? parseFloat(values.monto_apartado) : 0 }
+          : {}),
         mostrar_precio_m2_en_oferta: values.mostrar_precio_m2_en_oferta,
         mostrar_piso_en_oferta: values.mostrar_piso_en_oferta,
         mostrar_seccion_efectivo_en_oferta: values.mostrar_seccion_efectivo_en_oferta,
@@ -1380,6 +1424,32 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                           </FormItem>
                         )}
                       />
+
+                      {hasMontoApartado && (
+                        <FormField
+                          control={form.control}
+                          name="monto_apartado"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Monto de apartado</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="20000.00"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Lo que el cliente transfiere para apartar. Se muestra en la
+                                oferta digital y se descuenta del enganche.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       <FormField
                         control={form.control}

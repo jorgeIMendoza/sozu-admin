@@ -5,6 +5,7 @@ import sozuLogo from "@/assets/sozu-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { useOfferById, formatMXN } from "@/lib/offers/offer-data";
+import { apartadoDeOferta } from "@/lib/offers/apartado";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
 import { useAgentById, type Agent } from "@/lib/offers/agent-data";
 import { getPortalLoginUrl } from "@/lib/portalUrls";
@@ -25,8 +26,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// Apartado por transferencia SPEI (sin Stripe). Monto fijo del apartado.
-const APARTADO_AMOUNT_MXN = 20000;
+// Apartado por transferencia SPEI (sin Stripe). El monto es por proyecto
+// (`proyectos.monto_apartado`) y viaja en la oferta: ver lib/offers/apartado.ts.
 // Beneficiario STP fijo (mismo que PagoApartadoFinalPage / plantillas PDF).
 const BENEFICIARIO = "SOZU COMERCIALIZADORA SA DE CV";
 const BANCO = "STP (646)";
@@ -140,6 +141,7 @@ const AdvisorContactCard = ({ agent }: { agent?: Agent }) => {
 const SpeiPayPanel = ({
   formalReservationId,
   offerId,
+  montoApartado,
   clabe,
   concepto,
   agent,
@@ -149,6 +151,8 @@ const SpeiPayPanel = ({
 }: {
   formalReservationId: string;
   offerId: string;
+  /** Monto del apartado del proyecto, ya resuelto por el padre desde la oferta. */
+  montoApartado: number;
   clabe?: string;
   concepto: string;
   agent?: Agent;
@@ -177,7 +181,7 @@ const SpeiPayPanel = ({
   const markPaidLocally = useCallback(() => {
     recordPayment(formalReservationId, {
       id: `PAY-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      amountMXN: APARTADO_AMOUNT_MXN,
+      amountMXN: montoApartado,
       paymentMethod: "spei",
       detectedAt: new Date().toISOString(),
       speiTrackingKey: `MBAN${Date.now().toString().slice(-10)}${Math.random()
@@ -185,7 +189,7 @@ const SpeiPayPanel = ({
         .substring(2, 5)
         .toUpperCase()}`,
     });
-  }, [recordPayment, formalReservationId]);
+  }, [recordPayment, formalReservationId, montoApartado]);
 
   // Consulta a BD (RPC SECURITY DEFINER) si el apartado ya se reflejó pagado.
   // El pago es vía SPEI (externo): se valida contra el estado real en plataforma.
@@ -343,10 +347,10 @@ const SpeiPayPanel = ({
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Monto exacto
               </p>
-              <CopyButton compact copied={copiedField === "monto"} onClick={() => copy("monto", String(APARTADO_AMOUNT_MXN))} />
+              <CopyButton compact copied={copiedField === "monto"} onClick={() => copy("monto", String(montoApartado))} />
             </div>
             <p className="text-2xl font-bold text-foreground tabular-nums leading-none">
-              {formatMXN(APARTADO_AMOUNT_MXN)}
+              {formatMXN(montoApartado)}
             </p>
             <p className="text-[10px] text-muted-foreground mt-2">MXN · se aplica al precio final</p>
           </div>
@@ -534,6 +538,8 @@ const ReservarPage = () => {
   const { data: dbOfferResult } = useOfferFromDB(offerId);
   const mockOffer = useOfferById(offerId);
   const offer = isNumericOffer ? (dbOfferResult?.offer ?? null) : (mockOffer ?? null);
+  // Monto del apartado del proyecto (RPC get_oferta_financials → proyectos.monto_apartado).
+  const montoApartado = apartadoDeOferta(offer);
   const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = formalReservation?.offerId;
@@ -635,7 +641,7 @@ const ReservarPage = () => {
                 <div className="space-y-2">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    Apartar · {formatMXN(APARTADO_AMOUNT_MXN)} MXN
+                    Apartar · {formatMXN(montoApartado)} MXN
                   </span>
                   <h1 className="text-[1.7rem] font-bold text-foreground leading-tight tracking-tight">
                     Información para tu pago
@@ -648,6 +654,7 @@ const ReservarPage = () => {
                 <SpeiPayPanel
                   formalReservationId={formalReservationId}
                   offerId={offerId}
+                  montoApartado={montoApartado}
                   clabe={clabeApartado}
                   concepto={concepto}
                   agent={agent}
