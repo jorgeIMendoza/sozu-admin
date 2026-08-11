@@ -29,6 +29,7 @@ import { fetchNoAvancePorOferta } from "@/hooks/useMotivosNoAvance";
 import { IconTip } from "@/components/ui/icon-tip";
 import { IconButton } from "@/components/ui/icon-button";
 import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 import {
   ETAPAS, agruparOfertasPorUnidad, etapaDeOferta, fetchEtapasCanonicas, setNegocioEtapa,
   type EtapaClave, type EtapaDef,
@@ -112,8 +113,8 @@ const AgentPipeline = () => {
   }, []);
 
   // Link del cliente (con token) y su versión demo, para el popup de compartir.
-  const baseUrlDe = (o: any) => `${window.location.origin}/oferta/O-${String(o.id).padStart(6, '0')}`;
-  const shareUrlDe = (o: any) => (o?.reserva_token ? `${baseUrlDe(o)}/${o.reserva_token}` : baseUrlDe(o));
+  const baseUrlDe = (o: any) => buildOfferUrl(o.id);
+  const shareUrlDe = (o: any) => buildOfferUrl(o.id, o?.reserva_token);
 
   const descargarPdf = async (o: any) => {
     setDescargandoPdf(true);

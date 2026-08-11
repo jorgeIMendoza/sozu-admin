@@ -510,6 +510,10 @@ const isClientesSubdomain = matchPortal('clientes');
 const isEmbajadoresSubdomain = matchPortal('embajadores');
 const isPropietariosSubdomain = matchPortal('propietarios');
 const isBancosSubdomain = matchPortal('bancos');
+// Host público de la oferta digital. No es un portal (no monta /admin ni login):
+// es el único host por el que debe viajar el link que recibe el cliente, sin
+// importar desde qué portal se generó la oferta. Ver lib/offers/offer-links.ts.
+const isOfertasSubdomain = matchPortal('ofertas');
 
 // Determine portal context from subdomain for login page branding
 const getPortalContext = (): 'agentes' | 'inmobiliarias' | 'clientes' | 'embajadores' | 'propietarios' | 'bancos' | null => {
@@ -563,7 +567,39 @@ const App = () => (
             <CrmImpersonationProvider>
            <AmbassadorsProvider>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-              {isAgentesSubdomain ? (
+              {isOfertasSubdomain ? (
+                // Solo el flujo público de la oferta. Cualquier otra ruta (incluido
+                // /admin) no existe aquí: este host es exclusivo del cliente final.
+                <Routes>
+                  <Route path="/oferta/:offerId" element={<OfferPage />} />
+                  <Route path="/oferta/:offerId/:reservationId" element={<OfferPage />} />
+                  <Route path="/oferta/:offerId/datos" element={<CapturaDatosPage />} />
+                  <Route path="/oferta/:offerId/verificar-email" element={<VerificarEmailPage />} />
+                  <Route path="/oferta/:offerId/verificacion-ok" element={<VerificacionCallbackPage />} />
+                  <Route path="/oferta/:offerId/tipo-comprador" element={<TipoCompradorPage />} />
+                  <Route path="/oferta/:offerId/hold" element={<HoldTarjetaPage />} />
+                  <Route path="/oferta/:offerId/confirmacion" element={<ConfirmacionPage />} />
+                  {/* Flujo de apartado que continúa desde la oferta */}
+                  <Route path="/reservar/:offerToken/datos" element={<ApartarDirectoCapturePage />} />
+                  <Route path="/reservar/:offerToken/continuar" element={<ApartarDirectoContinuarPage />} />
+                  <Route path="/reservar/:formalReservationId/wizard" element={<ReservarPage />} />
+                  <Route path="/reservar/:formalReservationId/provisional-activado" element={<ApartadoProvisionalActivadoPage />} />
+                  <Route path="/apartado-provisional/:formalReservationId" element={<ApartadoProvisionalDashboardPage />} />
+                  <Route path="/apartado-liberado/:formalReservationId" element={<ApartadoLiberadoPage />} />
+                  <Route path="/apartar/:formalReservationId/completar" element={<CompletarApartadoPage />} />
+                  <Route path="/apartar/:formalReservationId/pago-final" element={<PagoApartadoFinalPage />} />
+                  <Route path="/apartar/:formalReservationId/exito" element={<FormalReservationSuccessPage />} />
+                  {/* Verificación de email del flujo de oferta */}
+                  <Route path="/verificar-email/:prospectId" element={<EmailVerificationOfferPage />} />
+                  <Route path="/verificar/:prospectId" element={<VerificationCallbackOfferPage />} />
+                  <Route path="/verificacion/:prospectId" element={<VerificationCallbackOfferPage />} />
+                  {/* Apartado provisional (DB-backed) */}
+                  <Route path="/reservar/:apartadoId" element={<CapturaDatosReservaPage />} />
+                  <Route path="/reservar/:apartadoId/hold" element={<HoldApartadoPage />} />
+                  <Route path="/reservar/:apartadoId/confirmacion" element={<ConfirmacionApartadoPage />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              ) : isAgentesSubdomain ? (
                 <Routes>
                   <Route path="/login" element={<Login portalContext="agentes" />} />
                   <Route path="/auth/login" element={<Login portalContext="agentes" />} />
