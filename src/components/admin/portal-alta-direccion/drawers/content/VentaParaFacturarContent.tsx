@@ -27,6 +27,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 export function VentaParaFacturarContent({
   entity,
@@ -256,7 +257,7 @@ export function VentaParaFacturarContent({
                 const folio = detalle.oferta_comercial.folio_oferta;
                 if (folio) {
                   // Prioridad: Oferta Digital (página web de la oferta).
-                  window.open(`${window.location.origin}/oferta/${folio}`, "_blank");
+                  window.open(buildOfferUrl(folio), "_blank");
                 } else if (detalle.oferta_comercial.url_oferta) {
                   // Sin URL de oferta digital → PDF de la oferta.
                   window.open(detalle.oferta_comercial.url_oferta, "_blank");

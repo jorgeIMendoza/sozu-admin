@@ -50,6 +50,7 @@ import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatu
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
 import { formatEscalonadoLabel, mesesMensualidadesRestantes, calcDynamicScheme } from "@/utils/escalonadoUtils";
 import { getBodegasIncluidasCosto } from "@/lib/offers/included-bodegas";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 // Component to show factura document link
 const FacturaCell = ({ propertyId }: { propertyId: number }) => {
@@ -6693,7 +6694,7 @@ const Propiedades = () => {
                                         variant="outline"
                                         size="icon"
                                         title="Abrir oferta digital"
-                                        onClick={() => window.open(`${window.location.origin}/oferta/O-${String(offer.id).padStart(6, '0')}`, '_blank', 'noopener')}
+                                        onClick={() => window.open(buildOfferUrl(offer.id), '_blank', 'noopener')}
                                       >
                                         <ExternalLink className="h-4 w-4" />
                                       </Button>
@@ -6709,7 +6710,7 @@ const Propiedades = () => {
                                         size="icon"
                                         title="Copiar link de oferta digital"
                                         onClick={() => {
-                                          const url = `${window.location.origin}/oferta/O-${String(offer.id).padStart(6, '0')}`;
+                                          const url = buildOfferUrl(offer.id);
                                           navigator.clipboard.writeText(url);
                                           toast({ title: 'Link copiado', description: url });
                                         }}

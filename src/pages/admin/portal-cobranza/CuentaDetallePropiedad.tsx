@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
+import { buildOfferUrl } from '@/lib/offers/offer-links';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
@@ -38,7 +39,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     setMultaAcuerdoId, setMultaDialog, setMultaGestionAcuerdoId, setMultaGestionDialog,
     setPagoEvidenciaModal, setPdfPreviewModal,
     canDeletePago, openEliminarPago,
-    hayDiscrepancia, sumaAcuerdos,
+    hayDiscrepancia, sumaAcuerdos, reconciliando, handleReconciliarAcuerdos,
     hayDiscrepanciaAplicaciones, recalculandoAplic, handleRecalcularAplicaciones,
     generatingPDF, handleEstadoCuenta, downloadingOferta, handleDownloadOferta,
     setTransferDialog,
@@ -102,7 +103,8 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
         </div>
       )}
 
-      {/* Discrepancy warning */}
+      {/* Discrepancy warning — el precio final del contrato manda; el botón hace que la suma
+          de acuerdos lo siga (el último acuerdo abierto absorbe la diferencia). */}
       {hayDiscrepancia && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
           <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
@@ -115,6 +117,15 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
               {sumaAcuerdos > precio_final ? ' (acuerdos exceden el precio)' : ' (acuerdos faltantes)'}
             </p>
           </div>
+          {!isEnDemanda && (
+            <button
+              onClick={handleReconciliarAcuerdos}
+              disabled={reconciliando}
+              className="shrink-0 text-[11px] font-semibold text-amber-800 border border-amber-400 rounded-md px-2.5 py-1.5 hover:bg-amber-100 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {reconciliando ? 'Reconciliando…' : 'Reconciliar acuerdos'}
+            </button>
+          )}
         </div>
       )}
 
@@ -292,7 +303,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                     <span className="text-[12px] text-muted-foreground w-28 shrink-0">Oferta digital</span>
                     <IconTip label="Abrir oferta digital en nueva pestaña">
                       <a
-                        href={`${window.location.origin}/oferta/${ofertaId}`}
+                        href={buildOfferUrl(ofertaId)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[12px] font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors"

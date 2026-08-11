@@ -26,6 +26,7 @@ import type { PagoExternoEntity, VentaContext } from "../types";
 import { useExpedienteVentaDetalle } from "@/hooks/useExpedienteVentaDetalle";
 import { OfertaPdfEdgeFunctionService } from "@/services/offerPdfEdgeFunctionService";
 import { supabase } from "@/integrations/supabase/client";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 const TIPO_LABEL: Record<PagoExternoEntity["beneficiario_tipo"], string> = {
   inmobiliaria: "Inmobiliaria",
@@ -310,7 +311,7 @@ export function PagoExternoContent({
                   const folio = detalle.oferta_comercial.folio_oferta;
                   if (folio) {
                     // Prioridad: Oferta Digital (página web de la oferta).
-                    window.open(`${window.location.origin}/oferta/${folio}`, "_blank");
+                    window.open(buildOfferUrl(folio), "_blank");
                   } else if (detalle.oferta_comercial.url_oferta) {
                     // Sin URL de oferta digital → PDF de la oferta.
                     window.open(detalle.oferta_comercial.url_oferta, "_blank");
