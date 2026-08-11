@@ -24,6 +24,7 @@ import {
   ArrowUpDown, Power, PowerOff, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import ChannelDetailDrawer from '../shared/ChannelDetailDrawer';
 import type { Channel } from '@/lib/portal-estructura-comisiones/types/simulator';
 import {
@@ -796,10 +797,19 @@ function PctPorProyecto({ valor, esOverride, heredado, disabled, onCommit }: {
       {!esOverride && (
         <Tooltip>
           <TooltipTrigger>
-            <Badge variant="outline" className="text-[10px]">hereda</Badge>
+            {/* Heredar un 0 no es un límite pactado, es un dato sin capturar:
+                se distingue para no presentarlo como si fuera una política. */}
+            <Badge
+              variant="outline"
+              className={cn('text-[10px]', heredado === 0 && 'border-amber-500 text-amber-600')}
+            >
+              {heredado === 0 ? 'sin definir' : 'hereda'}
+            </Badge>
           </TooltipTrigger>
-          <TooltipContent className="text-xs">
-            Usa {heredado}% del catálogo maestro. Escribe un valor para fijarlo solo en este proyecto.
+          <TooltipContent className="max-w-xs text-xs">
+            {heredado === 0
+              ? 'El catálogo maestro no tiene este porcentaje capturado (0%). Escribe un valor para fijarlo en este proyecto, o captúralo en el catálogo para que aplique a todos.'
+              : `Usa ${heredado}% del catálogo maestro. Escribe un valor para fijarlo solo en este proyecto.`}
           </TooltipContent>
         </Tooltip>
       )}

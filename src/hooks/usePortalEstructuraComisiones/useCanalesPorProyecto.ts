@@ -13,7 +13,7 @@ import {
  * y sus porcentajes propios. Un porcentaje `null` hereda del catálogo, así que
  * cambiar el maestro sigue propagándose a quien no tenga override.
  *
- * Ver `Ejecuciones_manuales/20260809_directorio_personal_rrhh.md`, Anexo 7.
+ * Ver `Ejecuciones_manuales/20260811_canales_por_proyecto.md`.
  */
 
 const CONFIG_KEY = "canales-config-proyecto";
@@ -99,13 +99,13 @@ export function useGuardarCanalDeProyecto(idProyecto: number | null) {
       if (res.columnMissing) {
         throw new Error(
           'La base de datos aún no tiene las columnas de canales por proyecto. ' +
-          'Ejecuta el DDL "Canales de Venta por proyecto" en Ejecuciones_manuales.',
+          'Ejecuta Ejecuciones_manuales/20260811_canales_por_proyecto.md.',
         );
       }
       if (res.tableMissing) {
         throw new Error(
           'La base de datos aún no tiene la tabla comisiones_canal_config. ' +
-          'Ejecuta el DDL "Comisión total independiente por canal" en Ejecuciones_manuales.',
+          'Ejecuta el Anexo 5 de Ejecuciones_manuales/20260809_directorio_personal_rrhh.md.',
         );
       }
       if (!res.ok) throw new Error("No se pudo guardar la configuración del canal.");
@@ -123,6 +123,14 @@ export interface ProyectoSozu {
 
 /** Entidad relacionada tipo 5 = SOZU (ver "IDs fijos importantes" en CLAUDE.md). */
 const TIPO_ENTIDAD_SOZU = 5;
+
+/**
+ * "Proyectos" que son catálogos internos (Productos, Servicios) y no desarrollos:
+ * comparten la relación con SOZU pero no se comercializan como inventario, así que
+ * no tienen canales de venta que configurar. Mismo criterio que
+ * `useProyectosMotorComisiones` y `useProyectosSozuReales`.
+ */
+const TIPOS_USO_EXCLUIDOS = [9, 10];
 
 /**
  * Proyectos **comercializados por SOZU** y activos — el universo válido para
@@ -149,12 +157,14 @@ export function useProyectosSozuCanales() {
 
       const { data, error } = await supabase
         .from("proyectos")
-        .select("id, nombre")
+        .select("id, nombre, id_tipo_uso")
         .in("id", ids)
         .eq("activo", true)
         .order("nombre");
       if (error || !data) return [];
-      return data as ProyectoSozu[];
+      return data
+        .filter(p => !TIPOS_USO_EXCLUIDOS.includes(p.id_tipo_uso as number))
+        .map(p => ({ id: p.id, nombre: p.nombre }));
     },
   });
 }

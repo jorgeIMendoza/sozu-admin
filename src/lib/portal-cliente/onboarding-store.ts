@@ -6,6 +6,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { clearDocBlobs } from "@/lib/portal-cliente/onboarding-doc-idb";
 import {
   margotFachada,
   margotWordmark,
@@ -400,8 +401,10 @@ export const usePortal = create<PortalState>()(
       setOnboarding: (partial) =>
         set((s) => ({ onboarding: { ...s.onboarding, ...partial } })),
 
-      resetOnboarding: () =>
-        set(() => ({ onboarding: structuredClone(initialOnboarding) })),
+      resetOnboarding: () => {
+        void clearDocBlobs();
+        set(() => ({ onboarding: structuredClone(initialOnboarding) }));
+      },
 
       addDoc: (doc) =>
         set((s) => ({
@@ -484,7 +487,10 @@ export const usePortal = create<PortalState>()(
           ),
         })),
 
-      reset: () => set(() => structuredClone(initial)),
+      reset: () => {
+        void clearDocBlobs();
+        set(() => structuredClone(initial));
+      },
     }),
     {
       name: "sozu-onboarding",

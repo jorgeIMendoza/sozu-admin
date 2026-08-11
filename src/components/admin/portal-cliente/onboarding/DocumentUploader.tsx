@@ -8,7 +8,7 @@ import { DOC_HELP, DOC_LABELS, usePortal, type DocField, type DocStatus, type Do
 import { extractPdfText } from "@/utils/pdfExtractText";
 import { validateCURPPdf, validateCSFPdf } from "@/utils/pdfDocumentValidators";
 import { extractCURPFields, extractCSFFields } from "@/utils/pdfDocumentExtractors";
-import { setDocBytes, removeDocBytes } from "@/lib/portal-cliente/onboarding-doc-bytes";
+import { setDocBlob, removeDocBlob } from "@/lib/portal-cliente/onboarding-doc-idb";
 
 interface Props {
   type: DocType;
@@ -96,6 +96,11 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
   const addDoc = usePortal((s) => s.addDoc);
   const updateDoc = usePortal((s) => s.updateDoc);
   const removeDoc = usePortal((s) => s.removeDoc);
+  // Quitar un documento: borra el archivo de IndexedDB y el metadato del store.
+  const removeCurrent = (docId: string) => {
+    void removeDocBlob(docId);
+    removeDoc(docId);
+  };
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,15 +135,15 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         confirmed: false,
         createdAt: new Date().toISOString(),
       };
-      // Guarda el archivo en memoria para subirlo a Storage al finalizar el
-      // wizard (registrar-solicitud-propietario). No se persiste en el store.
-      setDocBytes(id, {
+      // Guarda el archivo en IndexedDB (sobrevive F5) para subirlo a Storage al
+      // finalizar el wizard. No se persiste en el store (solo metadatos).
+      await setDocBlob(id, {
         blob: file,
         filename: file.name,
         contentType: file.type || "application/pdf",
       });
       if (doc) {
-        removeDocBytes(doc.id);
+        await removeDocBlob(doc.id);
         removeDoc(doc.id);
       }
       addDoc(newDoc);
@@ -248,7 +253,7 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
           de tu escritura.
           {/* SWAP POINT: alta de solicitud de verificación registral. */}
           <div className="mt-2 flex justify-end">
-            <Button variant="ghost" size="sm" onClick={() => removeDoc(doc.id)}>
+            <Button variant="ghost" size="sm" onClick={() => removeCurrent(doc.id)}>
               <Trash2 className="mr-1 h-3 w-3" /> Deshacer
             </Button>
           </div>
@@ -275,7 +280,7 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
             </div>
           </div>
           <div className="mt-3 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => removeDoc(doc.id)} type="button">
+            <Button size="sm" variant="ghost" onClick={() => removeCurrent(doc.id)} type="button">
               <Trash2 className="mr-1 h-3 w-3" /> Quitar
             </Button>
             <Button
@@ -335,7 +340,7 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
                 <Pencil className="mr-1 h-3 w-3" />
                 {editing ? "Listo" : "Corregir"}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => removeDoc(doc.id)} type="button">
+              <Button size="sm" variant="ghost" onClick={() => removeCurrent(doc.id)} type="button">
                 <Trash2 className="mr-1 h-3 w-3" /> Quitar
               </Button>
               <Button
