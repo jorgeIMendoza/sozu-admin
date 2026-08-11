@@ -152,8 +152,6 @@ interface Multa {
 
 import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
-import { pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
-import { esSinPermiso } from "@/lib/rpcErrors";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 // Read-only documents view component
@@ -561,7 +559,6 @@ export default function DetalleCuentaCobranza() {
   });
   const [downloadingRecibo, setDownloadingRecibo] = useState<number | null>(null);
   const [uploadingEvidence, setUploadingEvidence] = useState<number | null>(null);
-  const [reconciliandoAcuerdos, setReconciliandoAcuerdos] = useState(false);
   const [enDemandaDialog, setEnDemandaDialog] = useState(false);
   const [juicioTerminadoDialog, setJuicioTerminadoDialog] = useState(false);
   const [editCuentaDialog, setEditCuentaDialog] = useState(false);
@@ -2137,14 +2134,9 @@ export default function DetalleCuentaCobranza() {
     });
   }
   
-  // Calculate discrepancy between precio_final and sum of acuerdos.
-  // El precio de contrato es la fuente de verdad y la suma de acuerdos debe seguirlo. Las
-  // cuentas hijas de mantenimiento llevan precio_final = 0 por diseño (plan recurrente, sin
-  // precio contra el que comparar): ahí el banner sería un falso positivo.
+  // Calculate discrepancy between precio_final and sum of acuerdos
   const discrepanciaAcuerdos = (cuentaDetalle?.precio_final || 0) - totalAcuerdos;
-  const hayDiscrepancia = !!acuerdosPago && acuerdosPago.length > 0
-    && (cuentaDetalle?.precio_final || 0) > 0
-    && Math.abs(discrepanciaAcuerdos) > 0.01;
+  const hayDiscrepancia = acuerdosPago && acuerdosPago.length > 0 && Math.abs(discrepanciaAcuerdos) > 0.01;
 
   // Calcular diferencia real y detectar sobrepagos - AHORA USANDO PAGOS REALES
   const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagadoReal;
@@ -2374,73 +2366,24 @@ export default function DetalleCuentaCobranza() {
 
   
 
-  // Reconcilia la suma de acuerdos contra el precio_final del contrato: el último acuerdo
-  // ABIERTO absorbe la diferencia. La RPC no toca cuentas hijas ni cuentas liquidadas.
-  const handleReconciliarAcuerdos = async () => {
-    setReconciliandoAcuerdos(true);
-    try {
-      const { data, error } = await (supabase as any).rpc('reconciliar_acuerdos_precio_final', {
-        p_id_cuenta_cobranza: Number(cuentaId),
-        p_dry_run: false,
-      });
-      if (error) {
-        // DDL pendiente: la RPC aún no existe en este entorno.
-        if (esSinPermiso(error) || /does not exist|function .* not found/i.test(error.message ?? '')) {
-          toast({
-            title: "No disponible",
-            description: "La reconciliación aún no está habilitada en este ambiente.",
-            variant: "destructive",
-          });
-          return;
-        }
-        throw error;
-      }
-      const fila = Array.isArray(data) ? data[0] : null;
-      if (!fila || fila.accion === 'sin_cambio') {
-        toast({ title: "Sin cambios", description: "Los acuerdos ya cuadran con el precio final." });
-      } else if (fila.accion === 'requiere_revision') {
-        toast({
-          title: "Requiere revisión",
-          description: fila.motivo === 'sin_acuerdo_abierto'
-            ? "La cuenta está liquidada: la diferencia se revisa con legal contra el contrato."
-            : "No se pudo ajustar automáticamente; revisar manual.",
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Acuerdos reconciliados", description: "La suma de acuerdos ya cuadra con el precio final." });
-      }
-      queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
-      queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error?.message ?? "No se pudieron reconciliar los acuerdos",
-        variant: "destructive",
-      });
-    } finally {
-      setReconciliandoAcuerdos(false);
-    }
-  };
-
-  // Bucket por método: STP/STP-manual → ceps_stp ; efectivo, cheque y demás →
-  // evidencias_efectivo ; transferencia bancaria → evidencias_efectivo salvo que sea CEP
-  // (esta subida rápida no pregunta, para eso está el modal de carga de evidencia).
-  const handleUploadEvidence = async (pagoId: number, file: File, idMetodoPago?: number | null) => {
+  const handleUploadEvidence = async (pagoId: number, file: File) => {
     try {
       setUploadingEvidence(pagoId);
 
-      const bucket = resolveBucketEvidencia({ idMetodoPago });
-      const filePath = pathEvidencia(cuentaId, pagoId, file.name);
+      // Upload to supabase storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${pagoId}_${Date.now()}.${fileExt}`;
+      const filePath = `evidencias_pago/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, file, { upsert: true });
+        .from('documentos')
+        .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from(bucket)
+        .from('documentos')
         .getPublicUrl(filePath);
 
       // Update pago with url_recibo
@@ -3437,12 +3380,11 @@ export default function DetalleCuentaCobranza() {
         )}
       </div>
 
-      {/* Alert for discrepancy — el precio final del contrato manda; el botón hace que la suma
-          de acuerdos lo siga (el último acuerdo abierto absorbe la diferencia). */}
+      {/* Alert for discrepancy */}
       {hayDiscrepancia && (
         <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
+          <div>
             <p className="font-semibold text-red-700 dark:text-red-300">Discrepancia detectada</p>
             <p className="text-sm text-red-600 dark:text-red-400 mt-1">
               El precio final ({formatCurrency(cuentaDetalle.precio_final)}) no coincide con la suma de los acuerdos de pago ({formatCurrency(totalAcuerdos)}).
@@ -3452,16 +3394,6 @@ export default function DetalleCuentaCobranza() {
               {discrepanciaAcuerdos > 0 ? ' (acuerdos faltantes)' : ' (acuerdos exceden precio)'}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReconciliarAcuerdos}
-            disabled={reconciliandoAcuerdos}
-            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-300"
-          >
-            {reconciliandoAcuerdos && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-            Reconciliar acuerdos
-          </Button>
         </div>
       )}
 
@@ -5223,7 +5155,7 @@ export default function DetalleCuentaCobranza() {
                                                       const file = e.target.files?.[0];
                                                       if (file) {
                                                         e.stopPropagation();
-                                                        handleUploadEvidence(pago.id, file, pago.id_metodos_pago);
+                                                        handleUploadEvidence(pago.id, file);
                                                       }
                                                       e.target.value = '';
                                                     }}
