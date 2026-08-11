@@ -12,6 +12,7 @@ import { es } from "date-fns/locale";
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
 import { ENVIRONMENT } from "@/lib/config";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 import { toast } from "sonner";
 
 const MODAL_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
@@ -98,9 +99,9 @@ export function PipelineOfferDetailDialog({
     },
   });
 
-  const ofertaBaseUrl = `${window.location.origin}/oferta/O-${String(oferta?.id ?? '').padStart(6, '0')}`;
+  const ofertaBaseUrl = buildOfferUrl(oferta?.id ?? '');
   const shareUrl = linkDigital?.reserva?.token
-    ? `${ofertaBaseUrl}/${linkDigital.reserva.token}`
+    ? buildOfferUrl(oferta?.id ?? '', linkDigital.reserva.token)
     : '';
 
   // Fetch property details

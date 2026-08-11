@@ -23,6 +23,7 @@ import {
   personasDelExpediente,
 } from '@/utils/expediente-obligatorios';
 import { cn } from '@/lib/utils';
+import { buildOfferUrl } from '@/lib/offers/offer-links';
 
 type Person = { id: number; nombre_legal: string | null; rfc: string | null };
 type Option = { id: string; label: string };
@@ -309,7 +310,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 label="Oferta comercial"
                 value={row.ofertaId ? (
                   <a
-                    href={`/oferta/${row.ofertaId}`}
+                    href={buildOfferUrl(row.ofertaId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 font-mono text-primary underline-offset-2 hover:underline"

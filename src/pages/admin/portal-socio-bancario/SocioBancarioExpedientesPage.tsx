@@ -17,6 +17,7 @@ import { DesarrolloNoAsignado } from '@/components/admin/portal-socio-bancario/E
 import { useSocioProyecto } from '@/hooks/usePortalSocioBancario/useSocioProyecto';
 import { useExpedienteVentaDetalle } from '@/hooks/useExpedienteVentaDetalle';
 import { cn } from '@/lib/utils';
+import { buildOfferUrl } from '@/lib/offers/offer-links';
 import {
   ALL_TIPO_IDS_OBLIGATORIOS,
   buildLatestPorPersonaTipo,
@@ -323,7 +324,7 @@ function DetailModal({ row, open, onOpenChange }: { row: ExpedienteRow | null; o
                 label="Oferta comercial"
                 value={row.ofertaId ? (
                   <a
-                    href={`/oferta/${row.ofertaId}`}
+                    href={buildOfferUrl(row.ofertaId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 font-mono text-primary underline-offset-2 hover:underline"

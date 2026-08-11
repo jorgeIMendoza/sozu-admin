@@ -10,6 +10,7 @@ import { usePortalProductosStore } from '@/lib/portal-productos/store';
 import { deriveCuenta } from '@/lib/portal-productos/derive';
 import { formatMXN, formatFecha, formatPct } from '@/lib/portal-productos/format';
 import { useCuentaProductoDetalle } from '@/hooks/usePortalProductos/useCuentaProductoDetalle';
+import { buildOfferUrl } from '@/lib/offers/offer-links';
 
 export default function DetalleCuentaPage() {
   const { cuentaId } = useParams();
@@ -102,7 +103,7 @@ export default function DetalleCuentaPage() {
           <Info label="Oferta" value={
             cuenta.ofertaId && cuenta.ofertaId !== '—' ? (
               <a
-                href={`/oferta/${cuenta.ofertaId}`}
+                href={buildOfferUrl(cuenta.ofertaId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Ver oferta comercial"

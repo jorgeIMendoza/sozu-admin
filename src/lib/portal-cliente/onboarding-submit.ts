@@ -1,14 +1,16 @@
 // Envío de la solicitud del onboarding de propietarios a la Edge Function
 // `registrar-solicitud-propietario`. Los PDFs NO viajan en el JSON (el gateway
-// rechaza bodies > ~1 MB con 413): se suben directo a Storage por URL firmada.
+// rechaza bodies > ~1 MB con 413): se suben directo a Storage por URL firmada,
+// SOLO en este envío (nada llega a Storage antes → sin huérfanos).
 //
 // Flujo:
 //   1) action:"urls"  → pide una URL de subida firmada por documento.
-//   2) uploadToSignedUrl → sube cada PDF directo a Storage (sin límite del gateway).
+//   2) uploadToSignedUrl → sube cada PDF (leído de IndexedDB) directo a Storage.
 //   3) action:"crear" → crea persona/entidad/solicitud + registra las rutas subidas.
+//   4) al éxito, limpia los archivos retenidos en IndexedDB.
 
 import { supabase } from "@/integrations/supabase/client";
-import { getDocBytes } from "./onboarding-doc-bytes";
+import { getDocBlob, clearDocBlobs } from "./onboarding-doc-idb";
 import type { OnboardingState, UploadedDoc, VerificationCheck } from "./onboarding-store";
 
 const FN = "registrar-solicitud-propietario";
@@ -69,19 +71,18 @@ export async function submitSolicitudPropietario(
     sexo: field(curpDoc, "sexo"),
   };
 
-  // Documentos con contenido disponible en memoria (uno por tipo).
-  const docsConBytes = onb.docs
-    .map((d) => {
-      const b = getDocBytes(d.id);
-      return b ? { tipo: d.type as string, blob: b.blob, contentType: b.contentType } : null;
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+  // Documentos con archivo disponible en IndexedDB (uno por tipo).
+  const docsConBlob: { tipo: string; blob: Blob; contentType: string }[] = [];
+  for (const d of onb.docs) {
+    const b = await getDocBlob(d.id);
+    if (b) docsConBlob.push({ tipo: d.type as string, blob: b.blob, contentType: b.contentType });
+  }
 
   // 1) Pedir URLs firmadas + 2) subir cada PDF a Storage.
   const rutas: { tipo: string; path: string }[] = [];
-  if (docsConBytes.length > 0) {
+  if (docsConBlob.length > 0) {
     const { data: urlsData, error: urlsErr } = await supabase.functions.invoke(FN, {
-      body: { action: "urls", documentos: docsConBytes.map((d) => ({ tipo: d.tipo })) },
+      body: { action: "urls", documentos: docsConBlob.map((d) => ({ tipo: d.tipo })) },
     });
     if (urlsErr) {
       throw new Error(mensajeError(await codigoError(urlsErr)) ?? "No se pudo preparar la subida de documentos.");
@@ -89,7 +90,7 @@ export async function submitSolicitudPropietario(
     const uploads: UploadSlot[] = (urlsData as { uploads?: UploadSlot[] })?.uploads ?? [];
 
     for (const slot of uploads) {
-      const doc = docsConBytes.find((d) => d.tipo === slot.tipo);
+      const doc = docsConBlob.find((d) => d.tipo === slot.tipo);
       if (!doc) continue;
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
@@ -110,6 +111,7 @@ export async function submitSolicitudPropietario(
       action: "crear",
       idPropiedad,
       email: onb.accountEmail,
+      telefono: onb.accountPhone ? onb.accountPhone.replace(/\D/g, "") : undefined,
       tipoPersona: onb.personType,
       tipoCompra: onb.purchaseType,
       antiguedadCompra: onb.purchaseRecency,
@@ -126,6 +128,9 @@ export async function submitSolicitudPropietario(
 
   const caseId = (data as { caseId?: string })?.caseId;
   if (!caseId) throw new Error("El servidor no devolvió un número de caso. Intenta de nuevo.");
+
+  // Envío exitoso: los archivos ya están en Storage; liberar IndexedDB.
+  await clearDocBlobs();
 
   return {
     caseId,

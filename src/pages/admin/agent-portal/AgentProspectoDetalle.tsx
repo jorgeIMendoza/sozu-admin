@@ -22,6 +22,7 @@ import { ArrowLeft, CalendarPlus, Check, ExternalLink, FileText, Loader2, Messag
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 interface TimelineItem {
   key: string;
@@ -393,8 +394,8 @@ const AgentProspectoDetalle = () => {
           <SectionCard icon={FileText} title="Ofertas digitales" bodyClassName="p-5 md:p-6">
             <div className="space-y-2.5">
               {ofertas.map((o: any) => {
-                const base = `${window.location.origin}/oferta/O-${String(o.id).padStart(6, "0")}`;
-                const link = o.token ? `${base}/${o.token}` : base;
+                const base = buildOfferUrl(o.id);
+                const link = buildOfferUrl(o.id, o.token);
                 return (
                   <div
                     key={o.id}

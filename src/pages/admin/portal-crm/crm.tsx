@@ -1202,36 +1202,21 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
     }
     setBusy(true);
     try {
-      // 1. Persona (datos de contacto)
-      const { data: persona, error: pErr } = await (supabase as any).from("personas").insert({
-        tipo_persona: "pf",
-        nombre_legal: form.full_name,
-        email: email || null,
-        telefono: phone || null,
-      }).select("id").single();
-      if (pErr) throw pErr;
-      // 2. Entidad relacionada (prospecto tipo 7)
-      const { data: er, error: eErr } = await (supabase as any).from("entidades_relacionadas").insert({
-        id_persona: persona.id,
-        id_tipo_entidad: 7,
-        id_proyecto: form.development_id ? Number(form.development_id) : null,
-      }).select("id").single();
-      if (eErr) throw eErr;
-      // 3. Estado del CRM (best-effort: si la tabla aún no existe, el contacto igual queda creado)
-      const { error: aErr } = await (supabase as any).from("crm_leads_atribucion").insert({
-        id_entidad_relacionada: er.id,
-        estatus_lead: form.lead_status,
-        etapa_ciclo_vida: form.lifecycle_stage,
-        id_propietario: form.contact_owner || user?.id || null,
-        origen: "crm",
+      // Alta ATOMICA via RPC: persona + entidad + atribucion + categoria en una sola tx, con el
+      // dueño (id_persona_duena_lead) fijado server-side. Reemplaza los 3 INSERTs sueltos que
+      // dejaban personas huerfanas cuando la RLS de agentes bloqueaba el RETURNING de la entidad
+      // (roles no-admin; bug vivo desde el deploy del 8-ago).
+      const { error } = await (supabase as any).rpc("crm_crear_contacto", {
+        p_nombre: form.full_name,
+        p_email: email || null,
+        p_telefono: phone || null,
+        p_id_proyecto: form.development_id ? Number(form.development_id) : null,
+        p_estatus_lead: form.lead_status,
+        p_etapa_ciclo_vida: form.lifecycle_stage,
+        p_id_propietario: form.contact_owner || user?.id || null,
+        p_id_categoria: form.categoria ? Number(form.categoria) : null,
       });
-      if (aErr) console.warn("crm_leads_atribucion no disponible:", aErr.message);
-      // 4. Categoría (procedencia) seleccionada (best-effort: si la tabla aún no existe, el contacto igual queda creado)
-      if (form.categoria) {
-        const { error: cErr } = await (supabase as any).from("entidades_relacionadas_categorias")
-          .insert({ id_entidad_relacionada: er.id, id_categoria: Number(form.categoria), activo: true });
-        if (cErr) console.warn("crm_categorias no disponible:", cErr.message);
-      }
+      if (error) throw error;
       toast.success("Contacto creado");
       setOpen(false);
       setDuplicates([]);
