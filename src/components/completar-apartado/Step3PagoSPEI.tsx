@@ -11,6 +11,7 @@ import {
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import type { FormalReservation } from "@/lib/offers/formal-reservation-data";
 import { getOfferById } from "@/lib/offers/offer-data";
+import { apartadoDeOferta } from "@/lib/offers/apartado";
 
 interface Step3PagoSPEIProps {
   formalReservation: FormalReservation;
@@ -55,7 +56,7 @@ const Step3PagoSPEI = ({ formalReservation, onBack }: Step3PagoSPEIProps) => {
     // Secuencia crítica: recordPayment → releaseHold → navigate ceremonial
     recordPayment(formalReservation.id, {
       id: `PAY-${Date.now().toString(36).toUpperCase()}`,
-      amountMXN: 20000,
+      amountMXN: apartadoDeOferta(getOfferById(formalReservation.offerId)),
       paymentMethod: "spei",
       detectedAt: new Date().toISOString(),
       // SWAP POINT: en producción este viene de STP via webhook

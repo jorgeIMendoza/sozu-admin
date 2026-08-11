@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Home, Clock, BookOpen, FileText, ShieldCheck, ArrowRight } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import type { OfertaComercial } from "@/lib/offers/offer-data";
+import { formatMXN, type OfertaComercial } from "@/lib/offers/offer-data";
+import { apartadoDeOferta } from "@/lib/offers/apartado";
 
 interface Props {
   open: boolean;
@@ -61,7 +62,7 @@ const FormalReservationGateModal = ({ open, onClose, offer, onStartFormal }: Pro
         <p className="text-xs text-muted-foreground leading-relaxed">El apartado tiene tres fases. Esto es lo que sigue:</p>
         <div>
           <PhaseItem index={1} icon={Clock} phaseLabel="Fase 1 · 5 minutos" title="Reservas tu unidad" description="Capturas tus datos básicos y validamos tu email para iniciar el proceso de apartado a tu nombre." />
-          <PhaseItem index={2} icon={FileText} phaseLabel="Fase 2 · transferencia SPEI" title="Completas tu apartado" description="Haces una transferencia SPEI de $20,000 MXN a la CLABE de la unidad para apartarla. El monto se aplica al precio final de tu propiedad." />
+          <PhaseItem index={2} icon={FileText} phaseLabel="Fase 2 · transferencia SPEI" title="Completas tu apartado" description={`Haces una transferencia SPEI de ${formatMXN(apartadoDeOferta(offer))} MXN a la CLABE de la unidad para apartarla. El monto se aplica al precio final de tu propiedad.`} />
           <PhaseItem index={3} icon={BookOpen} phaseLabel="Fase 3 · con tu asesor" title="Revisas el contrato" description="Tu unidad queda apartada a tu nombre mientras revisas el contrato preliminar y completas tu expediente con tu asesor." />
         </div>
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3.5">

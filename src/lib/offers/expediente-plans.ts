@@ -1,6 +1,5 @@
 import type { PaymentItem, PlanPagosData } from "./formal-reservation-data";
-
-const APARTADO_AMOUNT = 20000;
+import { APARTADO_DEFAULT_MXN } from "./apartado";
 
 export const PAYMENT_PLANS = {
   corto: {
@@ -48,10 +47,16 @@ const addMonths = (date: Date, months: number): Date => {
 
 const fmtDate = (d: Date): string => d.toISOString().slice(0, 10);
 
-export const computePlanDetails = (planId: PlanPresetId, totalPriceMXN: number) => {
+export const computePlanDetails = (
+  planId: PlanPresetId,
+  totalPriceMXN: number,
+  // El apartado es por proyecto (`proyectos.monto_apartado`). Quien tenga la oferta
+  // a la mano debe pasarlo; el default solo cubre las vistas sin oferta cargada.
+  apartadoMXN: number = APARTADO_DEFAULT_MXN,
+) => {
   const plan = PAYMENT_PLANS[planId];
   const engancheTotal = Math.round(totalPriceMXN * plan.enganchePct);
-  const engancheRestante = Math.max(0, engancheTotal - APARTADO_AMOUNT);
+  const engancheRestante = Math.max(0, engancheTotal - apartadoMXN);
   const restoTotal = totalPriceMXN - engancheTotal;
   const mensualidad =
     plan.mensualidadesCount > 0 ? Math.round((restoTotal * 0.5) / plan.mensualidadesCount) : 0;
@@ -70,8 +75,9 @@ export const generateExpedienteSchedule = (
   planId: PlanPresetId,
   totalPriceMXN: number,
   apartadoPaidAt: string,
+  apartadoMXN: number = APARTADO_DEFAULT_MXN,
 ): PlanPagosData => {
-  const details = computePlanDetails(planId, totalPriceMXN);
+  const details = computePlanDetails(planId, totalPriceMXN, apartadoMXN);
   const startDate = new Date(apartadoPaidAt);
   const schedule: PaymentItem[] = [];
 
@@ -80,7 +86,7 @@ export const generateExpedienteSchedule = (
     type: "apartado",
     concepto: "Apartado pagado",
     fechaProgramada: fmtDate(startDate),
-    montoMXN: APARTADO_AMOUNT,
+    montoMXN: apartadoMXN,
     status: "pagado",
   });
 
@@ -121,7 +127,7 @@ export const generateExpedienteSchedule = (
   return {
     selectedPlanId: planId,
     totalPriceMXN,
-    appliedFromApartado: APARTADO_AMOUNT,
+    appliedFromApartado: apartadoMXN,
     engancheTotalMXN: details.engancheTotal,
     engancheRestanteMXN: details.engancheRestante,
     mensualidadesCount: details.plan.mensualidadesCount,

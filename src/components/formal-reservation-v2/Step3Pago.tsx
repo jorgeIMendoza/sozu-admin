@@ -11,8 +11,10 @@ import {
   ShieldCheck,
   Info,
 } from "lucide-react";
+import { APARTADO_DEFAULT_MXN } from "@/lib/offers/apartado";
 
-const APARTADO_AMOUNT_MXN = 20000;
+// Pantalla deprecada, sin oferta a la mano: usa el default compartido.
+const APARTADO_AMOUNT_MXN = APARTADO_DEFAULT_MXN;
 const AUTO_DETECT_DELAY_MS = 15000;
 
 // SWAP POINT: en producción cambiar a `import.meta.env.DEV`
