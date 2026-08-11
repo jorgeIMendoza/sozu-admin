@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Clock, SlidersHorizontal, Loader2, History, Building2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProyectosFiltro } from "@/hooks/usePortalAltaDireccion/useProyectosFiltro";
 import { useProyectosMotorComisiones } from "@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones";
+import { useProyectosSozuReales } from "@/hooks/usePortalEstructuraComisiones/useProyectosTallwoodReales";
+import { useEstructuraRealRaw, comisionistasDisponibles } from "@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador";
 import { SimulatorProvider, useSimulator } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { MotorComisionesReadOnly } from "@/components/admin/portal-alta-direccion/MotorComisionesReadOnly";
 import {
@@ -69,6 +71,27 @@ function MotorConsulta() {
   const { channels, roles, roleAssignments, commissionRules, motorConfig, motorProjectId, setMotorProjectId } = useSimulator();
   const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
 
+  // Precio de venta de referencia = precio promedio PONDERADO de la oferta
+  // disponible (id_estatus_disponibilidad = 2) del proyecto. Misma fuente que
+  // usa el Portal Estructura de comisiones (CommissionsTab) para estimar pagos.
+  const { proyectos: proyectosSozu } = useProyectosSozuReales();
+  const precioReferencia = useMemo(
+    () => proyectosSozu.find((p) => p.id === motorProjectId)?.precioPromedioUnidad ?? 0,
+    [proyectosSozu, motorProjectId],
+  );
+
+  // Resolución del nombre del comisionista desde `personalId` (el snapshot del
+  // motor guarda solo el id de persona). Sin esto, la columna "Comisionista"
+  // caía a "—".
+  const { data: estructuraRaw } = useEstructuraRealRaw();
+  const comisionistaPorId = useMemo(
+    () =>
+      new Map(
+        comisionistasDisponibles(estructuraRaw, roles, motorProjectId).map((c) => [c.personalId, c]),
+      ),
+    [estructuraRaw, roles, motorProjectId],
+  );
+
   const snapshot: MotorSnapshot = {
     // La comisión total viaja por canal: cada Canal de Venta define la suya.
     channels: channels.map((c) => ({
@@ -85,6 +108,7 @@ function MotorConsulta() {
       roleId: r.roleId,
       percentage: r.percentage,
       pool: r.pool,
+      comisionista: r.personalId ? comisionistaPorId.get(r.personalId)?.nombre ?? null : null,
     })),
   };
 
@@ -112,7 +136,7 @@ function MotorConsulta() {
           <p className="text-xs text-muted-foreground">Elige un desarrollo arriba para ver su Motor de Comisiones.</p>
         </div>
       ) : (
-        <MotorComisionesReadOnly snapshot={snapshot} />
+        <MotorComisionesReadOnly snapshot={snapshot} precioReferenciaInicial={precioReferencia || undefined} />
       )}
     </div>
   );
@@ -195,6 +219,11 @@ function ValidacionSheet({
 }) {
   const validar = useValidarPropuesta();
   const { data: historial = [] } = useValidacionesHistorial(propuesta?.id_proyecto);
+  const { proyectos: proyectosSozu } = useProyectosSozuReales();
+  const precioReferencia = useMemo(
+    () => proyectosSozu.find((p) => p.id === propuesta?.id_proyecto)?.precioPromedioUnidad ?? 0,
+    [proyectosSozu, propuesta?.id_proyecto],
+  );
   const [notas, setNotas] = useState("");
 
   const decidir = (estado: "validada" | "rechazada") => {
@@ -238,7 +267,7 @@ function ValidacionSheet({
             </SheetHeader>
 
             <div className="mt-4 space-y-5">
-              <MotorComisionesReadOnly snapshot={propuesta.snapshot} />
+              <MotorComisionesReadOnly snapshot={propuesta.snapshot} precioReferenciaInicial={precioReferencia || undefined} />
 
               <div className="rounded-xl border bg-card p-4">
                 <p className="mb-2 text-sm font-semibold">Validación</p>

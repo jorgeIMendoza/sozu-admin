@@ -1,18 +1,38 @@
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import type { MotorSnapshot } from "@/hooks/usePortalEstructuraComisiones/useComisionesValidacion";
 
 /**
  * Render de solo lectura del Motor de Comisiones a partir de un snapshot
  * (autocontenido). Reproduce el layout de `CommissionsTab` del Portal
- * Estructura de comisiones (tarjeta por canal con badges, tabla Rol/%/Pool y
- * "Resumen del canal"), sin depender del SimulatorContext ni permitir edición.
+ * Estructura de comisiones (tarjeta por canal con badges, tabla por
+ * comisionista y "Resumen del canal"), sin depender del SimulatorContext ni
+ * permitir edición.
+ *
+ * `precioReferenciaInicial` (opcional) prellena el "Precio de venta de
+ * referencia" editable; con él se estima el valor en $ de cada comisión
+ * (% sobre precio de venta final × precio de referencia).
  */
 
 const fmtCurrency = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n || 0);
 
-export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot }) {
+export function MotorComisionesReadOnly({
+  snapshot,
+  precioReferenciaInicial,
+}: {
+  snapshot: MotorSnapshot;
+  precioReferenciaInicial?: number;
+}) {
+  // Precio de venta de referencia editable; se recalcula al cambiar el
+  // prellenado (p. ej. al cambiar de proyecto).
+  const [precioRef, setPrecioRef] = useState<number>(precioReferenciaInicial ?? 0);
+  useEffect(() => {
+    setPrecioRef(precioReferenciaInicial ?? 0);
+  }, [precioReferenciaInicial]);
+
   if (!snapshot) {
     return <p className="text-sm text-muted-foreground">Sin datos del motor en esta propuesta.</p>;
   }
@@ -22,7 +42,7 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs text-muted-foreground">
             Modo: A · Sobre Venta · Comisión total{" "}
@@ -34,10 +54,31 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
             </span>
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="precio-referencia" className="whitespace-nowrap text-xs text-muted-foreground">
+            Precio de venta de referencia
+          </label>
+          <Input
+            id="precio-referencia"
+            type="number"
+            min={0}
+            step={100000}
+            value={precioRef || ""}
+            onChange={(e) => setPrecioRef(Math.max(0, Number(e.target.value) || 0))}
+            className="h-8 w-40 text-right font-mono text-sm"
+            placeholder="0"
+          />
+        </div>
       </div>
 
       {channels.map((ch) => {
         const channelRules = commissionRules.filter((r) => r.channelId === ch.id);
+        // Filas a mostrar: sin comisionistas en 0% y ordenadas de mayor a menor
+        // comisión. El "Resumen del canal" sigue calculándose sobre todas las
+        // reglas (channelRules) para no alterar la matemática de dispersión.
+        const displayRules = channelRules
+          .filter((r) => (r.percentage || 0) > 0)
+          .sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
         const extPct = ch.externalCommissionPct;
         const comisionTotal = ch.totalCommissionPct ?? snapshot.totalCommissionPct ?? 0;
         const comisionExterna = extPct;
@@ -71,49 +112,58 @@ export function MotorComisionesReadOnly({ snapshot }: { snapshot: MotorSnapshot 
               </div>
             </div>
 
-            {channelRules.length === 0 ? (
-              <p className="text-sm italic text-muted-foreground">Sin reglas de comisión definidas</p>
+            {displayRules.length === 0 ? (
+              <p className="text-sm italic text-muted-foreground">
+                Sin comisionistas con comisión asignada
+              </p>
             ) : (
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th>Comisionista</th>
                     <th>Rol</th>
-                    <th>% sobre venta</th>
+                    <th>% sobre precio de venta final</th>
+                    <th>Valor comisión estimado</th>
                     <th>Pool</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {channelRules.map((rule, i) => {
+                  {displayRules.map((rule, i) => {
                     const role = roleById.get(rule.roleId);
                     const assignment = assignmentByRole.get(rule.roleId);
+                    const pct = rule.percentage || 0;
+                    const valorEstimado = precioRef > 0 ? (pct / 100) * precioRef : null;
                     return (
                       <tr key={`${rule.channelId}-${rule.roleId}-${i}`}>
+                        {/* Los snapshots previos al modelo por persona no traen
+                            `comisionista`: ahí solo se conoce el rol. */}
+                        <td className="text-sm font-medium">{rule.comisionista ?? "—"}</td>
                         <td>
                           <div className="flex flex-col gap-0.5">
-                            {/* Los snapshots previos al modelo por persona no traen
-                                `comisionista`: ahí el rol sigue siendo el encabezado. */}
-                            <span className="text-sm font-medium">
-                              {rule.comisionista ?? role?.name ?? "—"}
-                            </span>
-                            {rule.comisionista && (
-                              <span className="pl-0.5 text-[11px] text-muted-foreground">
-                                {role?.name ?? "Sin rol"}
-                              </span>
-                            )}
+                            <span className="text-sm">{role?.name ?? "—"}</span>
                             {assignment && role && (
-                              <span className="pl-0.5 text-[11px] text-muted-foreground">
+                              <span className="text-[11px] text-muted-foreground">
                                 {fmtCurrency(assignment.baseSalary)} / mes · {role.belongsTo === "sozu_central" ? "SOZU" : "Proyecto"}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="font-mono text-sm">{(rule.percentage || 0).toFixed(2)}%</td>
+                        <td className="font-mono text-sm">{pct.toFixed(2)}%</td>
+                        <td className="font-mono text-sm">
+                          {valorEstimado != null ? fmtCurrency(valorEstimado) : "—"}
+                        </td>
                         <td className="text-sm">{rule.pool === "sozu" ? "SOZU" : "Proyecto"}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            )}
+
+            {displayRules.length > 0 && precioRef <= 0 && (
+              <p className="mt-2 text-[11px] italic text-muted-foreground">
+                Ingresa un precio de venta de referencia arriba para estimar el valor de cada comisión.
+              </p>
             )}
 
             <div className={`mt-4 rounded-lg border p-4 ${statusColor}`}>
