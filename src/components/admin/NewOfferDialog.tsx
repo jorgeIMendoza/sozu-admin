@@ -75,6 +75,7 @@ import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { formatEscalonadoLabel, mesesEntreFechas, calcDynamicScheme } from "@/utils/escalonadoUtils";
 import { ShareDigitalOfferDialog } from "@/components/admin/offers/ShareDigitalOfferDialog";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 import {
   Tooltip,
   TooltipContent,
@@ -1229,8 +1230,10 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             .select('id, token')
             .single();
           if (aptError) throw aptError;
-          const ofertaBase = `${window.location.origin}/oferta/O-${String(result.offerId).padStart(6, "0")}`;
-          const ofertaLink = `${ofertaBase}/${reservacion.token}`;
+          // Host fijo de ofertas: el link no puede depender del portal desde el
+          // que se generó (ver lib/offers/offer-links.ts).
+          const ofertaBase = buildOfferUrl(result.offerId);
+          const ofertaLink = buildOfferUrl(result.offerId, reservacion.token);
           // Link de revisión: la misma oferta sin credencial. Sirve para que el
           // asesor la revise; no permite continuar con el pago.
           const ofertaLinkPreview = ofertaBase;

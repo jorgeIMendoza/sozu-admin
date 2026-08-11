@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatOfertaId } from '@/utils/cuentaCobranzaUtils';
+import { buildOfferUrl } from '@/lib/offers/offer-links';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
@@ -292,7 +293,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                     <span className="text-[12px] text-muted-foreground w-28 shrink-0">Oferta digital</span>
                     <IconTip label="Abrir oferta digital en nueva pestaña">
                       <a
-                        href={`${window.location.origin}/oferta/${ofertaId}`}
+                        href={buildOfferUrl(ofertaId)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[12px] font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors"

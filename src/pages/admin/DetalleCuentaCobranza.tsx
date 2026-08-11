@@ -152,6 +152,7 @@ interface Multa {
 
 import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 // Read-only documents view component
 function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] }: { cuentaCobranzaId: number; propiedadId?: number | null; personaIds?: number[] }) {
@@ -3753,7 +3754,7 @@ export default function DetalleCuentaCobranza() {
                 <div className="flex flex-col gap-0.5">
                   {/* Oferta digital — abre la página pública de la oferta */}
                   <a
-                    href={`${window.location.origin}/oferta/${ofertaSlug}`}
+                    href={buildOfferUrl(ofertaSlug)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center text-sm text-primary hover:underline"
