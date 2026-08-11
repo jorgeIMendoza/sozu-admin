@@ -10,6 +10,7 @@ import {
   Ruler,
   User,
   FileText,
+  ExternalLink,
   Loader2,
 } from "lucide-react";
 import { useState } from "react";
@@ -306,7 +307,12 @@ export function PagoExternoContent({
                 className="h-8"
                 disabled={generandoOferta}
                 onClick={async () => {
-                  if (detalle.oferta_comercial.url_oferta) {
+                  const folio = detalle.oferta_comercial.folio_oferta;
+                  if (folio) {
+                    // Prioridad: Oferta Digital (página web de la oferta).
+                    window.open(`${window.location.origin}/oferta/${folio}`, "_blank");
+                  } else if (detalle.oferta_comercial.url_oferta) {
+                    // Sin URL de oferta digital → PDF de la oferta.
                     window.open(detalle.oferta_comercial.url_oferta, "_blank");
                   } else {
                     await handleGenerarOferta(detalle.oferta_comercial.id_oferta!);
@@ -318,10 +324,15 @@ export function PagoExternoContent({
                     <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                     Generando…
                   </>
+                ) : detalle.oferta_comercial.folio_oferta ? (
+                  <>
+                    <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                    Ver oferta digital
+                  </>
                 ) : (
                   <>
                     <FileText className="h-3.5 w-3.5 mr-1" />
-                    Ver oferta
+                    Ver oferta (PDF)
                   </>
                 )}
               </Button>
