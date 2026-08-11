@@ -20,6 +20,7 @@ import {
   BarChart3,
   MousePointerClick,
   SlidersHorizontal,
+  Users,
   LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -47,6 +48,7 @@ const ROUTES_SIN_FILTER_BAR = [
   "/admin/portal-alta-direccion/ingresos-egresos",
   "/admin/portal-alta-direccion/forecast-ingresos",
   "/admin/portal-alta-direccion/estructura-comisiones",
+  "/admin/portal-alta-direccion/personal",
   "/admin/portal-alta-direccion/mediciones/portales",
   "/admin/portal-alta-direccion/mediciones/menus",
   "/admin/portal-alta-direccion/mediciones/ctas",
@@ -92,6 +94,12 @@ const navGroups: NavGroup[] = [
         ],
       },
       { label: "Estructura de Comisiones", path: "/admin/portal-alta-direccion/estructura-comisiones", icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: "Organización",
+    items: [
+      { label: "Personal y Sueldos", path: "/admin/portal-alta-direccion/personal", icon: Users },
     ],
   },
   {
