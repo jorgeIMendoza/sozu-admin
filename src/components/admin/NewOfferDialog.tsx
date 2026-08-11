@@ -248,6 +248,8 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     leadPhone: string;
     leadPhoneCountry: string;
     projectName?: string;
+    /** Oferta de propiedad + productos: lo que se manda por correo desde el popup. */
+    offerIds: number[];
     pdfContext: OfferPdfContext;
   } | null>(null);
   const [downloadingSharePdf, setDownloadingSharePdf] = useState(false);
@@ -636,11 +638,18 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
   }, [propertyDetails, form]);
 
   /**
-   * Genera los PDFs de la oferta (propiedad + productos) y los descarga.
-   * Se usa tanto en el flujo de "Generar Oferta" (PDF) como bajo demanda desde
-   * el popup de compartir de la oferta digital.
+   * Genera los PDFs de la oferta (propiedad + productos). Se usa en el flujo de
+   * "Generar Oferta" (PDF), bajo demanda desde el popup de compartir y para
+   * adjuntarlos al correo.
+   *
+   * `descargar: false` los sube a Storage (quedan en `ofertas.url`) sin bajarlos
+   * al equipo: es lo que necesita el correo con PDF, donde nadie pidió el archivo.
    */
-  const generateAndDownloadOfferPdfs = React.useCallback(async (ctx: OfferPdfContext) => {
+  const generateAndDownloadOfferPdfs = React.useCallback(async (
+    ctx: OfferPdfContext,
+    opts: { descargar?: boolean } = {},
+  ) => {
+    const { descargar: bajarArchivos = true } = opts;
     const { generateOfferPDFAsBase64 } = await import('@/services/htmlToPdfService');
     const generatedPdfFiles: { blob: Blob; filename: string; offerId: number; tipo: string; url: string }[] = [];
     const attachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
@@ -685,7 +694,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       }
     }
 
-    for (const file of generatedPdfFiles) {
+    for (const file of bajarArchivos ? generatedPdfFiles : []) {
       try {
         const url = URL.createObjectURL(file.blob);
         const link = document.createElement('a');
@@ -721,6 +730,12 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
     } finally {
       setDownloadingSharePdf(false);
     }
+  };
+
+  /** Deja el PDF en Storage para que el correo pueda adjuntarlo (sin descargarlo). */
+  const handlePrepareSharePdfs = async () => {
+    if (!shareOffer) return;
+    await generateAndDownloadOfferPdfs(shareOffer.pdfContext, { descargar: false });
   };
 
   const createOfferMutation = useMutation({
@@ -1187,7 +1202,6 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         leadEmail: result.leadEmail,
         leadPhone: result.leadPhone || '',
       };
-      let digitalAttachments: { base64: string; filename: string; offerId: number; tipo: string }[] = [];
       const emailServicePromise = import('@/services/offerEmailService');
 
       // En oferta digital el PDF ya NO se genera en automático: se descarga a
@@ -1198,8 +1212,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             title: "Generando PDFs...",
             description: `Preparando ${allOfferIdsForEmail.length} PDF(s) para descarga`,
           });
-          const { count, attachments } = await generateAndDownloadOfferPdfs(pdfContext);
-          digitalAttachments = attachments;
+          const { count } = await generateAndDownloadOfferPdfs(pdfContext);
           toast({
             title: "Oferta generada",
             description: `Se descargaron ${count} PDF(s).`,
@@ -1249,42 +1262,35 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
             leadPhone: result.leadPhone || '',
             leadPhoneCountry: variables.data.clave_pais_telefono || 'MX',
             projectName: propertyDetails?.entidades_relacionadas?.proyectos?.nombre,
+            offerIds: allOfferIdsForEmail,
             pdfContext,
           });
-          // El correo va en su propio try: con el link ya emitido, que falle el
-          // envío no justifica revertir la oferta.
-          if (sendEmailOnGenerate) {
-            try {
-              const { sendMultipleOffersEmailDirect } = await emailServicePromise;
-              await sendMultipleOffersEmailDirect({
-                offerIds: allOfferIdsForEmail,
-                propertyNumber,
-                recipientEmail: result.leadEmail,
-                recipientName: result.leadName,
-                reservationLink: ofertaLink,
-                preGeneratedAttachments: digitalAttachments.filter(a => a.tipo === 'propiedad').length > 0
-                  ? digitalAttachments.filter(a => a.tipo === 'propiedad')
-                  : digitalAttachments.length > 0 ? digitalAttachments : undefined,
-              });
-              toast({
-                title: "Correo enviado",
-                description: "La oferta digital fue enviada al correo del prospecto.",
-                duration: 5000,
-                variant: "success",
-              });
-            } catch (emailErr) {
-              console.error('Error enviando el correo de la oferta digital:', emailErr);
-              toast({
-                title: "Oferta digital generada",
-                description: "No se pudo enviar el correo, pero puedes compartir el link desde aquí.",
-                duration: 6000,
-              });
-            }
-          } else {
+          toast({
+            title: "Oferta digital generada",
+            description: "La oferta se generó correctamente.",
+            duration: 5000,
+          });
+
+          // El correo de la oferta digital SIEMPRE sale en automático (no depende
+          // del checkbox, que solo aplica al flujo de PDF). Va en su propio try:
+          // con el link ya emitido, que falle el envío no justifica revertir la
+          // oferta — el asesor todavía puede compartirla desde el popup.
+          try {
+            const { sendDigitalOfferEmail } = await emailServicePromise;
+            await sendDigitalOfferEmail({
+              offerIds: allOfferIdsForEmail,
+              reservationLink: ofertaLink,
+              propertyNumber,
+              recipientEmail: result.leadEmail,
+              recipientName: result.leadName,
+              silent: true,
+            });
+          } catch (emailErr) {
+            console.error('Error enviando el correo de la oferta digital:', emailErr);
             toast({
-              title: "Oferta digital generada",
-              description: "La oferta se generó correctamente. No se envió correo al cliente.",
-              duration: 5000,
+              title: "Correo no enviado",
+              description: "No se pudo enviar el correo, pero puedes compartir el link desde aquí.",
+              duration: 6000,
             });
           }
         } catch (digitalErr: any) {
@@ -2919,20 +2925,25 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
               </div>
             )}
 
-            <div className="flex items-center gap-2 mt-2">
-              <Checkbox
-                id="sendEmailOnGenerate"
-                checked={sendEmailOnGenerate}
-                onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
-              />
-              <label htmlFor="sendEmailOnGenerate" className="text-sm text-foreground cursor-pointer">
-                Enviar oferta por correo al prospecto
-              </label>
-            </div>
+            {/* En oferta digital el correo NO es opcional: sale siempre al
+                generarla. El checkbox solo aplica al flujo de PDF. */}
+            {pendingButton !== 'digital' && (
+              <div className="flex items-center gap-2 mt-2">
+                <Checkbox
+                  id="sendEmailOnGenerate"
+                  checked={sendEmailOnGenerate}
+                  onCheckedChange={(checked) => setSendEmailOnGenerate(checked === true)}
+                />
+                <label htmlFor="sendEmailOnGenerate" className="text-sm text-foreground cursor-pointer">
+                  Enviar oferta por correo al prospecto
+                </label>
+              </div>
+            )}
 
             {pendingButton === 'digital' ? (
               <p className="text-sm text-muted-foreground">
-                Se generará la oferta digital. El PDF podrás descargarlo desde el popup de compartir.
+                Se generará la oferta digital y se enviará automáticamente al correo del
+                prospecto. El PDF podrás descargarlo desde el popup de compartir.
               </p>
             ) : productsWithPriceInfo.total > 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -2972,9 +2983,11 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
         leadPhoneCountry={shareOffer.leadPhoneCountry}
         propertyNumber={propertyNumber}
         projectName={shareOffer.projectName}
+        offerIds={shareOffer.offerIds}
         forceLight={forceLight}
         onDownloadPdf={handleDownloadSharePdfs}
         downloadingPdf={downloadingSharePdf}
+        onPreparePdf={handlePrepareSharePdfs}
       />
     )}
     </>

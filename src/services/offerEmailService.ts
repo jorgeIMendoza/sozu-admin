@@ -208,13 +208,15 @@ export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams):
       recipientName = recipientName || persona.nombre_legal || '';
     }
 
-    // Llamar al edge function
+    // Llamar al edge function. `includePdf` porque este flujo es el del PDF:
+    // el adjunto es el entregable, no el link.
     const { error } = await supabase.functions.invoke('enviar-oferta-email', {
       body: {
         offerIds: [offerId],
         recipientEmail,
         recipientName: recipientName || '',
         propertyNumber: propertyNumber || '',
+        includePdf: true,
       },
     });
 
@@ -314,6 +316,7 @@ export async function sendMultipleOffersEmail(params: {
       recipientEmail,
       recipientName: recipientName || '',
       propertyNumber: propertyNumber || '',
+      includePdf: true,
     };
 
     const { error } = await supabase.functions.invoke('enviar-oferta-email', { body });
@@ -403,6 +406,7 @@ export async function sendMultipleOffersEmailDirect(params: {
       recipientEmail,
       recipientName: recipientName || '',
       propertyNumber: propertyNumber || '',
+      includePdf: true,
       ...(reservationLink ? { reservationLink } : {}),
       ...(preGeneratedAttachments && preGeneratedAttachments.length > 0 ? { preGeneratedAttachments } : {}),
     };
@@ -427,6 +431,124 @@ export async function sendMultipleOffersEmailDirect(params: {
     });
   } catch (err) {
     console.error('[ofertaEmail] Error inesperado en envío múltiple directo:', err);
+  }
+}
+
+export interface SendDigitalOfferEmailParams {
+  /** Oferta de propiedad + sus ofertas de producto. */
+  offerIds: number[];
+  /** Link personal del cliente (`/oferta/O-xxxxxx/<token>`): va como botón en el correo. */
+  reservationLink: string;
+  propertyNumber?: string;
+  recipientEmail?: string;
+  recipientName?: string;
+  /**
+   * Adjuntar el PDF de la oferta. **Por defecto `false`**: el correo digital es
+   * de link y no depende del PDF. En `true` la EF adjunta el PDF ya guardado en
+   * `ofertas.url` (hay que generarlo antes).
+   */
+  includePdf?: boolean;
+  /** Envío en segundo plano (al generar): sin toast de "Enviando...". */
+  silent?: boolean;
+}
+
+/**
+ * Busca el correo del prospecto de una oferta cuando el llamador no lo tiene.
+ * Devuelve `null` si la oferta no tiene lead o el lead no tiene email.
+ */
+async function resolveRecipient(
+  offerId: number,
+): Promise<{ email: string; name: string } | null> {
+  const { data: oferta } = await supabase
+    .from('ofertas')
+    .select('id_persona_lead')
+    .eq('id', offerId)
+    .maybeSingle();
+
+  if (!oferta?.id_persona_lead) return null;
+
+  const { data: persona } = await supabase
+    .from('personas')
+    .select('email, nombre_legal')
+    .eq('id', oferta.id_persona_lead)
+    .maybeSingle();
+
+  if (!persona?.email) return null;
+  return { email: persona.email, name: persona.nombre_legal || '' };
+}
+
+/**
+ * Envía la oferta digital por correo: el cuerpo lleva el link del cliente y los
+ * PDFs solo si ya existen (la oferta digital no los genera al crearse).
+ *
+ * Es la utilería única del envío digital: la usa el envío automático al generar
+ * la oferta y el botón "Correo" del popup de compartir, en todos los portales.
+ */
+export async function sendDigitalOfferEmail(params: SendDigitalOfferEmailParams): Promise<boolean> {
+  try {
+    let { offerIds, reservationLink, propertyNumber, recipientEmail, recipientName, includePdf = false, silent } = params;
+
+    if (!offerIds.length) return false;
+
+    if (!recipientEmail) {
+      const destinatario = await resolveRecipient(offerIds[0]);
+      if (!destinatario) {
+        toast({
+          title: "Sin correo del prospecto",
+          description: "El prospecto no tiene email registrado: comparte el link por WhatsApp o cópialo.",
+          duration: 6000,
+        });
+        return false;
+      }
+      recipientEmail = destinatario.email;
+      recipientName = recipientName || destinatario.name;
+    }
+
+    if (!silent) {
+      toast({
+        title: "Enviando correo...",
+        description: `Enviando la oferta a ${recipientEmail}`,
+        duration: 3000,
+      });
+    }
+
+    const { error } = await supabase.functions.invoke('enviar-oferta-email', {
+      body: {
+        offerIds,
+        recipientEmail,
+        recipientName: recipientName || '',
+        propertyNumber: propertyNumber || '',
+        reservationLink,
+        includePdf,
+      },
+    });
+
+    if (error) {
+      console.error('[ofertaEmail] Error al enviar la oferta digital:', error);
+      toast({
+        title: "Correo no enviado",
+        description: `No se pudo enviar la oferta a ${recipientEmail}. Comparte el link por WhatsApp o cópialo.`,
+        variant: "destructive",
+        duration: 8000,
+      });
+      return false;
+    }
+
+    toast({
+      title: "Correo enviado",
+      description: `Se envió la oferta digital a ${recipientEmail}`,
+      duration: 5000,
+    });
+    return true;
+  } catch (err) {
+    console.error('[ofertaEmail] Error inesperado en envío digital:', err);
+    toast({
+      title: "Correo no enviado",
+      description: "Ocurrió un error al enviar la oferta digital por correo.",
+      variant: "destructive",
+      duration: 8000,
+    });
+    return false;
   }
 }
 
@@ -492,6 +614,7 @@ export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promis
         recipientEmail,
         recipientName: recipientName || '',
         propertyNumber: propertyNumber || '',
+        includePdf: true,
       },
     });
 

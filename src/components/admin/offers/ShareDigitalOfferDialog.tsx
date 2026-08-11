@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ModalFormHeader, MODAL_BODY_CLS } from "@/components/ui/modal-form";
@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Globe, Mail, Copy, Download, Loader2, ScanEye, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { sendDigitalOfferEmail } from "@/services/offerEmailService";
 
 // `personas.clave_pais_telefono` guarda el código ISO del país ("MX"), no la
 // lada numérica. Para armar el enlace de wa.me se necesita la lada.
@@ -37,11 +38,21 @@ export interface ShareDigitalOfferDialogProps {
   leadPhoneCountry?: string;
   propertyNumber?: string;
   projectName?: string;
+  /**
+   * Ofertas que van en el correo (propiedad + productos). Con ellas el botón
+   * "Correo" envía el mail desde la plataforma; sin ellas cae a `mailto:`.
+   */
+  offerIds?: number[];
   /** Forzar tema claro (portal de agentes en móvil). */
   forceLight?: boolean;
   /** Genera y descarga el PDF de la oferta (a demanda, ya no en automático). */
   onDownloadPdf?: () => void | Promise<void>;
   downloadingPdf?: boolean;
+  /**
+   * Genera el PDF y lo deja en Storage **sin descargarlo**, para poder adjuntarlo
+   * al correo. Sin este callback la casilla "Adjuntar el PDF" no se ofrece.
+   */
+  onPreparePdf?: () => Promise<void>;
   /** Callback de analítica por método compartido. */
   onShare?: (method: "web" | "whatsapp" | "email" | "copy" | "pdf") => void;
 }
@@ -67,12 +78,18 @@ export function ShareDigitalOfferDialog({
   leadPhoneCountry,
   propertyNumber,
   projectName,
+  offerIds,
   forceLight = false,
   onDownloadPdf,
   downloadingPdf = false,
+  onPreparePdf,
   onShare,
 }: ShareDigitalOfferDialogProps) {
   const { toast } = useToast();
+  const [sendingEmail, setSendingEmail] = useState(false);
+  // El PDF es opcional y va apagado: el correo manda el link. Se conserva la
+  // casilla mientras el negocio siga pidiendo el adjunto.
+  const [attachPdf, setAttachPdf] = useState(false);
 
   const unidad = [propertyNumber && `Departamento ${propertyNumber}`, projectName]
     .filter(Boolean)
@@ -112,13 +129,45 @@ export function ShareDigitalOfferDialog({
         );
         break;
       case "email":
-        window.open(
-          `mailto:${leadEmail || ""}?subject=${encodeURIComponent(
-            `Tu oferta digital${unidad ? ` — ${unidad}` : ""}`,
-          )}&body=${encodeURIComponent(mensaje)}`,
-          "_blank",
-          "noopener",
-        );
+        // Con las ofertas identificadas el correo sale de la plataforma (misma
+        // utilería que el envío automático al generar). Sin ellas —ofertas
+        // viejas sin id a la mano— queda el mailto del cliente de correo.
+        if (offerIds?.length) {
+          if (sendingEmail) break;
+          setSendingEmail(true);
+          void (async () => {
+            try {
+              // El PDF solo se produce si se pidió adjuntarlo: el envío por
+              // defecto no depende de generarlo.
+              if (attachPdf && onPreparePdf) await onPreparePdf();
+              await sendDigitalOfferEmail({
+                offerIds,
+                reservationLink: url,
+                propertyNumber,
+                recipientEmail: leadEmail,
+                recipientName: leadName,
+                includePdf: attachPdf,
+              });
+            } catch (err) {
+              console.error('Error preparando el PDF para el correo:', err);
+              toast({
+                title: "No se pudo adjuntar el PDF",
+                description: "No se envió el correo. Intenta de nuevo o mándalo sin PDF.",
+                variant: "destructive",
+              });
+            } finally {
+              setSendingEmail(false);
+            }
+          })();
+        } else {
+          window.open(
+            `mailto:${leadEmail || ""}?subject=${encodeURIComponent(
+              `Tu oferta digital${unidad ? ` — ${unidad}` : ""}`,
+            )}&body=${encodeURIComponent(mensaje)}`,
+            "_blank",
+            "noopener",
+          );
+        }
         break;
       case "copy":
         navigator.clipboard.writeText(url);
@@ -148,8 +197,18 @@ export function ShareDigitalOfferDialog({
             <Button variant="outline" className="justify-center gap-2" onClick={() => handle("whatsapp")}>
               <WhatsAppIcon className="h-4 w-4 shrink-0 text-green-500" /> WhatsApp
             </Button>
-            <Button variant="outline" className="justify-center gap-2" onClick={() => handle("email")}>
-              <Mail className="h-4 w-4 shrink-0 text-muted-foreground" /> Correo
+            <Button
+              variant="outline"
+              className="justify-center gap-2"
+              disabled={sendingEmail}
+              onClick={() => handle("email")}
+            >
+              {sendingEmail ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              {sendingEmail ? "Enviando..." : "Correo"}
             </Button>
             <Button variant="outline" className="justify-center gap-2" onClick={() => handle("copy")}>
               <Copy className="h-4 w-4 shrink-0 text-muted-foreground" /> Copiar link
@@ -168,6 +227,21 @@ export function ShareDigitalOfferDialog({
               {downloadingPdf ? "Generando..." : "Descargar PDF"}
             </Button>
           </div>
+
+          {/* Adjuntar el PDF al correo: opcional y apagado por defecto. El correo
+              lleva el link; el PDF solo si el asesor lo necesita. */}
+          {!!offerIds?.length && !!onPreparePdf && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 cursor-pointer accent-current"
+                checked={attachPdf}
+                disabled={sendingEmail}
+                onChange={(e) => setAttachPdf(e.target.checked)}
+              />
+              Adjuntar el PDF de la oferta al correo
+            </label>
+          )}
 
           {/* Demo: misma oferta sin credencial, para revisión interna. Va como
               extra debajo de las acciones, no como footer. */}
