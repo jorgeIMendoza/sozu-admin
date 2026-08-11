@@ -1425,32 +1425,6 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                         )}
                       />
 
-                      {hasMontoApartado && (
-                        <FormField
-                          control={form.control}
-                          name="monto_apartado"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Monto de apartado</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="20000.00"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Lo que el cliente transfiere para apartar. Se muestra en la
-                                oferta digital y se descuenta del enganche.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-
                       <FormField
                         control={form.control}
                         name="monto_garantia_renta"
@@ -1559,6 +1533,49 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                   <div>
                     <ProjectLegalNoticesSection projectId={projectId} />
                   </div>
+
+                  <FormSection
+                    title="Apartado"
+                    description="Monto que el cliente transfiere para apartar una unidad de este proyecto."
+                    icon={DollarSign}
+                  >
+                    {hasMontoApartado ? (
+                      <FieldGrid cols={3}>
+                        <FormField
+                          control={form.control}
+                          name="monto_apartado"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Monto de apartado (MXN)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="20000.00"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Se muestra en la oferta digital, se descuenta del enganche y es
+                                el monto que se le pide al cliente en la pantalla de pago.
+                                0 = este proyecto no cobra apartado.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </FieldGrid>
+                    ) : (
+                      // Sin la columna en este ambiente el campo no se puede guardar; se
+                      // explica en vez de desaparecer sin más (ver Ejecuciones_manuales/
+                      // ofertas-digitales/06_monto_apartado_por_proyecto.md).
+                      <p className="text-sm text-muted-foreground">
+                        Disponible al aplicar la migración <code>proyectos.monto_apartado</code>.
+                        Mientras tanto, todos los proyectos usan $20,000.
+                      </p>
+                    )}
+                  </FormSection>
 
                   <FormSection
                     title="Mostrar en la oferta"

@@ -39,9 +39,12 @@ const BANCO = "STP (646)";
 // SOLO en desarrollo: en un build de producción no existe, para que nadie pueda
 // marcar un apartado como pagado sin la transferencia SPEI.
 const SHOW_DEMO_PAY_BUTTON = import.meta.env.DEV;
-// Validación del pago: reintenta cada minuto, hasta 5 veces, luego "contacta asesor".
-const MAX_ATTEMPTS = 5;
-const CHECK_INTERVAL_MS = 60_000;
+// Validación del pago: el depósito aparece en la plataforma en ~30 segundos, así que
+// se consulta cada 30 s. 10 intentos ≈ 5 minutos, el techo que se le promete al cliente;
+// después se ofrece contactar al asesor. Con movimientos ya visibles no se agota (ver
+// runCheck): el pago está en curso.
+const MAX_ATTEMPTS = 10;
+const CHECK_INTERVAL_MS = 30_000;
 // Login del portal cliente (cross-subdominio, honra dev/prod). Ej. prod:
 // https://clientes.sozu.com/auth/login · dev: https://clientes-dev.sozu.com/auth/login
 const CLIENT_PORTAL_LOGIN_URL = getPortalLoginUrl("clientes");
@@ -427,9 +430,10 @@ const SpeiPayPanel = ({
             <div className="flex items-start gap-2.5 border-t border-border bg-primary/[0.04] px-4 py-3">
               <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <p className="text-[11px] leading-relaxed text-foreground">
-                Tu depósito quedó aplicado. Para completar el apartado, transfiere los{" "}
+                <span className="font-semibold">Tu depósito llegó y se aplicó.</span> Ya puedes
+                hacer el depósito completo: transfiere los{" "}
                 <span className="font-semibold tabular-nums">{formatMXN(estado!.restante as number)}</span>{" "}
-                restantes a la misma CLABE.
+                restantes a la misma CLABE, con el mismo concepto.
               </p>
             </div>
           )}
@@ -542,9 +546,19 @@ const SpeiPayPanel = ({
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Validamos automáticamente cada minuto. En cuanto STP confirme tu SPEI, continúas.
-            {remaining > 0 && <> Quedan {remaining} verificación{remaining === 1 ? "" : "es"}.</>}
+            Validamos solo. Una transferencia SPEI suele reflejarse entre 3 y 5 minutos.
+            {remaining > 0 && <> Seguimos revisando por {Math.ceil((remaining * CHECK_INTERVAL_MS) / 60_000)} min más.</>}
           </p>
+
+          {/* Sugerencia del depósito de prueba: es lo que hace la gente por su cuenta,
+              y así sabe que se lo vamos a confirmar antes de mandar el monto completo. */}
+          {movimientos.length === 0 && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              ¿Prefieres ir sobre seguro? Manda primero un depósito pequeño de prueba
+              (por ejemplo $1). En cuanto lo veamos aplicado te avisamos aquí para que
+              transfieras el resto.
+            </p>
+          )}
           <button
             type="button"
             onClick={runCheck}
