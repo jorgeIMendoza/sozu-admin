@@ -38,7 +38,7 @@ const fmt = (n: number) =>
 /** Tope de columnas del desglose, para que la tabla siga siendo legible. */
 const MAX_COLUMNAS_DESGLOSE = 12;
 
-export default function BrokerIncentivesTab() {
+export default function BrokerIncentivesTab({ readOnly = false }: { readOnly?: boolean } = {}) {
   const {
     channels: catalogoCanales, motorProjectId, setMotorProjectId, commissionRules, roles, motorConfig,
   } = useSimulator();
@@ -74,8 +74,9 @@ export default function BrokerIncentivesTab() {
       <div>
         <h2 className="text-xl font-bold">Incentivos por metas de cierre</h2>
         <p className="text-sm text-muted-foreground max-w-3xl">
-          Define cuántas ventas debe cerrar cada canal en el mes para que suba la comisión, y
-          ajusta la escalera por comisionista cuando haga falta.
+          {readOnly
+            ? "Consulta las metas de cierre por canal y comisionista, y simula distintos volúmenes de “Ventas del mes” para ver cómo cambia la comisión (solo lectura)."
+            : "Define cuántas ventas debe cerrar cada canal en el mes para que suba la comisión, y ajusta la escalera por comisionista cuando haga falta."}
         </p>
       </div>
       <div className="flex items-center gap-1.5">
@@ -167,6 +168,7 @@ export default function BrokerIncentivesTab() {
             nombreProyecto={proyectoActual?.nombre ?? ''}
             comisionTotalPct={motorConfig.channelTotals[canal.id] ?? 0}
             comisionExternaPct={canal.externalCommissionPct}
+            readOnly={readOnly}
           />
         ))
       )}
@@ -184,7 +186,7 @@ interface ComisionistaFila {
 function CanalEscalera({
   canal, idProyecto, escalonesDelCanal, escalonesPorPersona, ddlPendiente,
   comisionistasDelCanal, ventasDelMes, onVentasChange, precioPromUnidad, nombreProyecto,
-  comisionTotalPct, comisionExternaPct,
+  comisionTotalPct, comisionExternaPct, readOnly = false,
 }: {
   canal: { id: string; name: string };
   idProyecto: number;
@@ -200,6 +202,8 @@ function CanalEscalera({
   comisionTotalPct: number;
   /** Parte de esa comisión que se va al externo (inmobiliaria, broker, embajador…). */
   comisionExternaPct: number;
+  /** Solo lectura: deshabilita la edición de escalones (se conserva "Ventas del mes"). */
+  readOnly?: boolean;
 }) {
   const [expandida, setExpandida] = useState<string | null>(null);
 
@@ -314,6 +318,8 @@ function CanalEscalera({
         escalones={escalonesDelCanal}
         ventasDelMes={ventasDelMes}
         ddlPendiente={ddlPendiente}
+        deshabilitado={readOnly}
+        motivoDeshabilitado="Vista de solo lectura (Alta Dirección)."
       />
 
       {/* Efecto por comisionista, con su desglose venta por venta */}
@@ -425,8 +431,12 @@ function CanalEscalera({
                                 ventasDelMes={ventasDelMes}
                                 ddlPendiente={ddlPendiente}
                                 escaleraHeredada={escalera}
-                                deshabilitado={c.idPersonal === null}
-                                motivoDeshabilitado="Este renglón no tiene comisionista asignado: asígnalo en Comisiones para darle escalera propia."
+                                deshabilitado={readOnly || c.idPersonal === null}
+                                motivoDeshabilitado={
+                                  readOnly
+                                    ? "Vista de solo lectura (Alta Dirección)."
+                                    : "Este renglón no tiene comisionista asignado: asígnalo en Comisiones para darle escalera propia."
+                                }
                               />
                             </div>
                           </td>
