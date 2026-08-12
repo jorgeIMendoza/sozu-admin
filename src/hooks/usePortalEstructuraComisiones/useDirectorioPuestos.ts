@@ -39,9 +39,27 @@ export interface RolOrganizacional {
   activo: boolean;
 }
 
+/**
+ * Perfil del personal. Solo el empleado directo representa costo para SOZU:
+ * el colaborador del Grupo Investimento da servicio y soporte (administrativo,
+ * fiscal, financiero, legal) y su sueldo lo paga Investimento. Ambos pueden
+ * comisionar — al colaborador la comisión le llega como bono por ese soporte.
+ */
+export type TipoPersonal = "empleado_sozu" | "colaborador_investimento";
+
+export const ETIQUETA_TIPO_PERSONAL: Record<TipoPersonal, string> = {
+  empleado_sozu: "Empleado SOZU",
+  colaborador_investimento: "Colaborador Investimento",
+};
+
+/** Solo el costo de los empleados directos es costo fijo de SOZU. */
+export const esCostoDeSozu = (p: Pick<PersonalOrganizacional, "tipo_personal">) =>
+  p.tipo_personal === "empleado_sozu";
+
 export interface PersonalOrganizacional {
   id: number;
   nombre: string;
+  tipo_personal: TipoPersonal;
   email_usuario: string | null;
   email_contacto: string | null;
   telefono: string | null;
@@ -99,10 +117,12 @@ const PERSONAL_KEY = "personal-organizacional";
 const ASIGNACIONES_KEY = "personal-proyectos";
 const SCHEMA_KEY = "directorio-personal-schema";
 
-const PERSONAL_COLS =
+const PERSONAL_COLS_BASE =
   "id, nombre, email_usuario, email_contacto, telefono, id_rol, costo_nominal, " +
   "costo_externo, costo_social, costo_total, sueldo_base_recibido, fecha_ingreso, " +
   "fecha_baja, motivo_baja, activo";
+
+const PERSONAL_COLS = `${PERSONAL_COLS_BASE}, tipo_personal`;
 
 const ASIGNACION_COLS =
   "id, id_personal, id_proyecto, id_rol, asignacion_pct, fecha_inicio, fecha_fin, activo";
@@ -269,14 +289,22 @@ export function usePersonal(incluirBajas = false) {
     queryKey: [PERSONAL_KEY, incluirBajas],
     staleTime: 30_000,
     queryFn: async () => {
-      let query = (supabase as any)
-        .from("personal_organizacional")
-        .select(PERSONAL_COLS)
-        .order("nombre");
-      if (!incluirBajas) query = query.eq("activo", true);
-      const { data, error } = await query;
-      if (error || !data) return [];
-      return data as PersonalOrganizacional[];
+      const consultar = (cols: string) => {
+        let q = (supabase as any).from("personal_organizacional").select(cols).order("nombre");
+        if (!incluirBajas) q = q.eq("activo", true);
+        return q;
+      };
+
+      const { data, error } = await consultar(PERSONAL_COLS);
+      if (!error && data) return data as PersonalOrganizacional[];
+
+      // Sin `tipo_personal` (DDL pendiente) se relee sin ella y todos se tratan
+      // como empleados de SOZU: el costo fijo queda igual que antes.
+      if (!error || !COLUMN_MISSING_CODES.includes(error.code)) return [];
+      const fallback = await consultar(PERSONAL_COLS_BASE);
+      if (fallback.error || !fallback.data) return [];
+      return (fallback.data as Omit<PersonalOrganizacional, "tipo_personal">[])
+        .map(p => ({ ...p, tipo_personal: "empleado_sozu" as TipoPersonal }));
     },
   });
 }
@@ -287,6 +315,7 @@ export function usePersonal(incluirBajas = false) {
  */
 export interface NuevaPersonaInput {
   nombre: string;
+  tipo_personal?: TipoPersonal;
   email_usuario?: string | null;
   email_contacto?: string | null;
   telefono?: string | null;
