@@ -27,6 +27,12 @@ export interface EstructuraRealRaw {
     costo_nominal: number;
     costo_externo: number;
     costo_social: number;
+    /**
+     * `colaborador_investimento` = su sueldo lo paga Investimento, no SOZU, así
+     * que su costo NO entra en la estructura del simulador. Sigue pudiendo
+     * comisionar.
+     */
+    tipo_personal: string;
   }>;
   /** `id_rol` es el rol que la persona asume en ese proyecto; `null` = su rol base. */
   asignaciones: Array<{
@@ -56,11 +62,26 @@ export function useEstructuraRealRaw() {
     queryKey: ["estructura-real-simulador"],
     staleTime: 30_000,
     queryFn: async () => {
-      const { data: personal, error } = await (supabase as any)
-        .from("personal_organizacional")
-        .select("id, nombre, id_rol, costo_nominal, costo_externo, costo_social")
-        .eq("activo", true)
-        .order("nombre");
+      const COLS_BASE = "id, nombre, id_rol, costo_nominal, costo_externo, costo_social";
+      const consultarPersonal = (cols: string) =>
+        (supabase as any)
+          .from("personal_organizacional")
+          .select(cols)
+          .eq("activo", true)
+          .order("nombre");
+
+      let { data: personal, error } = await consultarPersonal(`${COLS_BASE}, tipo_personal`);
+
+      // Sin `tipo_personal` (DDL pendiente) se relee sin ella y todos cuentan
+      // como empleados de SOZU: la estructura queda igual que antes.
+      if (error && ["42703", "PGRST204"].includes(error.code)) {
+        const fallback = await consultarPersonal(COLS_BASE);
+        personal = (fallback.data ?? []).map((p: Record<string, unknown>) => ({
+          ...p, tipo_personal: "empleado_sozu",
+        }));
+        error = fallback.error;
+      }
+
       // Tabla inexistente (DDL pendiente) o sin personal: el simulador sigue con lo suyo.
       if (error || !personal?.length) return null;
 
@@ -108,6 +129,8 @@ export interface EstructuraDerivada {
   roleAssignments: RoleAssignment[];
   /** Personas activas sin rol vinculado: no pueden entrar al simulador. */
   personasSinRol: number;
+  /** Colaboradores de Investimento excluidos: su costo no es de SOZU. */
+  colaboradoresInvestimento: number;
   /** Proyectos reales con personal cuyo nombre no existe en el catálogo del simulador. */
   proyectosNoMapeados: string[];
   /** Roles reales con personal cuyo nombre no existe en el catálogo del simulador. */
@@ -150,6 +173,7 @@ export function derivarEstructura(
   const rolesNoMapeados = new Set<string>();
   const proyectosNoMapeados = new Set<string>();
   let personasSinRol = 0;
+  let colaboradoresInvestimento = 0;
 
   const acumular = (roleId: string, projectId: string | null, peso: number, p: EstructuraRealRaw["personal"][number]) => {
     if (peso <= 0) return;
@@ -171,6 +195,11 @@ export function derivarEstructura(
   };
 
   for (const persona of raw.personal) {
+    // El colaborador de Investimento no es costo de SOZU: su sueldo lo paga
+    // Investimento. Queda fuera de la estructura que consumen Organigrama,
+    // Financieros y el costo por proyecto. Sigue pudiendo comisionar.
+    if (persona.tipo_personal === "colaborador_investimento") { colaboradoresInvestimento++; continue; }
+
     if (persona.id_rol === null) { personasSinRol++; continue; }
 
     const rolBase = resolverRol(persona.id_rol);
@@ -214,6 +243,7 @@ export function derivarEstructura(
   return {
     roleAssignments,
     personasSinRol,
+    colaboradoresInvestimento,
     proyectosNoMapeados: Array.from(proyectosNoMapeados),
     rolesNoMapeados: Array.from(rolesNoMapeados),
   };
