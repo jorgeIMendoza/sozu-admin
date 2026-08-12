@@ -39,7 +39,9 @@ const fmt = (n: number) =>
 const MAX_COLUMNAS_DESGLOSE = 12;
 
 export default function BrokerIncentivesTab() {
-  const { channels: catalogoCanales, motorProjectId, setMotorProjectId, commissionRules, roles } = useSimulator();
+  const {
+    channels: catalogoCanales, motorProjectId, setMotorProjectId, commissionRules, roles, motorConfig,
+  } = useSimulator();
   const { data: proyectosMotor = [], isLoading: cargandoProyectos } = useProyectosMotorComisiones();
   const proyectoActual = proyectosMotor.find(p => p.id === motorProjectId);
 
@@ -163,6 +165,8 @@ export default function BrokerIncentivesTab() {
             onVentasChange={(v) => setVentasSimuladas(prev => ({ ...prev, [canal.id]: v }))}
             precioPromUnidad={precioPromUnidad}
             nombreProyecto={proyectoActual?.nombre ?? ''}
+            comisionTotalPct={motorConfig.channelTotals[canal.id] ?? 0}
+            comisionExternaPct={canal.externalCommissionPct}
           />
         ))
       )}
@@ -180,6 +184,7 @@ interface ComisionistaFila {
 function CanalEscalera({
   canal, idProyecto, escalonesDelCanal, escalonesPorPersona, ddlPendiente,
   comisionistasDelCanal, ventasDelMes, onVentasChange, precioPromUnidad, nombreProyecto,
+  comisionTotalPct, comisionExternaPct,
 }: {
   canal: { id: string; name: string };
   idProyecto: number;
@@ -191,6 +196,10 @@ function CanalEscalera({
   onVentasChange: (v: number) => void;
   precioPromUnidad: number;
   nombreProyecto: string;
+  /** Comisión total que el canal recibe en este proyecto, sobre el precio de venta. */
+  comisionTotalPct: number;
+  /** Parte de esa comisión que se va al externo (inmobiliaria, broker, embajador…). */
+  comisionExternaPct: number;
 }) {
   const [expandida, setExpandida] = useState<string | null>(null);
 
@@ -228,6 +237,47 @@ function CanalEscalera({
 
   const totalMes = filas.reduce((s, f) => s + f.totales.importe, 0);
   const pctBaseTotal = filas.reduce((s, f) => s + f.c.pctBase, 0);
+
+  /**
+   * Conciliación de la comisión del canal, venta por venta:
+   *
+   *   comisión total del canal − dispersado externamente − total dispersado
+   *   = remanente que le queda a SOZU
+   *
+   * El remanente puede salir negativo: significa que la escalera de incentivos
+   * rebasó la comisión que el canal recibe. Se marca en rojo porque es un
+   * excedido, no un sobrante.
+   */
+  const conciliacion = useMemo(() => {
+    const importeDe = (pct: number) => precioPromUnidad * pct / 100;
+    const porVenta = totalesPorVenta.map(t => {
+      const remanentePct = comisionTotalPct - comisionExternaPct - t.pct;
+      return {
+        ordinal: t.ordinal,
+        totalPct: comisionTotalPct,
+        externoPct: comisionExternaPct,
+        dispersadoPct: t.pct,
+        remanentePct,
+        totalImporte: importeDe(comisionTotalPct),
+        externoImporte: importeDe(comisionExternaPct),
+        dispersadoImporte: t.importe,
+        remanenteImporte: importeDe(remanentePct),
+      };
+    });
+    const suma = (sel: (v: typeof porVenta[number]) => number) =>
+      porVenta.reduce((s, v) => s + sel(v), 0);
+    return {
+      porVenta,
+      mes: {
+        totalImporte: suma(v => v.totalImporte),
+        externoImporte: suma(v => v.externoImporte),
+        dispersadoImporte: suma(v => v.dispersadoImporte),
+        remanenteImporte: suma(v => v.remanenteImporte),
+      },
+      /** true si en alguna venta la dispersión rebasa la comisión del canal. */
+      hayExcedido: porVenta.some(v => v.remanentePct < -0.0001),
+    };
+  }, [totalesPorVenta, comisionTotalPct, comisionExternaPct, precioPromUnidad]);
 
   return (
     <div className="rounded-xl border bg-card p-5">
@@ -386,31 +436,44 @@ function CanalEscalera({
                   );
                 })}
 
-                {/* Sumatoria de lo dispersado en cada escenario de venta */}
-                <tr className="border-t-2">
-                  <td></td>
-                  <td className="font-semibold text-sm whitespace-nowrap">Total dispersado</td>
-                  <td className="font-mono text-sm font-semibold">{pctBaseTotal.toFixed(2)}%</td>
-                  {totalesPorVenta.slice(0, columnas).map(t => (
-                    <td key={t.ordinal} className="text-right whitespace-nowrap">
-                      <div className="flex flex-col items-end">
-                        <span className="font-mono text-sm font-semibold">
-                          {precioPromUnidad > 0 ? fmt(t.importe) : '—'}
-                        </span>
-                        <span className="font-mono text-xs font-bold text-accent">
-                          {t.pct.toFixed(3)}%
-                        </span>
-                      </div>
-                    </td>
-                  ))}
-                  {Array.from({ length: Math.max(0, columnas - totalesPorVenta.length) }, (_, i) => (
-                    <td key={`tv-${i}`} className="text-right text-muted-foreground">—</td>
-                  ))}
-                  {ventasDelMes > MAX_COLUMNAS_DESGLOSE && <td></td>}
-                  <td className="text-right font-mono text-sm font-bold whitespace-nowrap">
-                    {precioPromUnidad > 0 ? fmt(totalMes) : '—'}
-                  </td>
-                </tr>
+                {/* Conciliación: total del canal − externo − dispersado = remanente */}
+                <FilaConciliacion
+                  etiqueta="Comisión total del canal"
+                  columnas={columnas}
+                  ventasDelMes={ventasDelMes}
+                  precioPromUnidad={precioPromUnidad}
+                  celdas={conciliacion.porVenta.map(v => ({ pct: v.totalPct, importe: v.totalImporte }))}
+                  totalMes={conciliacion.mes.totalImporte}
+                  className="border-t-2"
+                />
+                <FilaConciliacion
+                  etiqueta="− Dispersado externamente"
+                  columnas={columnas}
+                  ventasDelMes={ventasDelMes}
+                  precioPromUnidad={precioPromUnidad}
+                  celdas={conciliacion.porVenta.map(v => ({ pct: v.externoPct, importe: v.externoImporte }))}
+                  totalMes={conciliacion.mes.externoImporte}
+                />
+                <FilaConciliacion
+                  etiqueta="− Total dispersado"
+                  columnaBase={`${pctBaseTotal.toFixed(2)}%`}
+                  columnas={columnas}
+                  ventasDelMes={ventasDelMes}
+                  precioPromUnidad={precioPromUnidad}
+                  celdas={conciliacion.porVenta.map(v => ({ pct: v.dispersadoPct, importe: v.dispersadoImporte }))}
+                  totalMes={conciliacion.mes.dispersadoImporte}
+                  tono="accent"
+                />
+                <FilaConciliacion
+                  etiqueta="= Remanente de comisión"
+                  columnas={columnas}
+                  ventasDelMes={ventasDelMes}
+                  precioPromUnidad={precioPromUnidad}
+                  celdas={conciliacion.porVenta.map(v => ({ pct: v.remanentePct, importe: v.remanenteImporte }))}
+                  totalMes={conciliacion.mes.remanenteImporte}
+                  tono="remanente"
+                  className="border-t font-bold"
+                />
               </tbody>
             </table>
           </div>
@@ -420,9 +483,22 @@ function CanalEscalera({
           {precioPromUnidad > 0
             ? `Estimado sobre el precio promedio ponderado por unidad disponible de ${nombreProyecto}: ${fmt(precioPromUnidad)}. Cada venta se paga con el porcentaje de su tramo; las anteriores conservan el suyo.`
             : `Sin unidades disponibles en ${nombreProyecto} no hay precio promedio con el que estimar el pago.`}
-          {' '}<strong>Total dispersado</strong> es la suma de lo que se llevan todos los
-          comisionistas en esa venta: el porcentaje del precio que sale del canal en cada cierre.
+          {' '}El <strong>remanente</strong> es lo que le queda a SOZU tras pagar al externo y a
+          los comisionistas: comisión total del canal − dispersado externamente − total dispersado.
         </p>
+
+        {conciliacion.hayExcedido && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+            <p className="text-muted-foreground">
+              <span className="font-medium text-foreground">La escalera rebasa la comisión del canal.</span>{' '}
+              En al menos una venta lo dispersado supera el {comisionTotalPct.toFixed(2)}% que{' '}
+              {canal.name} recibe en este proyecto, así que el remanente sale negativo. Ajusta los
+              incrementos, los porcentajes base de los comisionistas, o la comisión total del canal
+              en Comisiones.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -652,5 +728,64 @@ function NumeroEditable({ valor, onCommit, ancho, min = 0, entero, disabled }: {
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
     />
+  );
+}
+
+/**
+ * Fila del bloque de conciliación de la comisión del canal. Cada celda muestra
+ * importe y porcentaje de una venta; el remanente se pinta en rojo si es
+ * negativo, porque entonces la dispersión rebasó la comisión del canal.
+ */
+function FilaConciliacion({
+  etiqueta, columnaBase, columnas, ventasDelMes, precioPromUnidad, celdas, totalMes,
+  tono = 'neutro', className,
+}: {
+  etiqueta: string;
+  columnaBase?: string;
+  columnas: number;
+  ventasDelMes: number;
+  precioPromUnidad: number;
+  celdas: Array<{ pct: number; importe: number }>;
+  totalMes: number;
+  tono?: 'neutro' | 'accent' | 'remanente';
+  className?: string;
+}) {
+  const colorPct = (pct: number) => {
+    if (tono === 'remanente') return pct < -0.0001 ? 'text-destructive' : 'text-emerald-600';
+    if (tono === 'accent') return 'text-accent';
+    return 'text-foreground/70';
+  };
+
+  return (
+    <tr className={className}>
+      <td></td>
+      <td className="font-semibold text-sm whitespace-nowrap">{etiqueta}</td>
+      <td className="font-mono text-sm font-semibold">{columnaBase ?? ''}</td>
+      {celdas.slice(0, columnas).map((c, i) => (
+        <td key={i} className="text-right whitespace-nowrap">
+          <div className="flex flex-col items-end">
+            <span className={cn(
+              'font-mono text-sm font-semibold',
+              tono === 'remanente' && c.pct < -0.0001 && 'text-destructive',
+            )}>
+              {precioPromUnidad > 0 ? fmt(c.importe) : '—'}
+            </span>
+            <span className={cn('font-mono text-xs font-bold', colorPct(c.pct))}>
+              {c.pct.toFixed(3)}%
+            </span>
+          </div>
+        </td>
+      ))}
+      {Array.from({ length: Math.max(0, columnas - celdas.length) }, (_, i) => (
+        <td key={`vacia-${i}`} className="text-right text-muted-foreground">—</td>
+      ))}
+      {ventasDelMes > MAX_COLUMNAS_DESGLOSE && <td></td>}
+      <td className={cn(
+        'text-right font-mono text-sm font-bold whitespace-nowrap',
+        tono === 'remanente' && totalMes < -0.0001 && 'text-destructive',
+      )}>
+        {precioPromUnidad > 0 ? fmt(totalMes) : '—'}
+      </td>
+    </tr>
   );
 }
