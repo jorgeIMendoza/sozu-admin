@@ -599,6 +599,22 @@ export function PipelineOfferDetailDialog({
           leadPhoneCountry={linkDigital?.lead?.clave_pais_telefono ?? 'MX'}
           propertyNumber={oferta?.propiedad_nombre}
           projectName={oferta?.proyecto_nombre}
+          offerIds={oferta?.id ? [oferta.id] : undefined}
+          onPreparePdf={async () => {
+            // Solo si el asesor pide adjuntarlo: genera y sube el PDF a Storage.
+            const { generarPdfOferta } = await import('@/lib/offers/offer-pdf');
+            await generarPdfOferta({
+              propertyId: oferta.id_propiedad,
+              offerId: oferta.id,
+              propertyNumber: oferta.propiedad_nombre || '',
+              leadName: linkDigital?.lead?.nombre_legal ?? oferta?.lead_nombre,
+              leadEmail: linkDigital?.lead?.email ?? linkDigital?.reserva?.email,
+              leadPhone: linkDigital?.lead?.telefono,
+              creatorEmail: oferta?.email_creador,
+              isProductOffer: !!oferta?.is_producto,
+              productId: oferta?.id_producto,
+            }, { descargar: false });
+          }}
           forceLight
         />
       )}

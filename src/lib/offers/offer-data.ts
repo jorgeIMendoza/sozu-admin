@@ -65,7 +65,7 @@ export interface PaymentPlan {
   finalPaymentPct: number;
   finalPaymentAmount: number;
   installmentsPct: number;
-  /** Apartado fijo ($20,000). Se descuenta del enganche. undefined = sin desglose. */
+  /** Apartado del proyecto (`proyectos.monto_apartado`). Se descuenta del enganche. undefined = sin desglose. */
   apartado?: number;
   /** Enganche neto = downPaymentAmount − apartado (lo que paga tras el apartado). */
   downPaymentNetAmount?: number;
@@ -309,6 +309,11 @@ export interface OfertaComercial {
   hasCuentaCobranza?: boolean;
   /** Meses restantes de mensualidades (hoy→entrega−1 mes) desde RPC. Para nota legal. */
   mesesRestantes?: number;
+  /**
+   * Monto del apartado del proyecto (`proyectos.monto_apartado`), vía RPC. Es el
+   * mismo número que se cobra en el flujo de pago. undefined → `APARTADO_DEFAULT_MXN`.
+   */
+  apartadoAmount?: number;
   /** Plano del nivel (edificios_niveles_planos.imagen_url) para señalar la ubicación de la unidad. */
   planoUbicacionUrl?: string;
   /** Regiones/polígonos del plano de nivel (edificios_niveles_planos.regiones) para resaltar la unidad. */

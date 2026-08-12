@@ -116,6 +116,22 @@ const AgentPipeline = () => {
   const baseUrlDe = (o: any) => buildOfferUrl(o.id);
   const shareUrlDe = (o: any) => buildOfferUrl(o.id, o?.reserva_token);
 
+  /** Deja el PDF en Storage para adjuntarlo al correo (nadie pidió el archivo local). */
+  const prepararPdf = async (o: any) => {
+    const { generarPdfOferta } = await import('@/lib/offers/offer-pdf');
+    await generarPdfOferta({
+      propertyId: o.id_propiedad,
+      offerId: o.id,
+      propertyNumber: o.propiedad_nombre || '',
+      leadName: o.lead_nombre,
+      leadEmail: o.lead_email,
+      leadPhone: o.lead_telefono,
+      creatorEmail: o.email_creador,
+      isProductOffer: !!o.is_producto,
+      productId: o.id_producto,
+    }, { descargar: false });
+  };
+
   const descargarPdf = async (o: any) => {
     setDescargandoPdf(true);
     try {
@@ -793,9 +809,11 @@ const AgentPipeline = () => {
           leadPhoneCountry={shareOferta.lead_clave_pais ?? 'MX'}
           propertyNumber={shareOferta.propiedad_nombre}
           projectName={shareOferta.proyecto_nombre}
+          offerIds={shareOferta.id ? [shareOferta.id] : undefined}
           forceLight
           downloadingPdf={descargandoPdf}
           onDownloadPdf={() => descargarPdf(shareOferta)}
+          onPreparePdf={() => prepararPdf(shareOferta)}
         />
       )}
 

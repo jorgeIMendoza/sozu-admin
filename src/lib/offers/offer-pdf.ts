@@ -31,10 +31,18 @@ function descargar(blob: Blob, filename: string) {
 }
 
 /**
- * Genera el/los PDF de la oferta y los descarga. Devuelve cuántos se bajaron.
+ * Genera el/los PDF de la oferta. Devuelve cuántos se generaron.
  * Lanza si la generación falla, para que quien llame muestre el aviso.
+ *
+ * `descargar: false` produce y sube el PDF a Storage (queda en `ofertas.url`)
+ * sin bajarlo al equipo: es lo que necesita el correo con PDF adjunto, donde el
+ * archivo local nunca se pide.
  */
-export async function generarYDescargarPdfOferta(params: OfertaPdfParams): Promise<number> {
+export async function generarPdfOferta(
+  params: OfertaPdfParams,
+  opts: { descargar?: boolean } = {},
+): Promise<number> {
+  const { descargar: bajarArchivo = true } = opts;
   const { generateOfferPDFAsBase64 } = await import("@/services/htmlToPdfService");
 
   const pdfs = await generateOfferPDFAsBase64({
@@ -50,8 +58,15 @@ export async function generarYDescargarPdfOferta(params: OfertaPdfParams): Promi
       : {}),
   } as any);
 
-  for (const pdf of pdfs) {
-    descargar(pdf.blob, pdf.filename);
+  if (bajarArchivo) {
+    for (const pdf of pdfs) {
+      descargar(pdf.blob, pdf.filename);
+    }
   }
   return pdfs.length;
+}
+
+/** Genera el/los PDF y los descarga. Atajo del caso más común. */
+export async function generarYDescargarPdfOferta(params: OfertaPdfParams): Promise<number> {
+  return generarPdfOferta(params, { descargar: true });
 }

@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowRight, CheckCircle2, ExternalLink, KeyRound, Mail } from "lucide-react";
+import { ArrowRight, CheckCircle2, ExternalLink, KeyRound, Mail, Smartphone } from "lucide-react";
+import { cargarLinksApp, type AppClienteLinks } from "@/lib/offers/apartado-status";
 
 /** Webmail del dominio del correo, para el botón "Abrir mi correo". */
 const WEBMAIL_POR_DOMINIO: Record<string, { url: string; nombre: string }> = {
@@ -48,6 +50,23 @@ export function ApartadoPagadoDialog({
   loginUrl,
 }: ApartadoPagadoDialogProps) {
   const webmail = webmailDe(email);
+
+  // Links de tienda desde `app_cliente_config`. Si la tabla no es legible sin sesión
+  // o la llave viene vacía (hoy iOS lo está), ese botón simplemente no se pinta.
+  const [app, setApp] = useState<AppClienteLinks>({ android: null, ios: null, version: null });
+  useEffect(() => {
+    if (!open) return;
+    let cancelado = false;
+    cargarLinksApp().then((links) => { if (!cancelado) setApp(links); });
+    return () => { cancelado = true; };
+  }, [open]);
+
+  // El botón de tienda solo tiene sentido en el celular.
+  const esMovil =
+    typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  const etiquetaTiendas = [app.android && "Android", app.ios && "iPhone"]
+    .filter(Boolean)
+    .join(" y ");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -104,6 +123,8 @@ export function ApartadoPagadoDialog({
             )}
             <a
               href={loginUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               className={`w-full h-11 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                 !tieneAcceso && webmail
                   ? "border border-border bg-card text-foreground hover:border-primary/40"
@@ -114,6 +135,47 @@ export function ApartadoPagadoDialog({
               <ArrowRight className="w-4 h-4" />
             </a>
           </div>
+
+          {/* App del portal de clientes. En el celular se ofrece la descarga; en
+              escritorio solo se menciona, porque ahí el link de tienda no sirve. */}
+          {(app.android || app.ios) && (
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <Smartphone className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-[12px] text-muted-foreground leading-relaxed">
+                  {esMovil
+                    ? "También puedes seguir tu proceso desde la app de clientes."
+                    : `Tu portal también existe como app${etiquetaTiendas ? ` para ${etiquetaTiendas}` : ""}. Búscala desde tu celular.`}
+                </p>
+              </div>
+              {esMovil && (
+                <div className="grid grid-cols-1 gap-2">
+                  {app.android && (
+                    <a
+                      href={app.android}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="h-10 rounded-lg border border-border bg-card text-xs font-semibold text-foreground flex items-center justify-center gap-2 hover:border-primary/40 transition-colors"
+                    >
+                      Descargar para Android
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  {app.ios && (
+                    <a
+                      href={app.ios}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="h-10 rounded-lg border border-border bg-card text-xs font-semibold text-foreground flex items-center justify-center gap-2 hover:border-primary/40 transition-colors"
+                    >
+                      Descargar para iPhone
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

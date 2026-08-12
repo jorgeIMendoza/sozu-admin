@@ -5,6 +5,11 @@ import sozuLogo from "@/assets/sozu-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { useOfferById, formatMXN } from "@/lib/offers/offer-data";
+import { apartadoDeOferta } from "@/lib/offers/apartado";
+import {
+  consultarEstadoApartado,
+  type EstadoApartado,
+} from "@/lib/offers/apartado-status";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
 import { useAgentById, type Agent } from "@/lib/offers/agent-data";
 import { getPortalLoginUrl } from "@/lib/portalUrls";
@@ -25,8 +30,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// Apartado por transferencia SPEI (sin Stripe). Monto fijo del apartado.
-const APARTADO_AMOUNT_MXN = 20000;
+// Apartado por transferencia SPEI (sin Stripe). El monto es por proyecto
+// (`proyectos.monto_apartado`) y viaja en la oferta: ver lib/offers/apartado.ts.
 // Beneficiario STP fijo (mismo que PagoApartadoFinalPage / plantillas PDF).
 const BENEFICIARIO = "SOZU COMERCIALIZADORA SA DE CV";
 const BANCO = "STP (646)";
@@ -34,28 +39,17 @@ const BANCO = "STP (646)";
 // SOLO en desarrollo: en un build de producción no existe, para que nadie pueda
 // marcar un apartado como pagado sin la transferencia SPEI.
 const SHOW_DEMO_PAY_BUTTON = import.meta.env.DEV;
-// Validación del pago: reintenta cada minuto, hasta 5 veces, luego "contacta asesor".
-const MAX_ATTEMPTS = 5;
-const CHECK_INTERVAL_MS = 60_000;
+// Validación del pago: el depósito aparece en la plataforma en ~30 segundos, así que
+// se consulta cada 30 s. 10 intentos ≈ 5 minutos, el techo que se le promete al cliente;
+// después se ofrece contactar al asesor. Con movimientos ya visibles no se agota (ver
+// runCheck): el pago está en curso.
+const MAX_ATTEMPTS = 10;
+const CHECK_INTERVAL_MS = 30_000;
 // Login del portal cliente (cross-subdominio, honra dev/prod). Ej. prod:
 // https://clientes.sozu.com/auth/login · dev: https://clientes-dev.sozu.com/auth/login
 const CLIENT_PORTAL_LOGIN_URL = getPortalLoginUrl("clientes");
 
 type PayFlow = "waiting" | "checking" | "paid" | "exhausted";
-
-/** Respuesta del RPC `get_apartado_status` (spec en Ejecuciones_manuales/ofertas-digitales/04). */
-type ApartadoStatus = {
-  pagado: boolean;
-  estatus_id?: number | null;
-  id_propiedad?: number | null;
-  id_cuenta_cobranza?: number | null;
-  /** CLABE dedicada de la cuenta de cobranza creada con el apartado. */
-  clabe_stp?: string | null;
-  /** Correo del cliente enmascarado por el RPC (j***@gmail.com). */
-  email_enmascarado?: string | null;
-  /** true → ya tenía usuario en la plataforma. */
-  tiene_acceso?: boolean | null;
-};
 
 /** Mismo enmascarado que devuelve el RPC, para el fallback local (demo). */
 const enmascararEmail = (email?: string | null) => {
@@ -140,6 +134,7 @@ const AdvisorContactCard = ({ agent }: { agent?: Agent }) => {
 const SpeiPayPanel = ({
   formalReservationId,
   offerId,
+  montoApartado,
   clabe,
   concepto,
   agent,
@@ -149,6 +144,8 @@ const SpeiPayPanel = ({
 }: {
   formalReservationId: string;
   offerId: string;
+  /** Monto del apartado del proyecto, ya resuelto por el padre desde la oferta. */
+  montoApartado: number;
   clabe?: string;
   concepto: string;
   agent?: Agent;
@@ -162,7 +159,9 @@ const SpeiPayPanel = ({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [flow, setFlow] = useState<PayFlow>("waiting");
   const [attempts, setAttempts] = useState(0);
-  const [paidStatus, setPaidStatus] = useState<ApartadoStatus | null>(null);
+  const [paidStatus, setPaidStatus] = useState<EstadoApartado | null>(null);
+  // Último estado leído (pagado o no): de aquí salen los movimientos en vivo.
+  const [estado, setEstado] = useState<EstadoApartado | null>(null);
   const [paidDialogOpen, setPaidDialogOpen] = useState(false);
 
   const clabeFormatted = clabe ? clabe.match(/.{1,4}/g)?.join(" ") ?? clabe : "";
@@ -177,7 +176,7 @@ const SpeiPayPanel = ({
   const markPaidLocally = useCallback(() => {
     recordPayment(formalReservationId, {
       id: `PAY-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      amountMXN: APARTADO_AMOUNT_MXN,
+      amountMXN: montoApartado,
       paymentMethod: "spei",
       detectedAt: new Date().toISOString(),
       speiTrackingKey: `MBAN${Date.now().toString().slice(-10)}${Math.random()
@@ -185,43 +184,35 @@ const SpeiPayPanel = ({
         .substring(2, 5)
         .toUpperCase()}`,
     });
-  }, [recordPayment, formalReservationId]);
+  }, [recordPayment, formalReservationId, montoApartado]);
 
   // Consulta a BD (RPC SECURITY DEFINER) si el apartado ya se reflejó pagado.
   // El pago es vía SPEI (externo): se valida contra el estado real en plataforma.
   // Cadena real: STP → backend → RPC insertar_pago_stp → n8n crea cuenta de cobranza
   // + pagos → triggers suben la propiedad a estatus 4. Aquí solo se lee ese estado.
-  const consultarApartado = useCallback(async (): Promise<ApartadoStatus | null> => {
+  // Sin token la RPC responde vacío (fallo cerrado): el estado del pago solo se
+  // consulta desde el link personal del cliente.
+  const consultarApartado = useCallback(async (): Promise<EstadoApartado | null> => {
     const numericId = Number(offerId);
     if (!numericId || Number.isNaN(numericId)) return null;
-    try {
-      const { data, error } = await (supabase as any).rpc("get_apartado_status", {
-        p_oferta_id: numericId,
-        // Sin token la RPC responde vacío (fallo cerrado): el estado del pago solo
-        // se consulta desde el link personal del cliente.
-        p_token: reservationToken ?? null,
-      });
-      if (error) return null;
-      const row = Array.isArray(data) ? data[0] : data;
-      return (row as ApartadoStatus) ?? null;
-    } catch {
-      return null;
-    }
+    const e = await consultarEstadoApartado(numericId, reservationToken);
+    if (e) setEstado(e);
+    return e;
   }, [offerId, reservationToken]);
 
   /** Estado del apartado solo si ya está pagado; si no, null. */
-  const checkPaidInDB = useCallback(async (): Promise<ApartadoStatus | null> => {
-    const estado = await consultarApartado();
-    return estado?.pagado ? estado : null;
+  const checkPaidInDB = useCallback(async (): Promise<EstadoApartado | null> => {
+    const e = await consultarApartado();
+    return e?.pagado ? e : null;
   }, [consultarApartado]);
 
   // Al confirmarse el pago: marca en store, dispara creación de cuenta cliente
   // (solo si aún no tiene acceso) y abre la modal de confirmación.
   const settlePaid = useCallback(
-    (status?: ApartadoStatus | null) => {
+    (status?: EstadoApartado | null) => {
       markPaidLocally();
       setPaidStatus(status ?? null);
-      if (!status?.tiene_acceso) onPaid?.();
+      if (!status?.tieneAcceso) onPaid?.();
       setFlow("paid");
       setPaidDialogOpen(true);
     },
@@ -232,9 +223,16 @@ const SpeiPayPanel = ({
   // al llegar a MAX_ATTEMPTS, muestra "contacta a tu asesor".
   const runCheck = useCallback(async () => {
     setFlow("checking");
-    const paid = await checkPaidInDB();
-    if (paid) {
-      settlePaid(paid);
+    const actual = await consultarApartado();
+    if (actual?.pagado) {
+      settlePaid(actual);
+      return;
+    }
+    // Si STP ya reportó algún depósito, el pago está en curso: se sigue
+    // consultando sin gastar intentos, para que el cliente vea cómo avanza.
+    if ((actual?.movimientos.length ?? 0) > 0) {
+      setFlow("waiting");
+      setAttempts(0);
       return;
     }
     setAttempts((prev) => {
@@ -242,7 +240,7 @@ const SpeiPayPanel = ({
       setFlow(n >= MAX_ATTEMPTS ? "exhausted" : "waiting");
       return n;
     });
-  }, [checkPaidInDB, settlePaid]);
+  }, [consultarApartado, settlePaid]);
 
   // Auto-verificación cada minuto mientras esté "waiting" (hasta MAX_ATTEMPTS).
   useEffect(() => {
@@ -268,17 +266,22 @@ const SpeiPayPanel = ({
   const handleDemoPay = async () => {
     // Se toma el estado real (aunque aún no esté pagado) para que la modal use el
     // `tiene_acceso` verdadero y no invente que se creó una cuenta.
-    const estado = await consultarApartado();
+    const actual = await consultarApartado();
     settlePaid({
-      ...(estado ?? {}),
+      ...(actual ?? {
+        estatusId: null, idCuentaCobranza: null, clabe: null, montoObjetivo: null,
+        totalAplicado: 0, restante: null, movimientos: [], conDetalle: false,
+      }),
       pagado: true,
-      email_enmascarado: estado?.email_enmascarado ?? enmascararEmail(clientEmail),
-      tiene_acceso: !!estado?.tiene_acceso,
-    });
+      emailEnmascarado: actual?.emailEnmascarado ?? enmascararEmail(clientEmail),
+      tieneAcceso: !!actual?.tieneAcceso,
+    } as EstadoApartado);
   };
 
-  // Redirect cross-subdominio al portal del cliente (no react-router).
-  const goToClientPortal = () => { window.location.assign(CLIENT_PORTAL_LOGIN_URL); };
+  // Portal del cliente en una pestaña aparte: el cliente conserva esta pantalla con
+  // sus datos del apartado mientras entra a la plataforma. Cross-subdominio, así que
+  // es window.open y no react-router.
+  const goToClientPortal = () => { window.open(CLIENT_PORTAL_LOGIN_URL, "_blank", "noopener"); };
 
   // Sin CLABE en la propiedad no hay a dónde transferir: pedir al asesor.
   if (!clabe) {
@@ -302,6 +305,14 @@ const SpeiPayPanel = ({
   }
 
   const remaining = Math.max(0, MAX_ATTEMPTS - attempts);
+
+  // Monto objetivo: manda la BD (proyectos.monto_apartado vía RPC) sobre lo que
+  // trae la oferta en memoria. Si ya hubo depósitos aplicados, lo que el cliente
+  // debe transferir es el faltante, no el total.
+  const objetivo = estado?.montoObjetivo ?? montoApartado;
+  const movimientos = estado?.movimientos ?? [];
+  const hayParcial = !!estado && estado.totalAplicado > 0 && (estado.restante ?? 0) > 0;
+  const montoAPagar = hayParcial ? (estado!.restante as number) : objetivo;
 
   return (
     <div className="space-y-4">
@@ -343,12 +354,16 @@ const SpeiPayPanel = ({
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Monto exacto
               </p>
-              <CopyButton compact copied={copiedField === "monto"} onClick={() => copy("monto", String(APARTADO_AMOUNT_MXN))} />
+              <CopyButton compact copied={copiedField === "monto"} onClick={() => copy("monto", String(montoAPagar))} />
             </div>
             <p className="text-2xl font-bold text-foreground tabular-nums leading-none">
-              {formatMXN(APARTADO_AMOUNT_MXN)}
+              {formatMXN(montoAPagar)}
             </p>
-            <p className="text-[10px] text-muted-foreground mt-2">MXN · se aplica al precio final</p>
+            <p className="text-[10px] text-muted-foreground mt-2">
+              {hayParcial
+                ? `MXN · faltante de ${formatMXN(objetivo)}, ya recibimos ${formatMXN(estado!.totalAplicado)}`
+                : "MXN · se aplica al precio final"}
+            </p>
           </div>
           <div className="px-5 py-4">
             <div className="flex items-center gap-1.5 mb-2">
@@ -360,6 +375,70 @@ const SpeiPayPanel = ({
           </div>
         </div>
       </div>
+
+      {/* ── Movimientos recibidos (en vivo, desde STP) ── */}
+      {movimientos.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-muted/40">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Lo que hemos recibido
+            </p>
+            {estado?.montoObjetivo != null && (
+              <p className="text-[11px] font-semibold tabular-nums text-foreground">
+                {formatMXN(estado.totalAplicado)} <span className="text-muted-foreground">de</span>{" "}
+                {formatMXN(objetivo)}
+              </p>
+            )}
+          </div>
+
+          <ul className="divide-y divide-border">
+            {movimientos.map((m, i) => (
+              <li key={m.claveRastreo ?? `mov-${i}`} className="flex items-start gap-3 px-4 py-3">
+                <span
+                  className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${
+                    m.aplicado ? "bg-success/15 text-success" : "bg-amber-100 text-amber-600"
+                  }`}
+                >
+                  {m.aplicado ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-[13px] font-semibold tabular-nums text-foreground">
+                      {formatMXN(m.monto)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground shrink-0">{m.fecha ?? ""}</p>
+                  </div>
+                  <p className={`text-[11px] leading-snug ${m.aplicado ? "text-muted-foreground" : "text-amber-700"}`}>
+                    {m.aplicado
+                      ? "Aplicado a tu apartado"
+                      : m.razonRechazo
+                        ? `No se aplicó: ${m.razonRechazo}`
+                        : "Recibido, aún sin aplicar"}
+                  </p>
+                  {m.claveRastreo && (
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/70 break-all">
+                      {m.claveRastreo}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* Faltante: el caso del depósito de prueba de $1 antes del monto completo */}
+          {hayParcial && (
+            <div className="flex items-start gap-2.5 border-t border-border bg-primary/[0.04] px-4 py-3">
+              <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <p className="text-[11px] leading-relaxed text-foreground">
+                <span className="font-semibold">Tu depósito llegó y se aplicó.</span> Ya puedes
+                hacer el depósito completo: transfiere los{" "}
+                <span className="font-semibold tabular-nums">{formatMXN(estado!.restante as number)}</span>{" "}
+                restantes a la misma CLABE, con el mismo concepto.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Estado de validación del pago ── */}
       {flow === "paid" ? (
@@ -378,11 +457,11 @@ const SpeiPayPanel = ({
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-card/70 border border-border/60">
             <Mail className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              {paidStatus?.tiene_acceso ? (
+              {paidStatus?.tieneAcceso ? (
                 <>
                   Ya tienes una cuenta con{" "}
                   <span className="font-semibold text-foreground">
-                    {paidStatus?.email_enmascarado ?? enmascararEmail(clientEmail) ?? "tu correo"}
+                    {paidStatus?.emailEnmascarado ?? enmascararEmail(clientEmail) ?? "tu correo"}
                   </span>
                   . Inicia sesión para revisar tu apartado.
                 </>
@@ -390,20 +469,20 @@ const SpeiPayPanel = ({
                 <>
                   Enviamos a{" "}
                   <span className="font-semibold text-foreground">
-                    {paidStatus?.email_enmascarado ?? enmascararEmail(clientEmail) ?? "tu correo"}
+                    {paidStatus?.emailEnmascarado ?? enmascararEmail(clientEmail) ?? "tu correo"}
                   </span>{" "}
                   tus datos de acceso para entrar a tu portal de cliente.
                 </>
               )}
             </p>
           </div>
-          {paidStatus?.clabe_stp && (
+          {paidStatus?.clabe && (
             <div className="p-3 rounded-xl bg-card/70 border border-border/60 space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 CLABE de tu cuenta
               </p>
               <p className="font-mono text-[13px] font-semibold text-foreground break-all">
-                {paidStatus.clabe_stp.match(/.{1,4}/g)?.join(" ") ?? paidStatus.clabe_stp}
+                {paidStatus.clabe.match(/.{1,4}/g)?.join(" ") ?? paidStatus.clabe}
               </p>
               <p className="text-[10px] text-muted-foreground">
                 Úsala para tus pagos siguientes. La CLABE del apartado ya no aplica.
@@ -467,9 +546,19 @@ const SpeiPayPanel = ({
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Validamos automáticamente cada minuto. En cuanto STP confirme tu SPEI, continúas.
-            {remaining > 0 && <> Quedan {remaining} verificación{remaining === 1 ? "" : "es"}.</>}
+            Validamos solo. Una transferencia SPEI suele reflejarse entre 3 y 5 minutos.
+            {remaining > 0 && <> Seguimos revisando por {Math.ceil((remaining * CHECK_INTERVAL_MS) / 60_000)} min más.</>}
           </p>
+
+          {/* Sugerencia del depósito de prueba: es lo que hace la gente por su cuenta,
+              y así sabe que se lo vamos a confirmar antes de mandar el monto completo. */}
+          {movimientos.length === 0 && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              ¿Prefieres ir sobre seguro? Manda primero un depósito pequeño de prueba
+              (por ejemplo $1). En cuanto lo veamos aplicado te avisamos aquí para que
+              transfieras el resto.
+            </p>
+          )}
           <button
             type="button"
             onClick={runCheck}
@@ -507,8 +596,8 @@ const SpeiPayPanel = ({
       <ApartadoPagadoDialog
         open={paidDialogOpen}
         onOpenChange={setPaidDialogOpen}
-        email={paidStatus?.email_enmascarado ?? enmascararEmail(clientEmail)}
-        tieneAcceso={!!paidStatus?.tiene_acceso}
+        email={paidStatus?.emailEnmascarado ?? enmascararEmail(clientEmail)}
+        tieneAcceso={!!paidStatus?.tieneAcceso}
         concepto={concepto}
         loginUrl={CLIENT_PORTAL_LOGIN_URL}
       />
@@ -534,6 +623,8 @@ const ReservarPage = () => {
   const { data: dbOfferResult } = useOfferFromDB(offerId);
   const mockOffer = useOfferById(offerId);
   const offer = isNumericOffer ? (dbOfferResult?.offer ?? null) : (mockOffer ?? null);
+  // Monto del apartado del proyecto (RPC get_oferta_financials → proyectos.monto_apartado).
+  const montoApartado = apartadoDeOferta(offer);
   const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = formalReservation?.offerId;
@@ -635,7 +726,7 @@ const ReservarPage = () => {
                 <div className="space-y-2">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    Apartar · {formatMXN(APARTADO_AMOUNT_MXN)} MXN
+                    Apartar · {formatMXN(montoApartado)} MXN
                   </span>
                   <h1 className="text-[1.7rem] font-bold text-foreground leading-tight tracking-tight">
                     Información para tu pago
@@ -648,6 +739,7 @@ const ReservarPage = () => {
                 <SpeiPayPanel
                   formalReservationId={formalReservationId}
                   offerId={offerId}
+                  montoApartado={montoApartado}
                   clabe={clabeApartado}
                   concepto={concepto}
                   agent={agent}
