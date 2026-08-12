@@ -34,6 +34,7 @@ import { EnDemandaDialog } from "@/components/admin/EnDemandaDialog";
 import { JuicioTerminadoDialog } from "@/components/admin/JuicioTerminadoDialog";
 import { EditCuentaCobranzaDialog } from "@/components/admin/EditCuentaCobranzaDialog";
 import { AgenteVendedorDialog, type AgenteVendedorInfo } from "@/components/admin/AgenteVendedorDialog";
+import { SubirDocumentosCuentaDialog } from "@/components/admin/SubirDocumentosCuentaDialog";
 
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -154,10 +155,27 @@ import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
 
-// Read-only documents view component
-function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] }: { cuentaCobranzaId: number; propiedadId?: number | null; personaIds?: number[] }) {
+// Documents view component (lectura + subida de documentos de la cuenta)
+function ReadOnlyDocumentsView({
+  cuentaCobranzaId,
+  propiedadId,
+  productoId,
+  personaIds = [],
+  tipoCuenta = 'Propiedad',
+  canUpload = false,
+}: {
+  cuentaCobranzaId: number;
+  propiedadId?: number | null;
+  productoId?: number | null;
+  personaIds?: number[];
+  tipoCuenta?: 'Propiedad' | 'Producto' | 'Servicio';
+  canUpload?: boolean;
+}) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isDownloading, setIsDownloading] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const esPropiedad = tipoCuenta === 'Propiedad';
   const [viewerDialog, setViewerDialog] = useState<{ isOpen: boolean; url: string; title: string }>({
     isOpen: false,
     url: '',
@@ -170,10 +188,11 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] 
   // los de id_cuenta_cobranza, por eso faltaban los personales/de propiedad.
   const personaKey = personaIds.join(",");
   const { data: documentos, isLoading } = useQuery({
-    queryKey: ["documentos_cuenta_cobranza", cuentaCobranzaId, propiedadId, personaKey],
+    queryKey: ["documentos_cuenta_cobranza", cuentaCobranzaId, propiedadId, productoId, personaKey],
     queryFn: async () => {
       const orParts: string[] = [`id_cuenta_cobranza.eq.${cuentaCobranzaId}`];
       if (propiedadId) orParts.push(`id_propiedad.eq.${propiedadId}`);
+      if (productoId) orParts.push(`id_producto.eq.${productoId}`);
       if (personaIds.length) orParts.push(`id_persona.in.(${personaIds.join(",")})`);
 
       const { data: docs, error } = await supabase
@@ -247,6 +266,7 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] 
   // Fetch delivery document types (categoria 7)
   const { data: tiposDocEntrega } = useQuery({
     queryKey: ["tipos_documento_entrega"],
+    enabled: esPropiedad,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tipos_documento')
@@ -272,9 +292,9 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] 
   
   // Find missing delivery documents by checking all uploaded delivery docs
   const uploadedDeliveryTypeIds = allDeliveryDocuments.map(d => d.id_tipo_documento);
-  const missingDeliveryDocs = tiposDocEntrega?.filter(
-    tipo => !uploadedDeliveryTypeIds.includes(tipo.id)
-  ) || [];
+  const missingDeliveryDocs = esPropiedad
+    ? (tiposDocEntrega?.filter(tipo => !uploadedDeliveryTypeIds.includes(tipo.id)) || [])
+    : [];
 
   // Get comprador name by id_persona
   const getCompradorName = (idPersona: number) => {
@@ -428,25 +448,37 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] 
         </CardContent>
       </Card>
 
-      {/* Property Documents Section */}
+      {/* Property / Account Documents Section */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
               <Home className="h-5 w-5" />
-              Documentos de la Propiedad
+              {esPropiedad ? 'Documentos de la Propiedad' : 'Documentos de la Cuenta'}
             </CardTitle>
-            {documentos && documentos.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadAll}
-                disabled={isDownloading}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                {isDownloading ? "Descargando..." : "Descargar todos"}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {canUpload && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUploadDialogOpen(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Agregar documentos
+                </Button>
+              )}
+              {documentos && documentos.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAll}
+                  disabled={isDownloading}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {isDownloading ? "Descargando..." : "Descargar todos"}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -476,6 +508,18 @@ function ReadOnlyDocumentsView({ cuentaCobranzaId, propiedadId, personaIds = [] 
         </CardContent>
       </Card>
 
+      {/* Subida de documentos de la cuenta (nota de crédito, evidencia de devolución, etc.) */}
+      <SubirDocumentosCuentaDialog
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        cuentaId={cuentaCobranzaId}
+        propiedadId={propiedadId ?? null}
+        productoId={productoId ?? null}
+        onUploaded={() => {
+          queryClient.invalidateQueries({ queryKey: ["documentos_cuenta_cobranza"] });
+        }}
+      />
+
       {/* Document Viewer Dialog */}
       <Dialog open={viewerDialog.isOpen} onOpenChange={(open) => setViewerDialog({ ...viewerDialog, isOpen: open })}>
         <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
@@ -499,6 +543,8 @@ export default function DetalleCuentaCobranza() {
   const { id } = useParams<{ id: string }>();
   const cuentaId = parseInt(id || '0');
   const [openAcuerdos, setOpenAcuerdos] = useState<{ [key: number]: boolean }>({});
+  // Modal de carga de documentos de la cuenta (accesible también en cuentas canceladas)
+  const [docsCuentaDialogOpen, setDocsCuentaDialogOpen] = useState(false);
   const [compradoresOpen, setCompradoresOpen] = useState(false);
   // Eliminar pago = SOFT DELETE vía RPC eliminar_pago (unificado con portal-cobranza /
   // validación de pagos). El borrado es del PAGO (tabla pagos), no de una aplicación suelta.
@@ -3083,7 +3129,20 @@ export default function DetalleCuentaCobranza() {
         
         {/* Mostrar badge grande cuando está cancelada, ocultar botones */}
         {esCuentaCancelada ? (
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
+            {/* Aunque la cuenta esté cancelada se pueden seguir cargando documentos
+                (nota de crédito, evidencia de devolución, comprobante de transferencia). */}
+            {(canUpdate || isSuperAdmin) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setDocsCuentaDialogOpen(true)}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Agregar documentos
+              </Button>
+            )}
             <Badge variant="destructive" className="text-lg px-6 py-2 font-bold">
               <X className="h-5 w-5 mr-2" />
               CUENTA CANCELADA
@@ -4034,7 +4093,7 @@ export default function DetalleCuentaCobranza() {
         <CardContent>
           <Tabs defaultValue="acuerdos-aplicaciones" className="w-full">
             <TabsList className={(() => {
-              const numTabs = 1 + (esDacionEnPago ? 0 : 1) + (cuentaDetalle?.tipo_cuenta === 'Propiedad' ? 1 : 0);
+              const numTabs = 1 + (esDacionEnPago ? 0 : 1) + (cuentaDetalle?.id ? 1 : 0);
               const colsClass = numTabs === 1 ? 'grid-cols-1' : numTabs === 2 ? 'grid-cols-2' : 'grid-cols-3';
               return `grid w-full ${colsClass}`;
             })()}>
@@ -4042,7 +4101,8 @@ export default function DetalleCuentaCobranza() {
               {!esDacionEnPago && (
                 <TabsTrigger value="pagos-aplicados">Pagos Aplicados</TabsTrigger>
               )}
-              {cuentaDetalle?.tipo_cuenta === 'Propiedad' && (
+              {/* Documentos disponible para cualquier tipo de cuenta (propiedad, producto o servicio) */}
+              {cuentaDetalle?.id && (
                 <TabsTrigger value="documentos">Documentos</TabsTrigger>
               )}
             </TabsList>
@@ -5101,31 +5161,34 @@ export default function DetalleCuentaCobranza() {
                                     <Badge variant="secondary" className="text-xs">
                                       {aplicacionesDelPago.length} {aplicacionesDelPago.length === 1 ? 'aplicación' : 'aplicaciones'}
                                     </Badge>
-                                    {!esCuentaCancelada && !isReadOnly && (
+                                    {/* Ver evidencia: disponible siempre (incluidas cuentas canceladas
+                                        y propiedades entregadas) porque es solo lectura. */}
+                                    {(pago.url_cep || pago.url_recibo) && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 w-8 p-0"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.open(pago.url_cep || pago.url_recibo || '', '_blank');
+                                              }}
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Ver evidencia de pago</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                    {/* Subir/actualizar evidencia: también en cuentas canceladas,
+                                        para completar el expediente del pago después del cierre. */}
+                                    {!isReadOnly && (
                                       <>
-                                        {(pago.url_cep || pago.url_recibo) && (
-                                          <TooltipProvider>
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  className="h-8 w-8 p-0"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    window.open(pago.url_cep || pago.url_recibo || '', '_blank');
-                                                  }}
-                                                >
-                                                  <Eye className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>Ver evidencia de pago</p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          </TooltipProvider>
-                                        )}
-                                        {/* Upload evidence button - requires update permission */}
                                         {(canUpdate || isSuperAdmin) && (
                                           <TooltipProvider>
                                             <Tooltip>
@@ -5425,12 +5488,15 @@ export default function DetalleCuentaCobranza() {
                   )}
                 </TabsContent>
 
-                {/* Documentos Tab - only available for properties */}
-                {cuentaDetalle?.tipo_cuenta === 'Propiedad' && cuentaDetalle?.id && (
+                {/* Documentos Tab - disponible para propiedades, productos y servicios */}
+                {cuentaDetalle?.id && (
                   <TabsContent value="documentos" className="mt-6">
                     <ReadOnlyDocumentsView
                       cuentaCobranzaId={cuentaDetalle.id}
-                      propiedadId={cuentaDetalle.id_propiedad ?? null}
+                      propiedadId={cuentaDetalle.tipo_cuenta === 'Propiedad' ? (cuentaDetalle.id_propiedad ?? null) : null}
+                      productoId={cuentaDetalle.tipo_cuenta !== 'Propiedad' ? (cuentaDetalle.producto_servicio_id ?? null) : null}
+                      tipoCuenta={cuentaDetalle.tipo_cuenta}
+                      canUpload={canUpdate || isSuperAdmin}
                       personaIds={(cuentaDetalle.compradores ?? [])
                         .map((c) => c.id_persona)
                         .filter((x): x is number => typeof x === 'number')}
@@ -5440,6 +5506,20 @@ export default function DetalleCuentaCobranza() {
               </Tabs>
             </CardContent>
           </Card>
+
+      {/* Carga de documentos de la cuenta desde el encabezado (cuentas canceladas) */}
+      {cuentaDetalle?.id && (
+        <SubirDocumentosCuentaDialog
+          open={docsCuentaDialogOpen}
+          onOpenChange={setDocsCuentaDialogOpen}
+          cuentaId={cuentaDetalle.id}
+          propiedadId={cuentaDetalle.tipo_cuenta === 'Propiedad' ? (cuentaDetalle.id_propiedad ?? null) : null}
+          productoId={cuentaDetalle.tipo_cuenta !== 'Propiedad' ? (cuentaDetalle.producto_servicio_id ?? null) : null}
+          onUploaded={() => {
+            queryClient.invalidateQueries({ queryKey: ["documentos_cuenta_cobranza"] });
+          }}
+        />
+      )}
 
       <EliminarPagoDialog
         open={deletePagoDialog !== null}
