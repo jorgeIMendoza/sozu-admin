@@ -16,6 +16,7 @@ import { useProyectosSozuReales } from "@/hooks/usePortalEstructuraComisiones/us
 import { useEstructuraRealRaw, comisionistasDisponibles } from "@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador";
 import { SimulatorProvider, useSimulator } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { MotorComisionesReadOnly } from "@/components/admin/portal-alta-direccion/MotorComisionesReadOnly";
+import BrokerIncentivesTab from "@/components/admin/portal-estructura-comisiones/tabs/BrokerIncentivesTab";
 import {
   useComisionesPropuestas,
   useValidarPropuesta,
@@ -51,11 +52,20 @@ export default function AltaDireccionEstructuraComisionesPage() {
       <Tabs defaultValue="motor">
         <TabsList>
           <TabsTrigger value="motor">Motor de Comisiones</TabsTrigger>
+          <TabsTrigger value="incentivos">Incentivos Dinámicos</TabsTrigger>
           <TabsTrigger value="validacion">Validación por proyecto</TabsTrigger>
         </TabsList>
         <TabsContent value="motor" className="mt-5">
           <SimulatorProvider>
             <MotorConsulta />
+          </SimulatorProvider>
+        </TabsContent>
+        <TabsContent value="incentivos" className="mt-5">
+          {/* Vista de solo lectura de los Incentivos Dinámicos del Portal
+              Estructura de comisiones: escenarios por "Ventas del mes", por
+              canal y por proyecto, sin poder editar los escalones. */}
+          <SimulatorProvider>
+            <BrokerIncentivesTab readOnly />
           </SimulatorProvider>
         </TabsContent>
         <TabsContent value="validacion" className="mt-5">
