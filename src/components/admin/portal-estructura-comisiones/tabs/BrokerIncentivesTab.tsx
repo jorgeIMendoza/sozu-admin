@@ -199,6 +199,36 @@ function CanalEscalera({
   const proxima = siguienteTramo(escaleraCanal, ventasDelMes);
   const columnas = Math.min(ventasDelMes, MAX_COLUMNAS_DESGLOSE);
 
+  /** Desglose de cada comisionista, calculado una vez para poder sumarlo por columna. */
+  const filas = useMemo(() => comisionistasDelCanal.map(c => {
+    const propios = escalonesPorPersona.filter(m => m.idPersonal === c.idPersonal);
+    const escalera = escaleraEfectiva(escalonesDelCanal, propios);
+    const desglose = desglosePorVenta(c.pctBase, escalera, ventasDelMes, precioPromUnidad);
+    return { c, propios, escalera, desglose, totales: totalesDelMes(desglose) };
+  }), [comisionistasDelCanal, escalonesPorPersona, escalonesDelCanal, ventasDelMes, precioPromUnidad]);
+
+  /**
+   * Sumatoria de lo dispersado entre todos los comisionistas, venta por venta.
+   * Es el % del precio de venta que sale del canal en cada cierre.
+   */
+  const totalesPorVenta = useMemo(() => {
+    const porOrdinal = Array.from({ length: ventasDelMes }, (_, i) => ({
+      ordinal: i + 1, pct: 0, importe: 0,
+    }));
+    for (const f of filas) {
+      for (const v of f.desglose) {
+        const acumulado = porOrdinal[v.ordinal - 1];
+        if (!acumulado) continue;
+        acumulado.pct += v.pct;
+        acumulado.importe += v.importe;
+      }
+    }
+    return porOrdinal;
+  }, [filas, ventasDelMes]);
+
+  const totalMes = filas.reduce((s, f) => s + f.totales.importe, 0);
+  const pctBaseTotal = filas.reduce((s, f) => s + f.c.pctBase, 0);
+
   return (
     <div className="rounded-xl border bg-card p-5">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -267,11 +297,7 @@ function CanalEscalera({
                 </tr>
               </thead>
               <tbody>
-                {comisionistasDelCanal.map(c => {
-                  const propios = escalonesPorPersona.filter(m => m.idPersonal === c.idPersonal);
-                  const escalera = escaleraEfectiva(escalonesDelCanal, propios);
-                  const desglose = desglosePorVenta(c.pctBase, escalera, ventasDelMes, precioPromUnidad);
-                  const totales = totalesDelMes(desglose);
+                {filas.map(({ c, propios, escalera, desglose, totales }) => {
                   const abierta = expandida === c.idRegla;
                   const tieneOverride = propios.length > 0;
 
@@ -311,9 +337,11 @@ function CanalEscalera({
                               <span className="font-mono text-sm">
                                 {precioPromUnidad > 0 ? fmt(v.importe) : '—'}
                               </span>
+                              {/* El % es el dato que explica el importe: se lee, no se
+                                  insinúa. En tramo escalado va destacado. */}
                               <span className={cn(
-                                'font-mono text-[10px]',
-                                v.tramo ? 'text-accent' : 'text-muted-foreground',
+                                'font-mono text-xs font-semibold',
+                                v.tramo ? 'text-accent' : 'text-foreground/70',
                               )}>
                                 {v.pct.toFixed(3)}%
                               </span>
@@ -357,6 +385,32 @@ function CanalEscalera({
                     </Fragment>
                   );
                 })}
+
+                {/* Sumatoria de lo dispersado en cada escenario de venta */}
+                <tr className="border-t-2">
+                  <td></td>
+                  <td className="font-semibold text-sm whitespace-nowrap">Total dispersado</td>
+                  <td className="font-mono text-sm font-semibold">{pctBaseTotal.toFixed(2)}%</td>
+                  {totalesPorVenta.slice(0, columnas).map(t => (
+                    <td key={t.ordinal} className="text-right whitespace-nowrap">
+                      <div className="flex flex-col items-end">
+                        <span className="font-mono text-sm font-semibold">
+                          {precioPromUnidad > 0 ? fmt(t.importe) : '—'}
+                        </span>
+                        <span className="font-mono text-xs font-bold text-accent">
+                          {t.pct.toFixed(3)}%
+                        </span>
+                      </div>
+                    </td>
+                  ))}
+                  {Array.from({ length: Math.max(0, columnas - totalesPorVenta.length) }, (_, i) => (
+                    <td key={`tv-${i}`} className="text-right text-muted-foreground">—</td>
+                  ))}
+                  {ventasDelMes > MAX_COLUMNAS_DESGLOSE && <td></td>}
+                  <td className="text-right font-mono text-sm font-bold whitespace-nowrap">
+                    {precioPromUnidad > 0 ? fmt(totalMes) : '—'}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -366,6 +420,8 @@ function CanalEscalera({
           {precioPromUnidad > 0
             ? `Estimado sobre el precio promedio ponderado por unidad disponible de ${nombreProyecto}: ${fmt(precioPromUnidad)}. Cada venta se paga con el porcentaje de su tramo; las anteriores conservan el suyo.`
             : `Sin unidades disponibles en ${nombreProyecto} no hay precio promedio con el que estimar el pago.`}
+          {' '}<strong>Total dispersado</strong> es la suma de lo que se llevan todos los
+          comisionistas en esa venta: el porcentaje del precio que sale del canal en cada cierre.
         </p>
       </div>
     </div>
