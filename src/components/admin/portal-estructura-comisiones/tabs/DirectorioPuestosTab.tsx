@@ -14,7 +14,8 @@ import {
   useProyectosActivosDirectorio, useBuscarUsuarios, useDirectorioSchemaReady, costoTotal,
   type RolOrganizacional, type PersonalOrganizacional, type AsignacionProyecto,
   type ProyectoActivo, type RoleType, type RoleBelongsTo, type NuevaPersonaInput,
-  type NuevoRolInput,
+  type NuevoRolInput, type TipoPersonal,
+  esCostoDeSozu, ETIQUETA_TIPO_PERSONAL,
 } from '@/hooks/usePortalEstructuraComisiones/useDirectorioPuestos';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -114,7 +115,21 @@ export default function DirectorioPuestosTab() {
     }
     return new Map(Array.from(porRol.entries()).map(([idRol, set]) => [idRol, set.size]));
   }, [personal, asignaciones]);
-  const costoEmpresa = useMemo(() => activos.reduce((s, p) => s + Number(p.costo_total), 0), [activos]);
+  /**
+   * Solo el empleado directo es costo fijo de SOZU. El colaborador de
+   * Investimento se registra porque puede comisionar, pero su sueldo lo paga
+   * Investimento, así que su costo se reporta aparte y no suma.
+   */
+  const empleadosSozu = useMemo(() => activos.filter(esCostoDeSozu), [activos]);
+  const colaboradores = useMemo(() => activos.filter(p => !esCostoDeSozu(p)), [activos]);
+  const costoEmpresa = useMemo(
+    () => empleadosSozu.reduce((s, p) => s + Number(p.costo_total), 0),
+    [empleadosSozu],
+  );
+  const costoInvestimento = useMemo(
+    () => colaboradores.reduce((s, p) => s + Number(p.costo_total), 0),
+    [colaboradores],
+  );
   const sinRol = activos.filter(p => p.id_rol === null).length;
   const sinProyecto = activos.filter(p => (asignacionesByPersona.get(p.id)?.length ?? 0) === 0).length;
   const sinNeto = activos.filter(p => p.sueldo_base_recibido === null).length;
@@ -131,11 +146,15 @@ export default function DirectorioPuestosTab() {
     });
   }, [personal, busqueda, rolesById, proyectosById, asignacionesByPersona]);
 
-  /** Costo por proyecto, prorrateado; el remanente no asignado se acumula en SOZU Central. */
+  /**
+   * Costo por proyecto, prorrateado; el remanente no asignado se acumula en
+   * SOZU Central. Solo cuenta a los empleados directos: el costo del
+   * colaborador de Investimento no lo paga SOZU.
+   */
   const costoPorProyecto = useMemo(() => {
     const porProyecto = new Map<number, number>();
     let central = 0;
-    for (const p of activos) {
+    for (const p of empleadosSozu) {
       const costo = Number(p.costo_total);
       const lista = asignacionesByPersona.get(p.id) ?? [];
       const pctAsignado = lista.reduce((s, a) => s + Number(a.asignacion_pct), 0);
@@ -146,7 +165,7 @@ export default function DirectorioPuestosTab() {
       central += costo * Math.max(0, 100 - pctAsignado) / 100;
     }
     return { porProyecto, central };
-  }, [activos, asignacionesByPersona]);
+  }, [empleadosSozu, asignacionesByPersona]);
 
   const guardarPersona = (input: NuevaPersonaInput & { proyectos?: number[] }, id: number | null) => {
     if (id === null) {
@@ -203,13 +222,31 @@ export default function DirectorioPuestosTab() {
 
       <EstructuraSimuladorAviso />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KpiCard label="Personal activo" value={String(activos.length)} />
-        <KpiCard label="Costo total mensual" value={formatCurrency(costoEmpresa)} />
-        <KpiCard label="Sin rol vinculado" value={String(sinRol)} tone={sinRol > 0 ? 'warn' : 'ok'} />
-        <KpiCard label="Sin proyecto asignado" value={String(sinProyecto)} tone={sinProyecto > 0 ? 'warn' : 'ok'} />
-        <KpiCard label="Sin neto capturado" value={String(sinNeto)} tone={sinNeto > 0 ? 'warn' : 'ok'} />
+      {/* KPIs — el costo de Investimento va aparte porque no lo paga SOZU */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="Empleados SOZU"
+          value={String(empleadosSozu.length)}
+          nota={`de ${activos.length} personas activas`}
+        />
+        <KpiCard
+          label="Costo fijo mensual SOZU"
+          value={formatCurrency(costoEmpresa)}
+          nota="solo empleados directos"
+        />
+        <KpiCard
+          label="Colaboradores Investimento"
+          value={String(colaboradores.length)}
+          nota={colaboradores.length > 0
+            ? `${formatCurrency(costoInvestimento)} que SOZU no paga`
+            : 'ninguno registrado'}
+        />
+        <KpiCard
+          label="Pendientes de capturar"
+          value={String(sinRol + sinProyecto + sinNeto)}
+          nota={`${sinRol} sin rol · ${sinProyecto} sin proyecto · ${sinNeto} sin neto`}
+          tone={sinRol + sinProyecto + sinNeto > 0 ? 'warn' : 'ok'}
+        />
       </div>
 
       {/* Paso 2 — Administración de roles */}
@@ -268,6 +305,7 @@ export default function DirectorioPuestosTab() {
               <thead>
                 <tr>
                   <th>Persona</th>
+                  <th>Perfil</th>
                   <th>Rol</th>
                   <th>Proyectos que atiende</th>
                   <th>Costo Nominal</th>
@@ -466,11 +504,17 @@ function EstructuraSimuladorAviso() {
   );
 }
 
-function KpiCard({ label, value, tone = 'ok' }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
+function KpiCard({ label, value, nota, tone = 'ok' }: {
+  label: string;
+  value: string;
+  nota?: string;
+  tone?: 'ok' | 'warn';
+}) {
   return (
     <div className="rounded-xl border bg-card p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={cn('text-lg font-bold font-mono mt-1', tone === 'warn' && 'text-amber-600')}>{value}</p>
+      {nota && <p className="text-[11px] text-muted-foreground mt-0.5">{nota}</p>}
     </div>
   );
 }
@@ -692,6 +736,25 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, on
             {persona.email_usuario ?? persona.email_contacto ?? 'Sin cuenta ligada'}
           </span>
         </div>
+      </td>
+      <td>
+        {/* Solo el empleado directo es costo de SOZU; el colaborador de
+            Investimento se registra para poder comisionarle. */}
+        <Select
+          value={persona.tipo_personal}
+          onValueChange={(v) => commit({ tipo_personal: v as TipoPersonal })}
+        >
+          <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="empleado_sozu">{ETIQUETA_TIPO_PERSONAL.empleado_sozu}</SelectItem>
+            <SelectItem value="colaborador_investimento">
+              {ETIQUETA_TIPO_PERSONAL.colaborador_investimento}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        {!esCostoDeSozu(persona) && (
+          <p className="text-[11px] text-muted-foreground mt-1">Su costo no lo paga SOZU</p>
+        )}
       </td>
       <td>
         <Select
@@ -977,6 +1040,7 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
   onCancel: () => void;
 }) {
   const [nombre, setNombre] = useState(persona?.nombre ?? '');
+  const [tipoPersonal, setTipoPersonal] = useState<TipoPersonal>(persona?.tipo_personal ?? 'empleado_sozu');
   const [emailUsuario, setEmailUsuario] = useState<string | null>(persona?.email_usuario ?? null);
   const [emailContacto, setEmailContacto] = useState(persona?.email_contacto ?? '');
   const [telefono, setTelefono] = useState(persona?.telefono ?? '');
@@ -1013,6 +1077,7 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
     }
     onSave({
       nombre: nombre.trim(),
+      tipo_personal: tipoPersonal,
       email_usuario: emailUsuario,
       email_contacto: emailContacto.trim() || null,
       telefono: telefono.trim() || null,
@@ -1107,9 +1172,31 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
         </div>
       )}
 
+      <div>
+        <Label>Perfil</Label>
+        <Select value={tipoPersonal} onValueChange={(v) => setTipoPersonal(v as TipoPersonal)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="empleado_sozu">
+              {ETIQUETA_TIPO_PERSONAL.empleado_sozu} — su costo es costo fijo de SOZU
+            </SelectItem>
+            <SelectItem value="colaborador_investimento">
+              {ETIQUETA_TIPO_PERSONAL.colaborador_investimento} — SOZU no paga su sueldo
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {tipoPersonal === 'empleado_sozu'
+            ? 'Su costo suma al costo fijo mensual y al costo por proyecto.'
+            : 'Da servicio y soporte al grupo; su costo se registra como referencia pero no suma al costo de SOZU. Puede comisionar como bono por ese soporte.'}
+        </p>
+      </div>
+
       <div className="rounded-lg border p-3 space-y-3">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Costo de la persona para la empresa
+          {tipoPersonal === 'empleado_sozu'
+            ? 'Costo de la persona para la empresa'
+            : 'Costo de referencia (lo paga Investimento)'}
         </p>
         <div className="grid grid-cols-3 gap-3">
           <div>
