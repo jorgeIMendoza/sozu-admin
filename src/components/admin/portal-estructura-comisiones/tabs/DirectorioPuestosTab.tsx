@@ -12,9 +12,10 @@ import {
   usePersonal, useCrearPersona, useActualizarPersona, useDarBajaPersona, useReactivarPersona,
   useAsignacionesProyecto, useVincularProyecto, useDesvincularProyecto, useActualizarAsignacion,
   useProyectosActivosDirectorio, useBuscarUsuarios, useDirectorioSchemaReady, costoTotal,
+  useCuentaSistema, rolesEnLaEmpresa, useRolesAdicionales, useGuardarRolesAdicionales,
   type RolOrganizacional, type PersonalOrganizacional, type AsignacionProyecto,
   type ProyectoActivo, type RoleType, type RoleBelongsTo, type NuevaPersonaInput,
-  type NuevoRolInput, type TipoPersonal,
+  type NuevoRolInput, type TipoPersonal, type PersonaVinculada,
   esCostoDeSozu, ETIQUETA_TIPO_PERSONAL,
 } from '@/hooks/usePortalEstructuraComisiones/useDirectorioPuestos';
 import {
@@ -60,6 +61,9 @@ export default function DirectorioPuestosTab() {
   const { data: personal = [] } = usePersonal(verBajas);
   const { data: asignaciones = [] } = useAsignacionesProyecto();
   const { data: proyectos = [] } = useProyectosActivosDirectorio();
+  const { data: rolesAdicionales } = useRolesAdicionales();
+  /** `null` = la tabla aún no existe; no es lo mismo que "nadie tiene roles extra". */
+  const rolesAdicionalesPendiente = rolesAdicionales === null;
 
   const [roleDialog, setRoleDialog] = useState<{ open: boolean; rol: RolOrganizacional | null }>({
     open: false, rol: null,
@@ -77,6 +81,7 @@ export default function DirectorioPuestosTab() {
   const actualizarPersona = useActualizarPersona();
   const darBaja = useDarBajaPersona();
   const reactivar = useReactivarPersona();
+  const guardarRolesAdicionales = useGuardarRolesAdicionales();
 
   const rolesById = useMemo(() => new Map(roles.map(r => [r.id, r])), [roles]);
   const proyectosById = useMemo(() => new Map(proyectos.map(p => [p.id, p])), [proyectos]);
@@ -89,6 +94,16 @@ export default function DirectorioPuestosTab() {
     }
     return map;
   }, [asignaciones]);
+
+  const rolesAdicionalesByPersona = useMemo(() => {
+    const map = new Map<number, number[]>();
+    for (const r of rolesAdicionales ?? []) {
+      const lista = map.get(r.id_personal);
+      if (lista) lista.push(r.id_rol);
+      else map.set(r.id_personal, [r.id_rol]);
+    }
+    return map;
+  }, [rolesAdicionales]);
 
   /** Solo los roles vigentes pueden asignarse a una persona. */
   const rolesAsignables = useMemo(() => roles.filter(r => r.activo), [roles]);
@@ -167,16 +182,47 @@ export default function DirectorioPuestosTab() {
     return { porProyecto, central };
   }, [empleadosSozu, asignacionesByPersona]);
 
-  const guardarPersona = (input: NuevaPersonaInput & { proyectos?: number[] }, id: number | null) => {
+  /**
+   * Guarda la ficha y, después, sus roles base adicionales.
+   *
+   * En ese orden y no en paralelo: en el alta los adicionales necesitan el id que
+   * devuelve el insert, y el trigger de BD rechaza guardar como adicional el rol
+   * que ya es principal, así que el principal debe estar escrito antes.
+   */
+  const guardarPersona = (
+    input: NuevaPersonaInput & { proyectos?: number[]; rolesAdicionales?: number[] },
+    id: number | null,
+  ) => {
+    const { rolesAdicionales, ...conProyectos } = input;
+    const cerrar = () => setPersonaDialog({ open: false, persona: null });
+
+    const persistirRoles = (idPersona: number, aviso: string) => {
+      if (!rolesAdicionales) { toast.success(aviso); cerrar(); return; }
+      guardarRolesAdicionales.mutate(
+        { id_personal: idPersona, roles: rolesAdicionales },
+        {
+          onSuccess: () => { toast.success(aviso); cerrar(); },
+          // La ficha ya quedó guardada: decirlo evita que se reintente todo.
+          onError: (e) => {
+            toast.error(
+              `${aviso}, pero no se pudieron guardar los roles adicionales: ` +
+              (e instanceof Error ? e.message : 'error desconocido'),
+            );
+            cerrar();
+          },
+        },
+      );
+    };
+
     if (id === null) {
-      crearPersona.mutate(input, {
-        onSuccess: () => { toast.success('Persona dada de alta'); setPersonaDialog({ open: false, persona: null }); },
+      crearPersona.mutate(conProyectos, {
+        onSuccess: (nuevoId) => persistirRoles(nuevoId, 'Persona dada de alta'),
         onError: notifyError,
       });
     } else {
-      const { proyectos: _ignorado, ...campos } = input;
+      const { proyectos: _ignorado, ...campos } = conProyectos;
       actualizarPersona.mutate({ id, ...campos }, {
-        onSuccess: () => { toast.success('Ficha actualizada'); setPersonaDialog({ open: false, persona: null }); },
+        onSuccess: () => persistirRoles(id, 'Ficha actualizada'),
         onError: notifyError,
       });
     }
@@ -326,6 +372,7 @@ export default function DirectorioPuestosTab() {
                     rol={p.id_rol !== null ? rolesById.get(p.id_rol) ?? null : null}
                     proyectos={proyectos}
                     asignaciones={asignacionesByPersona.get(p.id) ?? []}
+                    rolesAdicionales={rolesAdicionalesByPersona.get(p.id) ?? []}
                     onEditar={() => setPersonaDialog({ open: true, persona: p })}
                     onBaja={() => setBajaTarget(p)}
                     onReactivar={() => reactivar.mutate(p.id, {
@@ -387,8 +434,10 @@ export default function DirectorioPuestosTab() {
         open={roleDialog.open}
         onOpenChange={(open) => setRoleDialog({ open, rol: open ? roleDialog.rol : null })}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        {/* Alto acotado y cuerpo con scroll: sin esto el formulario largo desborda
+            el viewport por arriba y por abajo, y el encabezado queda inalcanzable. */}
+        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{roleDialog.rol ? `Editar rol: ${roleDialog.rol.nombre}` : 'Nuevo Rol'}</DialogTitle>
             <DialogDescription>
               Rol real de la empresa. Documenta su objetivo y labores para que quede claro
@@ -421,8 +470,8 @@ export default function DirectorioPuestosTab() {
         open={personaDialog.open}
         onOpenChange={(open) => setPersonaDialog({ open, persona: open ? personaDialog.persona : null })}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{personaDialog.persona ? 'Editar persona' : 'Alta de persona'}</DialogTitle>
             <DialogDescription>
               {personaDialog.persona
@@ -435,6 +484,17 @@ export default function DirectorioPuestosTab() {
             persona={personaDialog.persona}
             roles={rolesAsignables}
             proyectos={proyectos}
+            asignaciones={
+              personaDialog.persona
+                ? asignacionesByPersona.get(personaDialog.persona.id) ?? []
+                : []
+            }
+            rolesAdicionales={
+              personaDialog.persona
+                ? rolesAdicionalesByPersona.get(personaDialog.persona.id) ?? []
+                : []
+            }
+            rolesAdicionalesPendiente={rolesAdicionalesPendiente}
             onSave={(input) => guardarPersona(input, personaDialog.persona?.id ?? null)}
             onCancel={() => setPersonaDialog({ open: false, persona: null })}
           />
@@ -696,12 +756,14 @@ function RolesSection({ roles, personasPorRol, verInactivos, onToggleInactivos, 
 /* Fila de persona — rol y proyectos se vinculan aquí                  */
 /* ------------------------------------------------------------------ */
 
-function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, onEditar, onBaja, onReactivar }: {
+function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, rolesAdicionales, onEditar, onBaja, onReactivar }: {
   persona: PersonalOrganizacional;
   rolesAsignables: RolOrganizacional[];
   rol: RolOrganizacional | null;
   proyectos: ProyectoActivo[];
   asignaciones: AsignacionProyecto[];
+  /** Roles base adicionales al principal. */
+  rolesAdicionales: number[];
   onEditar: () => void;
   onBaja: () => void;
   onReactivar: () => void;
@@ -713,16 +775,26 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, on
   // Si el rol asignado fue dado de baja, se sigue mostrando para no perder el dato.
   const opcionesRol = rol && !rol.activo ? [...rolesAsignables, rol] : rolesAsignables;
 
-  // Roles distintos al base que la persona asume en algún proyecto.
-  const rolesPorProyecto = useMemo(() => {
+  /**
+   * Roles distintos al principal: los base adicionales y los que asume por
+   * proyecto. Se listan juntos porque en la tabla lo que importa es cuántos
+   * sombreros trae la persona, no de dónde sale cada uno.
+   */
+  const otrosRoles = useMemo(() => {
+    const nombreDe = (id: number) => rolesAsignables.find(r => r.id === id)?.nombre;
     const nombres = new Set<string>();
+    for (const idRol of rolesAdicionales) {
+      if (idRol === persona.id_rol) continue;
+      const nombre = nombreDe(idRol);
+      if (nombre) nombres.add(nombre);
+    }
     for (const a of asignaciones) {
       if (a.id_rol === null || a.id_rol === persona.id_rol) continue;
-      const nombre = rolesAsignables.find(r => r.id === a.id_rol)?.nombre;
+      const nombre = nombreDe(a.id_rol);
       if (nombre) nombres.add(nombre);
     }
     return Array.from(nombres);
-  }, [asignaciones, persona.id_rol, rolesAsignables]);
+  }, [asignaciones, rolesAdicionales, persona.id_rol, rolesAsignables]);
 
   return (
     <tr className={cn(!persona.activo && 'opacity-55')}>
@@ -772,9 +844,9 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, on
             ))}
           </SelectContent>
         </Select>
-        {rolesPorProyecto.length > 0 ? (
-          <p className="text-[11px] text-accent mt-1 max-w-52 truncate" title={rolesPorProyecto.join(' · ')}>
-            + {rolesPorProyecto.length} rol{rolesPorProyecto.length === 1 ? '' : 'es'} por proyecto
+        {otrosRoles.length > 0 ? (
+          <p className="text-[11px] text-primary mt-1 max-w-52 truncate" title={otrosRoles.join(' · ')}>
+            + {otrosRoles.length} rol{otrosRoles.length === 1 ? '' : 'es'} más
           </p>
         ) : rol?.objetivo ? (
           <p className="text-[11px] text-muted-foreground mt-1 max-w-52 truncate" title={rol.objetivo}>
@@ -1032,11 +1104,20 @@ function ProyectosPicker({ idPersonal, proyectos, asignaciones, rol, rolesAsigna
 /* Paso 1 — alta / modificación de la persona                          */
 /* ------------------------------------------------------------------ */
 
-function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
+function PersonaForm({
+  persona, roles, proyectos, asignaciones, rolesAdicionales, rolesAdicionalesPendiente,
+  onSave, onCancel,
+}: {
   persona: PersonalOrganizacional | null;
   roles: RolOrganizacional[];
   proyectos: ProyectoActivo[];
-  onSave: (input: NuevaPersonaInput & { proyectos?: number[] }) => void;
+  /** Asignaciones de esta persona; vacío en el alta. Sirven para sus roles de empresa. */
+  asignaciones: AsignacionProyecto[];
+  /** Roles base adicionales al principal. */
+  rolesAdicionales: number[];
+  /** La tabla de roles adicionales aún no existe en la BD. */
+  rolesAdicionalesPendiente: boolean;
+  onSave: (input: NuevaPersonaInput & { proyectos?: number[]; rolesAdicionales?: number[] }) => void;
   onCancel: () => void;
 }) {
   const [nombre, setNombre] = useState(persona?.nombre ?? '');
@@ -1055,8 +1136,26 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
   );
   const [fechaIngreso, setFechaIngreso] = useState(persona?.fecha_ingreso ?? '');
   const [proyectosSel, setProyectosSel] = useState<number[]>([]);
+  const [adicionales, setAdicionales] = useState<number[]>(rolesAdicionales);
 
   const esAlta = persona === null;
+
+  /**
+   * Se recalcula con el rol elegido en el formulario, no con el guardado: si el
+   * usuario acaba de cambiar el rol base, la lista debe reflejar lo que va a
+   * quedar, no lo que había.
+   */
+  const rolesEmpresa = useMemo(
+    () => rolesEnLaEmpresa(
+      { id_rol: idRol },
+      asignaciones,
+      roles,
+      (id) => proyectos.find(p => p.id === id)?.nombre ?? `Proyecto ${id}`,
+      adicionales,
+    ),
+    [idRol, asignaciones, roles, proyectos, adicionales],
+  );
+
   const costosValidos = [costoNominal, costoExterno, costoSocial]
     .every(v => Number.isFinite(Number(v)) && Number(v) >= 0);
   const total = costoTotal({
@@ -1088,11 +1187,16 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
       sueldo_base_recibido: netoCapturado ? Number(netoRecibido) : null,
       fecha_ingreso: fechaIngreso || null,
       ...(esAlta ? { proyectos: proyectosSel } : {}),
+      // El principal nunca viaja como adicional: la BD lo rechaza (23514).
+      ...(rolesAdicionalesPendiente ? {} : { rolesAdicionales: adicionales.filter(id => id !== idRol) }),
     });
   };
 
   return (
-    <div className="space-y-4">
+    /* Cuerpo con scroll y pie fijo: el costo total y los botones son lo que se
+       consulta al capturar, así que no deben irse con el scroll. */
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label>Nombre completo *</Label>
@@ -1111,6 +1215,23 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
         </div>
       </div>
 
+      {emailUsuario && (
+        <CuentaSistemaPanel
+          email={emailUsuario}
+          onCompletar={(datos) => {
+            const llenados: string[] = [];
+            if (!nombre.trim() && datos.nombre) { setNombre(datos.nombre); llenados.push('nombre'); }
+            if (!emailContacto.trim() && datos.email) { setEmailContacto(datos.email); llenados.push('email de contacto'); }
+            if (!telefono.trim() && datos.telefono) { setTelefono(datos.telefono); llenados.push('teléfono'); }
+            toast[llenados.length ? 'success' : 'info'](
+              llenados.length
+                ? `Se completó: ${llenados.join(', ')}.`
+                : 'No había campos vacíos que completar; nada se sobrescribió.',
+            );
+          }}
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label>Email de contacto</Label>
@@ -1124,7 +1245,7 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label>Rol en la empresa</Label>
+          <Label>Rol principal en la empresa</Label>
           <Select
             value={idRol !== null ? String(idRol) : 'none'}
             onValueChange={(v) => setIdRol(v === 'none' ? null : Number(v))}
@@ -1139,11 +1260,79 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Rige el costo, la comisión y el organigrama.
+          </p>
         </div>
         <div>
           <Label>Fecha de ingreso</Label>
           <Input type="date" value={fechaIngreso} onChange={e => setFechaIngreso(e.target.value)} />
         </div>
+      </div>
+
+      {/* Dentro de la empresa una persona puede tener varios roles: el principal,
+          otros roles base, y el que asume en cada proyecto donde se le asignó uno
+          distinto. Solo el principal reparte dinero. */}
+      <div className="rounded-lg border p-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          Roles en la empresa ({rolesEmpresa.length})
+        </p>
+
+        {rolesEmpresa.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {rolesEmpresa.map(r => (
+              <Badge
+                key={`${r.idRol}-${r.idProyecto ?? 'base'}`}
+                variant={r.principal ? 'default' : 'secondary'}
+                className="text-[11px] font-normal"
+              >
+                {r.nombre}
+                <span className="opacity-70 ml-1">
+                  · {r.principal ? 'principal' : r.idProyecto === null ? 'base' : r.proyecto}
+                </span>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic mb-3">Aún sin roles asignados.</p>
+        )}
+
+        {rolesAdicionalesPendiente ? (
+          <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-600 shrink-0" />
+            <p className="text-[11px] text-muted-foreground">
+              Para asignar más de un rol base falta ejecutar{' '}
+              <span className="font-medium text-foreground">
+                Ejecuciones_manuales/20260812_roles_base_multiples.md
+              </span>{' '}
+              en la base de datos. Mientras tanto la persona conserva su rol principal y
+              su rol por proyecto, que sí funcionan.
+            </p>
+          </div>
+        ) : (
+          <>
+            <Label className="text-xs">Otros roles base</Label>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1.5">
+              {roles.filter(r => r.id !== idRol).map(r => (
+                <label key={r.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                  <Checkbox
+                    checked={adicionales.includes(r.id)}
+                    onCheckedChange={(checked) =>
+                      setAdicionales(prev => checked ? [...prev, r.id] : prev.filter(id => id !== r.id))
+                    }
+                  />
+                  {r.nombre}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+
+        <p className="text-[11px] text-muted-foreground mt-2">
+          El rol principal aplica donde no haya uno específico y es el único que reparte
+          costo y comisión; los demás quedan como registro. El rol por proyecto se edita
+          desde la columna Proyectos de la tabla.
+        </p>
       </div>
 
       {esAlta && (
@@ -1233,25 +1422,29 @@ function PersonaForm({ persona, roles, proyectos, onSave, onCancel }: {
         </p>
       </div>
 
-      <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2">
-        <span>
-          Costo Total mensual:{' '}
-          <span className="font-semibold font-mono">{formatCurrency(total)}</span>
-          <span className="text-xs text-muted-foreground ml-1">(nominal + externo + social)</span>
-        </span>
-        {netoCapturado && netoValido && (
-          <span className="text-xs text-muted-foreground">
-            Recibe {formatCurrency(Number(netoRecibido))} · la empresa absorbe{' '}
-            {formatCurrency(total - Number(netoRecibido))}
-          </span>
-        )}
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-        <Button disabled={!nombre.trim() || !netoValido} onClick={guardar}>
-          {esAlta ? 'Dar de alta' : 'Guardar cambios'}
-        </Button>
+      <div className="shrink-0 border-t pt-3 mt-3 space-y-3">
+        <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Costo Total mensual:{' '}
+            <span className="font-semibold font-mono">{formatCurrency(total)}</span>
+            <span className="text-xs text-muted-foreground ml-1">(nominal + externo + social)</span>
+          </span>
+          {netoCapturado && netoValido && (
+            <span className="text-xs text-muted-foreground">
+              Recibe {formatCurrency(Number(netoRecibido))} · la empresa absorbe{' '}
+              {formatCurrency(total - Number(netoRecibido))}
+            </span>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancelar</Button>
+          <Button disabled={!nombre.trim() || !netoValido} onClick={guardar}>
+            {esAlta ? 'Dar de alta' : 'Guardar cambios'}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -1296,6 +1489,180 @@ function BajaDialog({ persona, onClose, onConfirm }: {
   );
 }
 
+const ETIQUETA_TIPO_PERSONA: Record<string, string> = { pf: 'Persona física', pm: 'Persona moral' };
+const ETIQUETA_SEXO: Record<string, string> = { m: 'Masculino', f: 'Femenino' };
+
+const fechaLarga = (iso: string | null) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+};
+
+/** Teléfono con su clave de país cuando existe. */
+const telefonoCompleto = (p: PersonaVinculada) =>
+  p.telefono ? `${p.clave_pais_telefono ? `+${p.clave_pais_telefono} ` : ''}${p.telefono}` : null;
+
+/**
+ * Lo que hay detrás de la cuenta del sistema ligada a la persona.
+ *
+ * Dos cosas distintas que conviene no confundir: el **rol del sistema**, que es
+ * uno solo y define el acceso (`usuarios.rol_id`), y el expediente de
+ * `personas`, al que se llega por `usuarios.id_persona = personas.id`.
+ *
+ * Todo aquí es de solo lectura: `personas` es la tabla central del sistema y su
+ * edición vive en el expediente, no en RRHH. Lo único que se ofrece es copiar
+ * datos hacia los campos vacíos de esta ficha.
+ */
+function CuentaSistemaPanel({ email, onCompletar }: {
+  email: string;
+  onCompletar: (datos: { nombre: string; email: string | null; telefono: string | null }) => void;
+}) {
+  const { data: cuenta, isLoading } = useCuentaSistema(email);
+  /* Abierto de entrada —nada se oculta sin avisar—, plegable para que el
+     expediente no empuje el resto del formulario cuando ya se revisó. */
+  const [abierto, setAbierto] = useState(true);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+        Consultando la cuenta {email}…
+      </div>
+    );
+  }
+
+  if (!cuenta) {
+    return (
+      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          No se pudo leer la cuenta <span className="font-medium text-foreground">{email}</span>.
+          Puede estar dada de baja o fuera de tu alcance de permisos. La persona se puede guardar
+          igual; el vínculo queda registrado.
+        </p>
+      </div>
+    );
+  }
+
+  const { persona } = cuenta;
+
+  return (
+    <div className="rounded-lg border p-3 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Cuenta del sistema
+          </p>
+          <p className="text-sm font-medium truncate">{cuenta.nombre}</p>
+          <p className="text-xs text-muted-foreground truncate">{cuenta.email}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-[11px] text-muted-foreground">Rol en el sistema</p>
+          {cuenta.rol
+            ? <Badge variant="outline" className="text-[11px] font-normal">{cuenta.rol.nombre}</Badge>
+            : <span className="text-xs text-muted-foreground italic">Sin rol</span>}
+          <p className="text-[10px] text-muted-foreground mt-0.5">Uno solo, define su acceso</p>
+        </div>
+      </div>
+
+      {persona ? (
+        <>
+          <div className="border-t pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setAbierto(a => !a)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground"
+              >
+                <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', abierto && 'rotate-90')} />
+                Expediente de la persona · id {persona.id}
+              </button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => onCompletar({
+                  nombre: persona.nombre_legal,
+                  email: persona.email,
+                  telefono: telefonoCompleto(persona),
+                })}
+              >
+                Completar campos vacíos
+              </Button>
+            </div>
+
+            {abierto ? (
+              <>
+                <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 mt-3">
+                  <DatoPersona etiqueta="Nombre legal" valor={persona.nombre_legal} />
+                  <DatoPersona etiqueta="Nombre comercial" valor={persona.nombre_comercial} />
+                  <DatoPersona
+                    etiqueta="Tipo"
+                    valor={ETIQUETA_TIPO_PERSONA[persona.tipo_persona] ?? persona.tipo_persona}
+                  />
+                  <DatoPersona etiqueta="RFC" valor={persona.rfc} />
+                  <DatoPersona etiqueta="CURP" valor={persona.curp} />
+                  <DatoPersona etiqueta="Nacimiento" valor={fechaLarga(persona.fecha_nacimiento)} />
+                  <DatoPersona
+                    etiqueta="Sexo"
+                    valor={persona.sexo ? ETIQUETA_SEXO[persona.sexo.toLowerCase()] ?? persona.sexo : null}
+                  />
+                  <DatoPersona etiqueta="Email" valor={persona.email} />
+                  <DatoPersona etiqueta="Teléfono" valor={telefonoCompleto(persona)} />
+                  <DatoPersona etiqueta="Ocupación" valor={persona.ocupacion} />
+                  <DatoPersona etiqueta="Régimen fiscal" valor={persona.regimen} />
+                </dl>
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Estos datos se leen de <span className="font-medium">personas</span> y no se
+                  editan aquí. El botón solo llena los campos de la ficha que estén vacíos.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1.5 truncate">
+                {persona.nombre_legal}
+                {persona.rfc && <span className="ml-2 font-mono">{persona.rfc}</span>}
+              </p>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="border-t pt-3 flex items-start gap-2">
+          <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            {cuenta.motivoSinPersona === 'sin_vinculo' ? (
+              <>
+                Esta cuenta no tiene expediente en <span className="font-medium">personas</span>:
+                su <code className="text-[10px]">id_persona</code> está vacío. Es lo habitual en
+                cuentas internas —dirección, finanzas, cobranza, jurídico—, así que los datos de
+                la ficha se capturan a mano.
+              </>
+            ) : (
+              <>
+                La cuenta apunta a un expediente que no se pudo leer. Puede estar inactivo o fuera
+                de tu alcance de permisos; los datos de la ficha se capturan a mano.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DatoPersona({ etiqueta, valor }: { etiqueta: string; valor: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] text-muted-foreground uppercase tracking-wider">{etiqueta}</dt>
+      <dd className={cn('text-xs truncate', valor ? 'text-foreground' : 'text-muted-foreground italic')}
+        title={valor ?? undefined}>
+        {valor ?? 'Sin dato'}
+      </dd>
+    </div>
+  );
+}
+
 /** Buscador de usuario real del sistema (nombre/email); opcional. */
 function UsuarioPicker({ email, onSelect, onClear }: {
   email: string | null;
@@ -1331,10 +1698,19 @@ function UsuarioPicker({ email, onSelect, onClear }: {
                     value={`${u.nombre} ${u.email}`}
                     onSelect={() => { onSelect(u.email, u.nombre); setOpen(false); setSearch(''); }}
                   >
-                    <Check className={cn('mr-2 h-4 w-4', email === u.email ? 'opacity-100' : 'opacity-0')} />
-                    <div className="flex flex-col min-w-0">
+                    <Check className={cn('mr-2 h-4 w-4 shrink-0', email === u.email ? 'opacity-100' : 'opacity-0')} />
+                    <div className="flex flex-col min-w-0 gap-0.5">
                       <span className="text-sm truncate">{u.nombre}</span>
                       <span className="text-xs text-muted-foreground truncate">{u.email}</span>
+                      <span className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          {u.rol_nombre ?? 'Sin rol'}
+                        </Badge>
+                        {/* Anticipa el caso vacío: se ve antes de elegir, no después. */}
+                        {u.id_persona === null && (
+                          <span className="text-[10px] text-muted-foreground">sin expediente</span>
+                        )}
+                      </span>
                     </div>
                   </CommandItem>
                 ))}
@@ -1377,7 +1753,8 @@ function RoleForm({ rol, onSave, onCancel }: {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
       <div>
         <Label>Nombre del Rol *</Label>
         <Input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Gerente de Ventas" />
@@ -1430,7 +1807,9 @@ function RoleForm({ rol, onSave, onCancel }: {
         />
       </div>
 
-      <div className="flex justify-end gap-2">
+      </div>
+
+      <div className="shrink-0 flex justify-end gap-2 border-t pt-3 mt-3">
         <Button variant="outline" onClick={onCancel}>Cancelar</Button>
         <Button disabled={!nombre.trim()} onClick={guardar}>
           {rol ? 'Guardar cambios' : 'Crear rol'}
