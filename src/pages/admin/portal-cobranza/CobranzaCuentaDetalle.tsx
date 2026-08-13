@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from '@/lib/config';
 import { pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
-import { esSinPermiso } from '@/lib/rpcErrors';
+import { esRpcInexistente, esSinPermiso } from '@/lib/rpcErrors';
 import { formatCuentaCobranzaId, formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -458,8 +458,8 @@ export default function CobranzaCuentaDetalle() {
       });
       if (error) {
         // DDL pendiente: la RPC aún no existe en este entorno.
-        if (esSinPermiso(error) || /does not exist|function .* not found/i.test(error.message ?? '')) {
-          toast.error('La reconciliación aún no está habilitada en este ambiente.');
+        if (esRpcInexistente(error) || esSinPermiso(error)) {
+          toast.error('La reconciliación aún no está habilitada en este ambiente. Falta aplicar la migración de acuerdos.');
           return;
         }
         throw error;

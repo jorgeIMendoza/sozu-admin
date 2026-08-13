@@ -154,7 +154,7 @@ interface Multa {
 import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
 import { pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
-import { esSinPermiso } from "@/lib/rpcErrors";
+import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 // Documents view component (lectura + subida de documentos de la cuenta)
@@ -2431,10 +2431,10 @@ export default function DetalleCuentaCobranza() {
       });
       if (error) {
         // DDL pendiente: la RPC aún no existe en este entorno.
-        if (esSinPermiso(error) || /does not exist|function .* not found/i.test(error.message ?? '')) {
+        if (esRpcInexistente(error) || esSinPermiso(error)) {
           toast({
             title: "No disponible",
-            description: "La reconciliación aún no está habilitada en este ambiente.",
+            description: "La reconciliación aún no está habilitada en este ambiente. Falta aplicar la migración de acuerdos.",
             variant: "destructive",
           });
           return;
