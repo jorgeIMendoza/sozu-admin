@@ -139,24 +139,32 @@ const ApartarDirectoCapturePage = () => {
     if (!reservationToken) return false;
     const marcarLista = (ok: boolean) => { if (ok) setCsfLista(true); return ok; };
     try {
-      // Storage rechaza llaves con acentos, espacios o símbolos raros (400
-      // "Invalid key"): el nombre del archivo lo pone el cliente, así que se
-      // normaliza. El timestamp ya hace única la ruta, por eso no hay upsert
-      // (el upsert además obliga a UPDATE sobre `storage.objects`).
-      const safeName = file.name
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9._-]/g, "_")
-        .slice(-80);
-      const path = `oferta-digital/${offer.id}/csf_${Date.now()}_${safeName}`;
-      const { error: upErr } = await supabase.storage.from("documentos").upload(path, file, {
-        contentType: file.type || "application/pdf",
+      // `anon` no sube directo a Storage. Hacerlo exigiria darle SELECT sobre
+      // storage.objects (el INSERT de storage-api lleva RETURNING), y con el bucket
+      // `documentos` publico esa politica habilita /object/list: cualquiera podria
+      // enumerar y bajar las constancias de todos los clientes.
+      //
+      // En su lugar la EF valida el token de la reservacion con service_role y
+      // devuelve una subida firmada a una ruta que decide el servidor:
+      // documentos/personas/<id_persona>/6_<ts>.<ext> — la misma convencion que usa
+      // el Panel Admin al subir un documento desde el perfil de la persona.
+      const { data: firma, error: firmaErr } = await supabase.functions.invoke("oferta-csf-subir", {
+        body: { token: reservationToken, filename: file.name },
       });
+      if (firmaErr || !firma?.uploadToken) {
+        throw firmaErr ?? new Error("No se pudo preparar la subida de la constancia");
+      }
+
+      const { error: upErr } = await supabase.storage
+        .from("documentos")
+        .uploadToSignedUrl(firma.path, firma.uploadToken, file, {
+          contentType: file.type || "application/pdf",
+        });
       if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
 
       const { data: ok, error } = await (supabase as any).rpc("guardar_csf_oferta", {
         p_token: reservationToken,
-        p_url: publicUrl,
+        p_url: firma.publicUrl,
         p_rfc: campos.rfc || null,
         p_curp: campos.curp || null,
         p_nombre: campos.nombre || null,
