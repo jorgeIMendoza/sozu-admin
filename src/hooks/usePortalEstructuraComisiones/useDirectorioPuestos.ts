@@ -555,11 +555,23 @@ export function useProyectosActivosDirectorio() {
 }
 
 export interface UsuarioBusqueda {
+  /** Llave primaria de `usuarios`. */
   email: string;
   nombre: string;
+  /** Rol de acceso al sistema. Un usuario tiene exactamente uno. */
+  rol_id: number | null;
+  rol_nombre: string | null;
+  /** `usuarios.id_persona` → `personas.id`. Muchas cuentas internas no lo tienen. */
+  id_persona: number | null;
 }
 
-/** Busca usuarios reales por nombre/email (mismo patrón que AgenteVendedorDialog). */
+/**
+ * Busca cuentas del sistema por nombre o email.
+ *
+ * Waterfall en dos pasos (patrón #1 de CLAUDE.md): primero las cuentas, después
+ * el nombre de su rol. El embed de PostgREST sobre `roles` falla en silencio y
+ * dejaría la columna del rol vacía sin ningún error visible.
+ */
 export function useBuscarUsuarios(search: string) {
   return useQuery<UsuarioBusqueda[]>({
     queryKey: ["directorio-buscar-usuarios", search],
@@ -567,13 +579,275 @@ export function useBuscarUsuarios(search: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("usuarios")
-        .select("email, nombre")
+        .select("email, nombre, rol_id, id_persona")
         .eq("activo", true)
         .or(`email.ilike.%${search}%,nombre.ilike.%${search}%`)
         .order("nombre")
         .limit(10);
       if (error || !data) return [];
-      return data as UsuarioBusqueda[];
+
+      const nombrePorRol = await nombresDeRolesSistema(
+        data.map(u => u.rol_id as number | null),
+      );
+
+      return data.map(u => ({
+        email: u.email as string,
+        nombre: u.nombre as string,
+        rol_id: (u.rol_id as number | null) ?? null,
+        rol_nombre: u.rol_id != null ? nombrePorRol.get(u.rol_id as number) ?? null : null,
+        id_persona: (u.id_persona as number | null) ?? null,
+      }));
     },
   });
+}
+
+/** Nombres del catálogo `roles` (acceso al sistema) para los ids dados. */
+async function nombresDeRolesSistema(ids: Array<number | null>): Promise<Map<number, string>> {
+  const unicos = Array.from(new Set(ids.filter((id): id is number => id != null)));
+  if (!unicos.length) return new Map();
+
+  const { data, error } = await supabase.from("roles").select("id, nombre").in("id", unicos);
+  if (error || !data) return new Map();
+  return new Map(data.map(r => [r.id as number, r.nombre as string]));
+}
+
+/**
+ * Datos de la persona detrás de una cuenta del sistema.
+ *
+ * Son de `personas`, la tabla central del sistema: aquí se leen, no se editan.
+ * Cualquier corrección se hace en el expediente de la persona, no en RRHH.
+ */
+export interface PersonaVinculada {
+  id: number;
+  /** `pf` = persona física, `pm` = moral. */
+  tipo_persona: string;
+  nombre_legal: string;
+  nombre_comercial: string | null;
+  email: string | null;
+  telefono: string | null;
+  clave_pais_telefono: string | null;
+  rfc: string | null;
+  curp: string | null;
+  fecha_nacimiento: string | null;
+  sexo: string | null;
+  ocupacion: string | null;
+  regimen: string | null;
+}
+
+export interface CuentaSistema {
+  email: string;
+  nombre: string;
+  telefono: string | null;
+  /** Rol de acceso: uno solo, definido en `usuarios.rol_id`. */
+  rol: { id: number; nombre: string } | null;
+  /**
+   * `null` cuando la cuenta no tiene `id_persona`, o cuando lo tiene pero la
+   * fila de `personas` no está accesible. Se distingue con `motivoSinPersona`.
+   */
+  persona: PersonaVinculada | null;
+  motivoSinPersona: "sin_vinculo" | "no_encontrada" | null;
+}
+
+const PERSONA_COLS =
+  "id, tipo_persona, nombre_legal, nombre_comercial, email, telefono, " +
+  "clave_pais_telefono, rfc, curp, fecha_nacimiento, sexo, ocupacion, regimen";
+
+/**
+ * Resuelve una cuenta del sistema y la persona que hay detrás.
+ *
+ * Cadena `usuarios.email` → `usuarios.id_persona` → `personas.id`, en waterfall
+ * explícito. Se consulta por separado porque el join anidado de PostgREST sobre
+ * dos niveles devuelve `null` sin error y aquí eso se leería como "esta persona
+ * no tiene expediente", que es una conclusión distinta y falsa.
+ *
+ * Ojo con el caso vacío: hoy 47 cuentas activas no tienen `id_persona`, y se
+ * concentran justamente en los roles internos que este módulo da de alta
+ * (dirección, finanzas, cobranza, jurídico). No es una rareza a ignorar.
+ */
+export function useCuentaSistema(email: string | null) {
+  return useQuery<CuentaSistema | null>({
+    queryKey: ["directorio-cuenta-sistema", email],
+    enabled: !!email,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (!email) return null;
+
+      const { data: usuario, error } = await supabase
+        .from("usuarios")
+        .select("email, nombre, telefono, rol_id, id_persona")
+        .eq("email", email)
+        .maybeSingle();
+      if (error || !usuario) return null;
+
+      const idRol = usuario.rol_id as number | null;
+      const idPersona = usuario.id_persona as number | null;
+
+      const [nombrePorRol, persona] = await Promise.all([
+        nombresDeRolesSistema([idRol]),
+        buscarPersona(idPersona),
+      ]);
+
+      return {
+        email: usuario.email as string,
+        nombre: usuario.nombre as string,
+        telefono: (usuario.telefono as string | null) ?? null,
+        rol: idRol != null ? { id: idRol, nombre: nombrePorRol.get(idRol) ?? `Rol ${idRol}` } : null,
+        persona,
+        motivoSinPersona: idPersona == null ? "sin_vinculo" : persona ? null : "no_encontrada",
+      };
+    },
+  });
+}
+
+async function buscarPersona(id: number | null): Promise<PersonaVinculada | null> {
+  if (id == null) return null;
+  const { data, error } = await supabase
+    .from("personas")
+    .select(PERSONA_COLS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as unknown as PersonaVinculada;
+}
+
+/* ------------------------------------------------------------------ */
+/* Roles base adicionales — una persona puede tener más de uno         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Rol base **adicional** de una persona.
+ *
+ * El rol principal sigue viviendo en `personal_organizacional.id_rol` y es el
+ * único que rige costo, comisión y organigrama; estos son informativos. Ver
+ * `Ejecuciones_manuales/20260812_roles_base_multiples.md`.
+ */
+export interface RolAdicional {
+  id: number;
+  id_personal: number;
+  id_rol: number;
+  activo: boolean;
+}
+
+const ROLES_ADICIONALES_KEY = "personal-roles-adicionales";
+
+/**
+ * Roles base adicionales de todo el personal.
+ *
+ * `null` —no `[]`— cuando la tabla aún no existe: son estados distintos y la UI
+ * necesita distinguirlos para avisar del DDL pendiente en vez de mostrar un
+ * editor vacío que no guarda nada (patrón #6 de CLAUDE.md).
+ */
+export function useRolesAdicionales() {
+  return useQuery<RolAdicional[] | null>({
+    queryKey: [ROLES_ADICIONALES_KEY],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_roles")
+        .select("id, id_personal, id_rol, activo")
+        .eq("activo", true);
+      if (error) return null;
+      return (data ?? []) as RolAdicional[];
+    },
+  });
+}
+
+/** Reemplaza el juego de roles adicionales de una persona por el que se indique. */
+export function useGuardarRolesAdicionales() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id_personal, roles }: { id_personal: number; roles: number[] }) => {
+      const { data: actuales, error: leerError } = await (supabase as any)
+        .from("personal_roles")
+        .select("id, id_rol")
+        .eq("id_personal", id_personal)
+        .eq("activo", true);
+      if (leerError) throw leerError;
+
+      const vigentes = new Map<number, number>(
+        ((actuales ?? []) as Array<{ id: number; id_rol: number }>).map(r => [r.id_rol, r.id]),
+      );
+      const deseados = new Set(roles);
+
+      const aQuitar = [...vigentes.entries()].filter(([rol]) => !deseados.has(rol)).map(([, id]) => id);
+      const aAgregar = roles.filter(rol => !vigentes.has(rol));
+
+      // Baja lógica, no DELETE: conserva el histórico de qué rol tuvo la persona.
+      if (aQuitar.length) {
+        const { error } = await (supabase as any)
+          .from("personal_roles")
+          .update({ activo: false, fecha_fin: new Date().toISOString().slice(0, 10) })
+          .in("id", aQuitar);
+        if (error) throw error;
+      }
+
+      if (aAgregar.length) {
+        const { error } = await (supabase as any)
+          .from("personal_roles")
+          .insert(aAgregar.map(id_rol => ({ id_personal, id_rol })));
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ROLES_ADICIONALES_KEY] }),
+  });
+}
+
+/** Un rol que la persona ejerce dentro de la empresa, y dónde lo ejerce. */
+export interface RolEnLaEmpresa {
+  idRol: number;
+  nombre: string;
+  /** `null` = rol base (principal o adicional); si no, el proyecto donde aplica. */
+  idProyecto: number | null;
+  proyecto: string | null;
+  /** El que rige costo, comisión y organigrama. Solo uno lo es. */
+  principal: boolean;
+}
+
+/**
+ * Roles que la persona tiene **dentro de la empresa**, que pueden ser varios:
+ * el principal, los base adicionales y el que asume en cada proyecto donde se le
+ * asignó uno distinto. Es lo opuesto al rol del sistema, que siempre es uno.
+ *
+ * Un proyecto sin rol propio no aparece: ahí rige el rol principal, y listarlo
+ * otra vez por proyecto sugeriría una asignación que no existe. Un rol adicional
+ * que además sea el rol de algún proyecto tampoco se repite.
+ */
+export function rolesEnLaEmpresa(
+  persona: Pick<PersonalOrganizacional, "id_rol">,
+  asignaciones: AsignacionProyecto[],
+  roles: RolOrganizacional[],
+  nombreProyecto: (id: number) => string,
+  rolesBaseAdicionales: number[] = [],
+): RolEnLaEmpresa[] {
+  const nombreRol = new Map(roles.map(r => [r.id, r.nombre]));
+  const nombreDe = (id: number) => nombreRol.get(id) ?? `Rol ${id}`;
+  const salida: RolEnLaEmpresa[] = [];
+
+  if (persona.id_rol != null) {
+    salida.push({
+      idRol: persona.id_rol,
+      nombre: nombreDe(persona.id_rol),
+      idProyecto: null,
+      proyecto: null,
+      principal: true,
+    });
+  }
+
+  for (const idRol of rolesBaseAdicionales) {
+    if (idRol === persona.id_rol) continue;
+    salida.push({ idRol, nombre: nombreDe(idRol), idProyecto: null, proyecto: null, principal: false });
+  }
+
+  for (const a of asignaciones) {
+    if (!a.activo || a.id_rol == null || a.id_rol === persona.id_rol) continue;
+    salida.push({
+      idRol: a.id_rol,
+      nombre: nombreDe(a.id_rol),
+      idProyecto: a.id_proyecto,
+      proyecto: nombreProyecto(a.id_proyecto),
+      principal: false,
+    });
+  }
+
+  return salida;
 }

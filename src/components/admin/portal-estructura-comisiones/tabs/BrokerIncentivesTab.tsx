@@ -68,6 +68,15 @@ export default function BrokerIncentivesTab({ readOnly = false }: { readOnly?: b
   const precioPromUnidad = proyectosSozu.find(p => p.id === motorProjectId)?.precioPromedioUnidad ?? 0;
 
   const [ventasSimuladas, setVentasSimuladas] = useState<Record<string, number>>({});
+  /** Valor del simulador global, que se puede empujar a todos los canales. */
+  const [ventasGlobales, setVentasGlobales] = useState(3);
+  const [plegados, setPlegados] = useState<Set<string>>(new Set());
+
+  /** Canales que ya tienen al menos un escalón capturado. */
+  const conEscalera = useMemo(
+    () => new Set((metas ?? []).filter(m => m.idPersonal === null).map(m => m.idCanal)).size,
+    [metas],
+  );
 
   const encabezado = (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -131,15 +140,57 @@ export default function BrokerIncentivesTab({ readOnly = false }: { readOnly?: b
         </div>
       )}
 
-      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground flex items-start gap-2">
-        <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-        <span>
-          Las metas se miden con las <strong>ventas del canal</strong> en el mes. El cálculo es{' '}
-          <strong>marginal por tramos</strong>: cada venta se paga con el porcentaje del tramo en
-          el que cae y las anteriores <strong>conservan el suyo</strong>. Con escalones 3/5/7, las
-          ventas 1–2 van a la base, 3–4 al escalón de 3, 5–6 al de 5 y 7 en adelante al de 7.
-        </span>
-      </div>
+      {/* Barra de simulación: antes las "ventas del mes" se capturaban canal por
+          canal, así que comparar el mismo escenario en los seis obligaba a
+          teclear seis veces. */}
+      {canales.length > 0 && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium whitespace-nowrap">Simular ventas del mes</span>
+                <Input
+                  type="number"
+                  min="0"
+                  className="w-20 h-8 text-sm font-mono"
+                  value={ventasGlobales}
+                  onChange={e => setVentasGlobales(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() => setVentasSimuladas(
+                    Object.fromEntries(canales.map(c => [c.id, ventasGlobales])),
+                  )}
+                >
+                  Aplicar a los {canales.length} canales
+                </Button>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {conEscalera} de {canales.length} canal{canales.length === 1 ? '' : 'es'} con escalera definida
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => setPlegados(
+                plegados.size === canales.length ? new Set() : new Set(canales.map(c => c.id)),
+              )}
+            >
+              {plegados.size === canales.length ? 'Expandir todos' : 'Plegar todos'}
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+            El cálculo es <strong>marginal por tramos</strong>: cada venta se paga con el porcentaje
+            del tramo en el que cae y las anteriores <strong>conservan el suyo</strong>. Con
+            escalones 3/5/7, las ventas 1–2 van a la base, 3–4 al escalón de 3, 5–6 al de 5 y 7 en
+            adelante al de 7.
+          </p>
+        </div>
+      )}
 
       {canales.length === 0 ? (
         <p className="text-sm text-muted-foreground italic">
@@ -169,6 +220,13 @@ export default function BrokerIncentivesTab({ readOnly = false }: { readOnly?: b
             comisionTotalPct={motorConfig.channelTotals[canal.id] ?? 0}
             comisionExternaPct={canal.externalCommissionPct}
             readOnly={readOnly}
+            plegado={plegados.has(canal.id)}
+            onAlternarPliegue={() => setPlegados(prev => {
+              const siguiente = new Set(prev);
+              if (siguiente.has(canal.id)) siguiente.delete(canal.id);
+              else siguiente.add(canal.id);
+              return siguiente;
+            })}
           />
         ))
       )}
@@ -186,7 +244,7 @@ interface ComisionistaFila {
 function CanalEscalera({
   canal, idProyecto, escalonesDelCanal, escalonesPorPersona, ddlPendiente,
   comisionistasDelCanal, ventasDelMes, onVentasChange, precioPromUnidad, nombreProyecto,
-  comisionTotalPct, comisionExternaPct, readOnly = false,
+  comisionTotalPct, comisionExternaPct, readOnly = false, plegado = false, onAlternarPliegue,
 }: {
   canal: { id: string; name: string };
   idProyecto: number;
@@ -204,6 +262,8 @@ function CanalEscalera({
   comisionExternaPct: number;
   /** Solo lectura: deshabilita la edición de escalones (se conserva "Ventas del mes"). */
   readOnly?: boolean;
+  plegado?: boolean;
+  onAlternarPliegue?: () => void;
 }) {
   const [expandida, setExpandida] = useState<string | null>(null);
 
@@ -285,18 +345,31 @@ function CanalEscalera({
 
   return (
     <div className="rounded-xl border bg-card p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold">{canal.name}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onAlternarPliegue}
+          className="flex items-center gap-2 min-w-0 text-left"
+        >
+          <ChevronRight className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            !plegado && 'rotate-90',
+          )} />
+          <h3 className="font-semibold truncate">{canal.name}</h3>
           {vigente ? (
-            <Badge className="text-[10px] gap-1">
+            <Badge className="text-[10px] gap-1 shrink-0">
               <TrendingUp className="h-3 w-3" />
               tramo actual +{vigente.incrementoPct}% desde {vigente.ventasMeta} ventas
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px]">Comisión base</Badge>
+            <Badge variant="outline" className="text-[10px] shrink-0">
+              {escaleraCanal.length === 0 ? 'Sin escalera' : 'Comisión base'}
+            </Badge>
           )}
-        </div>
+          <span className="text-xs text-muted-foreground shrink-0">
+            {comisionistasDelCanal.length} comisionista{comisionistasDelCanal.length === 1 ? '' : 's'}
+          </span>
+        </button>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted-foreground whitespace-nowrap">Ventas del mes</span>
           <Input
@@ -309,6 +382,8 @@ function CanalEscalera({
         </div>
       </div>
 
+      {plegado ? null : (
+      <div className="mt-4">
       <TablaEscalones
         titulo="Metas del canal"
         subtitulo="Aplican a todos los comisionistas que no tengan su propia escalera."
@@ -375,7 +450,7 @@ function CanalEscalera({
                             {tieneOverride && (
                               <Tooltip>
                                 <TooltipTrigger>
-                                  <Badge variant="outline" className="text-[10px] border-accent text-accent gap-0.5">
+                                  <Badge variant="outline" className="text-[10px] border-primary text-primary gap-0.5">
                                     <User className="h-2.5 w-2.5" /> propia
                                   </Badge>
                                 </TooltipTrigger>
@@ -397,7 +472,7 @@ function CanalEscalera({
                                   insinúa. En tramo escalado va destacado. */}
                               <span className={cn(
                                 'font-mono text-xs font-semibold',
-                                v.tramo ? 'text-accent' : 'text-foreground/70',
+                                v.tramo ? 'text-primary' : 'text-foreground/70',
                               )}>
                                 {v.pct.toFixed(3)}%
                               </span>
@@ -472,7 +547,7 @@ function CanalEscalera({
                   precioPromUnidad={precioPromUnidad}
                   celdas={conciliacion.porVenta.map(v => ({ pct: v.dispersadoPct, importe: v.dispersadoImporte }))}
                   totalMes={conciliacion.mes.dispersadoImporte}
-                  tono="accent"
+                  tono="destacado"
                 />
                 <FilaConciliacion
                   etiqueta="= Remanente de comisión"
@@ -510,6 +585,8 @@ function CanalEscalera({
           </div>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 }
@@ -666,7 +743,7 @@ function TablaEscalones({
           {escaleraHeredada.map((t, i) => (
             <span key={t.ventasMeta}>
               {i > 0 && ' · '}
-              <span className={t.esOverride ? 'text-accent font-medium' : ''}>
+              <span className={t.esOverride ? 'text-primary font-medium' : ''}>
                 {t.ventasMeta}→+{t.incrementoPct}%{t.esOverride ? ' (propio)' : ''}
               </span>
             </span>
@@ -757,12 +834,12 @@ function FilaConciliacion({
   precioPromUnidad: number;
   celdas: Array<{ pct: number; importe: number }>;
   totalMes: number;
-  tono?: 'neutro' | 'accent' | 'remanente';
+  tono?: 'neutro' | 'destacado' | 'remanente';
   className?: string;
 }) {
   const colorPct = (pct: number) => {
     if (tono === 'remanente') return pct < -0.0001 ? 'text-destructive' : 'text-emerald-600';
-    if (tono === 'accent') return 'text-accent';
+    if (tono === 'destacado') return 'text-primary';
     return 'text-foreground/70';
   };
 
