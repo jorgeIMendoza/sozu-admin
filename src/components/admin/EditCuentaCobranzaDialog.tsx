@@ -50,6 +50,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { PersonForm } from './PersonForm';
 import { DocumentsTab } from './DocumentsTab';
+import { DocumentosCuentaSimple } from './DocumentosCuentaSimple';
 import { InfoRow, EstadoBadge, fmtCurrency as fmtMXN, fmtDate as fmtFecha } from '@/pages/admin/portal-cobranza/cuentaDetalleShared';
 import { ConfirmEscrituraDialog } from './ConfirmEscrituraDialog';
 import { FacturasTab } from './FacturasTab';
@@ -3031,7 +3032,9 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                 { value: 'compradores', label: 'Comprador', show: true },
                 { value: 'progreso', label: 'Progreso', show: tipoCuenta === 'Propiedad' },
                 { value: 'escrituracion', label: 'Escrituración', show: tipoCuenta === 'Propiedad' },
-                { value: 'documentos', label: 'Documentos', show: tipoCuenta === 'Propiedad' },
+                // Productos/servicios también cargan documentos (nota de crédito, evidencia
+                // de devolución, comprobante de transferencia al cliente, facturas).
+                { value: 'documentos', label: 'Documentos', show: true },
                 { value: 'facturas', label: 'Facturas', show: tipoCuenta === 'Propiedad' && hasFacturas },
                 { value: 'acuerdo', label: 'Acuerdo de pago', show: true },
                 { value: 'comisiones', label: 'Comisiones', show: true },
@@ -3863,9 +3866,8 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             </TabsContent>
           )}
 
-          {/* Documentos Tab - Only for properties */}
-          {tipoCuenta === 'Propiedad' && (
-            <TabsContent value="documentos" className="space-y-3">
+          {/* Documentos Tab - propiedades, productos y servicios */}
+          <TabsContent value="documentos" className="space-y-3">
 {isReadOnly && <ReadOnlyBanner isEnDemanda={isEnDemanda} />}
               <Card>
                 <CardHeader className="px-4 py-3 border-b border-border/40">
@@ -3875,7 +3877,15 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-4 pb-4 pt-3">
-                  {cuenta?.id ? (
+                  {cuenta?.id && tipoCuenta !== 'Propiedad' ? (
+                    /* Cuentas de producto/servicio: listado + carga de documentos de la cuenta.
+                       DocumentsTab queda para propiedades (escrituración/facturación). */
+                    <DocumentosCuentaSimple
+                      cuentaId={cuenta.id}
+                      productoId={ofertaProductoData.id_producto}
+                      canUpload={(canUpdateCuenta || isSuperAdmin) && !isReadOnly}
+                    />
+                  ) : cuenta?.id ? (
                     <DocumentsTab
                       entityId={cuenta.id}
                       entityType="cuenta_cobranza"
@@ -4077,8 +4087,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-          )}
+          </TabsContent>
 
           {/* Progreso Tab */}
           {tipoCuenta === 'Propiedad' && propiedadDetalle && estatusPropiedad && (
