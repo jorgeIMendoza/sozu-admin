@@ -104,6 +104,13 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
   // `proyectos.monto_apartado` es columna nueva: hasta que el DDL esté aplicado en el
   // ambiente, el campo no se pinta ni se manda en el update (patrón de DDL probe).
   const [hasMontoApartado, setHasMontoApartado] = useState(false);
+  // Monto de apartado REAL del proyecto: vive en `propiedades.monto_apartado` (columna
+  // que ya existía y ya se edita en Editar propiedad). Aquí solo se resume, para que
+  // desde el proyecto se vea qué está cobrando sin abrir unidad por unidad.
+  const [apartadoUnidades, setApartadoUnidades] = useState<
+    { monto: number; unidades: number }[] | null
+  >(null);
+  const [apartadoSinMonto, setApartadoSinMonto] = useState(0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -452,6 +459,46 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
       cancelado = true;
     };
   }, [open, projectId, form]);
+
+  // Resumen del apartado de las unidades del proyecto. Waterfall explícito:
+  // el triple join de PostgREST falla en silencio (ver CLAUDE.md).
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    (async () => {
+      const { data: eds } = await supabase
+        .from("edificios").select("id").eq("id_proyecto", projectId).eq("activo", true);
+      const edIds = (eds ?? []).map((e: any) => e.id);
+      if (!edIds.length) { if (!cancelado) setApartadoUnidades([]); return; }
+
+      const { data: ems } = await supabase
+        .from("edificios_modelos").select("id").in("id_edificio", edIds);
+      const emIds = (ems ?? []).map((m: any) => m.id);
+      if (!emIds.length) { if (!cancelado) setApartadoUnidades([]); return; }
+
+      const { data: props } = await (supabase as any)
+        .from("propiedades")
+        .select("monto_apartado")
+        .in("id_edificio_modelo", emIds)
+        .eq("activo", true);
+      if (cancelado) return;
+
+      const porMonto = new Map<number, number>();
+      let sinMonto = 0;
+      for (const pr of (props ?? []) as any[]) {
+        if (pr.monto_apartado == null) { sinMonto += 1; continue; }
+        const m = Number(pr.monto_apartado);
+        porMonto.set(m, (porMonto.get(m) ?? 0) + 1);
+      }
+      setApartadoSinMonto(sinMonto);
+      setApartadoUnidades(
+        [...porMonto.entries()]
+          .map(([monto, unidades]) => ({ monto, unidades }))
+          .sort((a, b) => b.unidades - a.unidades),
+      );
+    })();
+    return () => { cancelado = true; };
+  }, [open, projectId]);
 
   // Populate form when project data is loaded
   useEffect(() => {
@@ -1539,42 +1586,75 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                     description="Monto que el cliente transfiere para apartar una unidad de este proyecto."
                     icon={DollarSign}
                   >
-                    {hasMontoApartado ? (
-                      <FieldGrid cols={3}>
-                        <FormField
-                          control={form.control}
-                          name="monto_apartado"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Monto de apartado (MXN)</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="20000.00"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Se muestra en la oferta digital, se descuenta del enganche y es
-                                el monto que se le pide al cliente en la pantalla de pago.
-                                0 = este proyecto no cobra apartado.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
+                    <div className="space-y-3">
+                      {/* Lo que hoy cobran las unidades. Es solo lectura a propósito: el
+                          dato vive en cada propiedad, no en el proyecto. */}
+                      {apartadoUnidades === null ? (
+                        <p className="text-sm text-muted-foreground">Consultando unidades…</p>
+                      ) : apartadoUnidades.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          Ninguna unidad tiene monto capturado: la oferta digital usa{" "}
+                          <span className="font-semibold text-foreground">$20,000</span>.
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {apartadoUnidades.map(({ monto, unidades }) => (
+                            <p key={monto} className="text-sm text-foreground">
+                              <span className="font-semibold tabular-nums">
+                                {monto.toLocaleString("es-MX", { style: "currency", currency: "MXN" })}
+                              </span>{" "}
+                              <span className="text-muted-foreground">
+                                en {unidades} unidad{unidades === 1 ? "" : "es"}
+                                {monto === 0 && " (este proyecto no cobra apartado)"}
+                              </span>
+                            </p>
+                          ))}
+                          {apartadoSinMonto > 0 && (
+                            <p className="text-sm text-muted-foreground">
+                              {apartadoSinMonto} unidad{apartadoSinMonto === 1 ? "" : "es"} sin monto
+                              capturado → se usan $20,000.
+                            </p>
                           )}
-                        />
-                      </FieldGrid>
-                    ) : (
-                      // Sin la columna en este ambiente el campo no se puede guardar; se
-                      // explica en vez de desaparecer sin más (ver Ejecuciones_manuales/
-                      // ofertas-digitales/06_monto_apartado_por_proyecto.md).
-                      <p className="text-sm text-muted-foreground">
-                        Disponible al aplicar la migración <code>proyectos.monto_apartado</code>.
-                        Mientras tanto, todos los proyectos usan $20,000.
+                        </div>
+                      )}
+
+                      <p className="text-[12px] leading-snug text-muted-foreground">
+                        El monto se captura en cada unidad: <strong>Propiedades → Editar →
+                        Monto Apartado</strong>. Es lo que ve el cliente en la oferta digital,
+                        lo que se le descuenta del enganche y lo que se le pide en la pantalla
+                        de pago.
                       </p>
-                    )}
+
+                      {/* Default heredado por proyecto: solo si algún día se aplica el §B
+                          del doc 06 (hoy la columna no existe y el campo no se pinta). */}
+                      {hasMontoApartado && (
+                        <FieldGrid cols={3}>
+                          <FormField
+                            control={form.control}
+                            name="monto_apartado"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Default del proyecto (MXN)</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="20000.00"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  Se aplica a las unidades que no tengan monto propio. La
+                                  unidad siempre manda sobre este valor.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </FieldGrid>
+                      )}
+                    </div>
                   </FormSection>
 
                   <FormSection

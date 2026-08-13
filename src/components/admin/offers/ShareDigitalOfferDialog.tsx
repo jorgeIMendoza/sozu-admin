@@ -130,7 +130,7 @@ export function ShareDigitalOfferDialog({
         break;
       case "email":
         // Con las ofertas identificadas el correo sale de la plataforma (misma
-        // utilería que el envío automático al generar). Sin ellas —ofertas
+        // utilería que el envío al generar). Sin ellas —ofertas
         // viejas sin id a la mano— queda el mailto del cliente de correo.
         if (offerIds?.length) {
           if (sendingEmail) break;

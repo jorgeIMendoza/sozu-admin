@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,12 +69,6 @@ const formSchema = z.object({
       message: "El monto debe ser entre 0 y 5000"
     }),
   monto_garantia_renta: z.string().optional(),
-  // Monto del apartado de la oferta digital (proyectos.monto_apartado).
-  monto_apartado: z.string()
-    .optional()
-    .refine((val) => !val || parseFloat(val) >= 0, {
-      message: "El monto no puede ser negativo",
-    }),
   slogan: z.string().optional(),
   url_sitio_web: z.string().optional(),
   instagram_handle: z.string().optional(),
@@ -97,18 +91,6 @@ interface NewProjectDialogProps {
 
 export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
   const [open, setOpen] = useState(false);
-  // Columna nueva: hasta que el DDL esté aplicado no se pinta ni se manda en el insert
-  // (si no existe, el insert completo fallaría). Ver EditProjectDialog.
-  const [hasMontoApartado, setHasMontoApartado] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    let cancelado = false;
-    (async () => {
-      const probe = await (supabase as any).from("proyectos").select("monto_apartado").limit(0);
-      if (!cancelado) setHasMontoApartado(!probe.error);
-    })();
-    return () => { cancelado = true; };
-  }, [open]);
   const [createdProjectId, setCreatedProjectId] = useState<number | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [paymentSchemes, setPaymentSchemes] = useState<PaymentScheme[]>([]);
@@ -148,7 +130,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
       costo_mantenimiento_m2: "",
       monto_mensual_cuota_extraordinaria: "",
       monto_garantia_renta: "",
-      monto_apartado: "",
       slogan: "",
       url_sitio_web: "",
       instagram_handle: "",
@@ -310,9 +291,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
         costo_mantenimiento_m2: values.costo_mantenimiento_m2 ? parseFloat(values.costo_mantenimiento_m2) : 0,
         monto_mensual_cuota_extraordinaria: values.monto_mensual_cuota_extraordinaria ? parseFloat(values.monto_mensual_cuota_extraordinaria) : 0,
         monto_garantia_renta: values.monto_garantia_renta ? parseFloat(values.monto_garantia_renta) : 0,
-        ...(hasMontoApartado && values.monto_apartado
-          ? { monto_apartado: parseFloat(values.monto_apartado) }
-          : {}),
         slogan: values.slogan || null,
         url_sitio_web: values.url_sitio_web || null,
         instagram_handle: values.instagram_handle || null,
@@ -1200,32 +1178,6 @@ export const NewProjectDialog = ({ onProjectAdded }: NewProjectDialogProps) => {
                       />
                     </div>
 
-
-                      {hasMontoApartado && (
-                        <FormField
-                          control={form.control}
-                          name="monto_apartado"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Monto de apartado</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="20000.00"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Lo que el cliente transfiere para apartar. Se muestra en la
-                                oferta digital y se descuenta del enganche. Vacío = $20,000.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
 
                       <FormField
                         control={form.control}
