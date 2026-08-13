@@ -45,6 +45,21 @@ import {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n || 0);
 
+/**
+ * Paleta de la gráfica: identidad de cada parte en que se reparte la comisión.
+ *
+ * Validada con el script de la guía de visualización en modo claro y oscuro —
+ * banda de luminosidad, piso de croma, separación CVD (peor par ΔE 16.8) y
+ * contraste contra la superficie—. Un solo juego para ambos modos porque los
+ * tres caen en la intersección de bandas (L 0.48–0.67).
+ *
+ * No se usan los tokens `--chart-N` del tema: solo están definidos para modo
+ * claro, así que en oscuro quedarían sin contraste garantizado.
+ */
+const COLOR_EXTERNO = '#c2761c';
+const COLOR_DISPERSADO = '#1f86cc';
+const COLOR_REMANENTE = '#239f71';
+
 export default function ScenariosTab() {
   const { channels: catalogoCanales, motorProjectId, setMotorProjectId, commissionRules, roles } = useSimulator();
   const { data: proyectosMotor = [], isLoading: cargandoProyectos } = useProyectosMotorComisiones();
@@ -280,7 +295,7 @@ function TarjetaEscenario({
   onEliminar: () => void;
 }) {
   const [verVentas, setVerVentas] = useState(false);
-  const { totales, ventas, ventasPorCanal, canalesNoVigentes, hayExcedido } = conciliacion;
+  const { totales, ventas, comisionistas, ventasPorCanal, canalesNoVigentes, hayExcedido } = conciliacion;
 
   /** % promedio por venta: comparable entre escenarios de distinto tamaño. */
   const promedio = (pct: number) => (ventas.length ? pct / ventas.length : 0);
@@ -316,7 +331,8 @@ function TarjetaEscenario({
         </div>
       </div>
 
-      {/* Conciliación del escenario */}
+      {/* Conciliación. Los tres primeros comparten estilo: son la comisión y
+          sus salidas. El remanente se distingue porque es el resultado. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Concepto
           etiqueta="Comisión total"
@@ -338,7 +354,6 @@ function TarjetaEscenario({
           pctPromedio={promedio(totales.dispersadoPct)}
           importe={totales.dispersadoImporte}
           precioPromUnidad={precioPromUnidad}
-          tono="accent"
         />
         <Concepto
           etiqueta="Remanente de comisión"
@@ -346,9 +361,19 @@ function TarjetaEscenario({
           pctPromedio={promedio(totales.remanentePct)}
           importe={totales.remanenteImporte}
           precioPromUnidad={precioPromUnidad}
-          tono={totales.remanentePct < -0.0001 ? 'negativo' : 'positivo'}
+          destacado
+          negativo={totales.remanentePct < -0.0001}
         />
       </div>
+
+      {precioPromUnidad > 0 && totales.totalImporte > 0 && (
+        <GraficaReparto
+          externo={totales.externoImporte}
+          dispersado={totales.dispersadoImporte}
+          remanente={totales.remanenteImporte}
+          total={totales.totalImporte}
+        />
+      )}
 
       {hayExcedido && (
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
@@ -369,9 +394,71 @@ function TarjetaEscenario({
         </p>
       )}
 
+      {/* Desglose de lo dispersado, por persona */}
+      {comisionistas.length > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLOR_DISPERSADO }} />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Comisionistas del equipo
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Comisionista</th>
+                  <th>Canales</th>
+                  <th className="text-right">Ventas</th>
+                  <th className="text-right">% acumulado</th>
+                  <th className="text-right">% por venta</th>
+                  <th className="text-right">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comisionistas.map(c => (
+                  <tr key={c.clave}>
+                    <td className="text-sm font-medium whitespace-nowrap">{c.nombre}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {c.canales.map(ca => (
+                          <Badge key={ca.nombre} variant="secondary" className="text-[10px] font-normal">
+                            {ca.nombre}: {ca.ventas}
+                          </Badge>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="text-right font-mono text-sm">{c.ventas}</td>
+                    <td className="text-right font-mono text-sm font-semibold">{c.pct.toFixed(3)}%</td>
+                    <td className="text-right font-mono text-sm text-foreground/70">
+                      {(c.ventas ? c.pct / c.ventas : 0).toFixed(3)}%
+                    </td>
+                    <td className="text-right font-mono text-sm font-semibold whitespace-nowrap">
+                      {precioPromUnidad > 0 ? fmt(c.importe) : '—'}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t">
+                  <td className="text-sm font-semibold">Total dispersado</td>
+                  <td></td>
+                  <td></td>
+                  <td className="text-right font-mono text-sm font-bold">
+                    {totales.dispersadoPct.toFixed(3)}%
+                  </td>
+                  <td></td>
+                  <td className="text-right font-mono text-sm font-bold whitespace-nowrap">
+                    {precioPromUnidad > 0 ? fmt(totales.dispersadoImporte) : '—'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => setVerVentas(v => !v)}
-        className="mt-3 text-xs font-medium text-primary hover:underline"
+        className="mt-4 text-xs font-medium text-primary hover:underline"
       >
         {verVentas ? 'Ocultar las ventas' : `Ver las ${ventas.length} ventas del escenario`}
       </button>
@@ -414,12 +501,12 @@ function TarjetaEscenario({
                   </td>
                   <CeldaVenta pct={v.totalPct} importe={v.totalImporte} precioPromUnidad={precioPromUnidad} />
                   <CeldaVenta pct={v.externoPct} importe={v.externoImporte} precioPromUnidad={precioPromUnidad} />
-                  <CeldaVenta pct={v.dispersadoPct} importe={v.dispersadoImporte} precioPromUnidad={precioPromUnidad} tono="accent" />
+                  <CeldaVenta pct={v.dispersadoPct} importe={v.dispersadoImporte} precioPromUnidad={precioPromUnidad} tono="neutro" />
                   <CeldaVenta
                     pct={v.remanentePct}
                     importe={v.remanenteImporte}
                     precioPromUnidad={precioPromUnidad}
-                    tono={v.remanentePct < -0.0001 ? 'negativo' : 'positivo'}
+                    tono={v.remanentePct < -0.0001 ? 'negativo' : 'destacado'}
                   />
                 </tr>
               ))}
@@ -437,30 +524,138 @@ function TarjetaEscenario({
   );
 }
 
-function Concepto({ etiqueta, pct, pctPromedio, importe, precioPromUnidad, tono = 'neutro' }: {
+/**
+ * Tarjeta de un concepto de la conciliación.
+ *
+ * Comisión total, dispersado externamente y total dispersado comparten estilo:
+ * son la comisión y sus salidas, y compararlos exige que se lean igual. Solo el
+ * remanente —el resultado— se destaca. El color de identidad va en un punto
+ * junto a la etiqueta, nunca en el número: el texto se queda en tinta legible.
+ */
+/**
+ * Una de las cuatro cifras de la conciliación.
+ *
+ * Comisión total, dispersado externamente y total dispersado se pintan
+ * exactamente igual —mismo color, misma tipografía, mismo fondo—: son la bolsa
+ * y sus salidas, y compararlas exige que nada más que el número las distinga.
+ * El remanente es el resultado de la resta, así que es el único que cambia de
+ * estilo. La identidad por color vive en la gráfica, no en las tarjetas.
+ */
+function Concepto({
+  etiqueta, pct, pctPromedio, importe, precioPromUnidad, destacado, negativo,
+}: {
   etiqueta: string;
   pct: number;
   pctPromedio: number;
   importe: number;
   precioPromUnidad: number;
-  tono?: 'neutro' | 'accent' | 'positivo' | 'negativo';
+  destacado?: boolean;
+  negativo?: boolean;
 }) {
-  const color =
-    tono === 'negativo' ? 'text-destructive'
-    : tono === 'positivo' ? 'text-emerald-600'
-    : tono === 'accent' ? 'text-accent'
-    : 'text-foreground';
-
   return (
-    <div className="rounded-lg border bg-muted/30 p-3">
+    <div className={cn(
+      'rounded-lg border p-3',
+      destacado ? 'border-primary/40 bg-primary/5' : 'bg-muted/30',
+    )}>
       <p className="text-xs text-muted-foreground">{etiqueta}</p>
-      <p className={cn('text-lg font-bold font-mono mt-0.5', color)}>
+      <p className={cn(
+        'text-lg font-bold font-mono mt-0.5',
+        negativo ? 'text-destructive' : 'text-foreground',
+      )}>
         {precioPromUnidad > 0 ? fmt(importe) : '—'}
       </p>
-      <p className={cn('text-xs font-mono font-semibold', color)}>
+      <p className={cn(
+        'text-xs font-mono font-semibold',
+        negativo ? 'text-destructive' : 'text-foreground/80',
+      )}>
         {pctPromedio.toFixed(3)}% <span className="font-normal text-muted-foreground">por venta</span>
       </p>
       <p className="text-[11px] text-muted-foreground">{pct.toFixed(3)}% acumulado</p>
+    </div>
+  );
+}
+
+/**
+ * Reparto de la comisión total en sus tres partes.
+ *
+ * Barra apilada, no tres barras agrupadas: el total ES la suma de las partes, y
+ * apilarlas deja ver la proporción y verifica el cuadre de un vistazo. Cada
+ * segmento lleva su etiqueta directa —encoding secundario además del color— y
+ * la leyenda queda siempre presente, así que la identidad nunca depende solo
+ * del tono.
+ */
+function GraficaReparto({ externo, dispersado, remanente, total }: {
+  externo: number;
+  dispersado: number;
+  remanente: number;
+  total: number;
+}) {
+  const partes = [
+    { etiqueta: 'Dispersado externamente', valor: externo, color: COLOR_EXTERNO },
+    { etiqueta: 'Total dispersado', valor: dispersado, color: COLOR_DISPERSADO },
+    { etiqueta: 'Remanente', valor: remanente, color: COLOR_REMANENTE },
+  ].filter(p => p.valor > 0);
+
+  /**
+   * Con remanente negativo lo repartido excede la comisión: el remanente sale
+   * de la barra y la base deja de ser el total. Se dice explícitamente, porque
+   * si no los porcentajes leerían como si el escenario cuadrara.
+   */
+  const excedido = remanente < -0.0001;
+  const base = partes.reduce((s, p) => s + p.valor, 0) || 1;
+  const referencia = excedido ? 'de lo repartido' : 'de la comisión';
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Reparto de la comisión
+        </p>
+        <p className="text-xs font-mono text-muted-foreground">{fmt(total)} en total</p>
+      </div>
+
+      {/* Barra apilada: 2px de separación entre segmentos, como marca la guía. */}
+      <div className="flex h-7 w-full gap-0.5 overflow-hidden rounded">
+        {partes.map(p => (
+          <Tooltip key={p.etiqueta}>
+            <TooltipTrigger asChild>
+              <div
+                className="flex items-center justify-center overflow-hidden first:rounded-l last:rounded-r"
+                style={{ backgroundColor: p.color, width: `${(p.valor / base) * 100}%` }}
+              >
+                {/* Etiqueta directa solo si cabe: si no, queda el tooltip. */}
+                {p.valor / base > 0.12 && (
+                  <span className="px-1 text-[11px] font-semibold text-white whitespace-nowrap">
+                    {((p.valor / base) * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">
+              {p.etiqueta}: {fmt(p.valor)} · {((p.valor / base) * 100).toFixed(1)}% {referencia}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+
+      {excedido && (
+        <p className="mt-1.5 text-[11px] text-destructive">
+          Lo repartido excede la comisión en {fmt(-remanente)}. La barra muestra cómo se reparte
+          ese total, no el cuadre contra lo que entra.
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {partes.map(p => (
+          <div key={p.etiqueta} className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+            <span className="text-[11px] text-muted-foreground">{p.etiqueta}</span>
+            <span className="text-[11px] font-mono font-semibold text-foreground/80">
+              {fmt(p.valor)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -469,12 +664,13 @@ function CeldaVenta({ pct, importe, precioPromUnidad, tono = 'neutro' }: {
   pct: number;
   importe: number;
   precioPromUnidad: number;
-  tono?: 'neutro' | 'accent' | 'positivo' | 'negativo';
+  tono?: 'neutro' | 'destacado' | 'negativo';
 }) {
+  // `text-accent` no se usa: el token --accent del tema es #f3f5f7 en modo
+  // claro —casi blanco—, así que como color de texto es ilegible.
   const color =
     tono === 'negativo' ? 'text-destructive'
-    : tono === 'positivo' ? 'text-emerald-600'
-    : tono === 'accent' ? 'text-accent'
+    : tono === 'destacado' ? 'text-primary'
     : 'text-foreground/70';
 
   return (
