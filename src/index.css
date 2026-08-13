@@ -1165,3 +1165,77 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   margin-left: auto;
 }
 
+
+/* ── Tabla de datos del Portal Estructura de Comisiones ───────────
+   La clase `.data-table` se usaba en 15 vistas pero nunca estuvo definida:
+   las tablas caían al estilo por defecto del navegador —encabezado centrado
+   y en negritas, sin separadores ni respiro—. Va en `components` para que
+   cualquier utilidad de Tailwind en la celda (text-right, p-0, w-*) siga
+   ganando. */
+@layer components {
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .data-table th {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+  .data-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid hsl(var(--border) / 0.55);
+    vertical-align: middle;
+  }
+  .data-table tbody tr:last-child > td {
+    border-bottom: none;
+  }
+  .data-table tbody tr:hover > td {
+    background: hsl(var(--muted) / 0.45);
+  }
+
+  /* Encabezado que permanece visible al recorrer una tabla larga. */
+  .data-table--sticky thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: hsl(var(--card));
+  }
+
+  /* Primera columna fija: en las tablas anchas es la que da contexto —de
+     quién es la fila— y sin ella el scroll horizontal deja celdas huérfanas. */
+  .data-table--anclada tbody td:first-child,
+  .data-table--anclada thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: hsl(var(--card));
+  }
+  .data-table--anclada thead th:first-child {
+    z-index: 3;
+  }
+  .data-table--anclada tbody tr:hover > td:first-child {
+    background: hsl(var(--muted) / 0.45);
+  }
+  /* Borde que marca dónde termina la columna anclada al desplazarse. */
+  .data-table--anclada tbody td:first-child::after,
+  .data-table--anclada thead th:first-child::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: -1px;
+    width: 1px;
+    background: hsl(var(--border));
+  }
+}
