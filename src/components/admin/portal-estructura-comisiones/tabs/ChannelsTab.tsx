@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Info, AlertTriangle, FileText, Plus, Search, MoreHorizontal, Pencil, Copy, Trash2, History,
-  ArrowUpDown, Power, PowerOff, Building2,
+  ArrowUpDown, ArrowUp, ArrowDown, Power, PowerOff, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -37,6 +37,76 @@ const CATEGORIES = [
   'Externo', 'Interno', 'Referido', 'Institucional', 'Patrimonial', 'Internacional',
   'Corporativo', 'Embajadores', 'Influencer', 'Otros',
 ];
+
+/**
+ * Por qué el rango mín–máx de un canal no acota nada, o `null` si está bien.
+ *
+ * El motor de comisiones usa la comisión base; el rango solo sirve como guarda.
+ * Si la base cae fuera, la guarda es falsa y más vale decirlo donde se captura.
+ */
+function rangoInvalido(c: Channel): string | null {
+  const base = c.baseCommissionPct ?? c.externalCommissionPct;
+  const min = c.minCommissionPct;
+  const max = c.maxCommissionPct;
+  if (min > max) return `El mínimo (${min}%) supera al máximo (${max}%).`;
+  if (base < min || base > max) {
+    return `La comisión base (${base}%) queda fuera del rango ${min}%–${max}%, así que el rango no acota nada.`;
+  }
+  return null;
+}
+
+/**
+ * Flecha de ordenamiento. La columna activa muestra la dirección real; las
+ * demás, el par neutro. Antes las tres se veían igual y no había forma de
+ * saber por cuál estaba ordenada la tabla.
+ */
+function IconoOrden({ activa, dir }: { activa: boolean; dir: 'asc' | 'desc' }) {
+  if (!activa) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+  return dir === 'asc'
+    ? <ArrowUp className="h-3 w-3 text-primary" />
+    : <ArrowDown className="h-3 w-3 text-primary" />;
+}
+
+/** Contador de la cabecera; con `onClick` filtra la tabla de abajo. */
+function ContadorCanal({ etiqueta, valor, clase, activo, onClick, ayuda }: {
+  etiqueta: string;
+  valor: number;
+  clase?: string;
+  activo?: boolean;
+  onClick?: () => void;
+  ayuda?: string;
+}) {
+  const cuerpo = (
+    <>
+      <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+        {etiqueta}
+        {ayuda && (
+          <Tooltip>
+            <TooltipTrigger asChild><Info className="h-3 w-3 opacity-60" /></TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">{ayuda}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+      <div className={cn('text-2xl font-bold', clase)}>{valor}</div>
+    </>
+  );
+
+  if (!onClick) return <div className="rounded-lg border bg-card px-4 py-3">{cuerpo}</div>;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={cn(
+        'rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/40',
+        activo && 'border-primary bg-primary/5 hover:bg-primary/5',
+      )}
+    >
+      {cuerpo}
+    </button>
+  );
+}
 
 type SortKey = 'name' | 'category' | 'baseCommissionPct' | 'createdAt';
 
@@ -90,6 +160,17 @@ export default function ChannelsTab() {
   // Derived
   const activeCount = channels.filter(c => c.active !== false).length;
   const inactiveCount = channels.length - activeCount;
+
+  /**
+   * Canales cuyo rango mín–máx no acota nada: o el mínimo supera al máximo, o
+   * la comisión base queda fuera. Hoy los seis del catálogo tienen mín y máx en
+   * 0 con una base distinta de 0, así que el rango es decorativo y conviene que
+   * se vea en lugar de suponer que valida algo.
+   */
+  const conRangoInvalido = useMemo(
+    () => channels.filter(c => rangoInvalido(c) !== null),
+    [channels],
+  );
 
   const filtered = useMemo(() => {
     let list = [...channels];
@@ -248,20 +329,35 @@ export default function ChannelsTab() {
         />
       )}
 
-      {/* Counters */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border bg-card px-4 py-3">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total</div>
-          <div className="text-2xl font-bold">{channels.length}</div>
-        </div>
-        <div className="rounded-lg border bg-card px-4 py-3">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Activos</div>
-          <div className="text-2xl font-bold text-primary">{activeCount}</div>
-        </div>
-        <div className="rounded-lg border bg-card px-4 py-3">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Inactivos</div>
-          <div className="text-2xl font-bold text-muted-foreground">{inactiveCount}</div>
-        </div>
+      {/* Contadores que además filtran: el número y la lista que lo explica
+          quedan a un clic, en vez de obligar a repetirlo en el selector. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <ContadorCanal
+          etiqueta="Total"
+          valor={channels.length}
+          activo={statusFilter === 'all'}
+          onClick={() => setStatusFilter('all')}
+        />
+        <ContadorCanal
+          etiqueta="Activos"
+          valor={activeCount}
+          clase="text-primary"
+          activo={statusFilter === 'active'}
+          onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')}
+        />
+        <ContadorCanal
+          etiqueta="Inactivos"
+          valor={inactiveCount}
+          clase="text-muted-foreground"
+          activo={statusFilter === 'inactive'}
+          onClick={() => setStatusFilter(statusFilter === 'inactive' ? 'all' : 'inactive')}
+        />
+        <ContadorCanal
+          etiqueta="Rango incongruente"
+          valor={conRangoInvalido.length}
+          clase={conRangoInvalido.length > 0 ? 'text-amber-600' : 'text-muted-foreground'}
+          ayuda="La comisión base queda fuera del rango mín–máx, o el mínimo supera al máximo. El motor toma la base, así que el rango deja de acotar nada."
+        />
       </div>
 
       {/* Filters */}
@@ -292,20 +388,29 @@ export default function ChannelsTab() {
         </Select>
       </div>
 
-      {/* Table */}
+      {/* Tabla del catálogo maestro. Con un proyecto elegido arriba conviven dos
+          alcances en pantalla, así que se dice cuál es cuál. */}
       <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4 pb-2">
+          <h3 className="font-semibold text-sm">Catálogo maestro</h3>
+          <p className="text-xs text-muted-foreground">
+            {proyectoSel != null
+              ? 'Editar aquí afecta a todos los proyectos, no solo al seleccionado arriba.'
+              : `${filtered.length} de ${channels.length} canales`}
+          </p>
+        </div>
         <table className="data-table">
           <thead>
             <tr>
               <th>
                 <button className="flex items-center gap-1 hover:text-primary" onClick={() => toggleSort('name')}>
-                  Canal <ArrowUpDown className="h-3 w-3" />
+                  Canal <IconoOrden activa={sortKey === 'name'} dir={sortDir} />
                 </button>
               </th>
               <th>Estado</th>
               <th>
                 <button className="flex items-center gap-1 hover:text-primary" onClick={() => toggleSort('baseCommissionPct')}>
-                  Comisión Base %
+                  Comisión base % <IconoOrden activa={sortKey === 'baseCommissionPct'} dir={sortDir} />
                   <Tooltip>
                     <TooltipTrigger asChild><Info className="h-3 w-3" /></TooltipTrigger>
                     <TooltipContent className="max-w-xs text-xs">Valor base sugerido. Sincroniza con la comisión externa usada por el motor de comisiones.</TooltipContent>
@@ -316,7 +421,7 @@ export default function ChannelsTab() {
               <th>Máx %</th>
               <th>
                 <button className="flex items-center gap-1 hover:text-primary" onClick={() => toggleSort('category')}>
-                  Categoría <ArrowUpDown className="h-3 w-3" />
+                  Categoría <IconoOrden activa={sortKey === 'category'} dir={sortDir} />
                 </button>
               </th>
               <th className="text-right">Acciones</th>
@@ -336,33 +441,50 @@ export default function ChannelsTab() {
                     </span>
                   </div>
                 </td>
+                {/* El Switch ya comunica el estado; el badge de al lado repetía
+                    lo mismo. Queda la etiqueta como texto, que sí hace falta
+                    para no depender solo de la posición del interruptor. */}
                 <td>
-                  <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <Switch checked={ch.active !== false} onCheckedChange={() => toggleActive(ch.id)} />
-                    <Badge variant={ch.active !== false ? 'default' : 'secondary'} className="text-[10px]">
+                    <span className={cn('text-xs', ch.active !== false ? 'text-foreground' : 'text-muted-foreground')}>
                       {ch.active !== false ? 'Activo' : 'Inactivo'}
-                    </Badge>
+                    </span>
+                  </label>
+                </td>
+                <td>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="w-24 h-8 text-sm font-mono"
+                      value={ch.baseCommissionPct ?? ch.externalCommissionPct}
+                      onChange={e => {
+                        const v = +e.target.value;
+                        updateChannel({ ...ch, baseCommissionPct: v, externalCommissionPct: v });
+                      }}
+                    />
+                    {/* La incongruencia se marca donde se captura, no solo en el
+                        contador de arriba. */}
+                    {rangoInvalido(ch) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">{rangoInvalido(ch)}</TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 </td>
                 <td>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    className="w-24 h-8 text-sm font-mono"
-                    value={ch.baseCommissionPct ?? ch.externalCommissionPct}
-                    onChange={e => {
-                      const v = +e.target.value;
-                      updateChannel({ ...ch, baseCommissionPct: v, externalCommissionPct: v });
-                    }}
-                  />
-                </td>
-                <td>
-                  <Input type="number" step="0.1" className="w-20 h-8 text-sm font-mono"
+                  <Input type="number" step="0.1"
+                    className={cn('w-20 h-8 text-sm font-mono', rangoInvalido(ch) && 'border-amber-500/60')}
                     value={ch.minCommissionPct}
                     onChange={e => updateChannel({ ...ch, minCommissionPct: +e.target.value })} />
                 </td>
                 <td>
-                  <Input type="number" step="0.1" className="w-20 h-8 text-sm font-mono"
+                  <Input type="number" step="0.1"
+                    className={cn('w-20 h-8 text-sm font-mono', rangoInvalido(ch) && 'border-amber-500/60')}
                     value={ch.maxCommissionPct}
                     onChange={e => updateChannel({ ...ch, maxCommissionPct: +e.target.value })} />
                 </td>

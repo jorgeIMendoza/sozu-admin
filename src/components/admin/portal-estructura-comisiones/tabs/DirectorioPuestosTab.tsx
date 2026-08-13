@@ -48,6 +48,103 @@ import { cn } from '@/lib/utils';
  */
 
 const hoy = () => new Date().toISOString().slice(0, 10);
+
+const ETIQUETA_FOCO: Record<string, string> = {
+  empleados: 'Solo empleados SOZU',
+  investimento: 'Solo colaboradores Investimento',
+  pendientes: 'Solo pendientes de capturar',
+};
+
+interface PersonaEnProyecto {
+  id: number;
+  nombre: string;
+  rol: string | null;
+  /** % de la persona asignado a este proyecto, tal como está capturado. */
+  pct: number;
+  /** Costo que este proyecto absorbe de esa persona. */
+  costo: number;
+}
+
+interface FilaProyecto {
+  clave: number | 'central';
+  nombre: string;
+  personas: PersonaEnProyecto[];
+  costo: number;
+}
+
+/**
+ * Costo fijo repartido entre proyectos, con el detalle de quién lo genera.
+ *
+ * Dos modos, porque los datos capturados admiten dos lecturas distintas y
+ * mezclarlas es lo que hacía que la tabla se contradijera:
+ *
+ * - **Como está capturado** (`prorratear = false`): cada proyecto absorbe el
+ *   `asignacion_pct` que tiene registrado. Si alguien está al 100% en cinco
+ *   proyectos, su costo entra completo en los cinco y la suma de los proyectos
+ *   supera el costo real de la empresa. Responde "¿cuánto me cuesta la gente
+ *   que atiende este proyecto?".
+ * - **Prorrateado** (`prorratear = true`): el costo de cada persona se reparte
+ *   entre sus proyectos en proporción a esos porcentajes, de modo que la suma
+ *   de los proyectos más SOZU Central da exactamente el costo de la empresa.
+ *   Responde "¿cómo se reparte el costo real?".
+ *
+ * En ambos casos el remanente no asignado —y quien no atiende ningún proyecto—
+ * se acumula en SOZU Central. Solo cuenta a los empleados directos: el costo del
+ * colaborador de Investimento no lo paga SOZU.
+ */
+function desglosarCostoPorProyecto(
+  empleados: PersonalOrganizacional[],
+  asignacionesByPersona: Map<number, AsignacionProyecto[]>,
+  proyectos: ProyectoActivo[],
+  rolesById: Map<number, RolOrganizacional>,
+  prorratear: boolean,
+): { filas: FilaProyecto[]; sumaProyectos: number; central: number } {
+  const acumulado = new Map<number | 'central', PersonaEnProyecto[]>();
+  const empujar = (clave: number | 'central', p: PersonaEnProyecto) => {
+    const lista = acumulado.get(clave);
+    if (lista) lista.push(p);
+    else acumulado.set(clave, [p]);
+  };
+
+  for (const p of empleados) {
+    const costo = Number(p.costo_total);
+    const lista = asignacionesByPersona.get(p.id) ?? [];
+    const pctAsignado = lista.reduce((s, a) => s + Number(a.asignacion_pct), 0);
+    const rol = p.id_rol !== null ? rolesById.get(p.id_rol)?.nombre ?? null : null;
+
+    // Prorratear = repartir sobre lo realmente asignado cuando pasa del 100%.
+    const base = prorratear ? Math.max(100, pctAsignado) : 100;
+
+    for (const a of lista) {
+      const pct = Number(a.asignacion_pct);
+      empujar(a.id_proyecto, { id: p.id, nombre: p.nombre, rol, pct, costo: costo * pct / base });
+    }
+
+    const remanente = Math.max(0, 100 - pctAsignado);
+    if (remanente > 0 || lista.length === 0) {
+      empujar('central', {
+        id: p.id, nombre: p.nombre, rol,
+        pct: remanente, costo: costo * remanente / 100,
+      });
+    }
+  }
+
+  const armar = (clave: number | 'central', nombre: string): FilaProyecto => {
+    const personas = (acumulado.get(clave) ?? []).sort((a, b) => b.costo - a.costo);
+    return { clave, nombre, personas, costo: personas.reduce((s, x) => s + x.costo, 0) };
+  };
+
+  const central = armar('central', 'SOZU Central / sin asignar');
+  const deProyectos = proyectos
+    .map(proy => armar(proy.id, proy.nombre))
+    .sort((a, b) => b.costo - a.costo);
+
+  return {
+    filas: [central, ...deProyectos],
+    sumaProyectos: deProyectos.reduce((s, f) => s + f.costo, 0) + central.costo,
+    central: central.costo,
+  };
+}
 const notifyError = (e: unknown) =>
   toast.error(e instanceof Error ? e.message : 'No se pudo guardar el cambio');
 
@@ -72,6 +169,13 @@ export default function DirectorioPuestosTab() {
     open: false, persona: null,
   });
   const [bajaTarget, setBajaTarget] = useState<PersonalOrganizacional | null>(null);
+  /** Proyectos con su detalle desplegado. `'central'` es SOZU Central. */
+  const [proyectosAbiertos, setProyectosAbiertos] = useState<Set<number | 'central'>>(new Set());
+  const [prorratear, setProrratear] = useState(false);
+  /** Filtro rápido activado desde los indicadores de cabecera. */
+  const [foco, setFoco] = useState<'todos' | 'empleados' | 'investimento' | 'pendientes'>('todos');
+  const alternarFoco = (v: Exclude<typeof foco, 'todos'>) =>
+    setFoco(actual => (actual === v ? 'todos' : v));
 
   const crearRol = useCrearRolOrganizacional();
   const actualizarRol = useActualizarRolOrganizacional();
@@ -151,36 +255,59 @@ export default function DirectorioPuestosTab() {
 
   const personalFiltrado = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return personal;
-    return personal.filter(p => {
+    let lista = personal;
+
+    if (foco === 'empleados') lista = lista.filter(p => p.activo && esCostoDeSozu(p));
+    else if (foco === 'investimento') lista = lista.filter(p => p.activo && !esCostoDeSozu(p));
+    else if (foco === 'pendientes') {
+      lista = lista.filter(p => p.activo && (
+        p.id_rol === null
+        || (asignacionesByPersona.get(p.id)?.length ?? 0) === 0
+        || p.sueldo_base_recibido === null
+      ));
+    }
+
+    if (!q) return lista;
+    return lista.filter(p => {
       const rol = p.id_rol !== null ? rolesById.get(p.id_rol)?.nombre ?? '' : '';
       const proys = (asignacionesByPersona.get(p.id) ?? [])
         .map(a => proyectosById.get(a.id_proyecto)?.nombre ?? '').join(' ');
       return `${p.nombre} ${p.email_usuario ?? ''} ${p.email_contacto ?? ''} ${rol} ${proys}`
         .toLowerCase().includes(q);
     });
-  }, [personal, busqueda, rolesById, proyectosById, asignacionesByPersona]);
+  }, [personal, busqueda, foco, rolesById, proyectosById, asignacionesByPersona]);
 
   /**
    * Costo por proyecto, prorrateado; el remanente no asignado se acumula en
    * SOZU Central. Solo cuenta a los empleados directos: el costo del
    * colaborador de Investimento no lo paga SOZU.
    */
-  const costoPorProyecto = useMemo(() => {
-    const porProyecto = new Map<number, number>();
-    let central = 0;
-    for (const p of empleadosSozu) {
-      const costo = Number(p.costo_total);
+  const costoPorProyecto = useMemo(
+    () => desglosarCostoPorProyecto(empleadosSozu, asignacionesByPersona, proyectos, rolesById, prorratear),
+    [empleadosSozu, asignacionesByPersona, proyectos, rolesById, prorratear],
+  );
+
+  /** Empleados directos ordenados por lo que cuestan: primero el peso mayor. */
+  const empleadosPorCosto = useMemo(
+    () => [...empleadosSozu].sort((a, b) => Number(b.costo_total) - Number(a.costo_total)),
+    [empleadosSozu],
+  );
+
+  /**
+   * Personas cuya asignación suma más de 100%.
+   *
+   * No es un detalle cosmético: con 100% en cada proyecto su costo entra
+   * completo en todos, y por eso la suma de los proyectos supera el costo real
+   * de la empresa. Se nombra para que se pueda corregir desde la columna
+   * Proyectos.
+   */
+  const sobreasignados = useMemo(
+    () => empleadosSozu.filter(p => {
       const lista = asignacionesByPersona.get(p.id) ?? [];
-      const pctAsignado = lista.reduce((s, a) => s + Number(a.asignacion_pct), 0);
-      for (const a of lista) {
-        const parte = costo * Number(a.asignacion_pct) / 100;
-        porProyecto.set(a.id_proyecto, (porProyecto.get(a.id_proyecto) ?? 0) + parte);
-      }
-      central += costo * Math.max(0, 100 - pctAsignado) / 100;
-    }
-    return { porProyecto, central };
-  }, [empleadosSozu, asignacionesByPersona]);
+      return lista.reduce((s, a) => s + Number(a.asignacion_pct), 0) > 100.0001;
+    }),
+    [empleadosSozu, asignacionesByPersona],
+  );
 
   /**
    * Guarda la ficha y, después, sus roles base adicionales.
@@ -234,10 +361,12 @@ export default function DirectorioPuestosTab() {
         <div>
           <h2 className="text-xl font-bold">Roles y Sueldos</h2>
           <p className="text-sm text-muted-foreground max-w-3xl">
-            Estructura organizacional y su costo: se definen los roles de la empresa, se da de alta a
-            la persona, se le vincula un rol y por último los proyectos a los que da servicio. De aquí
-            se alimenta el simulador (Organigrama, Escenarios, Financieros). Independiente del catálogo
-            de roles y permisos del sistema.
+            Estructura organizacional y su costo. Alimenta el simulador —Organigrama, Escenarios,
+            Financieros— y es independiente del catálogo de roles y permisos del sistema.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Se define el rol, se da de alta a la persona, se le vincula el rol y por último los
+            proyectos que atiende.
           </p>
         </div>
         <div className="flex gap-2">
@@ -271,14 +400,16 @@ export default function DirectorioPuestosTab() {
       {/* KPIs — el costo de Investimento va aparte porque no lo paga SOZU */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
-          label="Empleados SOZU"
-          value={String(empleadosSozu.length)}
-          nota={`de ${activos.length} personas activas`}
-        />
-        <KpiCard
           label="Costo fijo mensual SOZU"
           value={formatCurrency(costoEmpresa)}
           nota="solo empleados directos"
+        />
+        <KpiCard
+          label="Empleados SOZU"
+          value={String(empleadosSozu.length)}
+          nota={`de ${activos.length} personas activas`}
+          onClick={() => alternarFoco('empleados')}
+          activo={foco === 'empleados'}
         />
         <KpiCard
           label="Colaboradores Investimento"
@@ -286,12 +417,16 @@ export default function DirectorioPuestosTab() {
           nota={colaboradores.length > 0
             ? `${formatCurrency(costoInvestimento)} que SOZU no paga`
             : 'ninguno registrado'}
+          onClick={colaboradores.length > 0 ? () => alternarFoco('investimento') : undefined}
+          activo={foco === 'investimento'}
         />
         <KpiCard
           label="Pendientes de capturar"
           value={String(sinRol + sinProyecto + sinNeto)}
           nota={`${sinRol} sin rol · ${sinProyecto} sin proyecto · ${sinNeto} sin neto`}
           tone={sinRol + sinProyecto + sinNeto > 0 ? 'warn' : 'ok'}
+          onClick={sinRol + sinProyecto + sinNeto > 0 ? () => alternarFoco('pendientes') : undefined}
+          activo={foco === 'pendientes'}
         />
       </div>
 
@@ -317,9 +452,23 @@ export default function DirectorioPuestosTab() {
       <div className="rounded-xl border bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="font-semibold">Personal de la organización</h3>
+            <h3 className="font-semibold flex flex-wrap items-center gap-2">
+              Personal de la organización
+              {foco !== 'todos' && (
+                <button
+                  type="button"
+                  onClick={() => setFoco('todos')}
+                  className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-normal text-primary hover:bg-primary/20"
+                >
+                  {ETIQUETA_FOCO[foco]}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </h3>
             <p className="text-xs text-muted-foreground">
-              {activos.length} activo{activos.length === 1 ? '' : 's'} · Costo total mensual {formatCurrency(costoEmpresa)}
+              {foco === 'todos'
+                ? `${activos.length} activo${activos.length === 1 ? '' : 's'} · Costo total mensual ${formatCurrency(costoEmpresa)}`
+                : `${personalFiltrado.length} de ${activos.length} activos`}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -340,25 +489,45 @@ export default function DirectorioPuestosTab() {
         </div>
 
         {personalFiltrado.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">
-            {personal.length === 0
-              ? 'Aún no hay personal dado de alta. Empieza con "Nueva Persona".'
-              : 'Ningún resultado para la búsqueda.'}
-          </p>
+          <div className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              {personal.length === 0
+                ? 'Aún no hay personal dado de alta.'
+                : foco !== 'todos'
+                  ? `Nadie cumple el filtro "${ETIQUETA_FOCO[foco]}".`
+                  : 'Ningún resultado para la búsqueda.'}
+            </p>
+            {personal.length === 0 ? (
+              <Button size="sm" className="mt-3 gap-1.5" onClick={() => setPersonaDialog({ open: true, persona: null })}>
+                <Plus className="h-3.5 w-3.5" /> Nueva Persona
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => { setFoco('todos'); setBusqueda(''); }}
+              >
+                Quitar filtros
+              </Button>
+            )}
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table">
+          /* La tabla no cabe a lo ancho: se ancla la columna Persona para no
+             perder de vista de quién es la fila que se está editando. */
+          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto rounded-lg border">
+            <table className="data-table data-table--sticky data-table--anclada">
               <thead>
                 <tr>
                   <th>Persona</th>
                   <th>Perfil</th>
                   <th>Rol</th>
                   <th>Proyectos que atiende</th>
-                  <th>Costo Nominal</th>
-                  <th>Costo Externo</th>
-                  <th>Costo Social</th>
-                  <th>Costo Total</th>
-                  <th>Sueldo base recibido</th>
+                  <th className="text-right">Costo nominal</th>
+                  <th className="text-right">Costo externo</th>
+                  <th className="text-right">Costo social</th>
+                  <th className="text-right">Costo total</th>
+                  <th className="text-right">Sueldo base recibido</th>
                   <th>Ingreso</th>
                   <th></th>
                 </tr>
@@ -387,46 +556,207 @@ export default function DirectorioPuestosTab() {
         )}
       </div>
 
-      {/* Costo por proyecto (derivado) */}
+      {/* Costo fijo total de SOZU: el desglose que sí suma al total */}
       <div className="rounded-xl border bg-card p-5">
-        <div className="mb-4">
-          <h3 className="font-semibold">Costo fijo por proyecto</h3>
-          <p className="text-xs text-muted-foreground">
-            Derivado del personal activo y su % de asignación. El porcentaje no asignado a ningún
-            proyecto se contabiliza en SOZU Central.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold">Costo fijo total de SOZU</h3>
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              Personal directo, de mayor a menor costo. El colaborador de Investimento no aparece:
+              SOZU no paga su sueldo.
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold font-mono">{formatCurrency(costoEmpresa)}</p>
+            <p className="text-xs text-muted-foreground">
+              {empleadosPorCosto.length} empleado{empleadosPorCosto.length === 1 ? '' : 's'} directo
+              {empleadosPorCosto.length === 1 ? '' : 's'} · mensual
+            </p>
+          </div>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr><th>Proyecto</th><th>Personas</th><th>Costo mensual</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="font-medium">SOZU Central / sin asignar</td>
-              <td>{sinProyecto}</td>
-              <td className="font-semibold font-mono text-sm">{formatCurrency(costoPorProyecto.central)}</td>
-            </tr>
-            {proyectos.map(proy => {
-              const personas = asignaciones.filter(
-                a => a.id_proyecto === proy.id && activos.some(p => p.id === a.id_personal),
-              ).length;
-              return (
-                <tr key={proy.id}>
-                  <td className="font-medium">{proy.nombre}</td>
-                  <td>{personas}</td>
-                  <td className="font-semibold font-mono text-sm">
-                    {formatCurrency(costoPorProyecto.porProyecto.get(proy.id) ?? 0)}
-                  </td>
+
+        {empleadosPorCosto.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">Sin empleados directos activos.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Persona</th>
+                  <th>Rol</th>
+                  <th className="text-right">Proyectos</th>
+                  <th className="text-right">Costo mensual</th>
+                  <th className="text-right">% del total</th>
                 </tr>
-              );
-            })}
-            <tr className="border-t">
-              <td className="font-semibold">Total</td>
-              <td>{activos.length}</td>
-              <td className="font-bold font-mono text-sm">{formatCurrency(costoEmpresa)}</td>
-            </tr>
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {empleadosPorCosto.map(p => {
+                  const costo = Number(p.costo_total);
+                  const rol = p.id_rol !== null ? rolesById.get(p.id_rol)?.nombre ?? null : null;
+                  const nProyectos = (asignacionesByPersona.get(p.id) ?? []).length;
+                  return (
+                    <tr key={p.id}>
+                      <td className="font-medium whitespace-nowrap">{p.nombre}</td>
+                      <td className="text-sm text-muted-foreground">
+                        {rol ?? <span className="italic">Sin rol asignado</span>}
+                      </td>
+                      <td className="text-right font-mono text-sm">{nProyectos}</td>
+                      <td className="text-right font-semibold font-mono text-sm whitespace-nowrap">
+                        {formatCurrency(costo)}
+                      </td>
+                      <td className="text-right font-mono text-sm text-foreground/70">
+                        {costoEmpresa > 0 ? ((costo / costoEmpresa) * 100).toFixed(1) : '0.0'}%
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="border-t">
+                  <td className="font-semibold">Costo fijo total</td>
+                  <td></td>
+                  <td></td>
+                  <td className="text-right font-bold font-mono text-sm whitespace-nowrap">
+                    {formatCurrency(costoEmpresa)}
+                  </td>
+                  <td className="text-right font-bold font-mono text-sm">100.0%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Desglose por proyecto, desplegable */}
+      <div className="rounded-xl border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold">Costo fijo por proyecto</h3>
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              Da clic en un proyecto para ver quién lo genera. El porcentaje no asignado a ningún
+              proyecto se contabiliza en SOZU Central.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs cursor-pointer shrink-0">
+            <Switch checked={prorratear} onCheckedChange={setProrratear} />
+            <span className={cn(prorratear ? 'text-foreground font-medium' : 'text-muted-foreground')}>
+              Prorratear entre proyectos
+            </span>
+          </label>
+        </div>
+
+        {sobreasignados.length > 0 && !prorratear && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {sobreasignados.length} persona{sobreasignados.length === 1 ? '' : 's'} está
+                {sobreasignados.length === 1 ? '' : 'n'} asignada
+                {sobreasignados.length === 1 ? '' : 's'} a más del 100%.
+              </span>{' '}
+              Su costo entra completo en cada uno de sus proyectos, así que la suma de abajo
+              ({formatCurrency(costoPorProyecto.sumaProyectos)}) supera el costo real de SOZU
+              ({formatCurrency(costoEmpresa)}). Ajusta el % en la columna Proyectos de la tabla, o
+              activa <span className="font-medium text-foreground">Prorratear</span> para ver el
+              reparto que sí cuadra.
+            </p>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Proyecto</th>
+                <th className="text-right">Personas</th>
+                <th className="text-right">Costo mensual</th>
+                <th className="text-right">% del reparto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costoPorProyecto.filas.map(fila => {
+                const abierto = proyectosAbiertos.has(fila.clave);
+                return (
+                  <Fragment key={String(fila.clave)}>
+                    <tr
+                      className={cn('cursor-pointer hover:bg-muted/40', abierto && 'bg-muted/30')}
+                      onClick={() => setProyectosAbiertos(prev => {
+                        const siguiente = new Set(prev);
+                        if (siguiente.has(fila.clave)) siguiente.delete(fila.clave);
+                        else siguiente.add(fila.clave);
+                        return siguiente;
+                      })}
+                    >
+                      <td className="font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <ChevronRight
+                            className={cn('h-3.5 w-3.5 shrink-0 transition-transform', abierto && 'rotate-90')}
+                          />
+                          {fila.nombre}
+                        </span>
+                      </td>
+                      <td className="text-right font-mono text-sm">{fila.personas.length}</td>
+                      <td className="text-right font-semibold font-mono text-sm whitespace-nowrap">
+                        {formatCurrency(fila.costo)}
+                      </td>
+                      <td className="text-right font-mono text-sm text-foreground/70">
+                        {costoPorProyecto.sumaProyectos > 0
+                          ? ((fila.costo / costoPorProyecto.sumaProyectos) * 100).toFixed(1)
+                          : '0.0'}%
+                      </td>
+                    </tr>
+
+                    {abierto && (
+                      <tr>
+                        <td colSpan={4} className="bg-muted/20 p-0">
+                          {fila.personas.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic px-4 py-3">
+                              Sin personal asignado.
+                            </p>
+                          ) : (
+                            <table className="w-full">
+                              <tbody>
+                                {fila.personas.map(persona => (
+                                  <tr key={persona.id} className="border-b last:border-0 border-border/50">
+                                    <td className="pl-9 py-1.5 text-sm">{persona.nombre}</td>
+                                    <td className="py-1.5 text-xs text-muted-foreground">
+                                      {persona.rol ?? 'Sin rol'}
+                                    </td>
+                                    <td className="py-1.5 text-right text-xs font-mono text-muted-foreground w-20">
+                                      {persona.pct}%
+                                    </td>
+                                    <td className="py-1.5 pr-4 text-right text-sm font-mono w-36 whitespace-nowrap">
+                                      {formatCurrency(persona.costo)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+
+              <tr className="border-t">
+                <td className="font-semibold">Suma del reparto</td>
+                {/* Sin conteo: sumar las personas de cada fila contaría varias
+                    veces a quien atiende más de un proyecto. */}
+                <td></td>
+                <td className="text-right font-bold font-mono text-sm whitespace-nowrap">
+                  {formatCurrency(costoPorProyecto.sumaProyectos)}
+                </td>
+                <td className="text-right font-bold font-mono text-sm">100.0%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground mt-2">
+          {prorratear
+            ? `El costo de cada persona se reparte entre sus proyectos, así que la suma cuadra con el costo fijo de SOZU (${formatCurrency(costoEmpresa)}).`
+            : `Cada proyecto absorbe el % que tiene capturado. Quien atiende varios al 100% cuenta completo en cada uno, por eso esta suma no equivale al costo fijo de SOZU (${formatCurrency(costoEmpresa)}).`}
+        </p>
       </div>
 
       {/* Dialogs */}
@@ -564,18 +894,49 @@ function EstructuraSimuladorAviso() {
   );
 }
 
-function KpiCard({ label, value, nota, tone = 'ok' }: {
+/**
+ * Indicador de cabecera. Cuando trae `onClick` deja de ser un dato suelto y
+ * pasa a filtrar el listado: el número y la lista que lo explica quedan a un
+ * clic de distancia en vez de obligar a buscarla a mano.
+ */
+function KpiCard({ label, value, nota, tone = 'ok', onClick, activo }: {
   label: string;
   value: string;
   nota?: string;
   tone?: 'ok' | 'warn';
+  onClick?: () => void;
+  activo?: boolean;
 }) {
-  return (
-    <div className="rounded-xl border bg-card p-4">
+  const contenido = (
+    <>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn('text-lg font-bold font-mono mt-1', tone === 'warn' && 'text-amber-600')}>{value}</p>
-      {nota && <p className="text-[11px] text-muted-foreground mt-0.5">{nota}</p>}
-    </div>
+      <p className={cn('text-xl font-bold font-mono mt-1', tone === 'warn' && 'text-amber-600')}>{value}</p>
+      {nota && <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{nota}</p>}
+    </>
+  );
+
+  if (!onClick) {
+    return <div className="rounded-xl border bg-card p-4">{contenido}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={cn(
+        'rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/40',
+        activo && 'border-primary bg-primary/5 hover:bg-primary/5',
+      )}
+    >
+      {contenido}
+      <p className={cn(
+        'text-[10px] mt-1.5',
+        activo ? 'text-primary font-medium' : 'text-muted-foreground',
+      )}>
+        {activo ? 'Filtrando · clic para quitar' : 'Ver en la lista'}
+      </p>
+    </button>
   );
 }
 
@@ -679,7 +1040,7 @@ function RolesSection({ roles, personasPorRol, verInactivos, onToggleInactivos, 
                       </td>
                       <td>
                         {rol.participa_comision
-                          ? <Badge variant="outline" className="text-[10px] border-accent text-accent">Sí</Badge>
+                          ? <Badge variant="outline" className="text-[10px] border-primary text-primary">Sí</Badge>
                           : <span className="text-xs text-muted-foreground">No</span>}
                       </td>
                       <td className="text-sm">{personas}</td>
@@ -689,9 +1050,15 @@ function RolesSection({ roles, personasPorRol, verInactivos, onToggleInactivos, 
                             {rol.objetivo?.trim() || 'Solo descripción de labores'}
                           </span>
                         ) : (
-                          <span className="text-xs text-amber-600 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" /> Sin documentar
-                          </span>
+                          /* Ambar repetido en cada fila competía con todo lo demás; el
+                             conteo del encabezado ya da la señal de cuántos faltan. */
+                          <button
+                            type="button"
+                            onClick={() => onEditar(rol)}
+                            className="text-xs text-muted-foreground italic hover:text-primary hover:underline"
+                          >
+                            Documentar objetivo
+                          </button>
                         )}
                       </td>
                       <td>
