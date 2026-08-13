@@ -3,7 +3,7 @@ import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/Simulato
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2, Save } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2, Save, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -27,6 +27,55 @@ interface SyncHistoryEntry {
   user: string;
   rolesAdded: number;
 }
+
+type Cuadre = 'completo' | 'falta' | 'excedido' | 'sin_definir';
+
+interface EstadoCanal {
+  totalDefinido: boolean;
+  comisionTotal: number;
+  comisionExterna: number;
+  comisionInterna: number;
+  dispersada: number;
+  remanente: number;
+  comisionistas: number;
+  cuadre: Cuadre;
+}
+
+/**
+ * Estado del cuadre como color de acento, no como fondo de bloque completo.
+ *
+ * El resumen antes se pintaba entero del color del estado, así que un canal con
+ * faltante gritaba en ámbar sobre toda su tarjeta y competía con las cifras que
+ * uno va a leer. Aquí el color queda en el chip y en el remanente, que es el
+ * único dato que cambia de significado según el estado.
+ */
+const ESTILO_CUADRE: Record<Cuadre, { chip: string; texto: string; etiqueta: (e: EstadoCanal) => string }> = {
+  completo: {
+    chip: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    texto: 'text-emerald-600',
+    etiqueta: () => 'Distribución completa',
+  },
+  falta: {
+    chip: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    texto: 'text-amber-600',
+    etiqueta: (e) => `Falta por dispersar ${e.remanente.toFixed(2)}%`,
+  },
+  excedido: {
+    chip: 'border-destructive/40 bg-destructive/10 text-destructive',
+    texto: 'text-destructive',
+    etiqueta: (e) => `Excedido por ${Math.abs(e.remanente).toFixed(2)}%`,
+  },
+  sin_definir: {
+    chip: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    texto: 'text-amber-600',
+    etiqueta: () => 'Comisión total sin definir',
+  },
+};
+
+/** Los `select` nativos se alinean con los Input del sistema de diseño. */
+const CLASE_SELECT =
+  'h-8 rounded-md border border-input bg-background px-2 text-sm ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
 
 const SYNC_HISTORY_KEY = 'sozu_commission_sync_history';
 const loadHistory = (): SyncHistoryEntry[] => {
@@ -248,23 +297,78 @@ export default function CommissionsTab() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 
+  /**
+   * Estado de cuadre de cada canal, calculado una vez para todos.
+   *
+   * Antes cada tarjeta lo resolvía por su cuenta, así que no existía forma de
+   * saber cuántos canales estaban mal sin recorrerlos uno por uno.
+   */
+  const estadoPorCanal = useMemo(() => {
+    const mapa = new Map<string, EstadoCanal>();
+    for (const ch of channels) {
+      const reglas = commissionRules.filter(r => r.channelId === ch.id);
+      const totalDefinido = motorConfig.channelTotals[ch.id] !== undefined;
+      const comisionTotal = motorConfig.channelTotals[ch.id] ?? 0;
+      const comisionInterna = comisionTotal - ch.externalCommissionPct;
+      const dispersada = reglas.reduce((s, r) => s + r.percentage, 0);
+      const remanente = comisionInterna - dispersada;
+      mapa.set(ch.id, {
+        totalDefinido,
+        comisionTotal,
+        comisionExterna: ch.externalCommissionPct,
+        comisionInterna,
+        dispersada,
+        remanente,
+        comisionistas: reglas.length,
+        cuadre: !totalDefinido ? 'sin_definir'
+          : Math.abs(remanente) < 0.005 ? 'completo'
+            : remanente > 0 ? 'falta' : 'excedido',
+      });
+    }
+    return mapa;
+  }, [channels, commissionRules, motorConfig.channelTotals]);
+
+  const resumenCanales = useMemo(() => {
+    const conteo = { completo: 0, falta: 0, excedido: 0, sin_definir: 0 };
+    for (const e of estadoPorCanal.values()) conteo[e.cuadre]++;
+    return conteo;
+  }, [estadoPorCanal]);
+
+  /**
+   * Canales plegados. Se arranca plegando los que ya cuadran: lo que necesita
+   * atención queda a la vista y lo resuelto no ocupa media pantalla. El
+   * encabezado plegado conserva las cifras, así que nada queda escondido.
+   */
+  const [plegados, setPlegados] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (plegados !== null || estadoPorCanal.size === 0) return;
+    const iniciales = new Set<string>();
+    for (const [id, e] of estadoPorCanal) if (e.cuadre === 'completo') iniciales.add(id);
+    setPlegados(iniciales);
+  }, [estadoPorCanal, plegados]);
+  const estaPlegado = (id: string) => plegados?.has(id) ?? false;
+  const alternarPliegue = (id: string) => setPlegados(prev => {
+    const siguiente = new Set(prev ?? []);
+    if (siguiente.has(id)) siguiente.delete(id);
+    else siguiente.add(id);
+    return siguiente;
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      {/* Encabezado. Antes cuatro botones del mismo peso competían en una sola
+          fila; ahora se separan por jerarquía: contexto arriba, acciones
+          secundarias en línea, y guardar solo cuando hay algo que guardar. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-xl font-bold">Motor de Comisiones</h2>
-          <p className="text-sm text-muted-foreground">
-            Da de alta a los comisionistas de cada canal y su % sobre el precio de venta final
-            <Tooltip>
-              <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
-              <TooltipContent className="max-w-sm text-xs">
-                El % de cada comisionista se aplica sobre el precio de venta final de la unidad. La suma de los comisionistas + la comisión externa debe ser igual a la Comisión Total.
-              </TooltipContent>
-            </Tooltip>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Da de alta a los comisionistas de cada canal y su % sobre el precio de venta final. La
+            suma de los comisionistas más la comisión externa debe igualar la comisión total del
+            canal.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <div className="flex items-center gap-1.5">
             <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <Select
@@ -286,7 +390,7 @@ export default function CommissionsTab() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} className="gap-1.5">
-                    <RefreshCw className="h-3.5 w-3.5" /> Sincronizar comisionistas
+                    <RefreshCw className="h-3.5 w-3.5" /> Sincronizar
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs text-xs">
@@ -296,51 +400,55 @@ export default function CommissionsTab() {
               <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(v => !v)} className="gap-1.5">
                 <History className="h-3.5 w-3.5" /> Histórico
               </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => setValidarOpen(true)}
-                      disabled={motorDirty}
-                      className="gap-1.5"
-                    >
-                      <Send className="h-3.5 w-3.5" /> Enviar a validar
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {motorDirty && (
-                  <TooltipContent className="max-w-xs text-xs">
-                    Guarda los cambios pendientes antes de enviar a validar.
-                  </TooltipContent>
-                )}
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      variant={motorDirty ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => saveMotorComisiones()}
-                      disabled={!motorDirty || motorSaving}
-                      className="gap-1.5"
-                    >
-                      {motorSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Guardar cambios
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  {motorDirty
-                    ? 'Tienes cambios sin guardar en la matriz de comisiones o la Comisión Total.'
-                    : 'No hay cambios pendientes por guardar.'}
-                </TooltipContent>
-              </Tooltip>
             </>
           )}
         </div>
       </div>
+
+      {/* Barra de cambios pendientes: guardar y enviar a validar viven aquí,
+          donde el estado del documento se explica en vez de vivir en un
+          tooltip sobre un botón deshabilitado. */}
+      {motorProjectId != null && (
+        <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
+          motorDirty ? 'border-amber-500/40 bg-amber-500/10' : 'bg-muted/30'
+        }`}>
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+            {motorDirty ? (
+              <>
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span className="text-foreground font-medium">Cambios sin guardar</span>
+                <span>en la matriz o en la comisión total. Guárdalos para poder enviar a validar.</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                Todo guardado{proyectoActual ? ` en ${proyectoActual.nombre}` : ''}.
+              </>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={motorDirty ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => saveMotorComisiones()}
+              disabled={!motorDirty || motorSaving}
+              className="gap-1.5"
+            >
+              {motorSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Guardar cambios
+            </Button>
+            <Button
+              variant={motorDirty ? 'outline' : 'default'}
+              size="sm"
+              onClick={() => setValidarOpen(true)}
+              disabled={motorDirty}
+              className="gap-1.5"
+            >
+              <Send className="h-3.5 w-3.5" /> Enviar a validar
+            </Button>
+          </div>
+        </div>
+      )}
 
       {motorProjectId == null ? (
         <div className="rounded-xl border border-dashed border-border p-12 text-center">
@@ -352,30 +460,67 @@ export default function CommissionsTab() {
         </div>
       ) : (
       <>
-      {/* UX Message */}
-      <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground flex items-start gap-2">
-        <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-        <span>
-          Los comisionistas son el personal dado de alta en <strong>Roles y Sueldos</strong>; su rol se muestra
-          y no se teclea aquí. Puedes darlos de alta, de baja o modificar su porcentaje por canal.
+      {/* Estado de los canales de un vistazo: antes había que recorrer las seis
+          tarjetas para saber cuáles estaban mal. */}
+      <div className="rounded-xl border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
+              {channels.length} canal{channels.length === 1 ? '' : 'es'}
+            </span>
+            {resumenCanales.completo > 0 && (
+              <ChipCuadre cuadre="completo" texto={`${resumenCanales.completo} cuadran`} />
+            )}
+            {resumenCanales.falta > 0 && (
+              <ChipCuadre cuadre="falta" texto={`${resumenCanales.falta} con faltante`} />
+            )}
+            {resumenCanales.excedido > 0 && (
+              <ChipCuadre cuadre="excedido" texto={`${resumenCanales.excedido} excedido${resumenCanales.excedido === 1 ? '' : 's'}`} />
+            )}
+            {resumenCanales.sin_definir > 0 && (
+              <ChipCuadre cuadre="sin_definir" texto={`${resumenCanales.sin_definir} sin comisión total`} />
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-right">
+              <p className="text-[11px] text-muted-foreground">Precio prom. ponderado / unidad</p>
+              {precioPromUnidad > 0 ? (
+                <p className="text-sm font-semibold font-mono">{formatCurrency(precioPromUnidad)}</p>
+              ) : (
+                <p className="text-xs text-amber-600">Sin unidades disponibles</p>
+              )}
+            </div>
+            {plegados !== null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setPlegados(
+                  plegados.size === channels.length ? new Set() : new Set(channels.map(c => c.id)),
+                )}
+              >
+                {plegados.size === channels.length ? 'Expandir todos' : 'Plegar todos'}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+          Los comisionistas son el personal dado de alta en <strong>Roles y Sueldos</strong>; su rol
+          se muestra y no se teclea aquí.
           {comisionistas.length === 0 && (
             <span className="text-amber-600">
               {' '}Todavía no hay personal con rol vinculado, así que no hay a quién dar de alta.
             </span>
           )}
-          {precioPromUnidad > 0 ? (
-            <span>
-              {' '}El valor estimado se calcula sobre el precio promedio ponderado por unidad
-              disponible de {proyectoActual?.nombre ?? 'este proyecto'}:{' '}
-              <strong>{formatCurrency(precioPromUnidad)}</strong>.
-            </span>
-          ) : (
+          {precioPromUnidad === 0 && (
             <span className="text-amber-600">
-              {' '}Sin unidades disponibles en {proyectoActual?.nombre ?? 'este proyecto'} no hay
-              precio promedio con el que estimar el valor de comisión.
+              {' '}Sin unidades disponibles en {proyectoActual?.nombre ?? 'este proyecto'} no se puede
+              estimar el valor de comisión en pesos.
             </span>
           )}
-        </span>
+        </p>
       </div>
 
       {/* Channel cards */}
@@ -383,38 +528,31 @@ export default function CommissionsTab() {
         const channelRules = commissionRules.filter(r => r.channelId === ch.id);
         const extPct = ch.externalCommissionPct;
 
-        // Real-time channel summary calculations (siempre Modo A: sobre venta).
-        // La comisión total es de ESTE canal: cada uno define la suya.
-        const totalDefinido = motorConfig.channelTotals[ch.id] !== undefined;
-        const comisionTotal = motorConfig.channelTotals[ch.id] ?? 0;
-        const comisionExterna = extPct;
-        const comisionInterna = comisionTotal - comisionExterna;
-        const sumaDispersada = channelRules.reduce((sum, r) => sum + r.percentage, 0);
-        const remanente = comisionInterna - sumaDispersada;
-
-        const statusColor = Math.abs(remanente) < 0.005
-          ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400'
-          : remanente > 0
-            ? 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
-            : 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400';
-
-        const statusText = Math.abs(remanente) < 0.005
-          ? 'Distribución completa'
-          : remanente > 0
-            ? `Falta por dispersar ${remanente.toFixed(2)}%`
-            : `Excedido por ${Math.abs(remanente).toFixed(2)}%`;
-
-        const statusIcon = Math.abs(remanente) < 0.005
-          ? <CheckCircle className="h-3.5 w-3.5" />
-          : <AlertTriangle className="h-3.5 w-3.5" />;
+        // Cifras del canal, ya resueltas junto con las de los demás.
+        const estado = estadoPorCanal.get(ch.id)!;
+        const {
+          totalDefinido, comisionTotal, comisionExterna, comisionInterna, remanente,
+          dispersada: sumaDispersada,
+        } = estado;
+        const estilo = ESTILO_CUADRE[estado.cuadre];
+        const plegado = estaPlegado(ch.id);
 
         return (
           <div key={ch.id} className="rounded-xl border bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-3">
-                <h3 className="font-semibold">{ch.name}</h3>
-                <Badge variant="outline" className="text-[10px]">Ext: {extPct}%</Badge>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => alternarPliegue(ch.id)}
+                className="flex items-center gap-2 min-w-0 text-left"
+              >
+                <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${plegado ? '' : 'rotate-90'}`} />
+                <h3 className="font-semibold truncate">{ch.name}</h3>
+                <Badge variant="outline" className="text-[10px] shrink-0">Ext: {extPct}%</Badge>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {estado.comisionistas} comisionista{estado.comisionistas === 1 ? '' : 's'}
+                </span>
+              </button>
+
               <div className="flex flex-wrap items-center gap-2">
                 {/* La comisión total se define por canal, no una sola para todos. */}
                 <div className="flex items-center gap-1.5">
@@ -425,7 +563,7 @@ export default function CommissionsTab() {
                     min="0"
                     max="100"
                     placeholder="Sin definir"
-                    className={`w-24 h-9 text-sm font-mono ${totalDefinido ? '' : 'border-amber-500'}`}
+                    className={`w-24 h-8 text-sm font-mono ${totalDefinido ? '' : 'border-amber-500'}`}
                     value={totalDefinido ? comisionTotal : ''}
                     onChange={(e) => {
                       const raw = e.target.value;
@@ -437,16 +575,15 @@ export default function CommissionsTab() {
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
-                <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md border ${statusColor}`}>
-                  {statusIcon}
-                  {statusText}
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setAltaCanal(ch.id)}>
+                <ChipCuadre cuadre={estado.cuadre} texto={estilo.etiqueta(estado)} />
+                <Button variant="outline" size="sm" onClick={() => setAltaCanal(ch.id)} className="h-8">
                   <Plus className="h-3 w-3 mr-1" /> Agregar comisionista
                 </Button>
               </div>
             </div>
 
+            {plegado ? null : (
+            <div className="mt-4">
             {!totalDefinido && (
               <p className="mb-3 text-xs text-amber-600">
                 Define la comisión total de este canal para poder repartirla entre sus comisionistas.
@@ -510,7 +647,7 @@ export default function CommissionsTab() {
                             <select
                               value={rule.personalId ?? ''}
                               onChange={e => cambiarComisionista(rule.id, e.target.value)}
-                              className={`rounded border bg-transparent px-2 py-1 text-sm font-medium ${rule.personalId ? '' : 'border-amber-500 text-amber-600'}`}
+                              className={`${CLASE_SELECT} font-medium ${rule.personalId ? '' : 'border-amber-500 text-amber-600'}`}
                             >
                               {!rule.personalId && <option value="">Sin comisionista asignado</option>}
                               {comisionistas
@@ -537,7 +674,7 @@ export default function CommissionsTab() {
                               <select
                                 value={rule.roleId}
                                 onChange={e => cambiarRolComisionista(rule.id, e.target.value)}
-                                className="rounded border bg-transparent px-2 py-1 text-sm"
+                                className={CLASE_SELECT}
                               >
                                 {persona.roles.map(r => (
                                   <option key={r.roleId} value={r.roleId}>
@@ -578,21 +715,16 @@ export default function CommissionsTab() {
                             ? formatCurrency(rule.percentage / 100 * precioPromUnidad)
                             : <span className="font-normal text-muted-foreground">—</span>}
                         </td>
-                        <td>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            className="w-24 h-8 text-sm font-mono"
-                            value={Number.isFinite(sharePct) ? +sharePct.toFixed(2) : 0}
-                            disabled
-                            readOnly
-                          />
+                        {/* Dato derivado: se muestra como texto. Como campo
+                            deshabilitado parecía editable pero averiado. */}
+                        <td className="font-mono text-sm text-foreground/70">
+                          {Number.isFinite(sharePct) ? sharePct.toFixed(2) : '0.00'}%
                         </td>
                         <td>
                           <select
                             value={rule.pool}
                             onChange={e => updateRule(rule.id, { pool: e.target.value as 'sozu' | 'project' })}
-                            className="rounded border bg-transparent px-2 py-1 text-sm"
+                            className={CLASE_SELECT}
                           >
                             <option value="sozu">SOZU</option>
                             <option value="project">Proyecto</option>
@@ -610,46 +742,30 @@ export default function CommissionsTab() {
               </table>
             )}
 
-            {/* Channel Summary Footer */}
-            <div className={`mt-4 rounded-lg border p-4 ${statusColor}`}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold uppercase tracking-wide opacity-80">Resumen del canal</span>
-                <div className="flex items-center gap-1.5 text-xs font-semibold">
-                  {statusIcon}
-                  {statusText}
-                </div>
-              </div>
-              <div className="grid grid-cols-5 gap-3">
-                <div className="text-center">
-                  <p className="text-[10px] uppercase tracking-wide opacity-60 mb-1">Comisión total</p>
-                  <p className="text-sm font-bold font-mono">{comisionTotal.toFixed(2)}%</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] uppercase tracking-wide opacity-60 mb-1">Externa</p>
-                  <p className="text-sm font-bold font-mono">{comisionExterna.toFixed(2)}%</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] uppercase tracking-wide opacity-60 mb-1">Interna esperada</p>
-                  <p className="text-sm font-bold font-mono">{comisionInterna.toFixed(2)}%</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] uppercase tracking-wide opacity-60 mb-1">Dispersada</p>
-                  <p className="text-sm font-bold font-mono">{sumaDispersada.toFixed(2)}%</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] uppercase tracking-wide opacity-60 mb-1 flex items-center justify-center gap-1">
-                    Remanente
-                    <Tooltip>
-                      <TooltipTrigger><Info className="h-3 w-3 opacity-50" /></TooltipTrigger>
-                      <TooltipContent className="max-w-xs text-xs">
-                        El remanente es la comisión interna disponible aún no asignada a comisionistas. Se calcula como la comisión total menos la comisión externa del canal y menos la suma de los porcentajes capturados.
-                      </TooltipContent>
-                    </Tooltip>
-                  </p>
-                  <p className="text-sm font-bold font-mono">{remanente.toFixed(2)}%</p>
-                </div>
+            {/* Resumen del canal. Las cuatro primeras cifras comparten estilo —son
+                la bolsa y sus salidas—; solo el remanente se distingue, porque es
+                el resultado y el que cambia de color según el cuadre. Misma
+                convención que el menú Escenarios. */}
+            <div className="mt-4 rounded-lg border bg-muted/30 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Resumen del canal
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <CifraCanal etiqueta="Comisión total" valor={comisionTotal} />
+                <CifraCanal etiqueta="Externa" valor={comisionExterna} />
+                <CifraCanal etiqueta="Interna esperada" valor={comisionInterna} />
+                <CifraCanal etiqueta="Dispersada" valor={sumaDispersada} />
+                <CifraCanal
+                  etiqueta="Remanente"
+                  valor={remanente}
+                  destacado
+                  color={estilo.texto}
+                  ayuda="Comisión interna aún no asignada: la comisión total, menos la externa del canal, menos la suma de los porcentajes capturados."
+                />
               </div>
             </div>
+            </div>
+            )}
           </div>
         );
       })}
@@ -731,6 +847,46 @@ export default function CommissionsTab() {
  * roles. Quien ejerce más de un rol —porque asume roles distintos según el
  * proyecto— permite elegir con cuál comisiona en este canal.
  */
+/** Estado de cuadre, con icono y texto: nunca solo por color. */
+function ChipCuadre({ cuadre, texto }: { cuadre: Cuadre; texto: string }) {
+  const Icono = cuadre === 'completo' ? CheckCircle : AlertTriangle;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium whitespace-nowrap ${ESTILO_CUADRE[cuadre].chip}`}>
+      <Icono className="h-3.5 w-3.5 shrink-0" />
+      {texto}
+    </span>
+  );
+}
+
+/**
+ * Una cifra del resumen del canal. Todas comparten estilo salvo la destacada:
+ * comparar cuatro porcentajes exige que nada más que el número las separe.
+ */
+function CifraCanal({ etiqueta, valor, destacado, color, ayuda }: {
+  etiqueta: string;
+  valor: number;
+  destacado?: boolean;
+  color?: string;
+  ayuda?: string;
+}) {
+  return (
+    <div className={`rounded-md px-3 py-2 ${destacado ? 'border border-primary/30 bg-background' : ''}`}>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+        {etiqueta}
+        {ayuda && (
+          <Tooltip>
+            <TooltipTrigger><Info className="h-3 w-3 opacity-60" /></TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">{ayuda}</TooltipContent>
+          </Tooltip>
+        )}
+      </p>
+      <p className={`text-base font-bold font-mono mt-0.5 ${destacado ? color ?? '' : 'text-foreground'}`}>
+        {valor.toFixed(2)}%
+      </p>
+    </div>
+  );
+}
+
 function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAgregar }: {
   canal: { id: string; name: string } | null;
   comisionistas: ComisionistaReal[];
