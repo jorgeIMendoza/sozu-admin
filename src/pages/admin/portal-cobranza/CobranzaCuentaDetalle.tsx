@@ -6,6 +6,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from '@/lib/config';
+import { pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
+import { esSinPermiso } from '@/lib/rpcErrors';
 import { formatCuentaCobranzaId, formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -84,13 +86,14 @@ export default function CobranzaCuentaDetalle() {
   const [pagoDialog, setPagoDialog] = useState(false);
   const [pagoForm, setPagoForm] = useState({ fecha: todayIso(), monto: '', id_metodo: '', clave: '' });
   const [pagoSaving, setPagoSaving] = useState(false);
-  // Evidencia opcional al registrar el pago (mismo destino que el modal de carga:
-  // validado → bucket ceps / col url_cep ; no validado → evidencias_efectivo / url_recibo).
+  // Evidencia opcional al registrar el pago (mismo destino que el modal de carga: bucket por
+  // método vía resolveBucketEvidencia; columna url_cep si está validado, url_recibo si no).
   const [apFile, setApFile] = useState<File | null>(null);
   const [apDragging, setApDragging] = useState(false);
   const [apEsValido, setApEsValido] = useState(false);
   const [apEsCep, setApEsCep] = useState(false);
   const [recalculandoAplic, setRecalculandoAplic] = useState(false);
+  const [reconciliando, setReconciliando] = useState(false);
 
   const [multaDialog, setMultaDialog] = useState(false);
   const [multaAcuerdoId, setMultaAcuerdoId] = useState<number | null>(null);
@@ -111,7 +114,7 @@ export default function CobranzaCuentaDetalle() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadSaving, setUploadSaving] = useState(false);
 
-  // ── Cargar evidencia de pago (por registro → bucket ceps / evidencias_efectivo) ──
+  // ── Cargar evidencia de pago (por registro → bucket ceps_stp / evidencias_efectivo) ──
   const [cargarPagoDialog, setCargarPagoDialog] = useState(false);
   const [cpTarget, setCpTarget] = useState<any | null>(null); // pago destino
 
@@ -256,12 +259,14 @@ export default function CobranzaCuentaDetalle() {
       }).select('id').single();
       if (e) throw e;
 
-      // 2) Evidencia opcional → bucket + columna según validado/CEP.
+      // 2) Evidencia opcional → bucket por método (ceps_stp / evidencias_efectivo).
       if (apFile && nuevoPago?.id) {
-        const bucket = apEsCep ? 'ceps' : 'evidencias_efectivo';
+        const bucket = resolveBucketEvidencia({
+          idMetodoPago: parseInt(pagoForm.id_metodo),
+          esCep: apEsCep,
+        });
         const columna = apEsValido ? 'url_cep' : 'url_recibo';
-        const ext = apFile.name.split('.').pop() ?? 'bin';
-        const path = `${cuentaId}/${nuevoPago.id}/${Date.now()}.${ext}`;
+        const path = pathEvidencia(cuentaId, nuevoPago.id, apFile.name);
         const { error: se } = await supabase.storage.from(bucket).upload(path, apFile, { upsert: true });
         if (se) throw se;
         const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
@@ -441,6 +446,45 @@ export default function CobranzaCuentaDetalle() {
     }
   }
 
+  // Reconcilia la suma de acuerdos contra el precio_final del contrato: el último acuerdo
+  // ABIERTO absorbe la diferencia. La RPC no toca cuentas hijas ni cuentas liquidadas —
+  // esas devuelven 'requiere_revision' y se revisan con legal contra el contrato.
+  async function handleReconciliarAcuerdos() {
+    setReconciliando(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('reconciliar_acuerdos_precio_final', {
+        p_id_cuenta_cobranza: Number(cuentaId),
+        p_dry_run: false,
+      });
+      if (error) {
+        // DDL pendiente: la RPC aún no existe en este entorno.
+        if (esSinPermiso(error) || /does not exist|function .* not found/i.test(error.message ?? '')) {
+          toast.error('La reconciliación aún no está habilitada en este ambiente.');
+          return;
+        }
+        throw error;
+      }
+      const fila = Array.isArray(data) ? data[0] : null;
+      if (!fila || fila.accion === 'sin_cambio') {
+        toast.success('Los acuerdos ya cuadran con el precio final.');
+      } else if (fila.accion === 'requiere_revision') {
+        toast.error(
+          fila.motivo === 'sin_acuerdo_abierto'
+            ? 'La cuenta está liquidada: la diferencia se revisa con legal contra el contrato.'
+            : 'No se pudo ajustar automáticamente; revisar manual.'
+        );
+      } else {
+        toast.success('Acuerdos reconciliados con el precio final.');
+      }
+      queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al reconciliar los acuerdos');
+    } finally {
+      setReconciliando(false);
+    }
+  }
+
   async function handleEstadoCuenta() {
     setGeneratingPDF(true);
     try {
@@ -603,7 +647,10 @@ export default function CobranzaCuentaDetalle() {
   const porcentajePagado = precio_final > 0 ? Math.min(100, (totalPagado / precio_final) * 100) : 0;
 
   const sumaAcuerdos = acuerdos.reduce((s: number, a: any) => s + a.monto, 0);
-  const hayDiscrepancia = Math.abs(precio_final - sumaAcuerdos) > 0.01;
+  // El precio de contrato es la fuente de verdad y la suma de acuerdos debe seguirlo.
+  // Las cuentas hijas de mantenimiento llevan precio_final = 0 por diseño (su plan es
+  // recurrente, no se compara contra un precio): ahí el banner sería un falso positivo.
+  const hayDiscrepancia = precio_final > 0 && Math.abs(precio_final - sumaAcuerdos) > 0.01;
   // Discrepancia dinero-recibido vs dinero-dispersado: si hay pagos crudos cuyo
   // monto no está aplicado en aplicaciones_pago (ej. pago manual sin dispersar),
   // se ofrece "Recalcular dispersión" (edge function recalcular-aplicaciones).
@@ -728,6 +775,7 @@ export default function CobranzaCuentaDetalle() {
     setPdfPreviewModal,
     hayDiscrepancia, sumaAcuerdos,
     hayDiscrepanciaAplicaciones, recalculandoAplic, handleRecalcularAplicaciones,
+    reconciliando, handleReconciliarAcuerdos,
     generatingPDF, handleEstadoCuenta,
     downloadingOferta, handleDownloadOferta,
     setTransferDialog: (v) => setTransferDialog(v),
@@ -1066,6 +1114,7 @@ export default function CobranzaCuentaDetalle() {
         target={cpTarget ? {
           id: cpTarget.id,
           metodo: cpTarget.metodo,
+          id_metodos_pago: cpTarget.id_metodos_pago,
           monto: cpTarget.monto,
           fecha_pago: cpTarget.fecha_pago,
           clave_rastreo: cpTarget.clave_rastreo,

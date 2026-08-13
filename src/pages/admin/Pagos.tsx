@@ -1521,8 +1521,11 @@ export default function Pagos() {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider> : null}
-                            {/* Discrepancy indicator */}
-                            {cuenta.tiene_acuerdos && Math.abs(cuenta.discrepancia || 0) > 0.01 && (
+                            {/* Discrepancy indicator — solo cuando hay un precio de contrato
+                                contra el que comparar. Las cuentas hijas de mantenimiento
+                                llevan precio_final = 0 por diseño (plan recurrente). */}
+                            {cuenta.tiene_acuerdos && (cuenta.precio_final || 0) > 0
+                              && Math.abs(cuenta.discrepancia || 0) > 0.01 && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>

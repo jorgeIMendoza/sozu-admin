@@ -39,7 +39,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     setMultaAcuerdoId, setMultaDialog, setMultaGestionAcuerdoId, setMultaGestionDialog,
     setPagoEvidenciaModal, setPdfPreviewModal,
     canDeletePago, openEliminarPago,
-    hayDiscrepancia, sumaAcuerdos,
+    hayDiscrepancia, sumaAcuerdos, reconciliando, handleReconciliarAcuerdos,
     hayDiscrepanciaAplicaciones, recalculandoAplic, handleRecalcularAplicaciones,
     generatingPDF, handleEstadoCuenta, downloadingOferta, handleDownloadOferta,
     setTransferDialog,
@@ -103,7 +103,8 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
         </div>
       )}
 
-      {/* Discrepancy warning */}
+      {/* Discrepancy warning — el precio final del contrato manda; el botón hace que la suma
+          de acuerdos lo siga (el último acuerdo abierto absorbe la diferencia). */}
       {hayDiscrepancia && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
           <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
@@ -116,6 +117,15 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
               {sumaAcuerdos > precio_final ? ' (acuerdos exceden el precio)' : ' (acuerdos faltantes)'}
             </p>
           </div>
+          {!isEnDemanda && (
+            <button
+              onClick={handleReconciliarAcuerdos}
+              disabled={reconciliando}
+              className="shrink-0 text-[11px] font-semibold text-amber-800 border border-amber-400 rounded-md px-2.5 py-1.5 hover:bg-amber-100 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {reconciliando ? 'Reconciliando…' : 'Reconciliar acuerdos'}
+            </button>
+          )}
         </div>
       )}
 
