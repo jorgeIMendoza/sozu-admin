@@ -481,7 +481,7 @@ async function resolveRecipient(
  * Envía la oferta digital por correo: el cuerpo lleva el link del cliente y los
  * PDFs solo si ya existen (la oferta digital no los genera al crearse).
  *
- * Es la utilería única del envío digital: la usa el envío automático al generar
+ * Es la utilería única del envío digital: la usa el envío al generar (opt-in)
  * la oferta y el botón "Correo" del popup de compartir, en todos los portales.
  */
 export async function sendDigitalOfferEmail(params: SendDigitalOfferEmailParams): Promise<boolean> {
