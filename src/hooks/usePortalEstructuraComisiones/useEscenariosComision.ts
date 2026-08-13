@@ -226,8 +226,23 @@ export interface VentaConciliada {
   incrementoPct: number | null;
 }
 
+/** Lo que se lleva un comisionista en todo el escenario. */
+export interface ComisionistaEnEscenario {
+  clave: string;
+  nombre: string;
+  /** Canales por los que participa, con cuántas ventas le tocaron en cada uno. */
+  canales: Array<{ nombre: string; ventas: number }>;
+  /** Suma de los % de cada venta en la que participa. */
+  pct: number;
+  importe: number;
+  /** Ventas del escenario en las que participa. */
+  ventas: number;
+}
+
 export interface EscenarioConciliado {
   ventas: VentaConciliada[];
+  /** Desglose de lo dispersado, por persona. Ordenado de mayor a menor. */
+  comisionistas: ComisionistaEnEscenario[];
   totales: {
     totalPct: number; externoPct: number; dispersadoPct: number; remanentePct: number;
     totalImporte: number; externoImporte: number; dispersadoImporte: number; remanenteImporte: number;
@@ -260,6 +275,13 @@ export function conciliarEscenario(
   const conciliadas: VentaConciliada[] = [];
   const canalesNoVigentes = new Set<string>();
 
+  /**
+   * Acumulador por persona. La clave es el `idPersonal` cuando existe, y el
+   * nombre cuando no: los renglones sin comisionista asignado no deben
+   * fusionarse entre canales como si fueran la misma persona.
+   */
+  const porComisionista = new Map<string, ComisionistaEnEscenario & { porCanal: Map<string, number> }>();
+
   for (const venta of ordenadas) {
     const cfg = configPorCanal.get(venta.idCanal);
     const ordinalEnCanal = (contadorPorCanal.get(venta.idCanal) ?? 0) + 1;
@@ -288,6 +310,17 @@ export function conciliarEscenario(
       if (!laVenta) continue;
       dispersadoPct += laVenta.pct;
       if (laVenta.tramo) incrementoPct = laVenta.tramo.incrementoPct;
+
+      const clave = com.idPersonal ?? `sin-persona|${cfg.idCanal}|${com.nombre}`;
+      const acumulado = porComisionista.get(clave) ?? {
+        clave, nombre: com.nombre, canales: [], pct: 0, importe: 0, ventas: 0,
+        porCanal: new Map<string, number>(),
+      };
+      acumulado.pct += laVenta.pct;
+      acumulado.importe += laVenta.importe;
+      acumulado.ventas += 1;
+      acumulado.porCanal.set(cfg.nombre, (acumulado.porCanal.get(cfg.nombre) ?? 0) + 1);
+      porComisionista.set(clave, acumulado);
     }
 
     const remanentePct = cfg.comisionTotalPct - cfg.comisionExternaPct - dispersadoPct;
@@ -318,8 +351,18 @@ export function conciliarEscenario(
     ventas,
   })).sort((a, b) => b.ventas - a.ventas);
 
+  const comisionistas: ComisionistaEnEscenario[] = Array.from(porComisionista.values())
+    .map(({ porCanal, ...resto }) => ({
+      ...resto,
+      canales: Array.from(porCanal.entries())
+        .map(([nombre, ventas]) => ({ nombre, ventas }))
+        .sort((a, b) => b.ventas - a.ventas),
+    }))
+    .sort((a, b) => b.pct - a.pct);
+
   return {
     ventas: conciliadas,
+    comisionistas,
     totales: {
       totalPct: suma(v => v.totalPct),
       externoPct: suma(v => v.externoPct),

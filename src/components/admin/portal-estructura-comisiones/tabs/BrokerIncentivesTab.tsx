@@ -375,7 +375,7 @@ function CanalEscalera({
                             {tieneOverride && (
                               <Tooltip>
                                 <TooltipTrigger>
-                                  <Badge variant="outline" className="text-[10px] border-accent text-accent gap-0.5">
+                                  <Badge variant="outline" className="text-[10px] border-primary text-primary gap-0.5">
                                     <User className="h-2.5 w-2.5" /> propia
                                   </Badge>
                                 </TooltipTrigger>
@@ -397,7 +397,7 @@ function CanalEscalera({
                                   insinúa. En tramo escalado va destacado. */}
                               <span className={cn(
                                 'font-mono text-xs font-semibold',
-                                v.tramo ? 'text-accent' : 'text-foreground/70',
+                                v.tramo ? 'text-primary' : 'text-foreground/70',
                               )}>
                                 {v.pct.toFixed(3)}%
                               </span>
@@ -472,7 +472,7 @@ function CanalEscalera({
                   precioPromUnidad={precioPromUnidad}
                   celdas={conciliacion.porVenta.map(v => ({ pct: v.dispersadoPct, importe: v.dispersadoImporte }))}
                   totalMes={conciliacion.mes.dispersadoImporte}
-                  tono="accent"
+                  tono="destacado"
                 />
                 <FilaConciliacion
                   etiqueta="= Remanente de comisión"
@@ -666,7 +666,7 @@ function TablaEscalones({
           {escaleraHeredada.map((t, i) => (
             <span key={t.ventasMeta}>
               {i > 0 && ' · '}
-              <span className={t.esOverride ? 'text-accent font-medium' : ''}>
+              <span className={t.esOverride ? 'text-primary font-medium' : ''}>
                 {t.ventasMeta}→+{t.incrementoPct}%{t.esOverride ? ' (propio)' : ''}
               </span>
             </span>
@@ -757,12 +757,12 @@ function FilaConciliacion({
   precioPromUnidad: number;
   celdas: Array<{ pct: number; importe: number }>;
   totalMes: number;
-  tono?: 'neutro' | 'accent' | 'remanente';
+  tono?: 'neutro' | 'destacado' | 'remanente';
   className?: string;
 }) {
   const colorPct = (pct: number) => {
     if (tono === 'remanente') return pct < -0.0001 ? 'text-destructive' : 'text-emerald-600';
-    if (tono === 'accent') return 'text-accent';
+    if (tono === 'destacado') return 'text-primary';
     return 'text-foreground/70';
   };
 
