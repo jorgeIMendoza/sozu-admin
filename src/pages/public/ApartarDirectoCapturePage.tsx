@@ -139,8 +139,18 @@ const ApartarDirectoCapturePage = () => {
     if (!reservationToken) return false;
     const marcarLista = (ok: boolean) => { if (ok) setCsfLista(true); return ok; };
     try {
-      const path = `oferta-digital/${offer.id}/csf_${Date.now()}_${file.name}`;
-      const { error: upErr } = await supabase.storage.from("documentos").upload(path, file, { upsert: true });
+      // Storage rechaza llaves con acentos, espacios o símbolos raros (400
+      // "Invalid key"): el nombre del archivo lo pone el cliente, así que se
+      // normaliza. El timestamp ya hace única la ruta, por eso no hay upsert
+      // (el upsert además obliga a UPDATE sobre `storage.objects`).
+      const safeName = file.name
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+        .slice(-80);
+      const path = `oferta-digital/${offer.id}/csf_${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabase.storage.from("documentos").upload(path, file, {
+        contentType: file.type || "application/pdf",
+      });
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from("documentos").getPublicUrl(path);
 
@@ -158,8 +168,10 @@ const ApartarDirectoCapturePage = () => {
         p_colonia: campos.colonia || null,
       });
       return marcarLista(!error && ok !== false);
-    } catch (e) {
-      console.error("Error guardando la constancia:", e);
+    } catch (e: any) {
+      // El detalle importa: storage devuelve 400 tanto por RLS como por llave
+      // inválida, y sin el mensaje no hay forma de distinguirlos en soporte.
+      console.error("Error guardando la constancia:", e?.message ?? e, e);
       return false;
     }
   };
