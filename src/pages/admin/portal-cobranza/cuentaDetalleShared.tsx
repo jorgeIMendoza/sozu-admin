@@ -404,6 +404,9 @@ export interface CuentaDetalleCtx {
   hayDiscrepanciaAplicaciones: boolean;
   recalculandoAplic: boolean;
   handleRecalcularAplicaciones: () => void;
+  /** Reconcilia la suma de acuerdos contra el precio_final del contrato. */
+  reconciliando: boolean;
+  handleReconciliarAcuerdos: () => void;
   generatingPDF: boolean;
   downloadingOferta: boolean;
   handleEstadoCuenta: () => void;

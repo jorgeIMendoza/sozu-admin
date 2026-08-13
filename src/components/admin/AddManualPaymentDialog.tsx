@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { BUCKET_CEPS_STP, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -297,43 +298,49 @@ export function AddManualPaymentDialog({
       // Get form values for evidence files
       const formValues = form.getValues();
       
+      // Bucket por método de pago: STP / STP-manual → ceps_stp ; efectivo, cheque y demás →
+      // evidencias_efectivo. El bucket `documentos` ya no recibe evidencias de pago.
+      const bucketEvidencia = resolveBucketEvidencia({
+        idMetodoPago: parseInt(formValues.id_metodos_pago),
+      });
+
       // 1. Upload new evidence file
       let nuevaEvidenciaUrl: string | null = null;
       if (formValues.evidencia_pago && formValues.evidencia_pago instanceof File) {
-        const fileName = `evidencia_${Date.now()}_${formValues.evidencia_pago.name}`;
+        const filePath = pathEvidencia(cuentaCobranzaId, pagoExistente.id, formValues.evidencia_pago.name);
         const { error: uploadError } = await supabase.storage
-          .from('documentos')
-          .upload(fileName, formValues.evidencia_pago);
-        
+          .from(bucketEvidencia)
+          .upload(filePath, formValues.evidencia_pago, { upsert: true });
+
         if (uploadError) {
           console.error("Error uploading evidence:", uploadError);
           throw new Error("No se pudo subir la evidencia de pago");
         }
-        
+
         const { data: urlData } = supabase.storage
-          .from('documentos')
-          .getPublicUrl(fileName);
-        
+          .from(bucketEvidencia)
+          .getPublicUrl(filePath);
+
         nuevaEvidenciaUrl = urlData.publicUrl;
       }
-      
-      // 2. Upload new CEP file if STP-Manual
+
+      // 2. Upload new CEP file if STP-Manual — un CEP siempre vive en ceps_stp
       let nuevoCepUrl: string | null = null;
       if (isStpManual && formValues.archivo_cep && formValues.archivo_cep instanceof File) {
-        const fileName = `cep_${Date.now()}_${formValues.archivo_cep.name}`;
+        const filePath = pathEvidencia(cuentaCobranzaId, pagoExistente.id, formValues.archivo_cep.name);
         const { error: uploadError } = await supabase.storage
-          .from('documentos')
-          .upload(fileName, formValues.archivo_cep);
-        
+          .from(BUCKET_CEPS_STP)
+          .upload(filePath, formValues.archivo_cep, { upsert: true });
+
         if (uploadError) {
           console.error("Error uploading CEP:", uploadError);
           throw new Error("No se pudo subir el archivo CEP");
         }
-        
+
         const { data: urlData } = supabase.storage
-          .from('documentos')
-          .getPublicUrl(fileName);
-        
+          .from(BUCKET_CEPS_STP)
+          .getPublicUrl(filePath);
+
         nuevoCepUrl = urlData.publicUrl;
       }
       
@@ -564,37 +571,43 @@ export function AddManualPaymentDialog({
       let evidenciaUrl = null;
       let cepUrl = null;
 
+      // Bucket por método de pago. El pago aún no existe, así que la ruta usa el prefijo
+      // `nuevo/` bajo la carpeta de la cuenta en lugar de la raíz del bucket.
+      const bucketEvidencia = resolveBucketEvidencia({
+        idMetodoPago: parseInt(data.id_metodos_pago),
+      });
+
       // Upload evidencia file
       if (data.evidencia_pago) {
-        const fileName = `evidencia_${Date.now()}_${data.evidencia_pago.name}`;
+        const filePath = pathEvidencia(cuentaCobranzaId, 'nuevo', data.evidencia_pago.name);
         const { error: uploadError } = await supabase.storage
-          .from('documentos')
-          .upload(fileName, data.evidencia_pago);
-        
+          .from(bucketEvidencia)
+          .upload(filePath, data.evidencia_pago, { upsert: true });
+
         if (uploadError) throw uploadError;
-        
+
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from('documentos')
-          .getPublicUrl(fileName);
-        
+          .from(bucketEvidencia)
+          .getPublicUrl(filePath);
+
         evidenciaUrl = urlData.publicUrl;
       }
 
-      // Upload CEP file if STP-Manual
+      // Upload CEP file if STP-Manual — un CEP siempre vive en ceps_stp
       if (data.archivo_cep && isStpManual) {
-        const fileName = `cep_${Date.now()}_${data.archivo_cep.name}`;
+        const filePath = pathEvidencia(cuentaCobranzaId, 'nuevo', data.archivo_cep.name);
         const { error: uploadError } = await supabase.storage
-          .from('documentos')
-          .upload(fileName, data.archivo_cep);
-        
+          .from(BUCKET_CEPS_STP)
+          .upload(filePath, data.archivo_cep, { upsert: true });
+
         if (uploadError) throw uploadError;
-        
+
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from('documentos')
-          .getPublicUrl(fileName);
-        
+          .from(BUCKET_CEPS_STP)
+          .getPublicUrl(filePath);
+
         cepUrl = urlData.publicUrl;
       }
 
