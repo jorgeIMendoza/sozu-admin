@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "react-router-dom";
-import { RESERVATION_TOKEN_PARAM, parseReservationToken } from "@/lib/offers/reservation-token";
+import {
+  RESERVATION_TOKEN_PARAM,
+  cargarReservacionPublica,
+  parseReservationToken,
+  LINK_NO_VIGENTE,
+} from "@/lib/offers/reservation-token";
 import sozuLogo from "@/assets/sozu-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
@@ -616,18 +622,31 @@ const ReservarPage = () => {
     s.reservations.find((r) => r.id === formalReservationId)
   );
 
+  // El id FR-XXXX vive en el store local del navegador que armó el flujo, así que
+  // un link compartido (el asesor captura y le manda la liga al cliente) llegaba
+  // a un store vacío y la pantalla se quedaba en "Cargando…" para siempre. La
+  // oferta se resuelve desde el token del link, que sí es de la BD.
+  const { data: reservacion, isLoading: cargandoReservacion } = useQuery({
+    queryKey: ["reservacion-publica", reservationToken],
+    queryFn: () => cargarReservacionPublica(supabase, reservationToken),
+    enabled: !!reservationToken && !formalReservation,
+    staleTime: 60_000,
+  });
+
   // La oferta puede no estar en el store (navegación directa / recarga), por eso
   // se carga desde la BD igual que en la oferta pública. Numérico = id real.
-  const offerId = formalReservation?.offerId ?? "";
+  const offerId =
+    formalReservation?.offerId ??
+    (reservacion?.id_oferta != null ? String(reservacion.id_oferta) : "");
   const isNumericOffer = !!offerId && !isNaN(parseInt(offerId, 10));
-  const { data: dbOfferResult } = useOfferFromDB(offerId);
+  const { data: dbOfferResult, isLoading: cargandoOferta } = useOfferFromDB(offerId);
   const mockOffer = useOfferById(offerId);
   const offer = isNumericOffer ? (dbOfferResult?.offer ?? null) : (mockOffer ?? null);
   // Monto del apartado del proyecto (RPC get_oferta_financials → proyectos.monto_apartado).
   const montoApartado = apartadoDeOferta(offer);
   const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
-  const agentOfferId = formalReservation?.offerId;
+  const agentOfferId = offerId || undefined;
   useEffect(() => {
     if (!agentOfferId) return;
     (async () => {
@@ -666,11 +685,26 @@ const ReservarPage = () => {
       .catch(() => {});
   }, [clientEmail, clientName]);
 
-  if (!formalReservation || !offer || !formalReservationId) {
+  // Ya no se exige el registro local: basta la oferta (del store o de la BD).
+  const resolviendo = cargandoReservacion || (!!offerId && cargandoOferta);
+  if (!offer && resolviendo) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground text-sm">
         Cargando…
       </div>
+    );
+  }
+
+  // Sin oferta que mostrar (token ausente, vencido o de otra reservación) el
+  // cliente veía un "Cargando…" eterno. Mejor decirle qué pasó.
+  if (!offer || !formalReservationId) {
+    return (
+      <PublicShell>
+        <div className="mx-auto max-w-md px-4 py-20 text-center">
+          <h1 className="mb-2 text-xl font-semibold">No pudimos abrir tu apartado</h1>
+          <p className="text-sm text-muted-foreground">{LINK_NO_VIGENTE}</p>
+        </div>
+      </PublicShell>
     );
   }
 
