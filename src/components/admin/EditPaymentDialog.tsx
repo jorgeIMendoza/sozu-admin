@@ -129,15 +129,21 @@ export function EditPaymentDialog({
 
       if (updateError) throw updateError;
 
-      // Update all applications for this payment with the new amount
-      const { error: updateApplicationsError } = await supabase
-        .from("aplicaciones_pago")
-        .update({ monto })
-        .eq("id_pago", paymentId)
-        .eq("activo", true);
+      // Redistribuir la dispersión de TODA la cuenta.
+      //
+      // Antes esto era un UPDATE que escribía `monto` (el total del pago) en cada una de sus
+      // aplicaciones: si el pago estaba repartido entre N acuerdos, el aplicado quedaba
+      // multiplicado por N. Es la vía por la que se acumularon pagos sobreaplicados.
+      // La EF reparte FIFO y es idempotente, igual que en AddManualPaymentDialog y
+      // PaymentDetailDialog.
+      const { error: recalcError } = await supabase.functions.invoke("recalcular-aplicaciones", {
+        body: { id_cuenta_cobranza: cuentaCobranzaId },
+      });
 
-      if (updateApplicationsError) throw updateApplicationsError;
-      
+      if (recalcError) {
+        throw new Error("El pago se guardó, pero no se pudo recalcular la dispersión. Usa \"Recalcular dispersión\" en el detalle de la cuenta.");
+      }
+
       return { paymentId, monto };
     },
     onSuccess: async (data) => {
@@ -159,7 +165,7 @@ export function EditPaymentDialog({
       
       toast({
         title: "Pago actualizado",
-        description: "El pago ha sido actualizado correctamente",
+        description: "Se guardó el pago y se recalculó la dispersión de la cuenta.",
       });
       queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaCobranzaId] });
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaCobranzaId] });
