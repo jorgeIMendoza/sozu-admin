@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
+import { metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 
 const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
@@ -591,9 +592,11 @@ function EditPagoValidacionModal({ row, onClose }: {
 }
 
 // ── Cargar evidencia / CEP ───────────────────────────────────────────────────
-// Bucket por check "Es CEP"; columna por check "Validado".
-//   validado  → url_cep  ; no validado → url_recibo
-//   es CEP    → bucket 'ceps' ; no CEP   → bucket 'evidencias_efectivo'
+// Bucket por MÉTODO de pago (resolveBucketEvidencia); columna por check "Validado".
+//   validado                  → url_cep  ; no validado → url_recibo
+//   STP / STP-manual          → bucket 'ceps_stp' (su evidencia es un CEP por definición)
+//   transferencia bancaria    → 'ceps_stp' si es CEP, si no 'evidencias_efectivo'
+//   efectivo / cheque / demás → 'evidencias_efectivo'
 
 function CargarEvidenciaModal({ row, onClose }: {
   row: PagoRow | null;
@@ -606,19 +609,26 @@ function CargarEvidenciaModal({ row, onClose }: {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  useEffect(() => {
-    setFile(null); setDragging(false); setEsValido(false); setEsCep(false);
-  }, [row?.pago_id]);
+  // STP y STP-manual siempre van a ceps_stp; solo transferencia bancaria decide con el check.
+  const cepForzado = metodoEsCepForzado(row?.id_metodos_pago, row?.metodo_nombre);
+  const cepOpcional = !cepForzado && metodoAdmiteCep(row?.id_metodos_pago, row?.metodo_nombre);
 
-  const bucket = esCep ? "ceps" : "evidencias_efectivo";
+  useEffect(() => {
+    setFile(null); setDragging(false); setEsValido(false); setEsCep(cepForzado);
+  }, [row?.pago_id, cepForzado]);
+
+  const bucket = resolveBucketEvidencia({
+    idMetodoPago: row?.id_metodos_pago,
+    nombreMetodo: row?.metodo_nombre,
+    esCep,
+  });
   const columna: "url_cep" | "url_recibo" = esValido ? "url_cep" : "url_recibo";
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error("Selecciona un archivo");
       if (!row) throw new Error("No hay pago seleccionado");
-      const ext = file.name.split(".").pop() ?? "bin";
-      const path = `${row.cuenta_id}/${row.pago_id}/${Date.now()}.${ext}`;
+      const path = pathEvidencia(row.cuenta_id, row.pago_id, file.name);
       const { error: se } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
       if (se) throw se;
       const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
@@ -701,10 +711,18 @@ function CargarEvidenciaModal({ row, onClose }: {
               <input type="checkbox" checked={esValido} onChange={e => setEsValido(e.target.checked)} className="size-4 accent-primary" />
               <span className="text-[13px] font-medium text-foreground">Pago validado</span>
             </label>
-            <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
-              <input type="checkbox" checked={esCep} onChange={e => setEsCep(e.target.checked)} className="size-4 accent-primary" />
-              <span className="text-[13px] font-medium text-foreground">Es CEP</span>
-            </label>
+            {/* Solo transferencia bancaria decide: STP/STP-manual siempre es CEP y los demás
+                métodos nunca lo son. */}
+            {cepOpcional && (
+              <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+                <input type="checkbox" checked={esCep} onChange={e => setEsCep(e.target.checked)} className="size-4 accent-primary" />
+                <span className="text-[13px] font-medium text-foreground">Es CEP</span>
+              </label>
+            )}
+            <p className="text-[11px] text-muted-foreground px-1">
+              Se guardará en <span className="font-mono font-medium">{bucket}</span>
+              {cepForzado && " (los pagos STP siempre van al bucket de CEPs)"}
+            </p>
           </div>
         </div>
         <div className="px-5 py-4 border-t flex justify-end gap-2">

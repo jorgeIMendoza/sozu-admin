@@ -152,6 +152,11 @@ const ApartarDirectoCapturePage = () => {
         body: { token: reservationToken, filename: file.name },
       });
       if (firmaErr || !firma?.uploadToken) {
+        // supabase-js no expone el cuerpo del error de una EF: sin leer el
+        // `context` no se distingue un token vencido (403) de una oferta sin
+        // lead (409), y en consola solo aparece "non-2xx status code".
+        const detalle = await (firmaErr as any)?.context?.json?.().catch(() => null);
+        console.error("oferta-csf-subir falló:", detalle ?? firmaErr ?? "sin uploadToken");
         throw firmaErr ?? new Error("No se pudo preparar la subida de la constancia");
       }
 

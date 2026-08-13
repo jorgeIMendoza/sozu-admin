@@ -342,6 +342,42 @@ const AgentUnidadesProyecto = () => {
     ? schemesDirect
     : (selectedProperty ? getSchemesForProperty(selectedProperty) : []);
 
+  // Bodegas y estacionamientos de la unidad, con su costo. El detalle mostraba solo
+  // `precio_lista` de la propiedad, así que el agente veía un precio y al configurar
+  // la oferta le aparecía otro (el que sí suma los productos). Mismo cálculo que
+  // NewOfferDialog: precio_lista del producto × m2, sin distinguir es_incluido.
+  const { data: unidadExtras } = useQuery({
+    queryKey: ["unidad-extras-costo", selectedProperty?.id],
+    queryFn: async () => {
+      const [bodegasRes, estacionamientosRes] = await Promise.all([
+        (supabase as any)
+          .from("bodegas")
+          .select("id, nombre, m2, productos_servicios!bodegas_id_producto_fkey(precio_lista)")
+          .eq("id_propiedad", selectedProperty.id)
+          .eq("activo", true),
+        (supabase as any)
+          .from("estacionamientos")
+          .select("id, nombre, m2, productos_servicios!estacionamientos_id_producto_fkey(precio_lista)")
+          .eq("id_propiedad", selectedProperty.id)
+          .eq("activo", true),
+      ]);
+      const mapear = (filas: any[], tipo: "bodega" | "estacionamiento") =>
+        (filas || []).map((f: any) => ({
+          id: `${tipo}-${f.id}`,
+          tipo,
+          nombre: f.nombre as string,
+          costo: ((f.productos_servicios as any)?.precio_lista || 0) * (f.m2 || 0),
+        }));
+      return [
+        ...mapear(bodegasRes.data, "bodega"),
+        ...mapear(estacionamientosRes.data, "estacionamiento"),
+      ];
+    },
+    enabled: !!selectedProperty?.id,
+  });
+  const extrasConCosto = (unidadExtras ?? []).filter((e) => e.costo > 0);
+  const extrasTotal = extrasConCosto.reduce((suma, e) => suma + e.costo, 0);
+
   useEffect(() => { setPage(0); }, [filterProjectNames, filterModelNames, recamarasFilter, filterLevels, filterBodega, filterEstacionamiento, priceRange, normalizedSearchQuery]);
 
   // Guardar filtros para no reiniciarlos al navegar dentro de la sesión.
@@ -639,9 +675,35 @@ const AgentUnidadesProyecto = () => {
 
                 <PropertyFloorPlanButton propertyId={selectedProperty.id} />
                 {selectedProperty.precio_lista > 0 && (
-                  <div className="rounded-md border border-primary/20 bg-primary/[0.06] px-5 py-4 text-center">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/80">Precio de Lista</p>
-                    <p className="mt-1 text-2xl font-bold text-primary">{formatPrice(selectedProperty.precio_lista)}</p>
+                  <div className="rounded-md border border-primary/20 bg-primary/[0.06] px-5 py-4">
+                    {extrasTotal > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
+                          <span className="text-muted-foreground">Propiedad</span>
+                          <span className="font-semibold tabular-nums text-foreground">{formatPrice(selectedProperty.precio_lista)}</span>
+                        </div>
+                        {extrasConCosto.map((extra) => (
+                          <div key={extra.id} className="flex items-baseline justify-between gap-3 text-xs">
+                            <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                              {extra.tipo === "bodega"
+                                ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+                                : <Car className="h-3.5 w-3.5 shrink-0 text-primary/70" />}
+                              <span className="truncate">{extra.nombre}</span>
+                            </span>
+                            <span className="tabular-nums text-muted-foreground">+{formatPrice(extra.costo)}</span>
+                          </div>
+                        ))}
+                        <div className="flex items-baseline justify-between gap-3 border-t border-primary/20 pt-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/80">Total</span>
+                          <span className="text-2xl font-bold tabular-nums text-primary">{formatPrice(selectedProperty.precio_lista + extrasTotal)}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/80">Precio de Lista</p>
+                        <p className="mt-1 text-2xl font-bold text-primary">{formatPrice(selectedProperty.precio_lista)}</p>
+                      </div>
+                    )}
                   </div>
                 )}
                 {dialogSchemes.length > 0 && (

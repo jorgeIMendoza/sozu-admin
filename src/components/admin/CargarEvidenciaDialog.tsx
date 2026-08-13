@@ -5,11 +5,14 @@ import { toast } from 'sonner';
 import { Loader2, UploadCloud, FileCheck } from 'lucide-react';
 import { fmtCurrency, fmtDate } from '@/pages/admin/portal-cobranza/cuentaDetalleShared';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
 
 // Pago destino al que se le adjunta la evidencia.
 export interface EvidenciaTarget {
   id: number;                       // id del pago
   metodo?: string | null;
+  /** metodos_pago.id — decide el bucket. RP solo trae el nombre, ahí se cae a `metodo`. */
+  id_metodos_pago?: number | null;
   monto?: number | null;
   fecha_pago?: string | null;
   clave_rastreo?: string | null;
@@ -30,7 +33,7 @@ interface CargarEvidenciaDialogProps {
 /**
  * Modal canónico de "Cargar evidencia de pago" del portal de cobranza.
  * Base tomada del detalle de cuenta (CC) — dropzone + checks que deciden
- * bucket (ceps / evidencias_efectivo) y columna (url_cep / url_recibo).
+ * bucket (ceps_stp / evidencias_efectivo) y columna (url_cep / url_recibo).
  * Compartido entre CobranzaCuentaDetalle (CC) y CollectionPayments (RP).
  */
 export function CargarEvidenciaDialog({
@@ -53,18 +56,27 @@ export function CargarEvidenciaDialog({
   const existingClave = target?.clave_rastreo?.trim() || '';
   const claveEditable = captureClaveRastreo && !existingClave;
 
+  // STP y STP-manual siempre van a ceps_stp: su evidencia es un CEP por definición.
+  const cepForzado = metodoEsCepForzado(target?.id_metodos_pago, target?.metodo);
+  // Solo Transferencia bancaria puede caer en cualquiera de los dos buckets.
+  const cepOpcional = !cepForzado && metodoAdmiteCep(target?.id_metodos_pago, target?.metodo);
+
   // Reset al abrir/cambiar de pago destino.
   useEffect(() => {
     if (open) {
       setFile(null);
       setEsValido(false);
-      setEsCep(false);
+      setEsCep(cepForzado);
       setClaveRastreo(existingClave);
     }
-  }, [open, target?.id, existingClave]);
+  }, [open, target?.id, existingClave, cepForzado]);
 
-  // Bucket por check "Es CEP"; columna por check "Validado".
-  const bucket = esCep ? 'ceps' : 'evidencias_efectivo';
+  // Bucket por método (+ check "Es CEP" en transferencia); columna por check "Validado".
+  const bucket = resolveBucketEvidencia({
+    idMetodoPago: target?.id_metodos_pago,
+    nombreMetodo: target?.metodo,
+    esCep,
+  });
   const columna = esValido ? 'url_cep' : 'url_recibo';
 
   async function handleSubmit() {
@@ -72,8 +84,7 @@ export function CargarEvidenciaDialog({
     if (!target?.id) { toast.error('No hay pago destino'); return; }
     setSaving(true);
     try {
-      const ext = file.name.split('.').pop() ?? 'bin';
-      const path = `${cuentaId}/${target.id}/${Date.now()}.${ext}`;
+      const path = pathEvidencia(cuentaId, target.id, file.name);
       const { error: se } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
       if (se) throw se;
       const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
@@ -197,11 +208,19 @@ export function CargarEvidenciaDialog({
                 className="size-4 accent-primary" />
               <span className="text-[13px] font-medium text-foreground">Pago validado</span>
             </label>
-            <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
-              <input type="checkbox" checked={esCep} onChange={(e) => setEsCep(e.target.checked)}
-                className="size-4 accent-primary" />
-              <span className="text-[13px] font-medium text-foreground">Es CEP</span>
-            </label>
+            {/* Solo transferencia bancaria decide: STP/STP-manual siempre es CEP y los
+                demás métodos nunca lo son. */}
+            {cepOpcional && (
+              <label className="flex items-center gap-2.5 cursor-pointer rounded-md border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors">
+                <input type="checkbox" checked={esCep} onChange={(e) => setEsCep(e.target.checked)}
+                  className="size-4 accent-primary" />
+                <span className="text-[13px] font-medium text-foreground">Es CEP</span>
+              </label>
+            )}
+            <p className="text-[11px] text-muted-foreground px-1">
+              Se guardará en <span className="font-mono font-medium">{bucket}</span>
+              {cepForzado && ' (los pagos STP siempre van al bucket de CEPs)'}
+            </p>
           </div>
         </div>
         <DialogFooter>

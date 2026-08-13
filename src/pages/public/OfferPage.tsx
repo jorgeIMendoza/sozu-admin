@@ -701,11 +701,9 @@ const OfferPage = () => {
                         {ctaLabel}
                         {!ctaDisabled && !isReserved && <ChevronRight className="w-4 h-4" />}
                       </button>
-                      {!ctaDisabled && (
-                        <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
-                          Apartado reembolsable · Sin compromiso
-                        </p>
-                      )}
+                      {/* Nada de "apartado reembolsable · sin compromiso": eso era de
+                          la reserva provisional, que no está implementada. El apartado
+                          que sí opera es el SPEI, y no es reembolsable. */}
                     </>
                   ) : null}
                 </div>
