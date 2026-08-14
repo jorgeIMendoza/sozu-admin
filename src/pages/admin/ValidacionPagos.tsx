@@ -25,7 +25,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
-import { metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
+import { crearStoreFiltros } from "@/lib/filtrosPersistentes";
+import { etiquetaBucketEvidencia, mensajeErrorSubidaEvidencia, metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 
 const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
@@ -652,7 +653,11 @@ function CargarEvidenciaModal({ row, onClose }: {
       onClose();
     },
     onError: (err: any) => {
-      toast({ title: "Error al subir evidencia", description: err.message, variant: "destructive" });
+      toast({
+        title: "Error al subir evidencia",
+        description: mensajeErrorSubidaEvidencia(err, bucket),
+        variant: "destructive",
+      });
     },
   });
 
@@ -720,8 +725,8 @@ function CargarEvidenciaModal({ row, onClose }: {
               </label>
             )}
             <p className="text-[11px] text-muted-foreground px-1">
-              Se guardará en <span className="font-mono font-medium">{bucket}</span>
-              {cepForzado && " (los pagos STP siempre van al bucket de CEPs)"}
+              Se archivará como <span className="font-medium">{etiquetaBucketEvidencia(bucket)}</span>
+              {cepForzado && " (los pagos por STP siempre se archivan como CEP)"}
             </p>
           </div>
         </div>
@@ -738,33 +743,43 @@ function CargarEvidenciaModal({ row, onClose }: {
 
 // ── Página principal ───────────────────────────────────────────────────────────
 
-// Filtros persistidos en localStorage (sobreviven navegación, F5 y nueva sesión).
-const FILTROS_KEY = "validacion-pagos-filtros";
-function loadFiltros(): any {
-  try { return JSON.parse(localStorage.getItem(FILTROS_KEY) || "{}"); } catch { return {}; }
-}
+// Filtros persistidos: sobreviven navegación y F5. Se borran al cerrar sesión
+// (limpiarTodosLosFiltros) o con "Limpiar filtros".
+const filtrosVP = crearStoreFiltros("admin_validacion_pagos", {
+  searchCuenta: "",
+  searchCliente: "",
+  searchDepto: "",
+  filtroProyecto: "todos",
+  // Los Set se guardan y reconstruyen solos: el storage del store los serializa.
+  filtroEstados: new Set<string>(),
+  filtroMetodos: new Set<number>(),
+  filtroTipos: new Set<string>(),
+  filtroComprobante: "todos",
+  currentPage: 1,
+});
 
 export default function ValidacionPagos() {
   const { canUpdate, canDelete } = usePagePermissions("/admin/validacion-pagos");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { eliminarPago, isDeleting } = useEliminarPago();
-  const PF = useMemo(loadFiltros, []);
-  const [searchCuenta, setSearchCuenta] = useState<string>(PF.searchCuenta ?? "");
-  const [searchCliente, setSearchCliente] = useState<string>(PF.searchCliente ?? "");
-  const [searchDepto, setSearchDepto] = useState<string>(PF.searchDepto ?? "");
-  const [debouncedSearch, setDebouncedSearch] = useState<string>((PF.searchCuenta ?? "").trim());
-  const [debouncedCliente, setDebouncedCliente] = useState<string>((PF.searchCliente ?? "").trim());
-  const [debouncedDepto, setDebouncedDepto] = useState<string>((PF.searchDepto ?? "").trim());
-  const [filtroProyecto, setFiltroProyecto] = useState<string>(PF.filtroProyecto ?? "todos");
-  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set(PF.filtroEstados ?? []));
-  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set(PF.filtroMetodos ?? []));
+  // Filtros: viven en el store persistido, no en useState.
+  const [searchCuenta, setSearchCuenta] = filtrosVP.useFiltro("searchCuenta");
+  const [searchCliente, setSearchCliente] = filtrosVP.useFiltro("searchCliente");
+  const [searchDepto, setSearchDepto] = filtrosVP.useFiltro("searchDepto");
+  // Los debounced sí son estado de pantalla: arrancan con lo guardado y los mueve el efecto.
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(() => filtrosVP.leer().searchCuenta.trim());
+  const [debouncedCliente, setDebouncedCliente] = useState<string>(() => filtrosVP.leer().searchCliente.trim());
+  const [debouncedDepto, setDebouncedDepto] = useState<string>(() => filtrosVP.leer().searchDepto.trim());
+  const [filtroProyecto, setFiltroProyecto] = filtrosVP.useFiltro("filtroProyecto");
+  const [filtroEstados, setFiltroEstados] = filtrosVP.useFiltro("filtroEstados");
+  const [filtroMetodos, setFiltroMetodos] = filtrosVP.useFiltro("filtroMetodos");
   const [searchProyecto, setSearchProyecto] = useState("");
   const [searchMetodo, setSearchMetodo] = useState("");
   const [searchComprobante, setSearchComprobante] = useState("");
-  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set(PF.filtroTipos ?? []));
-  const [filtroComprobante, setFiltroComprobante] = useState<string>(PF.filtroComprobante ?? "todos");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [filtroTipos, setFiltroTipos] = filtrosVP.useFiltro("filtroTipos");
+  const [filtroComprobante, setFiltroComprobante] = filtrosVP.useFiltro("filtroComprobante");
+  const [currentPage, setCurrentPage] = filtrosVP.useFiltro("currentPage");
   const [detallePagoId, setDetallePagoId] = useState<number | null>(null);
   const [detallePagoRow, setDetallePagoRow] = useState<PagoRow | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -809,14 +824,7 @@ export default function ValidacionPagos() {
     return () => clearTimeout(t);
   }, [searchDepto]);
 
-  // Persistir filtros seleccionados (localStorage).
-  useEffect(() => {
-    localStorage.setItem(FILTROS_KEY, JSON.stringify({
-      searchCuenta, searchCliente, searchDepto, filtroProyecto,
-      filtroEstados: [...filtroEstados], filtroMetodos: [...filtroMetodos],
-      filtroTipos: [...filtroTipos], filtroComprobante,
-    }));
-  }, [searchCuenta, searchCliente, searchDepto, filtroProyecto, filtroEstados, filtroMetodos, filtroTipos, filtroComprobante]);
+
 
   // ── Main query ────────────────────────────────────────────────────────────────
 

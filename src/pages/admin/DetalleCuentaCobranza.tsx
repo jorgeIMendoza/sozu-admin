@@ -153,7 +153,7 @@ interface Multa {
 
 import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
-import { pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
+import { mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
@@ -2491,7 +2491,7 @@ export default function DetalleCuentaCobranza() {
         .from(bucket)
         .upload(filePath, file, { upsert: true });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) throw new Error(mensajeErrorSubidaEvidencia(uploadError, bucket));
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
@@ -2534,7 +2534,7 @@ export default function DetalleCuentaCobranza() {
 
       toast({
         title: "Error",
-        description: "No se pudo subir la evidencia de pago",
+        description: error instanceof Error ? error.message : "No se pudo subir la evidencia de pago",
         variant: "destructive",
       });
     } finally {
