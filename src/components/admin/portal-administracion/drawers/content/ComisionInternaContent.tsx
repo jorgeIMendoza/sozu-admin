@@ -404,7 +404,7 @@ export function ComisionInternaContent({
                         </p>
                         <p className="text-xs text-muted-foreground">{c.rol}</p>
                         <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
-                          {c.porcentaje.toFixed(2)}% · {fmtMxn(c.monto)}
+                          {c.porcentaje.toFixed(3)}% · {fmtMxn(c.monto)}
                         </p>
                       </div>
                       {!readOnly && (
