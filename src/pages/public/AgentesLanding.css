@@ -44,7 +44,9 @@
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  /* clip (no hidden): recorta el desborde horizontal SIN volverse contenedor de
+     scroll, para que el nav sticky se siga pegando al viewport al hacer scroll. */
+  overflow-x: clip;
   min-height: 100vh;
 }
 
@@ -150,7 +152,7 @@
   /* Altura por contenido (sin forzar 100vh): así no queda hueco arriba cuando
      la galería es más baja que la pantalla. El contenido arranca justo bajo el nav. */
   display: grid; grid-template-columns: 1.02fr .98fr; align-items: center;
-  gap: 48px; padding: clamp(84px, 10vh, 112px) 56px clamp(52px, 8vh, 84px); overflow: hidden;
+  gap: 48px; padding: clamp(32px, 4vh, 56px) 56px clamp(52px, 8vh, 84px); overflow: hidden;
 }
 .al-hero-bg { position: absolute; inset: 0; pointer-events: none; z-index: 0;
   background:
@@ -168,7 +170,7 @@
 
 @media (max-height: 820px) {
   .al-hero-h1 { font-size: clamp(34px, 6.2vh, 58px); }
-  .al-hero { padding-top: clamp(76px, 10vh, 100px); padding-bottom: clamp(44px, 6vh, 68px); }
+  .al-hero { padding-top: clamp(28px, 4vh, 48px); padding-bottom: clamp(44px, 6vh, 68px); }
 }
 @media (max-height: 660px) { .al-hero-h1 { font-size: clamp(28px, 5.6vh, 46px); } }
 
@@ -325,7 +327,7 @@
 @media (max-width: 980px) {
   .al-navlinks { display: none !important; }
   .al-nav { padding: 12px 20px !important; }
-  .al-hero { grid-template-columns: 1fr !important; padding: 100px 20px 48px !important; min-height: auto !important; gap: 32px !important; text-align: left; }
+  .al-hero { grid-template-columns: 1fr !important; padding: 28px 20px 48px !important; min-height: auto !important; gap: 32px !important; text-align: left; }
   .al-hero-visual { order: 2; }
   .al-oferta, .al-section, .al-cta, .al-footer { padding-left: 20px !important; padding-right: 20px !important; }
   .al-oferta-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 28px !important; }
