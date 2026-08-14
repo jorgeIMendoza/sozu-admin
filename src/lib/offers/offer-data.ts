@@ -310,8 +310,9 @@ export interface OfertaComercial {
   /** Meses restantes de mensualidades (hoy→entrega−1 mes) desde RPC. Para nota legal. */
   mesesRestantes?: number;
   /**
-   * Monto del apartado del proyecto (`proyectos.monto_apartado`), vía RPC. Es el
-   * mismo número que se cobra en el flujo de pago. undefined → `APARTADO_DEFAULT_MXN`.
+   * Monto del apartado de la unidad (`propiedades.monto_apartado`), vía RPC. Es el
+   * mismo número que se cobra en el flujo de pago. `0` = el proyecto no cobra
+   * apartado; undefined → `APARTADO_DEFAULT_MXN`.
    */
   apartadoAmount?: number;
   /** Plano del nivel (edificios_niveles_planos.imagen_url) para señalar la ubicación de la unidad. */
