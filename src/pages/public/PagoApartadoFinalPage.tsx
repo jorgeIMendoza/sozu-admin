@@ -8,10 +8,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { Wallet, Copy, CheckCircle2, ArrowLeft, ShieldCheck, Info, Eye } from "lucide-react";
-import { APARTADO_DEFAULT_MXN } from "@/lib/offers/apartado";
+import { apartadoDeOferta } from "@/lib/offers/apartado";
+import { getOfferById } from "@/lib/offers/offer-data";
 
-// Pantalla deprecada, sin oferta a la mano: usa el default compartido.
-const APARTADO_AMOUNT_MXN = APARTADO_DEFAULT_MXN;
 const AUTO_DETECT_DELAY_MS = 15000;
 const SHOW_DEMO_PAY_BUTTON = true; // SWAP POINT: import.meta.env.DEV en producción
 
@@ -23,6 +22,11 @@ const PagoApartadoFinalPage = () => {
   );
   const recordPayment = useFormalReservationStore((s) => s.recordPayment);
   const releaseHold = useFormalReservationStore((s) => s.releaseHold);
+
+  // El apartado es por unidad (`propiedades.monto_apartado`), resuelto en la oferta.
+  const APARTADO_AMOUNT_MXN = apartadoDeOferta(
+    formalReservation ? getOfferById(formalReservation.offerId) : null
+  );
 
   const [copiedClabe, setCopiedClabe] = useState(false);
   const [paymentDetected, setPaymentDetected] = useState(false);

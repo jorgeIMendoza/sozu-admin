@@ -2,9 +2,9 @@
 // globales y preview de cita. Extraído de crm.tsx. Consumido por la ficha de
 // contacto, la de negocio, CrmTasks y CrmAppointments.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { parseISO } from "date-fns";
 import {
@@ -13,6 +13,7 @@ import {
   UserPlus, Users, TriangleAlert, X, Trash2, Search, Loader2, Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -31,8 +35,8 @@ import {
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { advanceByRecurrence, fmtCitaWhen } from "@/lib/crm-format";
-import { fmtDateTime, taskStatusLabel } from "@/lib/crm-lib";
+import { advanceByRecurrence, fmtCitaWhen, fmtDueDateTime } from "@/lib/crm-format";
+import { fmtDateTime, relTime, taskStatusLabel } from "@/lib/crm-lib";
 
 // ─── (símbolos extraídos abajo; se les añade `export` automáticamente) ──────────
 export function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
@@ -167,6 +171,449 @@ export function TaskActivityCard({ task, defaultExpanded = false, onComplete, on
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TaskCard EDITABLE (estilo HubSpot) ─────────────────────────────────────
+// Colapsado: check para completar + título + asignado + vencimiento (rojo si con demora).
+// Expandido: edita EN VIVO fecha (reagendar), estado, prioridad, tipo, asignado, recordatorio,
+// repetir y notas — cada cambio se persiste vía onUpdate(id, patch). Usado en la ficha de contacto.
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const toDateInput = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const toTimeInput = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+// Deriva el preset de recordatorio (min antes) a partir del vencimiento + la fecha absoluta guardada.
+const reminderPresetFrom = (due: any, rec: any) => {
+  if (!rec || !due) return "none";
+  const mins = Math.round((new Date(due).getTime() - new Date(rec).getTime()) / 60000);
+  return TASK_REMINDER_OPTIONS.find((o) => o.minutes === mins)?.id ?? "none";
+};
+
+// Etiqueta uniforme de campo dentro del card de tarea.
+function FieldLabel({ children }: { children: any }) {
+  return <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">{children}</div>;
+}
+
+export function TaskCard({ task, owners = [], onComplete = () => {}, onUpdate = () => {}, onDelete = () => {}, defaultExpanded = false, contactName, contactId }: {
+  task: any;
+  owners?: { id: string; full_name: string; email: string }[];
+  onComplete?: (id: number) => void;
+  onUpdate?: (id: number, patch: Record<string, any>) => void;
+  onDelete?: (id: number) => void;
+  defaultExpanded?: boolean;
+  contactName?: string | null;
+  contactId?: number | null;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const done = task.status === "completada" || task.status === "completado";
+  const cancelada = task.status === "cancelada";
+  const due = task.due_date ? new Date(task.due_date) : null;
+  const overdue = !!due && !done && !cancelada && due.getTime() < Date.now();
+  const raw = task.raw ?? {};
+  // Tolerante a los 2 shapes: la ficha de contacto trae los campos en `raw`; la de negocio los
+  // pone arriba y el asignado como NOMBRE (sin id).
+  const tipo = raw.tipo ?? task.tipo;
+  const prioridad = task.priority ?? raw.prioridad ?? task.prioridad;
+  const asignadoId = raw.id_usuario_asignado ?? task.id_usuario_asignado ?? null;
+  const recurrencia = raw.recurrencia ?? task.recurrencia ?? null;
+  const recordatorio = raw.fecha_recordatorio ?? task.reminder ?? null;
+  const assigneeName = task.assignee
+    ?? owners.find((o) => o.id === asignadoId)?.full_name
+    ?? owners.find((o) => o.id === asignadoId)?.email ?? null;
+
+  // Notas: estado local, se guarda al salir del textarea.
+  const [notes, setNotes] = useState(task.descripcion ?? "");
+  useEffect(() => { setNotes(task.descripcion ?? ""); }, [task.descripcion]);
+
+  const dateStr = due ? toDateInput(due) : "";
+  const timeStr = due ? toTimeInput(due) : "08:00";
+
+  // Reagendar: nueva fecha/hora → ISO; si tenía recordatorio, se recorre el mismo offset.
+  const applyDue = (d: string, t: string) => {
+    if (!d) { onUpdate(task.id, { fecha_vencimiento: null, fecha_recordatorio: null }); return; }
+    const iso = new Date(`${d}T${t || "08:00"}:00`).toISOString();
+    const patch: Record<string, any> = { fecha_vencimiento: iso };
+    if (recordatorio && task.due_date) {
+      const offset = new Date(task.due_date).getTime() - new Date(recordatorio).getTime();
+      patch.fecha_recordatorio = new Date(new Date(iso).getTime() - offset).toISOString();
+    }
+    onUpdate(task.id, patch);
+  };
+
+  // Recordatorio: preset (min antes) ⇄ fecha absoluta calculada desde el vencimiento.
+  const reminderPreset = (() => {
+    if (!recordatorio || !task.due_date) return "none";
+    const mins = Math.round((new Date(task.due_date).getTime() - new Date(recordatorio).getTime()) / 60000);
+    return TASK_REMINDER_OPTIONS.find((o) => o.minutes === mins)?.id ?? "none";
+  })();
+  const applyReminder = (presetId: string) => {
+    const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === presetId)?.minutes;
+    if (mins == null || !task.due_date) { onUpdate(task.id, { fecha_recordatorio: null }); return; }
+    onUpdate(task.id, { fecha_recordatorio: new Date(new Date(task.due_date).getTime() - mins * 60000).toISOString() });
+  };
+
+  const onStatus = (v: string) => { if (v === "completada") onComplete(task.id); else onUpdate(task.id, { estatus: v }); };
+
+  const statusMeta = TASK_STATUS_META[task.status];
+  const prioMeta = TASK_PRIORITY_META[prioridad];
+  const TypeIcon = TASK_TYPE_META[tipo]?.icon ?? ClipboardList;
+
+  return (
+    <div className={`border rounded-lg bg-card shadow-sm ${overdue ? "border-red-500/30" : "border-border"}`}>
+      <div className="flex items-start gap-2.5 p-3">
+        {/* Check: completar / reabrir */}
+        <button
+          onClick={() => (done ? onUpdate(task.id, { estatus: "pendiente" }) : onComplete(task.id))}
+          title={done ? "Reabrir tarea" : "Marcar completada"}
+          className={`mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${done ? "bg-emerald-500 border-emerald-500 text-white" : "border-muted-foreground/40 hover:border-emerald-500"}`}>
+          {done && <Check className="h-3 w-3" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          {/* Título + vencimiento + chevron */}
+          <div className="flex items-start justify-between gap-2">
+            <button onClick={() => setExpanded((e) => !e)} className="flex items-start gap-1.5 text-left min-w-0 group/t">
+              {expanded ? <ChevronDown className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />}
+              <span className="min-w-0">
+                <span className={`text-sm ${done ? "line-through text-muted-foreground" : "font-medium text-foreground"} group-hover/t:underline`}>{task.title}</span>
+                {assigneeName && <span className="text-xs text-muted-foreground ml-1.5">· {assigneeName}</span>}
+              </span>
+            </button>
+            <span className={`text-xs shrink-0 tabular-nums inline-flex items-center gap-1 ${overdue ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground/70"}`}>
+              {overdue && <TriangleAlert className="h-3 w-3" />}
+              {due ? `${overdue ? "Con demora" : "Vence"} ${fmtDateTime(task.due_date)}` : "Sin fecha"}
+            </span>
+          </div>
+
+          {/* Contacto asociado (solo en la vista global de Tareas) */}
+          {contactName && (
+            <div className="ml-5 mt-0.5">
+              <Link to={`/admin/portal-crm/ventas/contactos/${contactId}`} className="text-xs text-primary hover:underline">{contactName}</Link>
+            </div>
+          )}
+
+          {/* Colapsado: chips de un vistazo */}
+          {!expanded && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-5">
+              {statusMeta && <Badge variant="outline" className={`${statusMeta.cls} text-[10px] px-1.5 py-0`}>{statusMeta.label}</Badge>}
+              {prioMeta && <Badge variant="outline" className={`${prioMeta.cls} text-[10px] px-1.5 py-0`}>{prioMeta.label}</Badge>}
+              <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><TypeIcon className="h-3 w-3" />{TASK_TYPE_META[tipo]?.label ?? tipo}</span>
+            </div>
+          )}
+
+          {/* Expandido: edición completa (estilo HubSpot) */}
+          {expanded && (
+            <div className="mt-3 ml-5 space-y-3">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div>
+                  <FieldLabel>Fecha de vencimiento</FieldLabel>
+                  <div className="flex gap-1.5">
+                    <Input type="date" value={dateStr} onChange={(e) => applyDue(e.target.value, timeStr)} className="h-8 text-sm" />
+                    <Input type="time" value={timeStr} onChange={(e) => applyDue(dateStr, e.target.value)} disabled={!dateStr} className="h-8 text-sm w-[112px]" />
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel>Recordatorio</FieldLabel>
+                  <Select value={reminderPreset} onValueChange={applyReminder} disabled={!task.due_date}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{TASK_REMINDER_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel>Etapa de la tarea</FieldLabel>
+                  <Select value={task.status} onValueChange={onStatus}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{TASK_STATUS_ORDER.map((k) => <SelectItem key={k} value={k}>{TASK_STATUS_META[k].label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel>Repetir</FieldLabel>
+                  <Select value={recurrencia ?? "none"} onValueChange={(v) => onUpdate(task.id, { recurrencia: v === "none" ? null : v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{TASK_RECURRENCE_OPTIONS.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel>Tipo de tarea</FieldLabel>
+                  <Select value={tipo} onValueChange={(v) => onUpdate(task.id, { tipo: v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{Object.entries(TASK_TYPE_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <FieldLabel>Prioridad</FieldLabel>
+                  <Select value={prioridad} onValueChange={(v) => onUpdate(task.id, { prioridad: v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{Object.entries(TASK_PRIORITY_META).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <FieldLabel>Asignado a</FieldLabel>
+                  <Select value={asignadoId ?? "none"} onValueChange={(v) => onUpdate(task.id, { id_usuario_asignado: v === "none" ? null : v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <FieldLabel>Notas de la tarea</FieldLabel>
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+                  onBlur={() => { if ((notes.trim() || null) !== (task.descripcion ?? null)) onUpdate(task.id, { descripcion: notes.trim() || null }); }}
+                  placeholder="Agregar descripción…" rows={2} className="text-sm" />
+              </div>
+              <div>
+                <FieldLabel>Comentarios</FieldLabel>
+                <TaskComments taskId={task.id} />
+              </div>
+              <div className="flex items-center justify-end pt-2 border-t border-border">
+                <button onClick={() => onDelete(task.id)} className="text-xs text-destructive hover:underline inline-flex items-center gap-1"><Trash2 className="h-3 w-3" />Eliminar tarea</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal para GESTIONAR una tarea (vista global de Tareas — no expandible). Reusa TaskFormFields
+// + un selector de etapa/estado; guarda TODO al presionar "Guardar cambios".
+export function TaskEditDialog({ task, owners = [], open, onOpenChange, onUpdate, onDelete }: {
+  task: any | null;
+  owners?: { id: string; full_name: string; email: string }[];
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onUpdate: (id: number, patch: Record<string, any>) => void;
+  onDelete?: (id: number) => void;
+}) {
+  const [form, setForm] = useState<TaskFormState>(emptyTaskForm());
+  const [estatus, setEstatus] = useState("pendiente");
+  useEffect(() => {
+    if (!task) return;
+    const due = task.fecha_vencimiento ? new Date(task.fecha_vencimiento) : null;
+    setForm({
+      titulo: task.titulo ?? "",
+      tipo: task.tipo ?? "seguimiento",
+      prioridad: task.prioridad ?? "normal",
+      fecha: due ? toDateInput(due) : "",
+      hora: due ? toTimeInput(due) : "08:00",
+      recordatorio: reminderPresetFrom(task.fecha_vencimiento, task.fecha_recordatorio),
+      recurrencia: task.recurrencia ?? "none",
+      descripcion: task.descripcion ?? "",
+      assigned_to: task.id_usuario_asignado ?? "",
+    });
+    setEstatus(task.estatus ?? "pendiente");
+  }, [task]);
+
+  if (!task) return null;
+
+  const save = () => {
+    const dueIso = form.fecha ? new Date(`${form.fecha}T${form.hora || "08:00"}:00`).toISOString() : null;
+    let recIso: string | null = null;
+    if (dueIso && form.recordatorio !== "none") {
+      const mins = TASK_REMINDER_OPTIONS.find((o) => o.id === form.recordatorio)?.minutes;
+      if (mins != null) recIso = new Date(new Date(dueIso).getTime() - mins * 60000).toISOString();
+    }
+    onUpdate(task.id, {
+      titulo: form.titulo.trim(),
+      tipo: form.tipo,
+      prioridad: form.prioridad,
+      descripcion: form.descripcion.trim() || null,
+      fecha_vencimiento: dueIso,
+      fecha_recordatorio: recIso,
+      recurrencia: form.recurrencia === "none" ? null : form.recurrencia,
+      id_usuario_asignado: form.assigned_to || null,
+      estatus,
+    });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] flex flex-col gap-0 p-0 sm:max-w-lg">
+        {/* Header fijo */}
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+          <DialogTitle>Gestionar tarea</DialogTitle>
+        </DialogHeader>
+        {/* Body con scroll */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="grid gap-3">
+            <TaskFormFields
+              form={form}
+              setForm={setForm}
+              owners={owners}
+              statusField={
+                <div>
+                  <Label>Etapa de la tarea</Label>
+                  <Select value={estatus} onValueChange={setEstatus}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{TASK_STATUS_ORDER.map((k) => <SelectItem key={k} value={k}>{TASK_STATUS_META[k].label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              }
+            />
+            <div>
+              <Label>Comentarios</Label>
+              <TaskComments taskId={task.id} />
+            </div>
+          </div>
+        </div>
+        {/* Footer fijo */}
+        <DialogFooter className="px-6 py-4 border-t border-border shrink-0 sm:justify-between gap-2">
+          {onDelete ? (
+            <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => { onDelete(task.id); onOpenChange(false); }}>
+              <Trash2 className="h-4 w-4 mr-1" />Eliminar
+            </Button>
+          ) : <span />}
+          <Button onClick={save} disabled={!form.titulo.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">Guardar cambios</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Editores INLINE para la tabla global de Tareas ─────────────────────────
+// Estado de la tarea como "pill" editable (Select compacto con color por etapa).
+export function InlineTaskStatus({ status, onChange, disabled }: {
+  status: string; onChange: (v: string) => void; disabled?: boolean;
+}) {
+  const meta = TASK_STATUS_META[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border", dot: "bg-muted-foreground" };
+  return (
+    <Select value={status} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className={`h-7 w-fit gap-1 whitespace-nowrap rounded-full border px-2.5 py-0 text-xs font-medium leading-none [&>span]:line-clamp-none ${meta.cls}`} aria-label="Cambiar etapa de la tarea">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {TASK_STATUS_ORDER.map((k) => (
+          <SelectItem key={k} value={k}>
+            <span className="inline-flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${TASK_STATUS_META[k].dot}`} />{TASK_STATUS_META[k].label}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Vencimiento editable inline: el texto abre un popover con fecha + hora (recorre el recordatorio).
+export function InlineTaskDue({ due, reminder, done, onChange }: {
+  due: string | null;
+  reminder?: string | null;
+  done?: boolean;
+  onChange: (patch: { fecha_vencimiento: string | null; fecha_recordatorio?: string | null }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const d = due ? new Date(due) : null;
+  const overdue = !!d && !done && d.getTime() < Date.now();
+  const dateStr = d ? toDateInput(d) : "";
+  const timeStr = d ? toTimeInput(d) : "08:00";
+  const apply = (ds: string, ts: string) => {
+    if (!ds) { onChange({ fecha_vencimiento: null, fecha_recordatorio: null }); return; }
+    const iso = new Date(`${ds}T${ts || "08:00"}:00`).toISOString();
+    const patch: { fecha_vencimiento: string | null; fecha_recordatorio?: string | null } = { fecha_vencimiento: iso };
+    if (reminder && due) {
+      const offset = new Date(due).getTime() - new Date(reminder).getTime();
+      patch.fecha_recordatorio = new Date(new Date(iso).getTime() - offset).toISOString();
+    }
+    onChange(patch);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center gap-1 rounded px-1.5 py-1 -mx-1.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-muted ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}
+          title="Cambiar vencimiento"
+        >
+          {overdue && <TriangleAlert className="h-3.5 w-3.5" />}
+          {due ? fmtDueDateTime(due) : <span className="text-muted-foreground/60">Sin fecha</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-3" align="start">
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Fecha</Label>
+              <Input type="date" value={dateStr} onChange={(e) => apply(e.target.value, timeStr)} className="h-8 text-sm" />
+            </div>
+            <div>
+              <Label className="text-[11px] text-muted-foreground">Hora</Label>
+              <Input type="time" value={timeStr} onChange={(e) => apply(dateStr, e.target.value)} disabled={!dateStr} className="h-8 text-sm w-[112px]" />
+            </div>
+          </div>
+          {due && (
+            <button type="button" onClick={() => { apply("", ""); setOpen(false); }} className="text-xs text-destructive hover:underline">Quitar fecha</button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Hilo de comentarios de una tarea (persisten en crm_tareas_comentarios; fail-soft si la tabla
+// aún no existe en el ambiente → lista vacía). Texto simple, estilo HubSpot.
+export function TaskComments({ taskId }: { taskId: number }) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const { data: comments = [] } = useQuery({
+    queryKey: ["tarea-comentarios", taskId],
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_tareas_comentarios")
+        .select("id, contenido, fecha_creacion, id_usuario")
+        .eq("id_tarea", taskId).eq("activo", true)
+        .order("fecha_creacion", { ascending: true });
+      if (res.error) return [];
+      const rows = res.data ?? [];
+      const ids = Array.from(new Set(rows.map((r: any) => r.id_usuario).filter(Boolean)));
+      let nameMap: Record<string, string> = {};
+      if (ids.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ids);
+        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null }));
+    },
+  });
+  const add = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_tareas_comentarios")
+      .insert({ id_tarea: taskId, id_usuario: user?.id ?? null, contenido: text });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    setDraft("");
+    qc.invalidateQueries({ queryKey: ["tarea-comentarios", taskId] });
+  };
+  return (
+    <div className="space-y-2">
+      {comments.length > 0 && (
+        <div className="space-y-1.5">
+          {comments.map((c: any) => (
+            <div key={c.id} className="rounded-md bg-muted/50 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">{c.author ?? "Usuario"}</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{relTime(c.ts)}</span>
+              </div>
+              <p className="text-sm mt-0.5 whitespace-pre-wrap break-words">{c.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); add(); } }}
+          placeholder="Agregar comentario… (Ctrl+Enter para enviar)"
+          rows={1}
+          className="text-sm min-h-[38px]"
+        />
+        <Button size="sm" onClick={add} disabled={saving || !draft.trim()} className="shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">Comentar</Button>
       </div>
     </div>
   );
@@ -398,6 +845,16 @@ export const TASK_PRIORITY_META: Record<string, { label: string; cls: string; or
   baja: { label: "Baja", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", order: 3 },
 };
 
+// Etapa/estado de la tarea (crm_tareas.estatus). No es solo "completada": HubSpot muestra un
+// embudo (Sin iniciar → En progreso → Completada / Cancelada). Se edita en el card de la tarea.
+export const TASK_STATUS_META: Record<string, { label: string; cls: string; dot: string }> = {
+  pendiente: { label: "Pendiente", cls: "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400", dot: "bg-blue-500" },
+  en_progreso: { label: "En progreso", cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400", dot: "bg-amber-500" },
+  completada: { label: "Completada", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400", dot: "bg-emerald-500" },
+  cancelada: { label: "Cancelada", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400", dot: "bg-slate-400" },
+};
+export const TASK_STATUS_ORDER = ["pendiente", "en_progreso", "completada", "cancelada"];
+
 // Presets de recordatorio (minutos antes del vencimiento). El valor absoluto
 // (fecha_recordatorio) lo dispara el cron `crm-recordatorios-tareas`.
 export const TASK_REMINDER_OPTIONS: { id: string; label: string; minutes: number | null }[] = [
@@ -481,10 +938,11 @@ export async function regenerateRecurringTask(t: {
 
 // Campos compartidos del formulario de tarea (título, tipo, prioridad, vencimiento+hora,
 // recordatorio, recurrencia, asignado, notas). El contacto lo maneja cada diálogo.
-export function TaskFormFields({ form, setForm, owners }: {
+export function TaskFormFields({ form, setForm, owners, statusField }: {
   form: TaskFormState;
   setForm: (f: TaskFormState) => void;
   owners: { id: string; full_name: string; email: string }[];
+  statusField?: any;   // slot opcional (ej. "Etapa de la tarea") que se pone junto a "Asignar a" en col-6
 }) {
   return (
     <>
@@ -521,12 +979,24 @@ export function TaskFormFields({ form, setForm, owners }: {
           </Select>
         </div>
       </div>
-      <div><Label>Asignar a</Label>
-        <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-          <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
+      {statusField ? (
+        <div className="grid grid-cols-2 gap-3">
+          {statusField}
+          <div><Label>Asignar a</Label>
+            <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+      ) : (
+        <div><Label>Asignar a</Label>
+          <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      )}
       <div><Label>Notas</Label><Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Detalles de la tarea…" rows={3} /></div>
     </>
   );
