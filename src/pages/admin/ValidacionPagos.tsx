@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
-import { mensajeErrorSubidaEvidencia, metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
+import { etiquetaBucketEvidencia, mensajeErrorSubidaEvidencia, metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 
 const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
@@ -724,8 +724,8 @@ function CargarEvidenciaModal({ row, onClose }: {
               </label>
             )}
             <p className="text-[11px] text-muted-foreground px-1">
-              Se guardará en <span className="font-mono font-medium">{bucket}</span>
-              {cepForzado && " (los pagos STP siempre van al bucket de CEPs)"}
+              Se archivará como <span className="font-medium">{etiquetaBucketEvidencia(bucket)}</span>
+              {cepForzado && " (los pagos por STP siempre se archivan como CEP)"}
             </p>
           </div>
         </div>
