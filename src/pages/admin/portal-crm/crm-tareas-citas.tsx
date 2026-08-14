@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { parseISO } from "date-fns";
 import {
@@ -13,6 +13,7 @@ import {
   UserPlus, Users, TriangleAlert, X, Trash2, Search, Loader2, Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -35,7 +36,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { advanceByRecurrence, fmtCitaWhen, fmtDueDateTime } from "@/lib/crm-format";
-import { fmtDateTime, taskStatusLabel } from "@/lib/crm-lib";
+import { fmtDateTime, relTime, taskStatusLabel } from "@/lib/crm-lib";
 
 // ─── (símbolos extraídos abajo; se les añade `export` automáticamente) ──────────
 export function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any) {
@@ -364,6 +365,10 @@ export function TaskCard({ task, owners = [], onComplete = () => {}, onUpdate = 
                   onBlur={() => { if ((notes.trim() || null) !== (task.descripcion ?? null)) onUpdate(task.id, { descripcion: notes.trim() || null }); }}
                   placeholder="Agregar descripción…" rows={2} className="text-sm" />
               </div>
+              <div>
+                <FieldLabel>Comentarios</FieldLabel>
+                <TaskComments taskId={task.id} />
+              </div>
               <div className="flex items-center justify-end pt-2 border-t border-border">
                 <button onClick={() => onDelete(task.id)} className="text-xs text-destructive hover:underline inline-flex items-center gap-1"><Trash2 className="h-3 w-3" />Eliminar tarea</button>
               </div>
@@ -451,6 +456,10 @@ export function TaskEditDialog({ task, owners = [], open, onOpenChange, onUpdate
                 </div>
               }
             />
+            <div>
+              <Label>Comentarios</Label>
+              <TaskComments taskId={task.id} />
+            </div>
           </div>
         </div>
         {/* Footer fijo */}
@@ -541,6 +550,72 @@ export function InlineTaskDue({ due, reminder, done, onChange }: {
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// Hilo de comentarios de una tarea (persisten en crm_tareas_comentarios; fail-soft si la tabla
+// aún no existe en el ambiente → lista vacía). Texto simple, estilo HubSpot.
+export function TaskComments({ taskId }: { taskId: number }) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const { data: comments = [] } = useQuery({
+    queryKey: ["tarea-comentarios", taskId],
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_tareas_comentarios")
+        .select("id, contenido, fecha_creacion, id_usuario")
+        .eq("id_tarea", taskId).eq("activo", true)
+        .order("fecha_creacion", { ascending: true });
+      if (res.error) return [];
+      const rows = res.data ?? [];
+      const ids = Array.from(new Set(rows.map((r: any) => r.id_usuario).filter(Boolean)));
+      let nameMap: Record<string, string> = {};
+      if (ids.length) {
+        const { data: us } = await (supabase as any).from("usuarios").select("auth_user_id, nombre").in("auth_user_id", ids);
+        nameMap = Object.fromEntries((us ?? []).map((u: any) => [u.auth_user_id, u.nombre]));
+      }
+      return rows.map((r: any) => ({ id: r.id, text: r.contenido, ts: r.fecha_creacion, author: r.id_usuario ? (nameMap[r.id_usuario] ?? null) : null }));
+    },
+  });
+  const add = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setSaving(true);
+    const { error } = await (supabase as any).from("crm_tareas_comentarios")
+      .insert({ id_tarea: taskId, id_usuario: user?.id ?? null, contenido: text });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    setDraft("");
+    qc.invalidateQueries({ queryKey: ["tarea-comentarios", taskId] });
+  };
+  return (
+    <div className="space-y-2">
+      {comments.length > 0 && (
+        <div className="space-y-1.5">
+          {comments.map((c: any) => (
+            <div key={c.id} className="rounded-md bg-muted/50 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">{c.author ?? "Usuario"}</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{relTime(c.ts)}</span>
+              </div>
+              <p className="text-sm mt-0.5 whitespace-pre-wrap break-words">{c.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); add(); } }}
+          placeholder="Agregar comentario… (Ctrl+Enter para enviar)"
+          rows={1}
+          className="text-sm min-h-[38px]"
+        />
+        <Button size="sm" onClick={add} disabled={saving || !draft.trim()} className="shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">Comentar</Button>
+      </div>
+    </div>
   );
 }
 
