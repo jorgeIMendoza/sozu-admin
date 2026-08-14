@@ -10,6 +10,26 @@
 export const esSinPermiso = (e: unknown): boolean =>
   !!e && typeof e === 'object' && (e as { code?: string }).code === '42501';
 
+/**
+ * La RPC no existe en este ambiente: el front va adelante del DDL.
+ *
+ * PostgREST responde `PGRST202` con "Could not find the function public.x(args) in the schema
+ * cache"; Postgres responde `42883` ("function ... does not exist") cuando sí llega a ejecutar.
+ * Se checan los dos códigos y, como red de seguridad, el texto — PostgREST cambia la redacción
+ * entre versiones.
+ *
+ * Sirve para degradar con un aviso claro en vez de escupir el error crudo al usuario.
+ */
+export const esRpcInexistente = (e: unknown): boolean => {
+  if (!e || typeof e !== 'object') return false;
+  const { code, message } = e as { code?: string; message?: string };
+  if (code === 'PGRST202' || code === '42883') return true;
+  const texto = (message ?? '').toLowerCase();
+  return texto.includes('could not find the function')
+    || texto.includes('schema cache')
+    || texto.includes('does not exist');
+};
+
 /** `retry` de React Query que no insiste cuando el problema es de permisos. */
 export const retrySalvoSinPermiso = (intentos: number, error: unknown): boolean =>
   !esSinPermiso(error) && intentos < 2;

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   DollarSign,
+  Percent,
   Home,
   Ruler,
   User,
@@ -448,6 +449,55 @@ export function PagoExternoContent({
           )}
         </div>
       </Section>
+
+      {/* ─── Desglose del pago de comisión al externo ─── */}
+      {(() => {
+        const externos = detalle.comisionistas.filter((c) => c.es_externo);
+        const pctExterno = externos.reduce((s, c) => s + c.porcentaje, 0);
+        // `comision_externa` = precio_final × % (base, sin IVA). El servicio de
+        // comisión del externo causa 16% de IVA que SOZU paga sobre esa base.
+        const IVA_RATE = 0.16;
+        const baseComision = detalle.comision_externa;
+        const ivaMonto = +(baseComision * IVA_RATE).toFixed(2);
+        const totalConIva = +(baseComision + ivaMonto).toFixed(2);
+        return (
+          <Section title="Desglose del pago de comisión">
+            <div className="grid grid-cols-2 gap-3">
+              <KV icon={DollarSign} label="Precio final" value={fmtMxn(detalle.precio_final)} />
+              <KV icon={Percent} label="Comisión al externo" value={`${pctExterno.toFixed(2)}%`} />
+            </div>
+
+            <div className="mt-3 divide-y divide-border rounded-md border border-border bg-card text-sm">
+              {externos.length > 1 &&
+                externos.map((c) => (
+                  <div key={c.email} className="flex items-center justify-between px-3 py-2">
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      {c.nombre} · {c.porcentaje.toFixed(2)}%
+                    </span>
+                    <span className="tabular-nums">{fmtMxn(c.monto)}</span>
+                  </div>
+                ))}
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-muted-foreground">
+                  Comisión al externo ({pctExterno.toFixed(2)}%) — sin IVA
+                </span>
+                <span className="font-medium tabular-nums">{fmtMxn(baseComision)}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-muted-foreground">IVA (16%)</span>
+                <span className="tabular-nums">{fmtMxn(ivaMonto)}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-3">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Monto total a pagar (con IVA)
+              </span>
+              <span className="text-xl font-bold tabular-nums">{fmtMxn(totalConIva)}</span>
+            </div>
+          </Section>
+        );
+      })()}
 
       {/* ─── Estado de cobro previo ─── */}
       <Section title="Estado de cobro previo">
