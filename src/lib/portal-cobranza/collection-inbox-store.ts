@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { registrarLimpiadorDeFiltros } from '@/lib/filtrosPersistentes';
 
 // Filter state for the Cuentas de Cobranza menu.
 // Persisted in localStorage: they are the user's settings, so they don't have to
@@ -91,3 +92,8 @@ export function clearCollectionFilters() {
     // no-op: if storage is unavailable, the in-memory reset is enough.
   }
 }
+
+// El logout barre todas las pantallas con `limpiarTodosLosFiltros()`. Este store se registra
+// para que además se resetee en memoria si ya está montado; el barrido de storage por sí solo
+// no vaciaría el estado que zustand ya tiene cargado.
+registrarLimpiadorDeFiltros(clearCollectionFilters);

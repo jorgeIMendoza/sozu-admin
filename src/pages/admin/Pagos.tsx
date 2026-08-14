@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { guardarFiltros, leerFiltros } from "@/lib/filtrosPersistentes";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,20 +39,57 @@ interface CashPayment {
   fecha_pago: string;
   monto: number;
 }
+// Filtros persistidos de Cuentas de Cobranza. Incluye pestaña y paginación: volver del
+// detalle de una cuenta no debe mandarte a la pestaña "activas", página 1.
+const CLAVE_FILTROS_CC = 'admin_cuentas_cobranza';
+const FILTROS_CC_INICIALES = {
+  searchTerm: '',
+  activeTab: 'activas',
+  selectedTipos: ['Propiedad', 'Producto', 'Servicio'] as Array<'Propiedad' | 'Producto' | 'Servicio'>,
+  idCuentaFilter: '',
+  productoFilter: '',
+  compradoresFilter: '',
+  clabeFilter: '',
+  proyectoFilter: '',
+  noPropiedadFilter: '',
+  modeloFilter: '',
+  estatusFilter: [] as number[],
+  currentPageActive: 1,
+  currentPageCancelled: 1,
+};
+
 export default function Pagos() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("activas");
-  const [selectedTipos, setSelectedTipos] = useState<Array<'Propiedad' | 'Producto' | 'Servicio'>>(['Propiedad', 'Producto', 'Servicio']);
+  // Filtros y estado de tabla persistidos: sobreviven navegación y F5, se borran solo al
+  // cerrar sesión o con "Limpiar Filtros".
+  const F = useMemo(() => leerFiltros(CLAVE_FILTROS_CC, FILTROS_CC_INICIALES), []);
+
+  const [searchTerm, setSearchTerm] = useState(F.searchTerm);
+  const [activeTab, setActiveTab] = useState(F.activeTab);
+  const [selectedTipos, setSelectedTipos] = useState<Array<'Propiedad' | 'Producto' | 'Servicio'>>(F.selectedTipos);
 
   // Filter states
-  const [idCuentaFilter, setIdCuentaFilter] = useState("");
-  const [productoFilter, setProductoFilter] = useState("");
-  const [compradoresFilter, setCompradoresFilter] = useState("");
-  const [clabeFilter, setClabeFilter] = useState("");
-  const [proyectoFilter, setProyectoFilter] = useState("");
-  const [noPropiedadFilter, setNoPropiedadFilter] = useState("");
-  const [modeloFilter, setModeloFilter] = useState("");
-  const [estatusFilter, setEstatusFilter] = useState<number[]>([]);
+  const [idCuentaFilter, setIdCuentaFilter] = useState(F.idCuentaFilter);
+  const [productoFilter, setProductoFilter] = useState(F.productoFilter);
+  const [compradoresFilter, setCompradoresFilter] = useState(F.compradoresFilter);
+  const [clabeFilter, setClabeFilter] = useState(F.clabeFilter);
+  const [proyectoFilter, setProyectoFilter] = useState(F.proyectoFilter);
+  const [noPropiedadFilter, setNoPropiedadFilter] = useState(F.noPropiedadFilter);
+  const [modeloFilter, setModeloFilter] = useState(F.modeloFilter);
+  const [estatusFilter, setEstatusFilter] = useState<number[]>(F.estatusFilter);
+
+  // Persistir filtros + pestaña + paginación. "Limpiar Filtros" deja los valores iniciales y
+  // este mismo efecto los escribe, así que no hace falta borrar a mano.
+  useEffect(() => {
+    guardarFiltros(CLAVE_FILTROS_CC, {
+      searchTerm, activeTab, selectedTipos,
+      idCuentaFilter, productoFilter, compradoresFilter, clabeFilter,
+      proyectoFilter, noPropiedadFilter, modeloFilter, estatusFilter,
+      currentPageActive, currentPageCancelled,
+    });
+  }, [searchTerm, activeTab, selectedTipos,
+      idCuentaFilter, productoFilter, compradoresFilter, clabeFilter,
+      proyectoFilter, noPropiedadFilter, modeloFilter, estatusFilter,
+      currentPageActive, currentPageCancelled]);
   const [cancelDialog, setCancelDialog] = useState<{
     isOpen: boolean;
     cuenta: CuentaCobranza | null;
@@ -118,8 +156,8 @@ export default function Pagos() {
   });
 
   // Paginación
-  const [currentPageActive, setCurrentPageActive] = useState(1);
-  const [currentPageCancelled, setCurrentPageCancelled] = useState(1);
+  const [currentPageActive, setCurrentPageActive] = useState(F.currentPageActive);
+  const [currentPageCancelled, setCurrentPageCancelled] = useState(F.currentPageCancelled);
   const itemsPerPage = 50;
   const {
     toast
@@ -1326,6 +1364,8 @@ export default function Pagos() {
                   setNoPropiedadFilter("");
                   setModeloFilter("");
                   setEstatusFilter([]);
+                  setCurrentPageActive(1);
+                  setCurrentPageCancelled(1);
                 }}>
                     Limpiar Filtros
                   </Button>
@@ -1981,6 +2021,8 @@ export default function Pagos() {
                   setNoPropiedadFilter("");
                   setModeloFilter("");
                   setEstatusFilter([]);
+                  setCurrentPageActive(1);
+                  setCurrentPageCancelled(1);
                 }}>
                     Limpiar Filtros
                   </Button>

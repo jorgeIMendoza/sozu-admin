@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
+import { guardarFiltros, leerFiltros } from "@/lib/filtrosPersistentes";
 import { etiquetaBucketEvidencia, mensajeErrorSubidaEvidencia, metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 
 const ITEMS_PER_PAGE = 25;
@@ -742,33 +743,42 @@ function CargarEvidenciaModal({ row, onClose }: {
 
 // ── Página principal ───────────────────────────────────────────────────────────
 
-// Filtros persistidos en localStorage (sobreviven navegación, F5 y nueva sesión).
-const FILTROS_KEY = "validacion-pagos-filtros";
-function loadFiltros(): any {
-  try { return JSON.parse(localStorage.getItem(FILTROS_KEY) || "{}"); } catch { return {}; }
-}
+// Filtros persistidos: sobreviven navegación y F5. Se borran al cerrar sesión
+// (limpiarTodosLosFiltros) o con "Limpiar filtros".
+const CLAVE_FILTROS_VP = "admin_validacion_pagos";
+const FILTROS_VP_INICIALES = {
+  searchCuenta: "",
+  searchCliente: "",
+  searchDepto: "",
+  filtroProyecto: "todos",
+  filtroEstados: [] as string[],
+  filtroMetodos: [] as number[],
+  filtroTipos: [] as string[],
+  filtroComprobante: "todos",
+  currentPage: 1,
+};
 
 export default function ValidacionPagos() {
   const { canUpdate, canDelete } = usePagePermissions("/admin/validacion-pagos");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { eliminarPago, isDeleting } = useEliminarPago();
-  const PF = useMemo(loadFiltros, []);
-  const [searchCuenta, setSearchCuenta] = useState<string>(PF.searchCuenta ?? "");
-  const [searchCliente, setSearchCliente] = useState<string>(PF.searchCliente ?? "");
-  const [searchDepto, setSearchDepto] = useState<string>(PF.searchDepto ?? "");
-  const [debouncedSearch, setDebouncedSearch] = useState<string>((PF.searchCuenta ?? "").trim());
-  const [debouncedCliente, setDebouncedCliente] = useState<string>((PF.searchCliente ?? "").trim());
-  const [debouncedDepto, setDebouncedDepto] = useState<string>((PF.searchDepto ?? "").trim());
-  const [filtroProyecto, setFiltroProyecto] = useState<string>(PF.filtroProyecto ?? "todos");
-  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set(PF.filtroEstados ?? []));
-  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set(PF.filtroMetodos ?? []));
+  const PF = useMemo(() => leerFiltros(CLAVE_FILTROS_VP, FILTROS_VP_INICIALES), []);
+  const [searchCuenta, setSearchCuenta] = useState<string>(PF.searchCuenta);
+  const [searchCliente, setSearchCliente] = useState<string>(PF.searchCliente);
+  const [searchDepto, setSearchDepto] = useState<string>(PF.searchDepto);
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(PF.searchCuenta.trim());
+  const [debouncedCliente, setDebouncedCliente] = useState<string>(PF.searchCliente.trim());
+  const [debouncedDepto, setDebouncedDepto] = useState<string>(PF.searchDepto.trim());
+  const [filtroProyecto, setFiltroProyecto] = useState<string>(PF.filtroProyecto);
+  const [filtroEstados, setFiltroEstados] = useState<Set<string>>(new Set(PF.filtroEstados));
+  const [filtroMetodos, setFiltroMetodos] = useState<Set<number>>(new Set(PF.filtroMetodos));
   const [searchProyecto, setSearchProyecto] = useState("");
   const [searchMetodo, setSearchMetodo] = useState("");
   const [searchComprobante, setSearchComprobante] = useState("");
-  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set(PF.filtroTipos ?? []));
-  const [filtroComprobante, setFiltroComprobante] = useState<string>(PF.filtroComprobante ?? "todos");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [filtroTipos, setFiltroTipos] = useState<Set<string>>(new Set(PF.filtroTipos));
+  const [filtroComprobante, setFiltroComprobante] = useState<string>(PF.filtroComprobante);
+  const [currentPage, setCurrentPage] = useState(PF.currentPage);
   const [detallePagoId, setDetallePagoId] = useState<number | null>(null);
   const [detallePagoRow, setDetallePagoRow] = useState<PagoRow | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -813,14 +823,15 @@ export default function ValidacionPagos() {
     return () => clearTimeout(t);
   }, [searchDepto]);
 
-  // Persistir filtros seleccionados (localStorage).
+  // Persistir filtros + página. Los Set se guardan como arreglo: JSON no serializa Set.
   useEffect(() => {
-    localStorage.setItem(FILTROS_KEY, JSON.stringify({
+    guardarFiltros(CLAVE_FILTROS_VP, {
       searchCuenta, searchCliente, searchDepto, filtroProyecto,
       filtroEstados: [...filtroEstados], filtroMetodos: [...filtroMetodos],
-      filtroTipos: [...filtroTipos], filtroComprobante,
-    }));
-  }, [searchCuenta, searchCliente, searchDepto, filtroProyecto, filtroEstados, filtroMetodos, filtroTipos, filtroComprobante]);
+      filtroTipos: [...filtroTipos], filtroComprobante, currentPage,
+    });
+  }, [searchCuenta, searchCliente, searchDepto, filtroProyecto, filtroEstados,
+      filtroMetodos, filtroTipos, filtroComprobante, currentPage]);
 
   // ── Main query ────────────────────────────────────────────────────────────────
 
