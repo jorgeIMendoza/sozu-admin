@@ -19,10 +19,13 @@ import { MotorComisionesReadOnly } from "@/components/admin/portal-alta-direccio
 import BrokerIncentivesTab from "@/components/admin/portal-estructura-comisiones/tabs/BrokerIncentivesTab";
 import {
   useComisionesPropuestas,
-  useValidarPropuesta,
   useValidacionesHistorial,
+  useValidacionesCanal,
+  useValidarCanalComision,
+  useActualizarEstadoPropuesta,
   type ComisionPropuesta,
   type EstadoPropuesta,
+  type EstadoValidacionCanal,
   type MotorSnapshot,
 } from "@/hooks/usePortalEstructuraComisiones/useComisionesValidacion";
 
@@ -227,7 +230,9 @@ function ValidacionSheet({
   onClose: () => void;
   validadoPor: string | null;
 }) {
-  const validar = useValidarPropuesta();
+  const validarCanal = useValidarCanalComision();
+  const actualizarEstado = useActualizarEstadoPropuesta();
+  const { data: validacionesCanal = [] } = useValidacionesCanal(propuesta?.id_proyecto);
   const { data: historial = [] } = useValidacionesHistorial(propuesta?.id_proyecto);
   const { proyectos: proyectosSozu } = useProyectosSozuReales();
   const precioReferencia = useMemo(
@@ -236,31 +241,115 @@ function ValidacionSheet({
   );
   const [notas, setNotas] = useState("");
 
-  const decidir = (estado: "validada" | "rechazada") => {
+  const canales = propuesta?.snapshot?.channels ?? [];
+
+  // Decisiones vigentes: solo las que coinciden con la versión (fecha) de la
+  // propuesta actual; si se reenvió a validar, las viejas quedan descartadas.
+  const decisionPorCanal = useMemo(() => {
+    const m = new Map<string, EstadoValidacionCanal>();
+    if (!propuesta) return m;
+    for (const v of validacionesCanal) {
+      if (v.snapshot_fecha === propuesta.fecha_actualizacion) m.set(v.id_canal, v.estado);
+    }
+    return m;
+  }, [validacionesCanal, propuesta]);
+
+  const resumen = useMemo(() => {
+    let validados = 0, rechazados = 0;
+    for (const ch of canales) {
+      const e = decisionPorCanal.get(ch.id);
+      if (e === "validada") validados++;
+      else if (e === "rechazada") rechazados++;
+    }
+    return {
+      total: canales.length,
+      validados,
+      rechazados,
+      pendientes: canales.length - validados - rechazados,
+    };
+  }, [canales, decisionPorCanal]);
+
+  /** Estado agregado del proyecto derivado de sus canales. */
+  const derivarEstado = (m: Map<string, EstadoValidacionCanal>): EstadoPropuesta => {
+    if (canales.length === 0) return "propuesta";
+    if (canales.some((ch) => m.get(ch.id) === "rechazada")) return "rechazada";
+    if (canales.every((ch) => m.get(ch.id) === "validada")) return "validada";
+    return "propuesta";
+  };
+
+  // ── Validación de UN canal
+  const decidirCanal = (canal: { id: string; name: string }, estado: EstadoValidacionCanal) => {
     if (!propuesta) return;
     if (estado === "rechazada" && !notas.trim()) {
-      toast.error("Indica el motivo del rechazo en las notas.");
+      toast.error("Indica el motivo del rechazo en las notas antes de rechazar el canal.");
       return;
     }
-    validar.mutate(
+    validarCanal.mutate(
       {
-        propuestaId: propuesta.id,
         id_proyecto: propuesta.id_proyecto,
-        snapshot: propuesta.snapshot,
+        id_canal: canal.id,
+        nombre_canal: canal.name,
         estado,
         notas: estado === "rechazada" ? notas.trim() : null,
         validado_por: validadoPor,
+        snapshot_fecha: propuesta.fecha_actualizacion,
       },
       {
         onSuccess: () => {
-          toast.success(estado === "validada" ? "Estructura validada" : "Estructura rechazada");
-          setNotas("");
-          onClose();
+          // Recalcular el estado agregado y reflejarlo en la propuesta.
+          const next = new Map(decisionPorCanal);
+          next.set(canal.id, estado);
+          const agg = derivarEstado(next);
+          if (agg !== propuesta.estado) {
+            actualizarEstado.mutate({ propuestaId: propuesta.id, estado: agg });
+          }
+          toast.success(
+            estado === "validada" ? `Canal “${canal.name}” validado` : `Canal “${canal.name}” rechazado`,
+          );
+          if (estado === "rechazada") setNotas("");
         },
-        onError: (e: any) => toast.error(e?.message || "No se pudo registrar la decisión."),
+        onError: (e: any) => toast.error(e?.message || "No se pudo registrar la decisión del canal."),
       },
     );
   };
+
+  const renderChannelAction = (canal: { id: string; name: string }) => {
+        const e = decisionPorCanal.get(canal.id);
+        return (
+          <div className="flex items-center gap-1.5">
+            {e === "validada" && (
+              <Badge className="border-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                Validado
+              </Badge>
+            )}
+            {e === "rechazada" && (
+              <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                Rechazado
+              </Badge>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2 text-[11px]"
+              disabled={validarCanal.isPending || e === "validada"}
+              onClick={() => decidirCanal(canal, "validada")}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Validar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 border-red-300 px-2 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+              disabled={validarCanal.isPending || e === "rechazada"}
+              onClick={() => decidirCanal(canal, "rechazada")}
+            >
+              <XCircle className="h-3.5 w-3.5" /> Rechazar
+            </Button>
+          </div>
+        );
+      };
+
+  const estadoActual = derivarEstado(decisionPorCanal);
 
   return (
     <Sheet open={!!propuesta} onOpenChange={(o) => !o && onClose()}>
@@ -270,33 +359,49 @@ function ValidacionSheet({
             <SheetHeader>
               <SheetTitle className="flex items-center gap-2">
                 {propuesta.proyecto_nombre}
-                <Badge variant="secondary" className={cn("text-[10px]", ESTADO_BADGE[propuesta.estado].cls)}>
-                  {ESTADO_BADGE[propuesta.estado].label}
+                <Badge variant="secondary" className={cn("text-[10px]", ESTADO_BADGE[estadoActual].cls)}>
+                  {ESTADO_BADGE[estadoActual].label}
                 </Badge>
               </SheetTitle>
             </SheetHeader>
 
             <div className="mt-4 space-y-5">
-              <MotorComisionesReadOnly snapshot={propuesta.snapshot} precioReferenciaInicial={precioReferencia || undefined} />
-
-              <div className="rounded-xl border bg-card p-4">
-                <p className="mb-2 text-sm font-semibold">Validación</p>
-                <Textarea
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  rows={2}
-                  placeholder="Notas (requeridas si rechazas)…"
-                  className="mb-3 text-sm"
-                />
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" className="gap-1.5 border-red-300 text-red-600 hover:bg-red-50" disabled={validar.isPending} onClick={() => decidir("rechazada")}>
-                    <XCircle className="h-4 w-4" /> Rechazar
-                  </Button>
-                  <Button className="gap-1.5" disabled={validar.isPending} onClick={() => decidir("validada")}>
-                    {validar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Validar
-                  </Button>
+              {(
+                <div className="rounded-xl border bg-card p-4">
+                  <p className="mb-2 text-sm font-semibold">Validación por canal</p>
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                    <Badge className="border-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      {resumen.validados} validados
+                    </Badge>
+                    <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                      {resumen.rechazados} rechazados
+                    </Badge>
+                    <Badge variant="outline">{resumen.pendientes} pendientes</Badge>
+                    <span className="text-muted-foreground">de {resumen.total} canales</span>
+                  </div>
+                  <Textarea
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    rows={2}
+                    placeholder="Notas (requeridas para rechazar un canal)…"
+                    className="mb-2 text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Usa los botones <span className="font-medium">Validar</span> /{" "}
+                    <span className="font-medium">Rechazar</span> en el encabezado de cada canal. El
+                    proyecto queda <span className="font-medium">Validada</span> cuando todos los
+                    canales están validados, y <span className="font-medium">Rechazada</span> si
+                    alguno se rechaza.
+                  </p>
                 </div>
-              </div>
+              )}
+
+              <MotorComisionesReadOnly
+                snapshot={propuesta.snapshot}
+                precioReferenciaInicial={precioReferencia || undefined}
+                renderChannelAction={renderChannelAction}
+                channelStatus={(id) => decisionPorCanal.get(id) ?? "pendiente"}
+              />
 
               <div className="rounded-xl border bg-card p-4">
                 <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><History className="h-4 w-4" /> Historial de validaciones</p>

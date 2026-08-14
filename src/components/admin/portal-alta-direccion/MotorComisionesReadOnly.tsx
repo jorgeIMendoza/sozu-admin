@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle, PieChart as PieChartIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip as ReTooltip } from "recharts";
 import type { MotorSnapshot } from "@/hooks/usePortalEstructuraComisiones/useComisionesValidacion";
 
@@ -16,6 +17,7 @@ const REMANENTE_COLOR = "hsl(280, 60%, 50%)";  // púrpura — lo que se queda S
 
 type DonutSlice = { label: string; value: number; color: string };
 type CanalResumen = {
+  id: string;
   name: string;
   total: number;
   externa: number;
@@ -39,12 +41,32 @@ type CanalResumen = {
 const fmtCurrency = (n: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n || 0);
 
+/** Estado de validación de un canal, para resaltarlo visualmente. */
+export type CanalValidacionEstado = "validada" | "rechazada" | "pendiente";
+
+const ESTADO_CANAL_CHIP: Record<CanalValidacionEstado, { label: string; cls: string }> = {
+  validada: { label: "Validado", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
+  rechazada: { label: "Rechazado", cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
+  pendiente: { label: "Pendiente", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+};
+const ESTADO_CANAL_RING: Record<CanalValidacionEstado, string> = {
+  validada: "ring-2 ring-emerald-400/70 dark:ring-emerald-700",
+  rechazada: "ring-2 ring-red-400/70 dark:ring-red-700",
+  pendiente: "ring-1 ring-amber-300/70 dark:ring-amber-800",
+};
+
 export function MotorComisionesReadOnly({
   snapshot,
   precioReferenciaInicial,
+  renderChannelAction,
+  channelStatus,
 }: {
   snapshot: MotorSnapshot;
   precioReferenciaInicial?: number;
+  /** Acción opcional por canal (p. ej. botones Validar/Rechazar en la validación). */
+  renderChannelAction?: (channel: { id: string; name: string }) => ReactNode;
+  /** Estado de validación por canal — resalta la tarjeta y la dona del canal. */
+  channelStatus?: (channelId: string) => CanalValidacionEstado | null | undefined;
 }) {
   // Precio de venta de referencia editable; se recalcula al cambiar el
   // prellenado (p. ej. al cambiar de proyecto).
@@ -72,6 +94,7 @@ export function MotorComisionesReadOnly({
       if (remanente > 0.005) slices.push({ label: "Remanente (SOZU)", value: +remanente.toFixed(2), color: REMANENTE_COLOR });
 
       return {
+        id: ch.id,
         name: ch.name,
         total: +total.toFixed(2),
         externa: +externa.toFixed(2),
@@ -120,7 +143,9 @@ export function MotorComisionesReadOnly({
         </div>
       </div>
 
-      {resumenCanales.length > 0 && <ComparativoCanalesChart data={resumenCanales} />}
+      {resumenCanales.length > 0 && (
+        <ComparativoCanalesChart data={resumenCanales} channelStatus={channelStatus} />
+      )}
 
       {channels.map((ch) => {
         const channelRules = commissionRules.filter((r) => r.channelId === ch.id);
@@ -150,16 +175,25 @@ export function MotorComisionesReadOnly({
             : `Excedido por ${Math.abs(remanente).toFixed(2)}%`;
         const StatusIcon = completo ? CheckCircle : AlertTriangle;
 
+        const estadoCanal = channelStatus?.(ch.id) ?? null;
         return (
-          <div key={ch.id} className="rounded-xl border bg-card p-5">
+          <div key={ch.id} className={cn("rounded-xl border bg-card p-5", estadoCanal && ESTADO_CANAL_RING[estadoCanal])}>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h3 className="font-semibold">{ch.name}</h3>
                 <Badge variant="outline" className="text-[10px]">Ext: {extPct}%</Badge>
+                {estadoCanal && (
+                  <Badge className={cn("border-0 text-[10px]", ESTADO_CANAL_CHIP[estadoCanal].cls)}>
+                    {ESTADO_CANAL_CHIP[estadoCanal].label}
+                  </Badge>
+                )}
               </div>
-              <div className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${statusColor}`}>
-                <StatusIcon className="h-3.5 w-3.5" />
-                {statusText}
+              <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${statusColor}`}>
+                  <StatusIcon className="h-3.5 w-3.5" />
+                  {statusText}
+                </div>
+                {renderChannelAction?.({ id: ch.id, name: ch.name })}
               </div>
             </div>
 
@@ -255,7 +289,13 @@ function Resumen({ label, value }: { label: string; value: number }) {
  * equipo interno + Remanente (SOZU). Colores hsl LITERAL (ver DONUT_COLORS).
  * ─────────────────────────────────────────────────────────────────────────── */
 
-function ComparativoCanalesChart({ data }: { data: CanalResumen[] }) {
+function ComparativoCanalesChart({
+  data,
+  channelStatus,
+}: {
+  data: CanalResumen[];
+  channelStatus?: (channelId: string) => CanalValidacionEstado | null | undefined;
+}) {
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -267,20 +307,27 @@ function ComparativoCanalesChart({ data }: { data: CanalResumen[] }) {
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {data.map((canal) => (
-          <CanalDonut key={canal.name} canal={canal} />
+          <CanalDonut key={canal.name} canal={canal} estado={channelStatus?.(canal.id) ?? null} />
         ))}
       </div>
     </div>
   );
 }
 
-function CanalDonut({ canal }: { canal: CanalResumen }) {
+function CanalDonut({ canal, estado }: { canal: CanalResumen; estado?: CanalValidacionEstado | null }) {
   const hayDatos = canal.slices.length > 0 && canal.total > 0;
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <h4 className="mb-1 truncate text-sm font-semibold" title={canal.name}>
-        {canal.name}
-      </h4>
+    <div className={cn("rounded-lg border border-border bg-card p-3", estado && ESTADO_CANAL_RING[estado])}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h4 className="truncate text-sm font-semibold" title={canal.name}>
+          {canal.name}
+        </h4>
+        {estado && (
+          <Badge className={cn("shrink-0 border-0 text-[9px]", ESTADO_CANAL_CHIP[estado].cls)}>
+            {ESTADO_CANAL_CHIP[estado].label}
+          </Badge>
+        )}
+      </div>
       {!hayDatos ? (
         <p className="py-8 text-center text-xs text-muted-foreground">Sin comisión definida</p>
       ) : (

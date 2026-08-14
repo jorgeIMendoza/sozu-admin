@@ -78,6 +78,11 @@ export interface PersonalOrganizacional {
   fecha_baja: string | null;
   motivo_baja: string | null;
   activo: boolean;
+  /**
+   * Plaza presupuestada sin ocupante. Tiene rol, proyectos y costo, y participa
+   * en la estructura de comisiones; solo le falta la persona.
+   */
+  es_vacante: boolean;
 }
 
 export interface AsignacionProyecto {
@@ -122,7 +127,7 @@ const PERSONAL_COLS_BASE =
   "costo_externo, costo_social, costo_total, sueldo_base_recibido, fecha_ingreso, " +
   "fecha_baja, motivo_baja, activo";
 
-const PERSONAL_COLS = `${PERSONAL_COLS_BASE}, tipo_personal`;
+const PERSONAL_COLS = `${PERSONAL_COLS_BASE}, tipo_personal, es_vacante`;
 
 const ASIGNACION_COLS =
   "id, id_personal, id_proyecto, id_rol, asignacion_pct, fecha_inicio, fecha_fin, activo";
@@ -149,6 +154,32 @@ export function useDirectorioSchemaReady() {
     },
   });
 }
+
+/**
+ * ¿Existe ya la columna `es_vacante`?
+ *
+ * Se prueba aparte del resto del esquema porque llegó después: sin ella todas
+ * las filas se leen como plazas ocupadas y la UI debe avisar del DDL pendiente
+ * en lugar de ofrecer un alta de vacante que no guardaría la condición.
+ * Ver `Ejecuciones_manuales/20260814_vacantes_en_roles_y_sueldos.md`.
+ */
+export function useVacantesSchemaReady() {
+  return useQuery<boolean>({
+    queryKey: ["directorio-vacantes-schema"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const probe = await (supabase as any)
+        .from("personal_organizacional")
+        .select("es_vacante")
+        .limit(0);
+      return !probe.error;
+    },
+  });
+}
+
+/** Una vacante es una plaza vigente sin ocupante. */
+export const esVacante = (p: Pick<PersonalOrganizacional, "es_vacante" | "activo">) =>
+  p.es_vacante && p.activo;
 
 /* ------------------------------------------------------------------ */
 /* Catálogo de roles de la empresa                                     */
@@ -297,14 +328,21 @@ export function usePersonal(incluirBajas = false) {
 
       const { data, error } = await consultar(PERSONAL_COLS);
       if (!error && data) return data as PersonalOrganizacional[];
-
-      // Sin `tipo_personal` (DDL pendiente) se relee sin ella y todos se tratan
-      // como empleados de SOZU: el costo fijo queda igual que antes.
       if (!error || !COLUMN_MISSING_CODES.includes(error.code)) return [];
+
+      // Sin `es_vacante` (DDL pendiente) se relee sin ella: todas las filas se
+      // tratan como plazas ocupadas, que es el comportamiento previo.
+      const sinVacante = await consultar(`${PERSONAL_COLS_BASE}, tipo_personal`);
+      if (!sinVacante.error && sinVacante.data) {
+        return (sinVacante.data as Omit<PersonalOrganizacional, "es_vacante">[])
+          .map(p => ({ ...p, es_vacante: false }));
+      }
+
+      // Sin `tipo_personal` tampoco: todos como empleados de SOZU, igual que antes.
       const fallback = await consultar(PERSONAL_COLS_BASE);
       if (fallback.error || !fallback.data) return [];
-      return (fallback.data as Omit<PersonalOrganizacional, "tipo_personal">[])
-        .map(p => ({ ...p, tipo_personal: "empleado_sozu" as TipoPersonal }));
+      return (fallback.data as Omit<PersonalOrganizacional, "tipo_personal" | "es_vacante">[])
+        .map(p => ({ ...p, tipo_personal: "empleado_sozu" as TipoPersonal, es_vacante: false }));
     },
   });
 }
@@ -325,6 +363,7 @@ export interface NuevaPersonaInput {
   costo_social?: number;
   sueldo_base_recibido?: number | null;
   fecha_ingreso?: string | null;
+  es_vacante?: boolean;
 }
 
 /** Alta de persona. `proyectos` la vincula de una vez con los proyectos que atiende. */
