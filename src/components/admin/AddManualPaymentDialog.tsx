@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { BUCKET_CEPS_STP, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
+import { BUCKET_CEPS_STP, mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -314,7 +314,7 @@ export function AddManualPaymentDialog({
 
         if (uploadError) {
           console.error("Error uploading evidence:", uploadError);
-          throw new Error("No se pudo subir la evidencia de pago");
+          throw new Error(mensajeErrorSubidaEvidencia(uploadError, bucketEvidencia));
         }
 
         const { data: urlData } = supabase.storage
@@ -334,7 +334,7 @@ export function AddManualPaymentDialog({
 
         if (uploadError) {
           console.error("Error uploading CEP:", uploadError);
-          throw new Error("No se pudo subir el archivo CEP");
+          throw new Error(mensajeErrorSubidaEvidencia(uploadError, BUCKET_CEPS_STP));
         }
 
         const { data: urlData } = supabase.storage
@@ -584,7 +584,7 @@ export function AddManualPaymentDialog({
           .from(bucketEvidencia)
           .upload(filePath, data.evidencia_pago, { upsert: true });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) throw new Error(mensajeErrorSubidaEvidencia(uploadError, bucketEvidencia));
 
         // Get public URL
         const { data: urlData } = supabase.storage
@@ -601,7 +601,7 @@ export function AddManualPaymentDialog({
           .from(BUCKET_CEPS_STP)
           .upload(filePath, data.archivo_cep, { upsert: true });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) throw new Error(mensajeErrorSubidaEvidencia(uploadError, BUCKET_CEPS_STP));
 
         // Get public URL
         const { data: urlData } = supabase.storage

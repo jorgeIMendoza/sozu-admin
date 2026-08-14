@@ -6,7 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from '@/lib/config';
-import { pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
+import { mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
 import { esRpcInexistente, esSinPermiso } from '@/lib/rpcErrors';
 import { interpretarReconciliacion, primeraFilaReconciliacion } from '@/lib/reconciliacionAcuerdos';
 import { formatCuentaCobranzaId, formatOfertaId } from '@/utils/cuentaCobranzaUtils';
@@ -269,7 +269,7 @@ export default function CobranzaCuentaDetalle() {
         const columna = apEsValido ? 'url_cep' : 'url_recibo';
         const path = pathEvidencia(cuentaId, nuevoPago.id, apFile.name);
         const { error: se } = await supabase.storage.from(bucket).upload(path, apFile, { upsert: true });
-        if (se) throw se;
+        if (se) throw new Error(mensajeErrorSubidaEvidencia(se, bucket));
         const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
         const { error: ue } = await (supabase as any).from('pagos')
           .update({ [columna]: pub.publicUrl }).eq('id', nuevoPago.id);
