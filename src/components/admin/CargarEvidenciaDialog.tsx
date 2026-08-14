@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Loader2, UploadCloud, FileCheck } from 'lucide-react';
 import { fmtCurrency, fmtDate } from '@/pages/admin/portal-cobranza/cuentaDetalleShared';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
-import { metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
+import { mensajeErrorSubidaEvidencia, metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
 
 // Pago destino al que se le adjunta la evidencia.
 export interface EvidenciaTarget {
@@ -118,7 +118,7 @@ export function CargarEvidenciaDialog({
           err instanceof Error ? err.message : 'Error desconocido'
         );
       }
-      toast.error(err?.message ?? 'Error al subir evidencia');
+      toast.error(mensajeErrorSubidaEvidencia(err, bucket));
     } finally {
       setSaving(false);
     }

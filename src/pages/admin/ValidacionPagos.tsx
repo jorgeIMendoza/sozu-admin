@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCuentaCobranzaId } from "@/utils/cuentaCobranzaUtils";
 import { cn } from "@/lib/utils";
 import { esSinPermiso, retrySalvoSinPermiso } from "@/lib/rpcErrors";
-import { metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
+import { mensajeErrorSubidaEvidencia, metodoAdmiteCep, metodoEsCepForzado, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 
 const ITEMS_PER_PAGE = 25;
 const CHUNK = 1000;
@@ -652,7 +652,11 @@ function CargarEvidenciaModal({ row, onClose }: {
       onClose();
     },
     onError: (err: any) => {
-      toast({ title: "Error al subir evidencia", description: err.message, variant: "destructive" });
+      toast({
+        title: "Error al subir evidencia",
+        description: mensajeErrorSubidaEvidencia(err, bucket),
+        variant: "destructive",
+      });
     },
   });
 

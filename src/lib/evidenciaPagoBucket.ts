@@ -75,3 +75,34 @@ export function pathEvidencia(cuentaId: number | string, pagoId: number | string
   const ext = fileName.split('.').pop() ?? 'bin';
   return `${cuentaId}/${pagoId}/${Date.now()}.${ext}`;
 }
+
+/**
+ * Traduce el error de Storage a algo que el usuario de cobranza pueda accionar.
+ *
+ * Storage devuelve texto de Postgres tal cual —"new row violates row-level security policy"—
+ * que no le dice nada a quien está capturando un pago y además expone el mecanismo interno.
+ * Cada caso se traduce a qué hacer, y solo el error desconocido cae al mensaje genérico.
+ */
+export function mensajeErrorSubidaEvidencia(error: unknown, bucket?: string): string {
+  const e = (error ?? {}) as { message?: string; statusCode?: string | number; error?: string };
+  const texto = `${e.message ?? ''} ${e.error ?? ''}`.toLowerCase();
+  const status = String(e.statusCode ?? '');
+
+  // Falta la policy de Storage del bucket destino: no es culpa del usuario ni de sus permisos.
+  if (texto.includes('row-level security') || texto.includes('violates row-level')) {
+    return `No se pudo guardar el archivo: falta configurar los permisos de almacenamiento${bucket ? ` de "${bucket}"` : ''}. Repórtalo a soporte, no es un problema de tu cuenta.`;
+  }
+  if (status === '403' || texto.includes('unauthorized') || texto.includes('not authorized')) {
+    return 'Tu sesión no tiene permiso para subir evidencia. Vuelve a iniciar sesión y si sigue igual repórtalo a soporte.';
+  }
+  if (status === '413' || texto.includes('payload too large') || texto.includes('exceeded the maximum')) {
+    return 'El archivo es demasiado grande. Súbelo comprimido o en menor calidad.';
+  }
+  if (status === '409' || texto.includes('already exists') || texto.includes('duplicate')) {
+    return 'Ya existe un archivo con ese nombre para este pago. Vuelve a intentar.';
+  }
+  if (texto.includes('failed to fetch') || texto.includes('network') || texto.includes('timeout')) {
+    return 'Se perdió la conexión durante la subida. Revisa tu internet y vuelve a intentar.';
+  }
+  return 'No se pudo subir la evidencia. Vuelve a intentar y si sigue igual repórtalo a soporte.';
+}
