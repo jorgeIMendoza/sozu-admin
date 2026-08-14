@@ -146,7 +146,6 @@ const SpeiPayPanel = ({
   agent,
   clientEmail,
   reservationToken,
-  onPaid,
 }: {
   formalReservationId: string;
   offerId: string;
@@ -158,7 +157,6 @@ const SpeiPayPanel = ({
   clientEmail?: string;
   /** Token del link personal del cliente: credencial de las RPC públicas. */
   reservationToken?: string | null;
-  onPaid?: () => void;
 }) => {
   const recordPayment = useFormalReservationStore((s) => s.recordPayment);
 
@@ -218,11 +216,10 @@ const SpeiPayPanel = ({
     (status?: EstadoApartado | null) => {
       markPaidLocally();
       setPaidStatus(status ?? null);
-      if (!status?.tieneAcceso) onPaid?.();
       setFlow("paid");
       setPaidDialogOpen(true);
     },
-    [markPaidLocally, onPaid]
+    [markPaidLocally]
   );
 
   // Un intento de verificación: si está pagado → éxito; si no, suma intento y,
@@ -402,10 +399,20 @@ const SpeiPayPanel = ({
               <li key={m.claveRastreo ?? `mov-${i}`} className="flex items-start gap-3 px-4 py-3">
                 <span
                   className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${
-                    m.aplicado ? "bg-success/15 text-success" : "bg-amber-100 text-amber-600"
+                    m.estado === "aplicado"
+                      ? "bg-success/15 text-success"
+                      : m.estado === "rechazado"
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {m.aplicado ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                  {m.estado === "aplicado" ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : m.estado === "rechazado" ? (
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
@@ -414,12 +421,16 @@ const SpeiPayPanel = ({
                     </p>
                     <p className="text-[10px] text-muted-foreground shrink-0">{m.fecha ?? ""}</p>
                   </div>
-                  <p className={`text-[11px] leading-snug ${m.aplicado ? "text-muted-foreground" : "text-amber-700"}`}>
-                    {m.aplicado
+                  <p
+                    className={`text-[11px] leading-snug ${
+                      m.estado === "rechazado" ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {m.estado === "aplicado"
                       ? "Aplicado a tu apartado"
-                      : m.razonRechazo
-                        ? `No se aplicó: ${m.razonRechazo}`
-                        : "Recibido, aún sin aplicar"}
+                      : m.estado === "rechazado"
+                        ? `No se aplicó: ${m.razonRechazo ?? "el banco lo devolvió"}`
+                        : "Recibido — lo estamos aplicando"}
                   </p>
                   {m.claveRastreo && (
                     <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/70 break-all">
@@ -436,8 +447,8 @@ const SpeiPayPanel = ({
             <div className="flex items-start gap-2.5 border-t border-border bg-primary/[0.04] px-4 py-3">
               <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <p className="text-[11px] leading-relaxed text-foreground">
-                <span className="font-semibold">Tu depósito llegó y se aplicó.</span> Ya puedes
-                hacer el depósito completo: transfiere los{" "}
+                <span className="font-semibold">Tu depósito llegó y se aplicó.</span> Para
+                terminar de cubrir el apartado, transfiere los{" "}
                 <span className="font-semibold tabular-nums">{formatMXN(estado!.restante as number)}</span>{" "}
                 restantes a la misma CLABE, con el mismo concepto.
               </p>
@@ -556,13 +567,14 @@ const SpeiPayPanel = ({
             {remaining > 0 && <> Seguimos revisando por {Math.ceil((remaining * CHECK_INTERVAL_MS) / 60_000)} min más.</>}
           </p>
 
-          {/* Sugerencia del depósito de prueba: es lo que hace la gente por su cuenta,
-              y así sabe que se lo vamos a confirmar antes de mandar el monto completo. */}
+          {/* Requisito duro del backend (`insertar_pago_stp`): el titular de la cuenta
+              que transfiere debe coincidir por RFC con el del expediente, o el pago se
+              devuelve. Vale más decirlo antes que explicar el rechazo después. */}
           {movimientos.length === 0 && (
             <p className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-              ¿Prefieres ir sobre seguro? Manda primero un depósito pequeño de prueba
-              (por ejemplo $1). En cuanto lo veamos aplicado te avisamos aquí para que
-              transfieras el resto.
+              Transfiere desde una cuenta a tu nombre: validamos que el RFC del titular
+              sea el mismo de tu Constancia. Si transfieres menos del monto, tu unidad
+              queda apartada igual y aquí te decimos cuánto falta.
             </p>
           )}
           <button
@@ -581,8 +593,8 @@ const SpeiPayPanel = ({
       <div className="flex items-start gap-2 px-1">
         <ShieldCheck className="w-3.5 h-3.5 text-success/80 shrink-0 mt-0.5" />
         <p className="text-[10px] text-muted-foreground/80 leading-relaxed">
-          Transfiere desde una cuenta a tu nombre. El apartado se aplica al precio final
-          de la unidad. No se realiza ningún cargo a tarjeta.
+          El apartado se aplica al precio final de la unidad. No se realiza ningún cargo
+          a tarjeta.
         </p>
       </div>
 
@@ -673,17 +685,13 @@ const ReservarPage = () => {
   }, [agentOfferId]);
   const agent = dbOfferResult?.agent ?? agentFromDB ?? mockAgent ?? undefined;
 
-  // Al confirmarse el pago: crear cuenta del cliente y disparar el correo con sus
-  // credenciales de acceso. Best-effort (no bloquea la UI); el paso autoritativo en
-  // prod lo cubre el backend al reflejarse el pago (ver .md de ejecución).
+  // El alta del cliente NO se dispara desde aquí. La cadena autoritativa vive en el
+  // backend: al aplicarse el pago se crea la cuenta de cobranza y su fila en
+  // `compradores`, y el trigger `create_client_user_on_comprador_insert` inserta el
+  // usuario (rol Cliente) y llama a la EF `create-client-user`, que manda las
+  // credenciales. Invocarla también desde el navegador duplicaba el alta y competía
+  // con el trigger. Esta pantalla solo refleja `tieneAcceso`.
   const clientEmail = offer?.prospectEmail;
-  const clientName = offer?.prospectName;
-  const createClientAccount = useCallback(() => {
-    if (!clientEmail) return;
-    (supabase as any).functions
-      .invoke("create-client-user", { body: { email: clientEmail, nombre: clientName ?? clientEmail } })
-      .catch(() => {});
-  }, [clientEmail, clientName]);
 
   // Ya no se exige el registro local: basta la oferta (del store o de la BD).
   const resolviendo = cargandoReservacion || (!!offerId && cargandoOferta);
@@ -779,7 +787,6 @@ const ReservarPage = () => {
                   agent={agent}
                   clientEmail={clientEmail}
                   reservationToken={reservationToken}
-                  onPaid={createClientAccount}
                 />
               </>
             )}
