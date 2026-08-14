@@ -13,6 +13,7 @@ import {
   useAsignacionesProyecto, useVincularProyecto, useDesvincularProyecto, useActualizarAsignacion,
   useProyectosActivosDirectorio, useBuscarUsuarios, useDirectorioSchemaReady, costoTotal,
   useCuentaSistema, rolesEnLaEmpresa, useRolesAdicionales, useGuardarRolesAdicionales,
+  useVacantesSchemaReady,
   type RolOrganizacional, type PersonalOrganizacional, type AsignacionProyecto,
   type ProyectoActivo, type RoleType, type RoleBelongsTo, type NuevaPersonaInput,
   type NuevoRolInput, type TipoPersonal, type PersonaVinculada,
@@ -34,6 +35,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 
@@ -159,19 +161,30 @@ export default function DirectorioPuestosTab() {
   const { data: asignaciones = [] } = useAsignacionesProyecto();
   const { data: proyectos = [] } = useProyectosActivosDirectorio();
   const { data: rolesAdicionales } = useRolesAdicionales();
+  const { data: vacantesReady = true } = useVacantesSchemaReady();
   /** `null` = la tabla aún no existe; no es lo mismo que "nadie tiene roles extra". */
   const rolesAdicionalesPendiente = rolesAdicionales === null;
 
   const [roleDialog, setRoleDialog] = useState<{ open: boolean; rol: RolOrganizacional | null }>({
     open: false, rol: null,
   });
-  const [personaDialog, setPersonaDialog] = useState<{ open: boolean; persona: PersonalOrganizacional | null }>({
+  /**
+   * `vacante` arranca el alta ya marcada como plaza; `cubrir` abre una vacante
+   * existente en modo contratación, con la bandera apagada de entrada.
+   */
+  const [personaDialog, setPersonaDialog] = useState<{
+    open: boolean;
+    persona: PersonalOrganizacional | null;
+    vacante?: boolean;
+    cubrir?: boolean;
+  }>({
     open: false, persona: null,
   });
   const [bajaTarget, setBajaTarget] = useState<PersonalOrganizacional | null>(null);
   /** Proyectos con su detalle desplegado. `'central'` es SOZU Central. */
   const [proyectosAbiertos, setProyectosAbiertos] = useState<Set<number | 'central'>>(new Set());
   const [prorratear, setProrratear] = useState(false);
+  const [gruposPlegados, setGruposPlegados] = useState<Set<TipoPersonal>>(new Set());
   /** Filtro rápido activado desde los indicadores de cabecera. */
   const [foco, setFoco] = useState<'todos' | 'empleados' | 'investimento' | 'pendientes'>('todos');
   const alternarFoco = (v: Exclude<typeof foco, 'todos'>) =>
@@ -245,6 +258,22 @@ export default function DirectorioPuestosTab() {
     () => empleadosSozu.reduce((s, p) => s + Number(p.costo_total), 0),
     [empleadosSozu],
   );
+
+  /**
+   * Vacantes vigentes y lo que pesan.
+   *
+   * Una vacante ya está presupuestada: entra en el costo fijo y, si su rol
+   * comisiona, en la estructura de comisiones. Separar su costo permite ver el
+   * costo de la plantilla actual frente al de la plantilla completa, que es la
+   * pregunta que motiva registrarlas.
+   */
+  const vacantes = useMemo(() => activos.filter(p => p.es_vacante), [activos]);
+  const ocupadas = useMemo(() => activos.filter(p => !p.es_vacante), [activos]);
+  const costoVacantes = useMemo(
+    () => empleadosSozu.filter(p => p.es_vacante).reduce((s, p) => s + Number(p.costo_total), 0),
+    [empleadosSozu],
+  );
+  const costoOcupado = costoEmpresa - costoVacantes;
   const costoInvestimento = useMemo(
     () => colaboradores.reduce((s, p) => s + Number(p.costo_total), 0),
     [colaboradores],
@@ -276,6 +305,31 @@ export default function DirectorioPuestosTab() {
         .toLowerCase().includes(q);
     });
   }, [personal, busqueda, foco, rolesById, proyectosById, asignacionesByPersona]);
+
+  /**
+   * El listado partido por perfil.
+   *
+   * Empleado SOZU primero porque es el costo que la empresa paga. Un grupo sin
+   * nadie no se dibuja: un encabezado vacío solo ocuparía espacio. El costo del
+   * grupo cuenta solo a los activos —una baja ya no cuesta— y las vacantes se
+   * cuentan aparte porque son plazas sin ocupante.
+   */
+  const gruposPersonal = useMemo(() => {
+    const orden: TipoPersonal[] = ['empleado_sozu', 'colaborador_investimento'];
+    return orden
+      .map(tipo => {
+        const personas = personalFiltrado.filter(p => p.tipo_personal === tipo);
+        return {
+          tipo,
+          personas,
+          vacantes: personas.filter(p => p.es_vacante && p.activo).length,
+          costo: personas
+            .filter(p => p.activo)
+            .reduce((s, p) => s + Number(p.costo_total), 0),
+        };
+      })
+      .filter(g => g.personas.length > 0);
+  }, [personalFiltrado]);
 
   /**
    * Costo por proyecto, prorrateado; el remanente no asignado se acumula en
@@ -402,12 +456,14 @@ export default function DirectorioPuestosTab() {
         <KpiCard
           label="Costo fijo mensual SOZU"
           value={formatCurrency(costoEmpresa)}
-          nota="solo empleados directos"
+          nota={costoVacantes > 0
+            ? `${formatCurrency(costoOcupado)} ocupado + ${formatCurrency(costoVacantes)} en vacantes`
+            : 'solo empleados directos'}
         />
         <KpiCard
           label="Empleados SOZU"
           value={String(empleadosSozu.length)}
-          nota={`de ${activos.length} personas activas`}
+          nota={`${ocupadas.length} ocupadas · ${vacantes.length} vacante${vacantes.length === 1 ? '' : 's'}`}
           onClick={() => alternarFoco('empleados')}
           activo={foco === 'empleados'}
         />
@@ -447,6 +503,164 @@ export default function DirectorioPuestosTab() {
           onError: notifyError,
         })}
       />
+
+      {/* Vacantes. Sección propia porque no son personas: son plazas que ya
+          cuestan y ya comisionan, y su efecto sobre el costo fijo es la razón
+          de registrarlas. */}
+      <div className="rounded-xl border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold">Vacantes</h3>
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              Plazas presupuestadas sin ocupante. Ya suman al costo fijo y, si su rol comisiona,
+              entran en la estructura de comisiones y en los escenarios.
+            </p>
+          </div>
+          {vacantesReady && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={!schemaReady}
+              onClick={() => setPersonaDialog({ open: true, persona: null, vacante: true })}
+            >
+              <Plus className="h-3.5 w-3.5" /> Nueva Vacante
+            </Button>
+          )}
+        </div>
+
+        {!vacantesReady ? (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Para administrar vacantes falta ejecutar{' '}
+              <span className="font-medium text-foreground">
+                Ejecuciones_manuales/20260814_vacantes_en_roles_y_sueldos.md
+              </span>{' '}
+              en la base de datos. Mientras tanto todas las plazas se leen como ocupadas y ningún
+              costo cambia.
+            </p>
+          </div>
+        ) : vacantes.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Sin vacantes registradas. El costo fijo de {formatCurrency(costoEmpresa)} corresponde
+            todo a plazas ocupadas.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <ResumenVacante etiqueta="Plazas ocupadas" valor={formatCurrency(costoOcupado)} nota={`${ocupadas.filter(esCostoDeSozu).length} empleados directos`} />
+              <ResumenVacante etiqueta="Vacantes" valor={formatCurrency(costoVacantes)} nota={`${vacantes.length} plaza${vacantes.length === 1 ? '' : 's'} por cubrir`} destacado />
+              <ResumenVacante
+                etiqueta="Costo fijo con vacantes"
+                valor={formatCurrency(costoEmpresa)}
+                nota={costoEmpresa > 0
+                  ? `las vacantes son el ${((costoVacantes / costoEmpresa) * 100).toFixed(1)}% del total`
+                  : '—'}
+              />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Plaza</th>
+                    <th>Rol</th>
+                    <th>Proyectos</th>
+                    <th className="text-right">Costo mensual</th>
+                    <th className="text-right">% del costo fijo</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...vacantes].sort((a, b) => Number(b.costo_total) - Number(a.costo_total)).map(v => {
+                    const rol = v.id_rol !== null ? rolesById.get(v.id_rol) ?? null : null;
+                    const proys = (asignacionesByPersona.get(v.id) ?? [])
+                      .map(a => proyectosById.get(a.id_proyecto)?.nombre ?? `#${a.id_proyecto}`);
+                    const costo = Number(v.costo_total);
+                    return (
+                      <tr key={v.id}>
+                        <td className="font-medium whitespace-nowrap">{v.nombre}</td>
+                        <td className="text-sm text-muted-foreground">
+                          {rol
+                            ? <span className="flex items-center gap-1.5">
+                                {rol.nombre}
+                                {rol.participa_comision && (
+                                  <Badge variant="outline" className="text-[10px] border-primary text-primary">
+                                    comisiona
+                                  </Badge>
+                                )}
+                              </span>
+                            : <span className="italic text-amber-600">Sin rol asignado</span>}
+                        </td>
+                        <td>
+                          {proys.length === 0
+                            ? <span className="text-xs text-muted-foreground italic">SOZU Central</span>
+                            : <div className="flex flex-wrap gap-1">
+                                {proys.map(n => (
+                                  <Badge key={n} variant="secondary" className="text-[10px] font-normal">{n}</Badge>
+                                ))}
+                              </div>}
+                        </td>
+                        <td className="text-right font-semibold font-mono text-sm whitespace-nowrap">
+                          {formatCurrency(costo)}
+                        </td>
+                        <td className="text-right font-mono text-sm text-foreground/70">
+                          {costoEmpresa > 0 ? ((costo / costoEmpresa) * 100).toFixed(1) : '0.0'}%
+                        </td>
+                        <td>
+                          <div className="flex items-center gap-1 justify-end">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => setPersonaDialog({ open: true, persona: v, cubrir: true })}
+                                  className="rounded p-1 hover:bg-muted"
+                                >
+                                  <UserCheck className="h-3.5 w-3.5 text-primary" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-xs max-w-xs">
+                                Cubrir la vacante: conserva el rol, los proyectos y el costo; solo
+                                se captura quién la ocupa.
+                              </TooltipContent>
+                            </Tooltip>
+                            <button
+                              title="Modificar la plaza"
+                              onClick={() => setPersonaDialog({ open: true, persona: v })}
+                              className="rounded p-1 hover:bg-muted"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                            </button>
+                            <button
+                              title="Cancelar la plaza"
+                              onClick={() => setBajaTarget(v)}
+                              className="rounded p-1 hover:bg-destructive/10"
+                            >
+                              <UserMinus className="h-3.5 w-3.5 text-destructive" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t">
+                    <td className="font-semibold">Total en vacantes</td>
+                    <td></td>
+                    <td></td>
+                    <td className="text-right font-bold font-mono text-sm whitespace-nowrap">
+                      {formatCurrency(costoVacantes)}
+                    </td>
+                    <td className="text-right font-bold font-mono text-sm">
+                      {costoEmpresa > 0 ? ((costoVacantes / costoEmpresa) * 100).toFixed(1) : '0.0'}%
+                    </td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Personal */}
       <div className="rounded-xl border bg-card p-5">
@@ -532,25 +746,68 @@ export default function DirectorioPuestosTab() {
                   <th></th>
                 </tr>
               </thead>
-              <tbody>
-                {personalFiltrado.map(p => (
-                  <PersonaRow
-                    key={p.id}
-                    persona={p}
-                    rolesAsignables={rolesAsignables}
-                    rol={p.id_rol !== null ? rolesById.get(p.id_rol) ?? null : null}
-                    proyectos={proyectos}
-                    asignaciones={asignacionesByPersona.get(p.id) ?? []}
-                    rolesAdicionales={rolesAdicionalesByPersona.get(p.id) ?? []}
-                    onEditar={() => setPersonaDialog({ open: true, persona: p })}
-                    onBaja={() => setBajaTarget(p)}
-                    onReactivar={() => reactivar.mutate(p.id, {
-                      onSuccess: () => toast.success('Persona reactivada'),
-                      onError: notifyError,
+              {/* Un grupo por perfil, no una lista revuelta: el costo de SOZU y
+                  el de Investimento no se suman entre sí, y verlos mezclados
+                  obligaba a leer la columna Perfil renglón por renglón. */}
+              {gruposPersonal.map(grupo => (
+                <tbody key={grupo.tipo} className="border-t-2 border-border">
+                  <tr
+                    className="cursor-pointer select-none"
+                    onClick={() => setGruposPlegados(prev => {
+                      const siguiente = new Set(prev);
+                      if (siguiente.has(grupo.tipo)) siguiente.delete(grupo.tipo);
+                      else siguiente.add(grupo.tipo);
+                      return siguiente;
                     })}
-                  />
-                ))}
-              </tbody>
+                  >
+                    <td colSpan={11} className="bg-muted/50 py-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="flex items-center gap-1.5 font-semibold text-sm">
+                          <ChevronRight className={cn(
+                            'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                            !gruposPlegados.has(grupo.tipo) && 'rotate-90',
+                          )} />
+                          <span className={cn(
+                            'h-2 w-2 rounded-full shrink-0',
+                            grupo.tipo === 'empleado_sozu' ? 'bg-primary' : 'bg-muted-foreground',
+                          )} />
+                          {ETIQUETA_TIPO_PERSONAL[grupo.tipo]}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {grupo.personas.length} {grupo.personas.length === 1 ? 'persona' : 'personas'}
+                          {grupo.vacantes > 0 && ` · ${grupo.vacantes} vacante${grupo.vacantes === 1 ? '' : 's'}`}
+                        </span>
+                        <span className="text-xs font-mono font-semibold">
+                          {formatCurrency(grupo.costo)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {grupo.tipo === 'empleado_sozu'
+                            ? 'costo fijo de SOZU'
+                            : 'lo paga Investimento; no suma al costo de SOZU'}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {!gruposPlegados.has(grupo.tipo) && grupo.personas.map(p => (
+                    <PersonaRow
+                      key={p.id}
+                      persona={p}
+                      rolesAsignables={rolesAsignables}
+                      rol={p.id_rol !== null ? rolesById.get(p.id_rol) ?? null : null}
+                      proyectos={proyectos}
+                      asignaciones={asignacionesByPersona.get(p.id) ?? []}
+                      rolesAdicionales={rolesAdicionalesByPersona.get(p.id) ?? []}
+                      onEditar={() => setPersonaDialog({ open: true, persona: p })}
+                      onBaja={() => setBajaTarget(p)}
+                      onReactivar={() => reactivar.mutate(p.id, {
+                        onSuccess: () => toast.success('Persona reactivada'),
+                        onError: notifyError,
+                      })}
+                    />
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         )}
@@ -798,20 +1055,31 @@ export default function DirectorioPuestosTab() {
 
       <Dialog
         open={personaDialog.open}
-        onOpenChange={(open) => setPersonaDialog({ open, persona: open ? personaDialog.persona : null })}
+        onOpenChange={(open) => setPersonaDialog(
+          open ? { ...personaDialog, open } : { open: false, persona: null },
+        )}
       >
         <DialogContent className="max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
           <DialogHeader className="shrink-0">
-            <DialogTitle>{personaDialog.persona ? 'Editar persona' : 'Alta de persona'}</DialogTitle>
+            <DialogTitle>
+              {personaDialog.cubrir ? `Cubrir vacante: ${personaDialog.persona?.nombre ?? ''}`
+                : personaDialog.persona ? (personaDialog.persona.es_vacante ? 'Editar vacante' : 'Editar persona')
+                  : personaDialog.vacante ? 'Alta de vacante' : 'Alta de persona'}
+            </DialogTitle>
             <DialogDescription>
-              {personaDialog.persona
-                ? 'Modifica los datos de la ficha. El rol y los proyectos también se editan desde la tabla.'
-                : 'Da de alta a la persona; puedes vincular su rol y proyectos ahora o después.'}
+              {personaDialog.cubrir
+                ? 'Captura quién ocupa la plaza y desmarca "Es una vacante". Conserva su rol, sus proyectos y su costo.'
+                : personaDialog.persona
+                  ? 'Modifica los datos de la ficha. El rol y los proyectos también se editan desde la tabla.'
+                  : personaDialog.vacante
+                    ? 'Da de alta la plaza presupuestada; puedes vincular su rol y proyectos ahora o después.'
+                    : 'Da de alta a la persona; puedes vincular su rol y proyectos ahora o después.'}
             </DialogDescription>
           </DialogHeader>
           <PersonaForm
-            key={personaDialog.persona?.id ?? 'nueva'}
+            key={`${personaDialog.persona?.id ?? 'nueva'}-${personaDialog.cubrir ? 'cubrir' : personaDialog.vacante ? 'vacante' : 'normal'}`}
             persona={personaDialog.persona}
+            vacanteInicial={personaDialog.cubrir ? false : personaDialog.vacante ?? personaDialog.persona?.es_vacante ?? false}
             roles={rolesAsignables}
             proyectos={proyectos}
             asignaciones={
@@ -825,6 +1093,7 @@ export default function DirectorioPuestosTab() {
                 : []
             }
             rolesAdicionalesPendiente={rolesAdicionalesPendiente}
+            vacantesPendiente={!vacantesReady}
             onSave={(input) => guardarPersona(input, personaDialog.persona?.id ?? null)}
             onCancel={() => setPersonaDialog({ open: false, persona: null })}
           />
@@ -890,6 +1159,22 @@ function EstructuraSimuladorAviso() {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Cifra del bloque de vacantes: ocupado, vacante y total. */
+function ResumenVacante({ etiqueta, valor, nota, destacado }: {
+  etiqueta: string;
+  valor: string;
+  nota: string;
+  destacado?: boolean;
+}) {
+  return (
+    <div className={cn('rounded-lg border p-3', destacado ? 'border-primary/40 bg-primary/5' : 'bg-muted/30')}>
+      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+      <p className="text-lg font-bold font-mono mt-0.5">{valor}</p>
+      <p className="text-[11px] text-muted-foreground">{nota}</p>
     </div>
   );
 }
@@ -1169,6 +1454,13 @@ function PersonaRow({ persona, rolesAsignables, rol, proyectos, asignaciones, ro
         <div className="flex flex-col min-w-0">
           <span className="font-medium truncate flex items-center gap-2">
             {persona.nombre}
+            {/* Una vacante convive con las personas en este listado porque
+                cuesta y comisiona igual; el badge evita confundirla con alguien. */}
+            {persona.es_vacante && persona.activo && (
+              <Badge variant="outline" className="text-[10px] border-primary text-primary shrink-0">
+                Vacante
+              </Badge>
+            )}
             {!persona.activo && <Badge variant="outline" className="text-[10px]">Baja</Badge>}
           </span>
           <span className="text-xs text-muted-foreground truncate">
@@ -1473,7 +1765,7 @@ function ProyectosPicker({ idPersonal, proyectos, asignaciones, rol, rolesAsigna
 
 function PersonaForm({
   persona, roles, proyectos, asignaciones, rolesAdicionales, rolesAdicionalesPendiente,
-  onSave, onCancel,
+  vacantesPendiente, vacanteInicial, onSave, onCancel,
 }: {
   persona: PersonalOrganizacional | null;
   roles: RolOrganizacional[];
@@ -1484,6 +1776,10 @@ function PersonaForm({
   rolesAdicionales: number[];
   /** La tabla de roles adicionales aún no existe en la BD. */
   rolesAdicionalesPendiente: boolean;
+  /** La columna `es_vacante` aún no existe en la BD. */
+  vacantesPendiente: boolean;
+  /** Estado inicial de la bandera; el alta de vacante y el cubrir la fijan. */
+  vacanteInicial: boolean;
   onSave: (input: NuevaPersonaInput & { proyectos?: number[]; rolesAdicionales?: number[] }) => void;
   onCancel: () => void;
 }) {
@@ -1504,6 +1800,7 @@ function PersonaForm({
   const [fechaIngreso, setFechaIngreso] = useState(persona?.fecha_ingreso ?? '');
   const [proyectosSel, setProyectosSel] = useState<number[]>([]);
   const [adicionales, setAdicionales] = useState<number[]>(rolesAdicionales);
+  const [vacante, setVacante] = useState(vacanteInicial);
 
   const esAlta = persona === null;
 
@@ -1535,7 +1832,10 @@ function PersonaForm({
     || (Number.isFinite(Number(netoRecibido)) && Number(netoRecibido) >= 0 && Number(netoRecibido) <= total);
 
   const guardar = () => {
-    if (!nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
+    if (!nombre.trim()) {
+      toast.error(vacante ? 'El nombre de la plaza es obligatorio' : 'El nombre es obligatorio');
+      return;
+    }
     if (!costosValidos) { toast.error('Los costos deben ser números ≥ 0'); return; }
     if (!netoValido) {
       toast.error('El sueldo base recibido debe estar entre 0 y el costo total');
@@ -1553,6 +1853,7 @@ function PersonaForm({
       costo_social: Number(costoSocial),
       sueldo_base_recibido: netoCapturado ? Number(netoRecibido) : null,
       fecha_ingreso: fechaIngreso || null,
+      ...(vacantesPendiente ? {} : { es_vacante: vacante }),
       ...(esAlta ? { proyectos: proyectosSel } : {}),
       // El principal nunca viaja como adicional: la BD lo rechaza (23514).
       ...(rolesAdicionalesPendiente ? {} : { rolesAdicionales: adicionales.filter(id => id !== idRol) }),
@@ -1564,10 +1865,42 @@ function PersonaForm({
        consulta al capturar, así que no deben irse con el scroll. */
     <div className="flex flex-col min-h-0 flex-1">
       <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
+      {/* Una vacante es la misma plaza sin ocupante: mismo rol, mismos
+          proyectos, mismo costo. Por eso se marca aquí y no en otro formulario. */}
+      {!vacantesPendiente && (
+        <label className={cn(
+          'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+          vacante ? 'border-primary/40 bg-primary/5' : 'hover:bg-muted/40',
+        )}>
+          <Checkbox
+            checked={vacante}
+            onCheckedChange={(checked) => {
+              const v = checked === true;
+              setVacante(v);
+              // Al marcar una plaza nueva se propone el nombre del puesto.
+              if (v && !nombre.trim() && idRol !== null) {
+                setNombre(`Vacante ${roles.find(r => r.id === idRol)?.nombre ?? ''}`.trim());
+              }
+            }}
+          />
+          <span className="min-w-0">
+            <span className="text-sm font-medium">Es una vacante</span>
+            <span className="block text-[11px] text-muted-foreground">
+              Plaza presupuestada sin ocupante. Suma al costo fijo y participa en la estructura
+              de comisiones igual que una persona; al cubrirla se desmarca y se captura su nombre.
+            </span>
+          </span>
+        </label>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label>Nombre completo *</Label>
-          <Input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Ana Martínez" />
+          <Label>{vacante ? 'Nombre de la plaza *' : 'Nombre completo *'}</Label>
+          <Input
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            placeholder={vacante ? 'Ej: Vacante Asesor de Ventas' : 'Ej: Ana Martínez'}
+          />
         </div>
         <div>
           <Label>Cuenta del sistema (opcional)</Label>
