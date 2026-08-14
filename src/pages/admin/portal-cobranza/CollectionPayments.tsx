@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -8,7 +8,7 @@ import { PaymentsAdvancedFilters } from '@/components/admin/portal-cobranza/Paym
 import { useRelacionPagos, type PagoRecord } from '@/hooks/useRelacionPagos';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { CargarEvidenciaDialog } from '@/components/admin/CargarEvidenciaDialog';
-import { guardarFiltros, leerFiltros } from '@/lib/filtrosPersistentes';
+import { crearStoreFiltros } from '@/lib/filtrosPersistentes';
 import { PaymentDetailDialog } from '@/components/admin/portal-cobranza/PaymentDetailDialog';
 import { EliminarPagoDialog } from '@/components/admin/portal-cobranza/EliminarPagoDialog';
 import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from '@/hooks/useEliminarPago';
@@ -72,8 +72,7 @@ function propStatusTextClass(status: string | null): string {
 
 // Filtros persistidos de esta pantalla. Incluye el estado de la tabla (página y orden):
 // volver del detalle de un pago no debe mandarte a la página 1.
-const CLAVE_FILTROS_RP = 'pcobranza_relacion_pagos';
-const FILTROS_RP_INICIALES = {
+const filtrosRP = crearStoreFiltros('pcobranza_relacion_pagos', {
   projectId: null as number | null,
   searchClabe: '',
   searchClient: '',
@@ -86,7 +85,7 @@ const FILTROS_RP_INICIALES = {
   page: 1,
   advancedOpen: false,
   sort: { key: null, dir: 'asc' } as SortState<PaymentsSortKey>,
-};
+});
 
 // Relación de Pagos: pagos directos del cliente. Válido = url_cep + validación 'coincide'.
 // Filtros: barra principal (Proyecto/Cliente/Unidad/Estatus) + panel avanzado.
@@ -98,27 +97,27 @@ export default function CollectionPayments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: projects } = useProyectosCobranza();
 
-  // Filtros y estado de tabla persistidos: sobreviven navegación y F5, se borran solo al
-  // cerrar sesión o con "Limpiar filtros".
-  const F = useMemo(() => leerFiltros(CLAVE_FILTROS_RP, FILTROS_RP_INICIALES), []);
+  // Filtros y estado de tabla: viven en el store persistido, no en useState.
+  const [projectId, setProjectId] = filtrosRP.useFiltro('projectId');
+  const [searchClabe, setSearchClabe] = filtrosRP.useFiltro('searchClabe');
+  const [searchClient, setSearchClient] = filtrosRP.useFiltro('searchClient');
+  const [searchUnit, setSearchUnit] = filtrosRP.useFiltro('searchUnit');
+  const [searchAccount, setSearchAccount] = filtrosRP.useFiltro('searchAccount');
+  const [filterType, setFilterType] = filtrosRP.useFiltro('filterType');
+  const [filterStatus, setFilterStatus] = filtrosRP.useFiltro('filterStatus');
+  const [filterMetodo, setFilterMetodo] = filtrosRP.useFiltro('filterMetodo');
+  const [filterEstatusProp, setFilterEstatusProp] = filtrosRP.useFiltro('filterEstatusProp');
+  const [page, setPage] = filtrosRP.useFiltro('page');
+  const [advancedOpen, setAdvancedOpen] = filtrosRP.useFiltro('advancedOpen');
+  // Orden de la tabla. key=null → orden del servidor.
+  const [sort, setSort] = filtrosRP.useFiltro('sort');
 
-  const [projectId, setProjectId] = useState<number | null>(() => {
-    // El proyecto de la URL manda: se llega aquí desde un dashboard con ?proyecto=N.
+  // El proyecto de la URL manda sobre el guardado: se llega aquí desde un dashboard con
+  // ?proyecto=N y esa intención es más reciente que el filtro que traía el usuario.
+  useEffect(() => {
     const p = searchParams.get('proyecto');
-    return p ? parseInt(p) : F.projectId;
-  });
-  const [searchClabe, setSearchClabe] = useState(F.searchClabe);
-  const [searchClient, setSearchClient] = useState(F.searchClient);
-  const [searchUnit, setSearchUnit] = useState(F.searchUnit);
-  const [searchAccount, setSearchAccount] = useState(F.searchAccount);
-  const [filterType, setFilterType] = useState<string[]>(F.filterType);
-  const [filterStatus, setFilterStatus] = useState<string[]>(F.filterStatus);
-  const [filterMetodo, setFilterMetodo] = useState<string[]>(F.filterMetodo);
-  const [filterEstatusProp, setFilterEstatusProp] = useState<string[]>(F.filterEstatusProp);
-  const [page, setPage] = useState(F.page);
-  const [advancedOpen, setAdvancedOpen] = useState(F.advancedOpen);
-  // Orden de la tabla (client-side). key=null → orden del servidor.
-  const [sort, setSort] = useState<SortState<PaymentsSortKey>>(F.sort);
+    if (p) setProjectId(parseInt(p));
+  }, [searchParams, setProjectId]);
   const toggleSort = (key: PaymentsSortKey) => { setSort(s => toggleSortState(s, key)); setPage(1); };
 
   // Cargar evidencia (icono Upload) + detalle del pago (icono Eye).
@@ -207,16 +206,6 @@ export default function CollectionPayments() {
     setFilterStatus([]); setFilterType([]); setFilterEstatusProp([]); setSearchAccount(''); setSearchClabe(''); setPage(1);
   };
 
-  // Persistir filtros + estado de tabla. Al limpiar, los setters de arriba dejan los valores
-  // iniciales y este mismo efecto los escribe, así que no hace falta borrar a mano.
-  useEffect(() => {
-    guardarFiltros(CLAVE_FILTROS_RP, {
-      projectId, searchClabe, searchClient, searchUnit, searchAccount,
-      filterType, filterStatus, filterMetodo, filterEstatusProp,
-      page, advancedOpen, sort,
-    });
-  }, [projectId, searchClabe, searchClient, searchUnit, searchAccount,
-      filterType, filterStatus, filterMetodo, filterEstatusProp, page, advancedOpen, sort]);
 
   // El folio canónico (CC- / CCP- / CM-) lo resuelve la RPC; solo hay fallback por si
   // la versión vieja aún no lo devuelve.

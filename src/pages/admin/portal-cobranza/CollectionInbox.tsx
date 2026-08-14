@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCollectionAccounts, CollectionAccount } from '@/hooks/useCollectionAccounts';
-import { useCollectionInboxStore } from '@/lib/portal-cobranza/collection-inbox-store';
+import { filtrosCuentasCobranza } from '@/lib/portal-cobranza/collection-inbox-store';
 import { CobranzaProjectFilter } from '@/components/admin/portal-cobranza/CobranzaProjectFilter';
 import { useProyectosCobranza } from '@/hooks/useCobranzaDashboard';
 import { formatCuentaCobranzaId } from '@/utils/cuentaCobranzaUtils';
@@ -137,24 +137,19 @@ function CountCircle({ n }: { n: number }) {
 export default function CollectionInboxPage() {
   const navigate = useNavigate();
   // Filters in localStorage: cleared only by user decision (logout or clear button).
-  const {
-    projectId, searchClabe, searchClient, searchUnit,
-    filterType, searchAccount, filterPriority, filterInvalidLevel,
-    filterModel, filterStatus,
-    setFilter, resetFilters,
-  } = useCollectionInboxStore();
-  const setProjectId          = (v: number | null) => setFilter('projectId', v);
-  const setSearchClabe        = (v: string)        => setFilter('searchClabe', v);
-  const setSearchClient       = (v: string)        => setFilter('searchClient', v);
-  const setSearchUnit         = (v: string)        => setFilter('searchUnit', v);
-  const setFilterType         = (v: string[])      => setFilter('filterType', v);
-  const setSearchAccount      = (v: string)        => setFilter('searchAccount', v);
-  const setFilterPriority     = (v: string[])      => setFilter('filterPriority', v);
-  const setFilterInvalidLevel = (v: string[])      => setFilter('filterInvalidLevel', v);
-  const setFilterModel        = (v: string[])      => setFilter('filterModel', v);
-  const setFilterStatus       = (v: string[])      => setFilter('filterStatus', v);
-  const [page, setPage] = useState(1);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [projectId, setProjectId] = filtrosCuentasCobranza.useFiltro('projectId');
+  const [searchClabe, setSearchClabe] = filtrosCuentasCobranza.useFiltro('searchClabe');
+  const [searchClient, setSearchClient] = filtrosCuentasCobranza.useFiltro('searchClient');
+  const [searchUnit, setSearchUnit] = filtrosCuentasCobranza.useFiltro('searchUnit');
+  const [filterType, setFilterType] = filtrosCuentasCobranza.useFiltro('filterType');
+  const [searchAccount, setSearchAccount] = filtrosCuentasCobranza.useFiltro('searchAccount');
+  const [filterPriority, setFilterPriority] = filtrosCuentasCobranza.useFiltro('filterPriority');
+  const [filterInvalidLevel, setFilterInvalidLevel] = filtrosCuentasCobranza.useFiltro('filterInvalidLevel');
+  const [filterModel, setFilterModel] = filtrosCuentasCobranza.useFiltro('filterModel');
+  const [filterStatus, setFilterStatus] = filtrosCuentasCobranza.useFiltro('filterStatus');
+  const [page, setPage] = filtrosCuentasCobranza.useFiltro('page');
+  const [advancedOpen, setAdvancedOpen] = filtrosCuentasCobranza.useFiltro('advancedOpen');
+  const resetFilters = filtrosCuentasCobranza.reset;
 
   // Filtros entrantes por URL (drills desde dashboard): prioridad, proyecto (id), cliente.
   // Al llegar con un drill, se LIMPIAN los filtros previos y luego se aplican los
@@ -166,13 +161,14 @@ export default function CollectionInboxPage() {
     const cli = searchParams.get('cliente');
     if (!p && !proj && !cli) return;
     resetFilters();
-    if (p) setFilter('filterPriority', [p]);
-    if (proj && !Number.isNaN(Number(proj))) setFilter('projectId', Number(proj));
-    if (cli) setFilter('searchClient', cli);
+    if (p) setFilterPriority([p]);
+    if (proj && !Number.isNaN(Number(proj))) setProjectId(Number(proj));
+    if (cli) setSearchClient(cli);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Table sort. key=null → default criticality order.
-  const [sort, setSort] = useState<{ key: SortKey | null; dir: 'asc' | 'desc' }>({ key: null, dir: 'asc' });
+  // Table sort. key=null → default criticality order. Persistido igual que los filtros.
+  const [sort, setSort] = filtrosCuentasCobranza.useFiltro('sort') as unknown as
+    [{ key: SortKey | null; dir: 'asc' | 'desc' }, (v: { key: SortKey | null; dir: 'asc' | 'desc' }) => void];
   const toggleSort = (key: SortKey) => {
     setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
     setPage(1); // el orden cambia el conjunto paginado server-side
