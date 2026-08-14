@@ -633,8 +633,8 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   let vigenciaHasta: string | null = null;
   let mesesRestantes: number | null = null;
   let finAgente: any = null;
-  // `proyectos.monto_apartado` resuelto server-side. Viaja en la oferta para que el
-  // flujo de pago cobre exactamente lo que se le mostró al cliente.
+  // `propiedades.monto_apartado` (por unidad) resuelto server-side. Viaja en la oferta
+  // para que el flujo de pago cobre exactamente lo que se le mostró al cliente.
   let apartadoAmount: number | null = null;
   try {
     const { data: fin, error: finErr } = await (supabase as any).rpc("get_oferta_financials", {
@@ -643,8 +643,10 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     if (!finErr && fin) {
       // Datos del creador vía RPC (usuarios tiene RLS que bloquea anon en la oferta pública)
       finAgente = fin.agente ?? null;
+      // `>= 0`: hay proyectos que no cobran apartado (monto_apartado = 0) y ese cero
+      // debe viajar tal cual; solo NULL/no numérico cae al default del front.
       const ap = Number(fin.apartado);
-      if (Number.isFinite(ap) && ap > 0) apartadoAmount = ap;
+      if (Number.isFinite(ap) && ap >= 0) apartadoAmount = ap;
     }
     if (!finErr && fin && Array.isArray(fin.planes)) {
       const finById = new Map<string, any>(fin.planes.map((p: any) => [String(p.esquema_id), p]));

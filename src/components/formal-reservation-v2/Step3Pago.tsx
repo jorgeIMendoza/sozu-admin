@@ -11,10 +11,9 @@ import {
   ShieldCheck,
   Info,
 } from "lucide-react";
-import { APARTADO_DEFAULT_MXN } from "@/lib/offers/apartado";
+import { apartadoDeOferta } from "@/lib/offers/apartado";
+import { getOfferById } from "@/lib/offers/offer-data";
 
-// Pantalla deprecada, sin oferta a la mano: usa el default compartido.
-const APARTADO_AMOUNT_MXN = APARTADO_DEFAULT_MXN;
 const AUTO_DETECT_DELAY_MS = 15000;
 
 // SWAP POINT: en producción cambiar a `import.meta.env.DEV`
@@ -45,8 +44,12 @@ const Step3Pago = () => {
     }
   }, [formalReservation, navigate]);
 
+  // El apartado es por unidad (`propiedades.monto_apartado`), resuelto en la oferta.
+  const APARTADO_AMOUNT_MXN = apartadoDeOferta(
+    formalReservation ? getOfferById(formalReservation.offerId) : null
+  );
   const appliedAmount = formalReservation?.appliedAmountMXN ?? 0;
-  const amountToPay = APARTADO_AMOUNT_MXN - appliedAmount;
+  const amountToPay = Math.max(0, APARTADO_AMOUNT_MXN - appliedAmount);
   const hasPreReservation = appliedAmount > 0;
 
   const triggerPaymentDetected = () => {

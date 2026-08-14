@@ -3,7 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { activityLoggerService } from "@/services/activityLoggerService";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
-import { clearCollectionFilters } from "@/lib/portal-cobranza/collection-inbox-store";
+import { limpiarTodosLosFiltros } from "@/lib/filtrosPersistentes";
 import { vieneDeFlujoConfirmacion } from "@/lib/emailConfirmacion";
 
 interface UserProfile {
@@ -388,7 +388,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await supabase.auth.signOut();
-    clearCollectionFilters(); // collection filters must not survive a user switch
+    limpiarTodosLosFiltros(); // los filtros de tabla no deben sobrevivir a un cambio de usuario
     setUser(null);
     setSession(null);
     setProfile(null);
@@ -407,7 +407,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("Error during inactivity signOut:", err);
     }
-    clearCollectionFilters();
+    limpiarTodosLosFiltros();
     // Siempre redirigir, sin importar si signOut falló
     window.location.href = "/auth/login?reason=inactivity";
   }, []);
