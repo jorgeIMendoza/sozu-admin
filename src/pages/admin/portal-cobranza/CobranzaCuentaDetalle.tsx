@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PROD_FUNCTIONS_BASE_URL, PROD_SUPABASE_ANON_KEY } from '@/lib/config';
 import { pathEvidencia, resolveBucketEvidencia } from '@/lib/evidenciaPagoBucket';
 import { esRpcInexistente, esSinPermiso } from '@/lib/rpcErrors';
+import { interpretarReconciliacion, primeraFilaReconciliacion } from '@/lib/reconciliacionAcuerdos';
 import { formatCuentaCobranzaId, formatOfertaId } from '@/utils/cuentaCobranzaUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -464,18 +465,24 @@ export default function CobranzaCuentaDetalle() {
         }
         throw error;
       }
-      const fila = Array.isArray(data) ? data[0] : null;
-      if (!fila || fila.accion === 'sin_cambio') {
-        toast.success('Los acuerdos ya cuadran con el precio final.');
-      } else if (fila.accion === 'requiere_revision') {
-        toast.error(
-          fila.motivo === 'sin_acuerdo_abierto'
-            ? 'La cuenta está liquidada: la diferencia se revisa con legal contra el contrato.'
-            : 'No se pudo ajustar automáticamente; revisar manual.'
-        );
-      } else {
-        toast.success('Acuerdos reconciliados con el precio final.');
+      const resultado = interpretarReconciliacion(primeraFilaReconciliacion(data));
+
+      // Si el plan cambió, las aplicaciones quedaron cuadrando contra el plan anterior:
+      // hay que redistribuir los pagos de la cuenta. La EF es idempotente.
+      let avisoDispersion = '';
+      if (resultado.requiereRecalcularDispersion) {
+        const { error: recalcError } = await supabase.functions.invoke('recalcular-aplicaciones', {
+          body: { id_cuenta_cobranza: Number(cuentaId) },
+        });
+        if (recalcError) {
+          avisoDispersion = ' Falta redistribuir los pagos: usa "Recalcular dispersión".';
+        }
       }
+
+      const mensaje = resultado.descripcion + avisoDispersion;
+      if (resultado.tono === 'exito' && !avisoDispersion) toast.success(mensaje);
+      else toast.error(mensaje);
+
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {

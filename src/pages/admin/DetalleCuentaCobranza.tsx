@@ -155,6 +155,7 @@ import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
 import { pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
+import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 // Documents view component (lectura + subida de documentos de la cuenta)
@@ -2441,22 +2442,30 @@ export default function DetalleCuentaCobranza() {
         }
         throw error;
       }
-      const fila = Array.isArray(data) ? data[0] : null;
-      if (!fila || fila.accion === 'sin_cambio') {
-        toast({ title: "Sin cambios", description: "Los acuerdos ya cuadran con el precio final." });
-      } else if (fila.accion === 'requiere_revision') {
-        toast({
-          title: "Requiere revisión",
-          description: fila.motivo === 'sin_acuerdo_abierto'
-            ? "La cuenta está liquidada: la diferencia se revisa con legal contra el contrato."
-            : "No se pudo ajustar automáticamente; revisar manual.",
-          variant: "destructive",
+      const resultado = interpretarReconciliacion(primeraFilaReconciliacion(data));
+
+      // Si el plan cambió, las aplicaciones quedaron cuadrando contra el plan anterior:
+      // hay que redistribuir los pagos de la cuenta. La EF es idempotente.
+      let avisoDispersion = "";
+      if (resultado.requiereRecalcularDispersion) {
+        const { error: recalcError } = await supabase.functions.invoke('recalcular-aplicaciones', {
+          body: { id_cuenta_cobranza: Number(cuentaId) },
         });
-      } else {
-        toast({ title: "Acuerdos reconciliados", description: "La suma de acuerdos ya cuadra con el precio final." });
+        if (recalcError) {
+          avisoDispersion = ' Falta redistribuir los pagos: usa "Recalcular dispersión".';
+        }
       }
+
+      toast({
+        title: resultado.titulo,
+        description: resultado.descripcion + avisoDispersion,
+        variant: resultado.tono === 'aviso' || avisoDispersion ? "destructive" : undefined,
+      });
+
       queryClient.invalidateQueries({ queryKey: ["acuerdos_pago", cuentaId] });
       queryClient.invalidateQueries({ queryKey: ["cuenta_detalle", cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ["pagos_cuenta", cuentaId] });
+      queryClient.invalidateQueries({ queryKey: ["aplicaciones_por_pago", cuentaId] });
     } catch (error: any) {
       toast({
         title: "Error",
