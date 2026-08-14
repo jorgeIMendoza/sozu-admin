@@ -257,7 +257,7 @@ export default function AgentesLanding() {
       <nav
         className="al-nav"
         style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 28,
+          position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 28,
           padding: "14px 56px", background: "hsl(0 0% 100% / .82)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
           borderBottom: "1px solid var(--line-soft)",
         }}
