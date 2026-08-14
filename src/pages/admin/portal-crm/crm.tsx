@@ -80,7 +80,7 @@ import {
 } from "./crm-adjuntos";
 import { InlineNoteForm, NoteCard, NoteDialog } from "./crm-notas";
 import {
-  TaskDialog, CitaDialog, TaskActivityCard, regenerateRecurringTask,
+  TaskDialog, CitaDialog, TaskActivityCard, TaskEditDialog, InlineTaskStatus, InlineTaskDue, regenerateRecurringTask,
   NewGlobalCitaDialog, CitaPreviewSheet, NewGlobalTaskDialog,
   CITA_TYPE_META, CITA_STATUS_META, CITA_STATUS_ORDER,
   TASK_TYPE_META, TASK_PRIORITY_META, RECURRENCE_LABEL,
@@ -1614,6 +1614,13 @@ export function CrmContactDetail() {
     if (error) { toast.error(error.message); return; }
     toast.success("Tarea eliminada"); invalidateAll();
   };
+  // Edición inline de la tarea desde el TaskCard (reagendar, estado, prioridad, tipo, asignado,
+  // recordatorio, repetir, notas). Silencioso salvo error, para no spamear toasts al editar campo por campo.
+  const updateTask = async (id: number, patch: Record<string, any>) => {
+    const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    invalidateAll();
+  };
   const deleteNote = async (id: number) => {
     const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id);
     if (error) { toast.error(error.message); return; }
@@ -1794,9 +1801,9 @@ export function CrmContactDetail() {
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <DescriptionPanel
-                canEdit={canEdit}
+                canEdit={canEdit} owners={owners ?? []}
                 contact={contact} notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
-                onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                onCompleteTask={completeTask} onDeleteTask={deleteTask} onUpdateTask={updateTask} onDeleteNote={deleteNote}
                 onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
               />
             </TabsContent>
@@ -1805,7 +1812,7 @@ export function CrmContactDetail() {
                 canEdit={canEdit}
                 contactId={contactId!} userId={user?.id} owners={owners ?? []} contact={contact}
                 notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} onSaved={invalidateAll}
-                onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                onCompleteTask={completeTask} onDeleteTask={deleteTask} onUpdateTask={updateTask} onDeleteNote={deleteNote}
                 onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
               />
             </TabsContent>
@@ -2001,7 +2008,7 @@ function AssocCard({ title }: { title: string }) {
   );
 }
 
-function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, canEdit = true }: any) {
+function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, owners = [], onCompleteTask, onDeleteTask, onUpdateTask, onDeleteNote, onUpdateCita, onDeleteCita, canEdit = true }: any) {
   const lastActivity = (() => {
     const dates: string[] = [
       ...(notes ?? []).map((n: any) => n.created_at),
@@ -2039,8 +2046,8 @@ function DescriptionPanel({ contact, notes, tasks, citas = [], onSaved, onComple
         <h3 className="text-sm font-semibold mb-3">Actividades recientes</h3>
         <Timeline
           notes={notes ?? []} tasks={tasks ?? []} citas={citas ?? []} deals={[]} pipelineEvents={[]} conversionEvents={[]}
-          contact={contact} canEdit={canEdit}
-          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
+          contact={contact} canEdit={canEdit} owners={owners}
+          onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onUpdateTask={onUpdateTask} onDeleteNote={onDeleteNote}
           onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
         />
       </div>
@@ -2760,6 +2767,7 @@ export function CrmDealDetail() {
   const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
   const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea completada"); invalidateActivity(); };
   const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea eliminada"); invalidateActivity(); };
+  const updateTask = async (id: number, patch: Record<string, any>) => { const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id); if (error) { toast.error(error.message); return; } invalidateActivity(); };
   const deleteNote = async (id: number) => { const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Nota eliminada"); invalidateActivity(); };
   const updateCitaStatus = async (id: number, estatus: string) => { const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita actualizada"); invalidateActivity(); };
   const deleteCita = async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita eliminada"); invalidateActivity(); };
@@ -2998,7 +3006,7 @@ export function CrmDealDetail() {
                   contact={{ full_name: deal.contacto?.nombre }}
                   notes={actNotes} tasks={actTasks} citas={actCitas} includeSystem={false}
                   onSaved={invalidateActivity}
-                  onCompleteTask={completeTask} onDeleteTask={deleteTask} onDeleteNote={deleteNote}
+                  onCompleteTask={completeTask} onDeleteTask={deleteTask} onUpdateTask={updateTask} onDeleteNote={deleteNote}
                   onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
                 />
               )}
@@ -3357,12 +3365,13 @@ type GlobalTask = {
 export function CrmTasks() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [tab, setTab] = useState<"all" | "today" | "overdue" | "upcoming">("today");
+  const [tab, setTab] = useState<"all" | "today" | "overdue" | "upcoming" | "completed">("today");
   const [search, setSearch] = useState("");
   const [fType, setFType] = useState("all");
   const [fPriority, setFPriority] = useState("all");
   const [fAssignee, setFAssignee] = useState("all");
   const [open, setOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
 
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
@@ -3434,9 +3443,11 @@ export function CrmTasks() {
 
   // Conteos por pestaña (siempre sobre tareas no completadas, salvo "Todo").
   const counts = useMemo(() => {
-    const c = { all: tasks.length, today: 0, overdue: 0, upcoming: 0 };
+    const c = { all: 0, today: 0, overdue: 0, upcoming: 0, completed: 0 };
     for (const t of tasks) {
-      if (isDone(t) || !t.fecha_vencimiento) continue;
+      if (isDone(t)) { c.completed++; continue; }   // "Todo" = solo tareas abiertas
+      c.all++;
+      if (!t.fecha_vencimiento) continue;
       const d = parseISO(t.fecha_vencimiento);
       if (isToday(d)) c.today++;
       else if (isPast(d)) c.overdue++;
@@ -3450,7 +3461,11 @@ export function CrmTasks() {
     return tasks
       .filter((t) => {
         // Pestaña
-        if (tab !== "all") {
+        if (tab === "completed") {
+          if (!isDone(t)) return false;
+        } else if (tab === "all") {
+          if (isDone(t)) return false;   // "Todo" = solo abiertas; las completadas viven en su pestaña
+        } else {
           if (isDone(t)) return false;
           if (!t.fecha_vencimiento) return false;
           const d = parseISO(t.fecha_vencimiento);
@@ -3503,11 +3518,22 @@ export function CrmTasks() {
     onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
   });
 
+  // Edición inline desde el TaskCard (reagendar, estado, prioridad, tipo, asignado, recordatorio, repetir, notas).
+  const updateTaskMut = useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Record<string, any> }) => {
+      const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }),
+    onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
+  });
+
   const TASK_TABS = [
-    { id: "all" as const, label: "Todo", count: counts.all },
     { id: "today" as const, label: "Vencen hoy", count: counts.today },
     { id: "overdue" as const, label: "Atrasado", count: counts.overdue },
     { id: "upcoming" as const, label: "Próximamente", count: counts.upcoming },
+    { id: "all" as const, label: "Todo", count: counts.all },
+    { id: "completed" as const, label: "Completadas", count: counts.completed },
   ];
 
   const hasFilters = search || fType !== "all" || fPriority !== "all" || fAssignee !== "all";
@@ -3589,11 +3615,11 @@ export function CrmTasks() {
               <tr>
                 <th className="p-3 w-10"></th>
                 <th className="p-3 text-left font-medium">Título</th>
-                <th className="p-3 text-left font-medium">Prioridad</th>
+                <th className="p-3 text-left font-medium">Estado</th>
                 <th className="p-3 text-left font-medium">Vencimiento</th>
                 <th className="p-3 text-left font-medium">Contacto asociado</th>
                 <th className="p-3 text-left font-medium">Asignado a</th>
-                <th className="p-3 w-10"></th>
+                <th className="p-3 w-16"></th>
               </tr>
             </thead>
             <tbody>
@@ -3606,9 +3632,6 @@ export function CrmTasks() {
               )}
               {filtered.map((t) => {
                 const done = isDone(t);
-                const d = t.fecha_vencimiento ? parseISO(t.fecha_vencimiento) : null;
-                const isOverdue = d && isPast(d) && !isToday(d) && !done;
-                const dueLabel = t.fecha_vencimiento ? fmtDueDateTime(t.fecha_vencimiento) : "—";
                 const typeMeta = TASK_TYPE_META[t.tipo] ?? { label: t.tipo, icon: ClipboardList };
                 const prioMeta = TASK_PRIORITY_META[t.prioridad];
                 const TypeIcon = typeMeta.icon;
@@ -3625,13 +3648,10 @@ export function CrmTasks() {
                       </button>
                     </td>
                     <td className="p-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                        {t.id_entidad_relacionada ? (
-                          <Link to={`/admin/portal-crm/ventas/contactos/${t.id_entidad_relacionada}?tab=actividades`} className={`hover:underline ${done ? "line-through text-muted-foreground" : "font-medium"}`}>{t.titulo}</Link>
-                        ) : (
-                          <span className={done ? "line-through text-muted-foreground" : "font-medium"}>{t.titulo}</span>
-                        )}
+                        <button type="button" onClick={() => setEditingTask(t)} title="Gestionar tarea" className={`text-left hover:underline ${done ? "line-through text-muted-foreground" : "font-medium"}`}>{t.titulo}</button>
+                        {prioMeta && <Badge variant="outline" className={`${prioMeta.cls} text-[10px] px-1.5 py-0`}>{prioMeta.label}</Badge>}
                         {t.recurrencia && <RefreshCw className="h-3 w-3 text-muted-foreground shrink-0" aria-label={`Se repite: ${RECURRENCE_LABEL[t.recurrencia] ?? t.recurrencia}`} />}
                         {t.fecha_recordatorio && <Bell className="h-3 w-3 text-muted-foreground shrink-0" aria-label="Tiene recordatorio" />}
                       </div>
@@ -3639,10 +3659,13 @@ export function CrmTasks() {
                       {t.descripcion && <div className="text-xs text-muted-foreground/80 ml-6 mt-0.5 line-clamp-1 max-w-md">{t.descripcion}</div>}
                     </td>
                     <td className="p-3">
-                      {prioMeta ? <Badge variant="outline" className={prioMeta.cls}>{prioMeta.label}</Badge> : <span className="text-muted-foreground">{t.prioridad}</span>}
+                      <InlineTaskStatus
+                        status={t.estatus}
+                        onChange={(v) => { if (v === "completada" && !done) toggleComplete.mutate(t); else updateTaskMut.mutate({ id: t.id, patch: { estatus: v } }); }}
+                      />
                     </td>
-                    <td className={`p-3 whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                      <span className="inline-flex items-center gap-1">{isOverdue && <TriangleAlert className="h-3.5 w-3.5" />}{dueLabel}</span>
+                    <td className="p-3">
+                      <InlineTaskDue due={t.fecha_vencimiento} reminder={t.fecha_recordatorio} done={done} onChange={(patch) => updateTaskMut.mutate({ id: t.id, patch })} />
                     </td>
                     <td className="p-3">
                       {t.contact_name ? (
@@ -3651,14 +3674,24 @@ export function CrmTasks() {
                     </td>
                     <td className="p-3 text-muted-foreground">{t.assigned_name ?? <span className="italic text-muted-foreground/60">Sin asignar</span>}</td>
                     <td className="p-3">
-                      <button
-                        type="button"
-                        title="Eliminar tarea"
-                        onClick={() => removeTask.mutate(t.id)}
-                        className="text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          title="Gestionar tarea"
+                          onClick={() => setEditingTask(t)}
+                          className="text-muted-foreground/50 hover:text-primary"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Eliminar tarea"
+                          onClick={() => removeTask.mutate(t.id)}
+                          className="text-muted-foreground/50 hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -3667,6 +3700,15 @@ export function CrmTasks() {
           </table>
         )}
       </div>
+
+      <TaskEditDialog
+        task={editingTask}
+        owners={owners}
+        open={!!editingTask}
+        onOpenChange={(v) => { if (!v) setEditingTask(null); }}
+        onUpdate={(id, patch) => updateTaskMut.mutate({ id, patch })}
+        onDelete={(id) => removeTask.mutate(id)}
+      />
     </div>
   );
 }
