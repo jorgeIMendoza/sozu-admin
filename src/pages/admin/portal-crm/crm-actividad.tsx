@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NoteCard, InlineNoteForm } from "./crm-notas";
 import {
-  TaskDialog, CitaDialog, TaskActivityCard,
+  TaskDialog, CitaDialog, TaskActivityCard, TaskCard,
   CITA_TYPE_META, CITA_STATUS_META,
 } from "./crm-tareas-citas";
 import { relTime, fmtDate, fmtDateTime, fmtMXN, DEAL_STAGES } from "@/lib/crm-lib";
@@ -19,7 +19,7 @@ import { stripHtml, fmtCitaWhen } from "@/lib/crm-format";
 // ─── (símbolos extraídos abajo; se les añade `export` automáticamente) ──────────
 export type TLItem = { id: string; ts: string; kind: string; title: string; subtitle?: string; html?: string; icon: any; tone?: string; type?: string; rawId?: number; status?: string; author?: string | null; anclado?: boolean; attachments?: any[] };
 
-export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, includeSystem = true, canEdit = true }: any) {
+export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks, citas = [], onSaved, onCompleteTask, onDeleteTask, onUpdateTask, onDeleteNote, onUpdateCita, onDeleteCita, includeSystem = true, canEdit = true }: any) {
   const [filter, setFilter] = useState<"all" | "note" | "task" | "cita">("all");
   const [search, setSearch] = useState("");
   const TABS: { id: "all" | "note" | "task" | "cita"; label: string }[] = [
@@ -73,20 +73,20 @@ export function ActivityPanel({ contactId, userId, owners, contact, notes, tasks
       </div>
 
       <Timeline
-        canEdit={canEdit}
+        canEdit={canEdit} owners={owners} pinnedPending
         notes={showNotes ? notes : []}
         tasks={showTasks ? tasks : []}
         citas={showCitas ? citas : []}
         deals={[]} pipelineEvents={[]} conversionEvents={[]}
         contact={contact} search={search} includeSystem={includeSystem && filter === "all"}
-        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onDeleteNote={onDeleteNote}
+        onCompleteTask={onCompleteTask} onDeleteTask={onDeleteTask} onUpdateTask={onUpdateTask} onDeleteNote={onDeleteNote}
         onUpdateCita={onUpdateCita} onDeleteCita={onDeleteCita} onEdited={onSaved}
       />
     </div>
   );
 }
 
-export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, onCompleteTask, onDeleteTask, onDeleteNote, onUpdateCita, onDeleteCita, onEdited, canEdit = true }: any) {
+export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conversionEvents, contact, search, includeSystem = true, owners = [], pinnedPending = false, onCompleteTask, onDeleteTask, onUpdateTask, onDeleteNote, onUpdateCita, onDeleteCita, onEdited, canEdit = true }: any) {
   const synthetic: TLItem = {
     id: "contact-created",
     ts: contact.created_at,
@@ -96,9 +96,23 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
     tone: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
   };
 
+  // Tareas PENDIENTES → se fijan arriba (orden por vencimiento ascendente, vencidas primero).
+  // Completadas/canceladas se quedan en el feed cronológico de abajo.
+  const PENDING_STATUS = new Set(["pendiente", "en_progreso"]);
+  const pendingTasks = pinnedPending
+    ? (tasks ?? [])
+        .filter((t: any) => PENDING_STATUS.has(t.status))
+        .sort((a: any, b: any) => {
+          const da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+          const db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+          return da - db;
+        })
+    : [];
+  const feedTasks = pinnedPending ? (tasks ?? []).filter((t: any) => !PENDING_STATUS.has(t.status)) : (tasks ?? []);
+
   let items: TLItem[] = [
     ...notes.map((n: any) => ({ id: `n-${n.id}`, type: "note", rawId: n.id, author: n.author, anclado: n.anclado, ts: n.created_at, kind: "Nota", title: stripHtml(n.content ?? "").slice(0, 80) || "Nota", html: n.content, attachments: n.attachments ?? [], icon: StickyNote, tone: "bg-amber-500/15 text-amber-700 dark:text-amber-400" })),
-    ...tasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date ? `${t.due_date}T${t.due_time ?? "09:00:00"}` : t.created_at, kind: `Tarea · ${t.status}`, title: t.title, subtitle: t.due_date ? `Vence ${fmtDate(t.due_date)}` : undefined, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400" })),
+    ...feedTasks.map((t: any) => ({ id: `t-${t.id}`, type: "task", rawId: t.id, status: t.status, ts: t.due_date || t.created_at, kind: `Tarea · ${t.status}`, title: t.title, icon: ClipboardList, tone: "bg-blue-500/15 text-blue-700 dark:text-blue-400", data: t })),
     ...citas.map((c: any) => ({ id: `cita-${c.id}`, type: "cita", rawId: c.id, status: c.status, ts: c.start_at ?? c.created_at, kind: `Cita · ${CITA_STATUS_META[c.status]?.label ?? c.status}`, title: c.title, subtitle: `${CITA_TYPE_META[c.tipo]?.label ?? c.tipo} · ${fmtCitaWhen(c.start_at, c.end_at)}`, icon: CITA_TYPE_META[c.tipo]?.icon ?? CalendarClock, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-400" })),
     ...deals.map((d: any) => ({ id: `d-${d.id}`, ts: d.created_at, kind: `Deal · ${DEAL_STAGES.find((s) => s.id === d.deal_stage)?.label ?? d.deal_stage}`, title: d.deal_name, subtitle: d.value ? fmtMXN(Number(d.value)) : undefined, icon: Briefcase, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-400" })),
     ...pipelineEvents.map((p: any) => ({ id: `p-${p.id}`, ts: p.changed_at, kind: "Pipeline", title: `${p.old_stage ?? "—"} → ${p.new_stage}`, icon: GitBranch, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" })),
@@ -113,10 +127,13 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
       stripHtml(it.html ?? "").toLowerCase().includes(q) ||
       (it.kind ?? "").toLowerCase().includes(q));
   }
+  const pending = q
+    ? pendingTasks.filter((t: any) => (t.title ?? "").toLowerCase().includes(q) || (t.descripcion ?? "").toLowerCase().includes(q))
+    : pendingTasks;
 
-  const hasRealActivity = items.some((it) => it.id !== "contact-created");
+  const hasRealActivity = items.some((it) => it.id !== "contact-created") || pending.length > 0;
 
-  if (!items.length) {
+  if (!items.length && !pending.length) {
     return (
       <div className="text-center py-8 border border-dashed border-primary/20 rounded-xl bg-primary/5">
         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
@@ -140,6 +157,18 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
 
   return (
     <div className="space-y-5">
+      {pending.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+            <ClipboardList className="h-3.5 w-3.5" />Tareas pendientes
+            <span className="text-[10px] rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 tabular-nums">{pending.length}</span>
+          </p>
+          {pending.map((t: any) => (
+            <TaskCard key={`pt-${t.id}`} task={t} owners={owners}
+              onComplete={onCompleteTask} onUpdate={onUpdateTask} onDelete={onDeleteTask} />
+          ))}
+        </div>
+      )}
       {groups.map((g) => (
         <div key={g.key}>
           <p className="text-xs font-semibold text-muted-foreground mb-2 capitalize">{g.key}</p>
@@ -149,6 +178,13 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
             return (
               <div key={it.id} className="pb-4 last:pb-0">
                 <NoteCard note={{ id: it.rawId, content: it.html, created_at: it.ts, author: it.author, anclado: it.anclado, attachments: it.attachments ?? [] }} contactName={contact.full_name} onEdited={onEdited} onDelete={onDeleteNote} canEdit={canEdit} />
+              </div>
+            );
+          }
+          if (it.type === "task") {
+            return (
+              <div key={it.id} className="pb-4 last:pb-0">
+                <TaskCard task={it.data} owners={owners} onComplete={onCompleteTask} onUpdate={onUpdateTask} onDelete={onDeleteTask} />
               </div>
             );
           }

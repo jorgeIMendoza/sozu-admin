@@ -379,7 +379,7 @@ export function EjecucionDispersionExpedienteContent({
                       {internos.length === 1 ? "comisionista" : "comisionistas"})
                     </span>
                     <span className="font-semibold tabular-nums text-foreground">
-                      {pctTotal.toFixed(2)}% · {fmtMxn(totalDispersar)}
+                      {pctTotal.toFixed(3)}% · {fmtMxn(totalDispersar)}
                     </span>
                   </div>
                   {(montoAprobadoPendiente > 0 || pagadoTotal > 0) && (
@@ -480,7 +480,7 @@ export function EjecucionDispersionExpedienteContent({
                       <p className="text-sm font-medium text-foreground truncate">{c.nombre}</p>
                       <p className="text-xs text-muted-foreground">{c.rol}</p>
                       <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
-                        {c.porcentaje.toFixed(2)}% · {fmtMxn(c.monto)}
+                        {c.porcentaje.toFixed(3)}% · {fmtMxn(c.monto)}
                       </p>
                       <div className="mt-2">
                         <Badge variant="outline" className={cn("text-[10px]", ESTADO_TONE[estado])}>
