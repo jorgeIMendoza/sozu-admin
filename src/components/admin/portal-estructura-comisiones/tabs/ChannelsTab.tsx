@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/SimulatorContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,12 @@ import {
   useCanalesConfigProyecto, useGuardarCanalDeProyecto, useProyectosSozuCanales,
   resolverCanalesDeProyecto, type CanalDeProyecto,
 } from '@/hooks/usePortalEstructuraComisiones/useCanalesPorProyecto';
-import type { CanalConfigProyecto } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
+import {
+  guardarCanalConfigProyecto, type CanalConfigProyecto,
+} from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
+import {
+  useComisionesPropuestas, useValidacionesCanal,
+} from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
 
 const CATEGORIES = [
   'Externo', 'Interno', 'Referido', 'Institucional', 'Patrimonial', 'Internacional',
@@ -737,6 +743,83 @@ export default function ChannelsTab() {
  * maestro sigue propagándose a los proyectos que no capturaron su propio valor.
  * Se muestra con un badge cuál está heredado y cuál es propio del proyecto.
  */
+/**
+ * Estado de validación de un canal del proyecto ante Alta Dirección.
+ *
+ * `sin_propuesta`  — nunca se ha enviado la estructura de este proyecto.
+ * `pendiente`      — hay propuesta, pero Alta Dirección no ha decidido este canal.
+ * `validado`       — decisión favorable sobre la propuesta **vigente**.
+ * `desactualizado` — se validó, pero la estructura cambió después: lo validado
+ *                    ya no es lo que está capturado.
+ * `rechazado`      — decisión desfavorable.
+ */
+type EstadoValidacionCanalUI =
+  | 'sin_propuesta' | 'pendiente' | 'validado' | 'desactualizado' | 'rechazado';
+
+const ESTILO_VALIDACION: Record<EstadoValidacionCanalUI, { texto: string; clase: string }> = {
+  sin_propuesta: { texto: 'Sin enviar a validar', clase: 'text-muted-foreground border-border' },
+  pendiente: { texto: 'Pendiente de validar', clase: 'text-amber-700 dark:text-amber-400 border-amber-500/40 bg-amber-500/10' },
+  validado: { texto: 'Validado', clase: 'text-emerald-700 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10' },
+  desactualizado: { texto: 'Cambió tras validarse', clase: 'text-amber-700 dark:text-amber-400 border-amber-500/40 bg-amber-500/10' },
+  rechazado: { texto: 'Rechazado', clase: 'text-destructive border-destructive/40 bg-destructive/10' },
+};
+
+const fechaHora = (iso: string | null | undefined) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleString('es-MX', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+};
+
+/**
+ * Estatus de validación de un canal, con su fecha y hora cuando la hay.
+ *
+ * La fecha solo acompaña a una decisión tomada: sin ella el chip diría
+ * «Validado» sin decir cuándo, que es justo lo que hace falta para saber si
+ * ampara lo que hoy está capturado.
+ */
+function CeldaValidacion({ estado, fecha, por, notas, aplica }: {
+  estado: EstadoValidacionCanalUI;
+  fecha: string | null;
+  por: string | null;
+  notas: string | null;
+  aplica: boolean;
+}) {
+  if (!aplica) {
+    return <span className="text-[11px] text-muted-foreground italic">No aplica</span>;
+  }
+
+  const estilo = ESTILO_VALIDACION[estado];
+  const marca = fechaHora(fecha);
+  const decidido = estado === 'validado' || estado === 'desactualizado' || estado === 'rechazado';
+
+  const chip = (
+    <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap', estilo.clase)}>
+      {estado === 'validado' && <Power className="h-3 w-3 shrink-0" />}
+      {(estado === 'pendiente' || estado === 'desactualizado') && <AlertTriangle className="h-3 w-3 shrink-0" />}
+      {estado === 'rechazado' && <PowerOff className="h-3 w-3 shrink-0" />}
+      {estilo.texto}
+    </span>
+  );
+
+  return (
+    <div className="flex flex-col gap-0.5 items-start">
+      {notas ? (
+        <Tooltip>
+          <TooltipTrigger asChild><span>{chip}</span></TooltipTrigger>
+          <TooltipContent className="max-w-xs text-xs">{notas}</TooltipContent>
+        </Tooltip>
+      ) : chip}
+      {decidido && marca && (
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+          {marca}{por ? ` · ${por}` : ''}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
   idProyecto: number;
   nombreProyecto: string;
@@ -744,12 +827,110 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
 }) {
   const { data: config, isLoading } = useCanalesConfigProyecto(idProyecto);
   const guardar = useGuardarCanalDeProyecto(idProyecto);
+  const { addChannel } = useSimulator();
+  const { data: proyectosSozu = [] } = useProyectosSozuCanales();
+  const qc = useQueryClient();
+  const [altaOpen, setAltaOpen] = useState(false);
+  const [guardandoAlta, setGuardandoAlta] = useState(false);
+
+  /**
+   * Alta de un canal que nace en este proyecto.
+   *
+   * El canal se registra en el catálogo maestro —sigue siendo el único registro
+   * de canales— pero se marca `aplica = false` en los demás proyectos, de modo
+   * que solo exista aquí. Hace falta escribirlo explícitamente porque la
+   * resolución es permisiva: sin fila, un canal nuevo del catálogo aparecería en
+   * todos los desarrollos.
+   */
+  const altaCanalDelProyecto = async (nuevo: Channel) => {
+    setGuardandoAlta(true);
+    try {
+      await addChannel(nuevo);
+
+      const otros = proyectosSozu.filter(p => p.id !== idProyecto);
+      const fallidos: string[] = [];
+      for (const p of otros) {
+        const res = await guardarCanalConfigProyecto(p.id, {
+          idCanal: nuevo.id,
+          aplica: false,
+          comisionTotalPct: 0,
+          comisionExternaPct: null,
+          comisionMinPct: null,
+          comisionMaxPct: null,
+        });
+        if (!res.ok) fallidos.push(p.nombre);
+      }
+
+      await guardar.mutateAsync({
+        idCanal: nuevo.id,
+        aplica: true,
+        comisionTotalPct: 0,
+        comisionExternaPct: nuevo.externalCommissionPct,
+        comisionMinPct: null,
+        comisionMaxPct: null,
+      });
+
+      qc.invalidateQueries({ queryKey: ['canales-config-proyecto'] });
+      setAltaOpen(false);
+
+      // Si algún proyecto no se pudo marcar, el canal le aparecería sin querer:
+      // se dice cuál, en vez de dar el alta por buena.
+      if (fallidos.length > 0) {
+        toast.warning(
+          `"${nuevo.name}" se creó en ${nombreProyecto}, pero no se pudo excluir de: ${fallidos.join(', ')}. ` +
+          'Desactívalo ahí manualmente.',
+        );
+      } else {
+        toast.success(`"${nuevo.name}" quedó activo solo en ${nombreProyecto}. Envíalo a validar desde Comisiones.`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo crear el canal');
+    } finally {
+      setGuardandoAlta(false);
+    }
+  };
+
+  // Estatus de validación por canal, contra la propuesta vigente del proyecto.
+  const { data: propuestas = [] } = useComisionesPropuestas(idProyecto);
+  const propuesta = propuestas.find(p => p.id_proyecto === idProyecto) ?? null;
+  const { data: validaciones = [] } = useValidacionesCanal(idProyecto);
+  const validacionPorCanal = useMemo(
+    () => new Map(validaciones.map(v => [v.id_canal, v])),
+    [validaciones],
+  );
+
+  /**
+   * La validación se compara contra `fecha_actualizacion` de la propuesta: es la
+   * versión sobre la que Alta Dirección decidió. Si la estructura se volvió a
+   * enviar después, la decisión anterior ya no ampara lo que está capturado.
+   */
+  const estadoDe = (idCanal: string): { estado: EstadoValidacionCanalUI; fecha: string | null; por: string | null; notas: string | null } => {
+    if (!propuesta) return { estado: 'sin_propuesta', fecha: null, por: null, notas: null };
+    const v = validacionPorCanal.get(idCanal);
+    if (!v) return { estado: 'pendiente', fecha: null, por: null, notas: null };
+    const base = { fecha: v.fecha_validacion, por: v.validado_por, notas: v.notas };
+    if (v.estado === 'rechazada') return { estado: 'rechazado', ...base };
+    const vigente = v.snapshot_fecha === propuesta.fecha_actualizacion;
+    return { estado: vigente ? 'validado' : 'desactualizado', ...base };
+  };
 
   const resueltos = useMemo(
     () => resolverCanalesDeProyecto(catalogo.filter(c => c.active !== false), config),
     [catalogo, config],
   );
   const aplican = resueltos.filter(c => c.aplica).length;
+
+  const resumenValidacion = useMemo(() => {
+    const conteo: Record<EstadoValidacionCanalUI, number> = {
+      sin_propuesta: 0, pendiente: 0, validado: 0, desactualizado: 0, rechazado: 0,
+    };
+    for (const c of resueltos) {
+      if (!c.aplica) continue;
+      conteo[estadoDe(c.canal.id).estado]++;
+    }
+    return conteo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resueltos, propuesta, validacionPorCanal]);
 
   const commit = (c: CanalDeProyecto, cambios: Partial<CanalConfigProyecto>) => {
     guardar.mutate(
@@ -773,11 +954,40 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="font-semibold">Canales de {nombreProyecto}</h3>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground max-w-2xl">
             {aplican} de {resueltos.length} canales aplican a este desarrollo. Los porcentajes
-            vacíos heredan del catálogo maestro.
+            vacíos heredan del catálogo maestro; al capturarlos el canal se vuelve independiente
+            de él en este proyecto.
           </p>
         </div>
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAltaOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> Agregar canal a este proyecto
+        </Button>
+        <div className="flex flex-wrap items-center gap-1.5 w-full">
+          {(['validado', 'desactualizado', 'pendiente', 'rechazado', 'sin_propuesta'] as const)
+            .filter(e => resumenValidacion[e] > 0)
+            .map(e => (
+              <span
+                key={e}
+                className={cn('rounded-md border px-2 py-1 text-[11px] font-medium', ESTILO_VALIDACION[e].clase)}
+              >
+                {resumenValidacion[e]} {ESTILO_VALIDACION[e].texto.toLowerCase()}
+              </span>
+            ))}
+        </div>
+      </div>
+
+      {/* Cualquier cambio aquí necesita el visto bueno de Alta Dirección, y eso
+          se dice antes de tocar nada, no después de guardar. */}
+      <div className="mb-4 flex items-start gap-2 rounded-lg border bg-muted/40 p-3">
+        <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+        <p className="text-xs text-muted-foreground">
+          Los cambios en los canales de un proyecto los valida{' '}
+          <strong className="text-foreground">Portal Alta Dirección → Estructura de Comisiones,
+          Validación por proyecto</strong>. Tras modificar algo, envía la estructura desde el menú{' '}
+          <strong className="text-foreground">Comisiones</strong> con «Enviar a validar»: mientras
+          no lo hagas, la validación anterior sigue amparando la versión previa, no la capturada.
+        </p>
       </div>
 
       {isLoading ? (
@@ -793,10 +1003,11 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
               <tr>
                 <th>Aplica</th>
                 <th>Canal</th>
-                <th>Comisión Externa %</th>
-                <th>Mín %</th>
-                <th>Máx %</th>
-                <th>Comisión Total %</th>
+                <th>Validación</th>
+                <th className="text-right">Comisión externa %</th>
+                <th className="text-right">Mín %</th>
+                <th className="text-right">Máx %</th>
+                <th className="text-right">Comisión total %</th>
               </tr>
             </thead>
             <tbody>
@@ -813,10 +1024,11 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
                       <span className="font-medium">{c.canal.name}</span>
                       <span className="text-[11px] text-muted-foreground">
                         {c.canal.category ?? 'Sin categoría'}
-                        {c.sinConfigurar && ' · sin configurar'}
+                        {c.sinConfigurar && ' · hereda todo del catálogo'}
                       </span>
                     </div>
                   </td>
+                  <td><CeldaValidacion {...estadoDe(c.canal.id)} aplica={c.aplica} /></td>
                   <td>
                     <PctPorProyecto
                       valor={c.comisionExternaPct}
@@ -875,7 +1087,101 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
         Quitar un canal no borra su configuración: se conserva el porcentaje capturado por si
         se vuelve a habilitar, y las comisiones ya registradas mantienen su contexto.
       </p>
+
+      <AltaCanalProyectoDialog
+        open={altaOpen}
+        nombreProyecto={nombreProyecto}
+        guardando={guardandoAlta}
+        onClose={() => setAltaOpen(false)}
+        onCrear={altaCanalDelProyecto}
+      />
     </div>
+  );
+}
+
+/** Alta de un canal que nace en un proyecto: lo mínimo para poder operarlo. */
+function AltaCanalProyectoDialog({ open, nombreProyecto, guardando, onClose, onCrear }: {
+  open: boolean;
+  nombreProyecto: string;
+  guardando: boolean;
+  onClose: () => void;
+  onCrear: (c: Channel) => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  const [categoria, setCategoria] = useState('Externo');
+  const [externa, setExterna] = useState('0');
+
+  useEffect(() => {
+    if (open) { setNombre(''); setCategoria('Externo'); setExterna('0'); }
+  }, [open]);
+
+  const pct = Number(externa);
+  const valido = nombre.trim().length > 0 && Number.isFinite(pct) && pct >= 0 && pct <= 100;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Agregar canal a {nombreProyecto}</DialogTitle>
+          <DialogDescription>
+            El canal se registra en el catálogo maestro —es el único registro de canales— y
+            queda activo solo en este proyecto. Después podrás habilitarlo en otros desde su
+            propia vista.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div>
+            <Label>Nombre del canal *</Label>
+            <Input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Alianza Banco Regional" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Categoría</Label>
+              <Select value={categoria} onValueChange={setCategoria}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Comisión externa %</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={externa}
+                onChange={e => setExterna(e.target.value)}
+                className="font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Lo que se lleva el externo. La comisión total se define en Comisiones.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={guardando}>Cancelar</Button>
+          <Button
+            disabled={!valido || guardando}
+            onClick={() => onCrear({
+              ...emptyChannel(),
+              id: crypto.randomUUID(),
+              name: nombre.trim(),
+              category: categoria,
+              externalCommissionPct: pct,
+              baseCommissionPct: pct,
+              maxCommissionPct: pct,
+            })}
+          >
+            {guardando ? 'Creando…' : 'Crear canal'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

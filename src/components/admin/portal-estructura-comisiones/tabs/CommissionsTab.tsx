@@ -38,6 +38,8 @@ interface EstadoCanal {
   dispersada: number;
   remanente: number;
   comisionistas: number;
+  /** Cuántos de ellos ya tienen un porcentaje capturado. */
+  conPorcentaje: number;
   cuadre: Cuadre;
 }
 
@@ -320,6 +322,7 @@ export default function CommissionsTab() {
         dispersada,
         remanente,
         comisionistas: reglas.length,
+        conPorcentaje: reglas.filter(r => r.percentage > 0).length,
         cuadre: !totalDefinido ? 'sin_definir'
           : Math.abs(remanente) < 0.005 ? 'completo'
             : remanente > 0 ? 'falta' : 'excedido',
@@ -548,8 +551,13 @@ export default function CommissionsTab() {
                 <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${plegado ? '' : 'rotate-90'}`} />
                 <h3 className="font-semibold truncate">{ch.name}</h3>
                 <Badge variant="outline" className="text-[10px] shrink-0">Ext: {extPct}%</Badge>
+                {/* Cuántos hay y cuántos ya tienen porcentaje: un canal con
+                    cuatro comisionistas y dos en cero no está repartido. */}
                 <span className="text-xs text-muted-foreground shrink-0">
                   {estado.comisionistas} comisionista{estado.comisionistas === 1 ? '' : 's'}
+                  {estado.comisionistas > estado.conPorcentaje && (
+                    <span className="text-amber-600"> · {estado.comisionistas - estado.conPorcentaje} sin %</span>
+                  )}
                 </span>
               </button>
 
@@ -591,15 +599,26 @@ export default function CommissionsTab() {
             )}
 
             {channelRules.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">Sin comisionistas dados de alta en este canal</p>
+              <div className="rounded-lg border border-dashed py-8 text-center">
+                <p className="text-sm text-muted-foreground">Sin comisionistas en este canal.</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => setAltaCanal(ch.id)}>
+                  <Plus className="h-3 w-3 mr-1" /> Agregar comisionista
+                </Button>
+              </div>
             ) : (
-              <table className="data-table">
+              /* Sin contenedor propio la tabla empujaba la página entera a
+                 desplazarse y la columna del comisionista quedaba cortada bajo el
+                 menú lateral. Aquí el scroll es de la tabla y esa columna se ancla. */
+              <div className="overflow-x-auto">
+              <table className="data-table data-table--anclada">
                 <thead>
                   <tr>
                     <th>Comisionista</th>
                     <th>Rol</th>
-                    <th>
-                      % sobre precio de venta final
+                    {/* Encabezados cortos con su explicación en el tooltip: los
+                        largos estiraban la tabla más allá del ancho útil. */}
+                    <th className="text-right">
+                      % s/ venta
                       <Tooltip>
                         <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
                         <TooltipContent className="max-w-xs text-xs">
@@ -607,8 +626,8 @@ export default function CommissionsTab() {
                         </TooltipContent>
                       </Tooltip>
                     </th>
-                    <th>
-                      Valor comisión estimado
+                    <th className="text-right">
+                      Valor estimado
                       <Tooltip>
                         <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
                         <TooltipContent className="max-w-xs text-xs">
@@ -618,8 +637,8 @@ export default function CommissionsTab() {
                         </TooltipContent>
                       </Tooltip>
                     </th>
-                    <th>
-                      % de la comisión a dispersar
+                    <th className="text-right">
+                      % del reparto
                       <Tooltip>
                         <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
                         <TooltipContent className="max-w-xs text-xs">
@@ -700,24 +719,24 @@ export default function CommissionsTab() {
                             </div>
                           )}
                         </td>
-                        <td>
+                        <td className="text-right">
                           <Input
                             type="number"
                             step="0.01"
                             min="0"
-                            className="w-28 h-8 text-sm font-mono"
+                            className="w-24 h-8 text-sm font-mono text-right ml-auto"
                             value={rule.percentage}
                             onChange={e => updateRule(rule.id, { percentage: Math.max(0, +e.target.value) })}
                           />
                         </td>
-                        <td className="font-semibold font-mono text-sm whitespace-nowrap">
+                        <td className="text-right font-semibold font-mono text-sm whitespace-nowrap">
                           {precioPromUnidad > 0
                             ? formatCurrency(rule.percentage / 100 * precioPromUnidad)
                             : <span className="font-normal text-muted-foreground">—</span>}
                         </td>
                         {/* Dato derivado: se muestra como texto. Como campo
                             deshabilitado parecía editable pero averiado. */}
-                        <td className="font-mono text-sm text-foreground/70">
+                        <td className="text-right font-mono text-sm text-foreground/70">
                           {Number.isFinite(sharePct) ? sharePct.toFixed(2) : '0.00'}%
                         </td>
                         <td>
@@ -738,8 +757,28 @@ export default function CommissionsTab() {
                       </tr>
                     );
                   })}
+
+                  {/* Cierra el circuito con el resumen de abajo: lo que suman los
+                      renglones es exactamente la cifra "Dispersada". */}
+                  <tr className="border-t">
+                    <td className="font-semibold text-sm">Total dispersado</td>
+                    <td></td>
+                    <td className="text-right font-bold font-mono text-sm">
+                      {sumaDispersada.toFixed(2)}%
+                    </td>
+                    <td className="text-right font-bold font-mono text-sm whitespace-nowrap">
+                      {precioPromUnidad > 0
+                        ? formatCurrency(sumaDispersada / 100 * precioPromUnidad)
+                        : '—'}
+                    </td>
+                    <td className="text-right font-bold font-mono text-sm">
+                      {comisionInterna > 0 ? ((sumaDispersada / comisionInterna) * 100).toFixed(2) : '0.00'}%
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
                 </tbody>
               </table>
+              </div>
             )}
 
             {/* Resumen del canal. Las cuatro primeras cifras comparten estilo —son
