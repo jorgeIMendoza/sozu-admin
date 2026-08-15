@@ -135,7 +135,7 @@ async function getPaginasComprobante(url: string): Promise<PageResult> {
     const loadingTask = getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
     const pages = pdf.numPages;
-    await pdf.destroy();
+    await (pdf as any).destroy();
     console.warn('[PLD] páginas detectadas por pdfjs:', pages);
     return { pages, failedAt: null };
   } catch (err) {

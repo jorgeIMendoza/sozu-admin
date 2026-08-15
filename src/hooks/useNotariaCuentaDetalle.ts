@@ -148,7 +148,7 @@ export function useNotariaCuentaDetalle({
       }
 
       // ── Paso 3: Compradores ────────────────────────────────────────────────
-      const { data: compradoresRows } = await supabase
+      const { data: compradoresRows } = await (supabase as any)
         .from('compradores')
         .select('id_persona, activo')
         .eq('id_cuenta_cobranza' as any, cuentaId!)
