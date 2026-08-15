@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { buscarProspectosExistentes, describirCoincidencia, type ProspectoCoincidencia } from "@/lib/prospectos/duplicados";
 
 interface AddProspectoFloatingDialogProps {
   open: boolean;
@@ -43,7 +44,7 @@ const CLAVE_PAIS_OPTIONS: SearchableOption[] = [
 ];
 
 export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPersonaId }: AddProspectoFloatingDialogProps) {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const queryClient = useQueryClient();
@@ -65,6 +66,9 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
   const hasAppliedPreselect = useRef(false);
   // When an existing persona is found by email (not in agent's prospects)
   const [existingPersonaId, setExistingPersonaId] = useState<number | null>(null);
+  // Coincidencias por correo o teléfono, con dueño y desarrollo. Mismo criterio que el CRM.
+  const [coincidencias, setCoincidencias] = useState<ProspectoCoincidencia[]>([]);
+  const [buscandoDuplicados, setBuscandoDuplicados] = useState(false);
   const emailLookupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch agent's existing prospects (grouped by persona)
@@ -428,38 +432,51 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     }
   };
 
-  // Lookup persona by email when not in edit mode
+  // Busca duplicados por correo **y** por teléfono, con la misma función que el CRM.
+  // Antes esto era `email = <minúsculas>` exacto: no encontraba `Janethwirth@gmail.com`
+  // ni miraba el teléfono, y por ahí entró la misma persona dos veces con dos dueños.
+  const buscarDuplicados = (nuevoEmail: string, nuevoTelefono: string) => {
+    if (emailLookupTimeout.current) clearTimeout(emailLookupTimeout.current);
+    if (isEditMode) return;
+    const correo = nuevoEmail.trim();
+    const tel = nuevoTelefono.trim();
+    const correoValido = /\S+@\S+\.\S+/.test(correo);
+    if (!correoValido && tel.replace(/\D/g, "").length < 10) {
+      setCoincidencias([]);
+      setExistingPersonaId(null);
+      return;
+    }
+
+    emailLookupTimeout.current = setTimeout(async () => {
+      setBuscandoDuplicados(true);
+      try {
+        const encontradas = await buscarProspectosExistentes({
+          email: correoValido ? correo : null,
+          telefono: tel,
+          miPersonaId: effectivePersonaId ?? null,
+          miAuthUserId: user?.id ?? null,
+        });
+        setCoincidencias(encontradas);
+        // Solo se reutiliza la persona cuando el correo coincide: el teléfono repetido
+        // puede ser de un familiar y no se debe pisar el registro de otra persona.
+        const porCorreo = encontradas.find((c) => c.motivo !== "teléfono");
+        setExistingPersonaId(porCorreo ? porCorreo.idPersona : null);
+      } finally {
+        setBuscandoDuplicados(false);
+      }
+    }, 600);
+  };
+
   const handleEmailChange = (newEmail: string) => {
     setEmail(newEmail);
     trackFieldFill();
-    setExistingPersonaId(null);
+    buscarDuplicados(newEmail, telefono);
+  };
 
-    if (emailLookupTimeout.current) clearTimeout(emailLookupTimeout.current);
-    if (!newEmail || isEditMode) return;
-
-    emailLookupTimeout.current = setTimeout(async () => {
-      const trimmed = newEmail.trim().toLowerCase();
-      if (!trimmed || !/\S+@\S+\.\S+/.test(trimmed)) return;
-
-      const { data } = await supabase
-        .from("personas")
-        .select("id, nombre_legal, email, telefono, clave_pais_telefono, tipo_persona, rfc, curp")
-        .eq("email", trimmed)
-        .eq("activo", true)
-        .limit(1)
-        .single();
-
-      if (data) {
-        setExistingPersonaId(data.id);
-        setNombre(data.nombre_legal || "");
-        setTelefono(data.telefono || "");
-        setClavePais(data.clave_pais_telefono || "MX");
-        setTipoPersona(data.tipo_persona || "pf");
-        setRfc(data.rfc || "");
-        setCurp(data.curp || "");
-        toast.info("Esta persona ya existe en el sistema. Se vincularán sus datos al nuevo prospecto.");
-      }
-    }, 600);
+  const handleTelefonoChange = (nuevoTelefono: string) => {
+    setTelefono(nuevoTelefono);
+    trackFieldFill();
+    buscarDuplicados(email, nuevoTelefono);
   };
 
   const handleClose = () => {
@@ -474,6 +491,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
     setCurp("");
     setEditProyectos([]);
     setExistingPersonaId(null);
+    setCoincidencias([]);
     hasTrackedFieldFill.current = false;
     onOpenChange(false);
   };
@@ -633,8 +651,8 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                     onChange={(e) => handleEmailChange(e.target.value)}
                     disabled={isEditMode && !!selectedProspectoId}
                   />
-                  {existingPersonaId && !isEditMode && (
-                    <p className="mt-1 text-xs font-medium text-blue-600">✓ Persona existente - se vinculará al prospecto</p>
+                  {buscandoDuplicados && !isEditMode && (
+                    <p className="mt-1 text-xs text-muted-foreground">Revisando si ya existe…</p>
                   )}
                 </div>
                 <div>
@@ -653,7 +671,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                       inputMode="numeric"
                       placeholder="5512345678"
                       value={telefono}
-                      onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 10); setTelefono(v); trackFieldFill(); }}
+                      onChange={(e) => handleTelefonoChange(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       maxLength={10}
                     />
                   </div>
@@ -685,6 +703,40 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                   {curpInvalid && <p className="mt-1 text-xs text-red-500">Formato inválido (18 caracteres)</p>}
                 </div>
               </div>
+              {coincidencias.length > 0 && !isEditMode && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-800">
+                    Ya existe {coincidencias.length === 1 ? "un registro" : `${coincidencias.length} registros`} con este correo o teléfono
+                  </p>
+                  {coincidencias.map((c) => (
+                    <div key={c.idPersona} className="rounded border border-border bg-card p-2">
+                      <p className="truncate text-sm font-medium text-foreground">{c.nombre}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {c.email || "sin correo"} · {c.telefono || "sin teléfono"} · coincide por {c.motivo}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-800">{describirCoincidencia(c)}</p>
+                      {c.leads.length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {c.leads.map((l) => (
+                            <li key={l.idEntidadRelacionada} className="text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">{l.proyecto}</span>
+                              {" · "}{l.dueno ?? "sin dueño asignado"}
+                              {l.estatus ? ` · ${l.estatus}` : ""}
+                              {l.esMio ? " · tuyo" : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                  <p className="text-xs text-amber-700">
+                    {existingPersonaId
+                      ? "Se reutilizarán sus datos: no se crea otra persona, solo se le agrega el desarrollo seleccionado."
+                      : "Si es la misma persona, pide el traspaso en vez de darla de alta otra vez."}
+                  </p>
+                </div>
+              )}
+
             </div>
           </div>
         </div>
