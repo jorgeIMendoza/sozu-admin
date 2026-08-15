@@ -288,6 +288,10 @@ export interface CanalConfigProyecto {
   comisionExternaPct: number | null;
   comisionMinPct: number | null;
   comisionMaxPct: number | null;
+  /** Cuándo se guardó por última vez esta configuración. */
+  fechaActualizacion?: string | null;
+  /** Quién la guardó. `null` = se configuró antes de registrar autoría. */
+  actualizadoPor?: string | null;
 }
 
 /**
@@ -302,13 +306,23 @@ export interface CanalConfigProyecto {
 export async function fetchCanalesConfigProyecto(idProyecto: number): Promise<CanalConfigProyecto[] | null> {
   const completo = await (supabase as any)
     .from("comisiones_canal_config")
-    .select("id_canal, activo, comision_total_pct, comision_externa_pct, comision_min_pct, comision_max_pct")
+    .select("id_canal, activo, comision_total_pct, comision_externa_pct, comision_min_pct, comision_max_pct, fecha_actualizacion, actualizado_por")
     .eq("id_proyecto", idProyecto);
 
   if (!completo.error && completo.data) {
     return (completo.data as any[]).map(mapCanalConfig);
   }
   if (!isColumnMissing(completo.error)) return null;
+
+  // Sin `actualizado_por` (DDL de autoría pendiente) se relee con la fecha, que
+  // sí existe desde antes: se pierde el autor, no el rastro del cambio.
+  const sinAutor = await (supabase as any)
+    .from("comisiones_canal_config")
+    .select("id_canal, activo, comision_total_pct, comision_externa_pct, comision_min_pct, comision_max_pct, fecha_actualizacion")
+    .eq("id_proyecto", idProyecto);
+  if (!sinAutor.error && sinAutor.data) {
+    return (sinAutor.data as any[]).map(mapCanalConfig);
+  }
 
   const parcial = await (supabase as any)
     .from("comisiones_canal_config")
@@ -327,6 +341,8 @@ function mapCanalConfig(row: any): CanalConfigProyecto {
     comisionExternaPct: num(row.comision_externa_pct),
     comisionMinPct: num(row.comision_min_pct),
     comisionMaxPct: num(row.comision_max_pct),
+    fechaActualizacion: row.fecha_actualizacion ?? null,
+    actualizadoPor: row.actualizado_por ?? null,
   };
 }
 
@@ -340,6 +356,7 @@ function mapCanalConfig(row: any): CanalConfigProyecto {
 export async function guardarCanalConfigProyecto(
   idProyecto: number,
   config: CanalConfigProyecto,
+  actualizadoPor?: string | null,
 ): Promise<SyncResult> {
   const fila: Record<string, unknown> = {
     id_proyecto: idProyecto,
@@ -352,13 +369,27 @@ export async function guardarCanalConfigProyecto(
     fecha_actualizacion: new Date().toISOString(),
   };
 
-  const { error } = await (supabase as any)
+  const upsert = (datos: Record<string, unknown>) => (supabase as any)
     .from("comisiones_canal_config")
-    .upsert(fila, { onConflict: "id_proyecto,id_canal" });
+    .upsert(datos, { onConflict: "id_proyecto,id_canal" });
+
+  const { error } = await upsert({ ...fila, actualizado_por: actualizadoPor ?? null });
+  if (!error) return { ok: true, tableMissing: false, columnMissing: false };
+
+  // Sin la columna de autoría el cambio igual se guarda: perder el nombre del
+  // autor no justifica perder la configuración que el usuario acaba de capturar.
+  if (isColumnMissing(error)) {
+    const reintento = await upsert(fila);
+    return {
+      ok: !reintento.error,
+      tableMissing: reintento.error?.code === TABLE_MISSING_CODE,
+      columnMissing: isColumnMissing(reintento.error),
+    };
+  }
 
   return {
-    ok: !error,
+    ok: false,
     tableMissing: error?.code === TABLE_MISSING_CODE,
-    columnMissing: isColumnMissing(error),
+    columnMissing: false,
   };
 }
