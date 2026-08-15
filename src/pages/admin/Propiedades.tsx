@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote, Lock, Users, MapPin, Mail } from "lucide-react";
+import { Search, Edit, Trash2, Upload, Plus, Eye, Download, Car, Warehouse, CreditCard, Loader2, DollarSign, Calendar, Home, FileText, ArrowRightLeft, Zap, TrendingUp, TrendingDown, Equal, Check, X, ShoppingCart, AlertCircle, Banknote, Lock, Users, MapPin, Mail, Layers } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BulkUploadPropertiesDialog } from "@/components/admin/BulkUploadPropertiesDialog";
+import { BulkUpdatePropiedadesDialog, PropiedadBulk } from "@/components/admin/BulkUpdatePropiedadesDialog";
 import { NewOfferDialog } from "@/components/admin/NewOfferDialog";
 import { NewProductOfferDialog } from "@/components/admin/NewProductOfferDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -503,6 +504,7 @@ const Propiedades = () => {
   }, [inputValue]);
   
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [selectedPropertyOffers, setSelectedPropertyOffers] = useState<any[] | null>(null);
   const [selectedPropertyProductOffers, setSelectedPropertyProductOffers] = useState<any[] | null>(null);
@@ -669,9 +671,14 @@ const Propiedades = () => {
   // Hook reutilizable para exportación
   const { exportToExcel, isExporting } = useExportToExcel();
 
-  // Función para exportar a Excel - obtiene TODOS los datos filtrados sin paginación
-  const handleExportToExcel = async () => {
-    try {
+  // Obtiene TODAS las propiedades que coinciden con los filtros activos (sin paginación).
+  // Lo usan tanto la exportación a Excel como la actualización masiva, para que ambas
+  // trabajen exactamente sobre el mismo universo de propiedades que muestra la tabla.
+  const fetchPropiedadesFiltradas = async (): Promise<{
+    rows: any[];
+    estacionamientosCounts: Record<number, number>;
+    bodegasCounts: Record<number, number>;
+  }> => {
       // Construir query base (sin paginación)
       let query = supabase
         .from('propiedades')
@@ -686,6 +693,7 @@ const Propiedades = () => {
           monto_apartado_pagando,
           clabe_stp_tmp_apartado,
           id_tipo_transaccion,
+          id_estatus_disponibilidad,
           edificios_modelos!propiedades_id_edificio_modelo_fkey!inner(
             edificios!edificios_modelos_id_edificio_fkey!inner(
               nombre,
@@ -854,18 +862,13 @@ const Propiedades = () => {
         }
       }
 
-      // Ejecutar query - obtener hasta 5000 registros para exportación
+      // Ejecutar query - obtener hasta 5000 registros
       const { data, error } = await query.range(0, 4999);
-      
+
       if (error) throw error;
 
       if (!data || data.length === 0) {
-        toast({
-          title: "Sin datos",
-          description: "No hay propiedades para exportar con los filtros actuales.",
-          variant: "destructive",
-        });
-        return;
+        return { rows: [], estacionamientosCounts: {}, bodegasCounts: {} };
       }
 
       // Obtener IDs de propiedades para buscar estacionamientos y bodegas
@@ -925,6 +928,14 @@ const Propiedades = () => {
           return cuentaCobranzaFilter === "si" ? tieneCuenta : !tieneCuenta;
         });
       }
+
+      return { rows: filteredData, estacionamientosCounts, bodegasCounts };
+  };
+
+  // Función para exportar a Excel - obtiene TODOS los datos filtrados sin paginación
+  const handleExportToExcel = async () => {
+    try {
+      const { rows: filteredData, estacionamientosCounts, bodegasCounts } = await fetchPropiedadesFiltradas();
 
       if (filteredData.length === 0) {
         toast({
@@ -989,7 +1000,7 @@ const Propiedades = () => {
     queryFn: async () => {
       let query = supabase
         .from('proyectos')
-        .select('id, nombre, fecha_entrega')
+        .select('id, nombre, fecha_entrega, publicar')
         .eq('activo', true)
         .not("id_tipo_uso", "in", "(9,10,11)")
         .order('nombre', { ascending: true });
@@ -1005,6 +1016,17 @@ const Propiedades = () => {
     },
     enabled: !isLoadingAccess && (hasUnrestrictedAccess || accessibleProjectIds.length > 0),
   });
+
+  // Proyectos sin publicar: sus propiedades se marcan en la tabla y quedan sin acciones,
+  // porque el desarrollo todavía no está liberado para comercializarse.
+  const proyectosNoPublicados = useMemo(
+    // NULL cuenta como no publicado, igual que el toggle de la vista de Proyectos (`!!publicar`).
+    () => new Set((proyectos || []).filter((p: any) => !p.publicar).map((p: any) => p.id as number)),
+    [proyectos]
+  );
+
+  const esProyectoNoPublicado = (proyectoId: number | null | undefined) =>
+    proyectoId != null && proyectosNoPublicados.has(proyectoId);
 
   // Fetch modelos para el filtro (filtrados por proyectos seleccionados o todos)
   const { data: modelos } = useQuery({
@@ -1140,6 +1162,45 @@ const Propiedades = () => {
     areaFilter[0] !== 0 || areaFilter[1] !== 500 ||
     precioFilterIsActive ||
     searchTerm !== "";
+
+  // Descripción legible de los filtros activos: se muestra en el modal de actualización
+  // masiva para que quede explícito sobre qué universo de propiedades se va a escribir.
+  const filtrosActivosDescripcion: string[] = [];
+  if (searchTerm) filtrosActivosDescripcion.push(`Búsqueda: "${searchTerm}"`);
+  if (selectedProyectos.length > 0) {
+    const nombres = selectedProyectos
+      .map(id => proyectos?.find(p => p.id === id)?.nombre)
+      .filter(Boolean)
+      .join(", ");
+    filtrosActivosDescripcion.push(`Desarrollo: ${nombres || selectedProyectos.length}`);
+  }
+  if (selectedModelos.length > 0) {
+    const nombres = selectedModelos.map(id => selectedModelosLabels[id]).filter(Boolean).join(", ");
+    filtrosActivosDescripcion.push(`Modelo: ${nombres || selectedModelos.length}`);
+  }
+  if (recamarasFilter) filtrosActivosDescripcion.push(`Recámaras: ${recamarasFilter}`);
+  if (banosFilter) filtrosActivosDescripcion.push(`Baños: ${banosFilter}`);
+  if (disponibilidadFilter.length > 0) filtrosActivosDescripcion.push(`Estatus: ${disponibilidadFilter.join(", ")}`);
+  if (tipoTransaccionFilter.length > 0) filtrosActivosDescripcion.push(`Tipo transacción: ${tipoTransaccionFilter.join(", ")}`);
+  if (bodegasFilter) filtrosActivosDescripcion.push(bodegasFilter === "con_bodegas" ? "Con bodega" : "Sin bodega");
+  if (estacionamientosFilter) filtrosActivosDescripcion.push(estacionamientosFilter === "con_estacionamientos" ? "Con estacionamiento" : "Sin estacionamiento");
+  if (cuentaCobranzaFilter) filtrosActivosDescripcion.push(cuentaCobranzaFilter === "si" ? "Con cuenta de cobranza" : "Sin cuenta de cobranza");
+  if (areaFilter[0] !== 0 || areaFilter[1] !== 500) filtrosActivosDescripcion.push(`Área: ${areaFilter[0]}–${areaFilter[1]} m²`);
+  if (precioFilterIsActive) filtrosActivosDescripcion.push(`Precio: ${precioFilter[0]}–${precioFilter[1]}`);
+
+  // Universo de propiedades sobre el que opera la actualización masiva: exactamente el
+  // mismo que exporta el Excel, es decir, todas las coincidencias del filtro sin paginar.
+  const cargarPropiedadesParaBulkUpdate = async (): Promise<PropiedadBulk[]> => {
+    const { rows } = await fetchPropiedadesFiltradas();
+    return rows.map((row: any) => ({
+      id: row.id,
+      numero_propiedad: row.numero_propiedad,
+      id_estatus_disponibilidad: row.id_estatus_disponibilidad,
+      precio_lista: Number(row.precio_lista) || 0,
+      monto_apartado: row.monto_apartado != null ? Number(row.monto_apartado) : null,
+      id_tipo_transaccion: row.id_tipo_transaccion ?? null,
+    }));
+  };
 
   // Debounce filtros de sliders y búsqueda de modelos
   useEffect(() => {
@@ -4674,12 +4735,15 @@ const Propiedades = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              propertiesToRender.map((property) => (
-                <TableRow 
-                  key={property.id} 
+              propertiesToRender.map((property) => {
+                const propiedadNoPublicada = esProyectoNoPublicado(property.proyecto_id);
+                return (
+                <TableRow
+                  key={property.id}
                   className={`
                     ${tabType === "eliminados" ? "opacity-60" : ""}
                     ${property.id_estatus_disponibilidad === 11 ? "bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50" : ""}
+                    ${propiedadNoPublicada && property.id_estatus_disponibilidad !== 11 ? "bg-slate-200/70 dark:bg-slate-800/60 hover:bg-slate-300/70 dark:hover:bg-slate-800" : ""}
                   `}
                 >
                   {tabType === "draft" && (
@@ -4758,7 +4822,21 @@ const Propiedades = () => {
                         );
                       
                       case 'numero_departamento':
-                        return <TableCell key={column.key}>{property.numero_propiedad}</TableCell>;
+                        return (
+                          <TableCell key={column.key}>
+                            <div className="flex flex-col gap-1">
+                              <span>{property.numero_propiedad}</span>
+                              {propiedadNoPublicada && (
+                                <Badge
+                                  variant="outline"
+                                  className="w-fit text-[10px] border-slate-400 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                                >
+                                  No publicado
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                        );
                       
                       case 'piso':
                         return <TableCell key={column.key}>{property.numero_piso}</TableCell>;
@@ -5346,6 +5424,21 @@ const Propiedades = () => {
                         );
                       
                       case 'acciones':
+                        // Proyecto sin publicar: la propiedad no se opera desde aquí hasta que se publique.
+                        if (propiedadNoPublicada) {
+                          return (
+                            <TableCell key={column.key}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-muted-foreground">Sin acciones</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>El desarrollo no está publicado: acciones deshabilitadas</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TableCell>
+                          );
+                        }
                         return (
                           <TableCell key={column.key}>
                     {tabType === "eliminados" ? (
@@ -5555,7 +5648,8 @@ const Propiedades = () => {
             }
           })}
         </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -5604,6 +5698,18 @@ const Propiedades = () => {
                 <Download className="h-4 w-4" />
               )}
               Exportar Excel
+            </Button>
+          )}
+          {/* Actualización masiva: requiere permiso de actualizar y al menos un filtro activo,
+              porque siempre escribe sobre el resultado completo del filtro. */}
+          {(canUpdate || isSuperAdmin) && hasActiveFilters && activeTab === "activos" && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setBulkUpdateOpen(true)}
+            >
+              <Layers className="h-4 w-4" />
+              Actualización Masiva
             </Button>
           )}
           {(canCreate || isSuperAdmin) && (
@@ -6297,7 +6403,19 @@ const Propiedades = () => {
         </CardContent>
       </Card>
 
-      <BulkUploadPropertiesDialog 
+      <BulkUpdatePropiedadesDialog
+        open={bulkUpdateOpen}
+        onOpenChange={setBulkUpdateOpen}
+        cargarPropiedades={cargarPropiedadesParaBulkUpdate}
+        tiposTransaccion={(tiposTransaccionOptions || []).map((t: any) => ({ id: t.id, nombre: t.nombre }))}
+        filtrosActivos={filtrosActivosDescripcion}
+        onUpdated={() => {
+          refetchActivos();
+          queryClient.invalidateQueries({ queryKey: ['propiedades_paginadas'] });
+        }}
+      />
+
+      <BulkUploadPropertiesDialog
         open={bulkUploadOpen}
         onClose={() => setBulkUploadOpen(false)}
         onSuccess={() => {
