@@ -32,6 +32,9 @@ export interface CanalDeProyecto {
   comisionMaxPct: number;
   /** Qué porcentajes vienen del proyecto y no heredados del catálogo. */
   overrides: { externa: boolean; min: boolean; max: boolean };
+  /** Último guardado de esta configuración: cuándo y por quién. */
+  fechaActualizacion: string | null;
+  actualizadoPor: string | null;
 }
 
 export function useCanalesConfigProyecto(idProyecto: number | null) {
@@ -74,7 +77,51 @@ export function resolverCanalesDeProyecto(
         min: cfg?.comisionMinPct != null,
         max: cfg?.comisionMaxPct != null,
       },
+      fechaActualizacion: cfg?.fechaActualizacion ?? null,
+      actualizadoPor: cfg?.actualizadoPor ?? null,
     };
+  });
+}
+
+/**
+ * Guardado en lote de los canales de un proyecto.
+ *
+ * Se escribe canal por canal —el upsert es por `(id_proyecto, id_canal)`— pero
+ * el resultado se reporta junto: al usuario le importa si su tanda de cambios
+ * quedó guardada, no cuál de los seis upserts falló. Si alguno falla se dice
+ * cuáles, en lugar de dar por bueno el guardado completo.
+ */
+export function useGuardarCanalesDeProyecto(idProyecto: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      { cambios, actualizadoPor }: {
+        cambios: Array<{ nombre: string; config: CanalConfigProyecto }>;
+        actualizadoPor: string | null;
+      },
+    ) => {
+      if (idProyecto == null) throw new Error("Selecciona un proyecto primero.");
+
+      const fallidos: string[] = [];
+      for (const { nombre, config } of cambios) {
+        const res = await guardarCanalConfigProyecto(idProyecto, config, actualizadoPor);
+        if (!res.tableMissing && !res.ok) fallidos.push(nombre);
+        if (res.tableMissing) {
+          throw new Error(
+            'La base de datos aún no tiene la tabla comisiones_canal_config. ' +
+            'Ejecuta el Anexo 5 de Ejecuciones_manuales/20260809_directorio_personal_rrhh.md.',
+          );
+        }
+      }
+
+      if (fallidos.length > 0) {
+        throw new Error(`No se pudieron guardar: ${fallidos.join(', ')}.`);
+      }
+      return cambios.length;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [CONFIG_KEY, idProyecto] });
+    },
   });
 }
 
