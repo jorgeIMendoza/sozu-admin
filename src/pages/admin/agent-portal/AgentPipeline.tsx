@@ -201,7 +201,7 @@ const AgentPipeline = () => {
           ? (supabase as any).from('cuentas_cobranza').select('id, id_oferta, contrato_draft').in('id_oferta', ofertaIds).eq('activo', true)
           : { data: [] as any[] },
         productoIds.length > 0
-          ? (supabase as any).from('productos_servicios').select('id, nombre, precio_lista, id_proyecto').in('id', productoIds)
+          ? (supabase as any).from('productos_servicios').select('id, nombre, precio_lista, id_proyecto, id_categoria').in('id', productoIds)
           : { data: [] as any[] },
       ]) as [{ data: any[] }, { data: any[] }, { data: any[] }, { data: any[] }];
 
@@ -294,6 +294,34 @@ const AgentPipeline = () => {
         if (!tokenByOferta.has(r.id_oferta)) tokenByOferta.set(r.id_oferta, r.token);
       }
       const productoMap = new Map<number, any>((productosRes.data || []).map((p: any) => [p.id, p]));
+
+      // Tipo de la unidad: Propiedad, o la categoría del producto (Bodega, Estacionamiento…).
+      // En Daiku la unidad y su bodega se venden juntas, así que el tipo va en columna aparte.
+      const categoriaNombre = new Map<number, string>();
+      {
+        const catIds = [...new Set((productosRes.data || []).map((p: any) => p.id_categoria).filter(Boolean))] as number[];
+        if (catIds.length > 0) {
+          const { data: cats } = await (supabase as any)
+            .from('categorias_producto').select('id, nombre').in('id', catIds);
+          (cats || []).forEach((c: any) => categoriaNombre.set(c.id, c.nombre));
+        }
+      }
+
+      // Qué extras acompañan a cada unidad: la venta con bodega (o paquete de muebles,
+      // condensadora…) se escribe como una oferta aparte que repite el id_propiedad y el
+      // lead. El renglón de la propiedad los declara, porque la unidad los incluye; si no
+      // se agregó ninguno, se queda en "Propiedad" a secas.
+      const extrasPorUnidad = new Map<string, Set<string>>();
+      for (const o of ofertasData) {
+        if (!o.id_producto || !o.id_propiedad) continue;
+        const prod = productoMap.get(o.id_producto);
+        const cat = prod?.id_categoria ? categoriaNombre.get(prod.id_categoria) : null;
+        if (!cat) continue;
+        const k = `${o.id_propiedad}|${o.id_persona_lead ?? 0}`;
+        if (!extrasPorUnidad.has(k)) extrasPorUnidad.set(k, new Set());
+        extrasPorUnidad.get(k)!.add(cat);
+      }
+
       const cuentaByOferta = new Map<number, any>();
       (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaByOferta.set(c.id_oferta, c); });
 
@@ -306,6 +334,8 @@ const AgentPipeline = () => {
         const producto = o.id_producto ? productoMap.get(o.id_producto) : null;
         const cuenta = cuentaByOferta.get(o.id);
         const isProducto = !!o.id_producto;
+        const categoriaProducto = producto?.id_categoria ? categoriaNombre.get(producto.id_categoria) : null;
+        const extrasUnidad = [...(extrasPorUnidad.get(`${o.id_propiedad}|${o.id_persona_lead ?? 0}`) ?? [])];
         const proyectoNombre = isProducto
           ? (producto?.id_proyecto ? productoToProject.get(producto.id_proyecto) || '' : '')
           : (propToProject.get(o.id_propiedad) || '');
@@ -328,6 +358,12 @@ const AgentPipeline = () => {
           tiene_contrato_firmado: cuenta ? signedSet.has(cuenta.id) : false,
           is_producto: isProducto,
           no_avance: noAvanceMap.get(o.id) || null,
+          // La propiedad declara lo que incluye ("Propiedad · Bodega"); sin extras se queda
+          // en "Propiedad". El renglón del extra dice su categoría, o "Producto" si no la
+          // tiene. Son dos ofertas distintas (ver `claveUnidad`) porque su precio también.
+          tipo_label: isProducto
+            ? (categoriaProducto ?? 'Producto')
+            : (extrasUnidad.length > 0 ? `Propiedad · ${extrasUnidad.join(' · ')}` : 'Propiedad'),
         };
         enriched.stage = classifyOffer(enriched);
         // Etapa canónica del pipeline `ventas_sozu`, derivada de los mismos hechos que usarán
@@ -563,7 +599,7 @@ const AgentPipeline = () => {
                 <thead className="sozu-thead [&_th]:uppercase [&_th]:tracking-wide [&_th]:px-3">
                   <tr>
                     <th className="w-[206px] text-left">Desarrollo · Unidad</th>
-                    <th className="w-[120px] text-center">Tipo</th>
+                    <th className="w-[152px] text-center">Tipo</th>
                     <th className="w-[190px] text-left">Prospecto</th>
                     <th className="w-[158px] text-center">Etapa</th>
                     <th className="w-[120px] text-center">Valor</th>
@@ -600,9 +636,9 @@ const AgentPipeline = () => {
                           </p>
                         </td>
                         <td className="px-3 text-center">
-                          <span className={cn('inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                          <span className={cn('inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                             negocio.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-muted text-muted-foreground ring-1 ring-border/60')}>
-                            {negocio.is_producto ? 'Producto' : 'Propiedad'}
+                            {negocio.tipo_label}
                           </span>
                         </td>
                         <td className="px-3 text-left">
@@ -735,9 +771,9 @@ const AgentPipeline = () => {
                             <p className="truncate text-[12px] font-semibold text-foreground">
                               {negocio.proyecto_nombre || 'Sin desarrollo'}
                             </p>
-                            <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
+                            <span className={cn('shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
                               negocio.is_producto ? 'bg-sky-50 text-sky-700' : 'bg-muted text-muted-foreground')}>
-                              {negocio.is_producto ? 'Producto' : 'Propiedad'}
+                              {negocio.tipo_label}
                             </span>
                           </div>
                           <p className="truncate text-[10px] text-muted-foreground">
@@ -885,10 +921,10 @@ function OfertaCard({ oferta, etapa, formatCurrency, onClick, onShare, onAbrir, 
       {/* Cabecera: tipo + etapa */}
       <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
         <span className={cn(
-          'inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
+          'inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
           oferta.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-card text-muted-foreground ring-1 ring-border',
         )}>
-          {oferta.is_producto ? 'Producto' : 'Propiedad'}
+          {oferta.tipo_label ?? (oferta.is_producto ? 'Producto' : 'Propiedad')}
         </span>
         <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold', etapa.chip)}>
           {etapa.label}

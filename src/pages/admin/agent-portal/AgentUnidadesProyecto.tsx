@@ -4,6 +4,7 @@ import { mesesMensualidadesRestantes, calcDynamicScheme, calcEscalonadoScheme, e
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
+import { fetchExtrasDetalleUnidad, fetchExtrasPorPropiedad, precioTotalUnidad } from "@/lib/inventario/precio-unidad";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ModalFilters, FilterSelect, FilterField } from "@/components/ui/modal-filters";
@@ -147,6 +148,21 @@ const AgentUnidadesProyecto = () => {
     pageSize: requestedPageSize,
   });
 
+  // Valor de bodegas y estacionamientos de las unidades de la página. La RPC del
+  // inventario solo devuelve el conteo, así que el costo se trae aparte (una consulta
+  // por tabla para las ≤30 unidades visibles) y se suma al precio de lista: la tarjeta
+  // muestra el valor total, que es lo que el cliente termina pagando.
+  const propiedadIdsPagina = useMemo(
+    () => (inventarioData?.propiedades || []).map((p: InventarioPropiedad) => p.id),
+    [inventarioData?.propiedades],
+  );
+  const { data: extrasPagina } = useQuery({
+    queryKey: ["inventario-extras", propiedadIdsPagina],
+    queryFn: () => fetchExtrasPorPropiedad(propiedadIdsPagina),
+    enabled: propiedadIdsPagina.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   const pageProperties = useMemo(() => {
     return (inventarioData?.propiedades || []).map((p: InventarioPropiedad) => {
       const propImgs = p.propiedad_imagenes || [];
@@ -158,6 +174,8 @@ const AgentUnidadesProyecto = () => {
         numero: p.numero_propiedad,
         piso: p.numero_piso,
         precio_lista: p.precio_lista,
+        // Lo que se muestra: precio de lista + bodegas + estacionamientos de esa unidad.
+        precio_total: precioTotalUnidad(p.precio_lista, extrasPagina?.get(p.id)),
         m2_interiores: p.m2_interiores,
         m2_exteriores: p.m2_exteriores,
         m2_total: (p.m2_interiores || 0) + (p.m2_exteriores || 0),
@@ -176,7 +194,7 @@ const AgentUnidadesProyecto = () => {
         esquemas_pago: p.esquemas_pago || [],
       };
     });
-  }, [inventarioData?.propiedades]);
+  }, [inventarioData?.propiedades, extrasPagina]);
 
   const availableProjectNames = inventarioData?.filterOptions?.proyectos || [];
   const availableModelNames = inventarioData?.filterOptions?.modelos || [];
@@ -342,37 +360,12 @@ const AgentUnidadesProyecto = () => {
     ? schemesDirect
     : (selectedProperty ? getSchemesForProperty(selectedProperty) : []);
 
-  // Bodegas y estacionamientos de la unidad, con su costo. El detalle mostraba solo
-  // `precio_lista` de la propiedad, así que el agente veía un precio y al configurar
-  // la oferta le aparecía otro (el que sí suma los productos). Mismo cálculo que
-  // NewOfferDialog: precio_lista del producto × m2, sin distinguir es_incluido.
+  // Bodegas y estacionamientos de la unidad, con su costo. Misma fuente que la tarjeta
+  // del listado (`@/lib/inventario/precio-unidad`): el detalle sí desglosa, la tarjeta
+  // solo muestra el total, pero la fórmula es una sola.
   const { data: unidadExtras } = useQuery({
     queryKey: ["unidad-extras-costo", selectedProperty?.id],
-    queryFn: async () => {
-      const [bodegasRes, estacionamientosRes] = await Promise.all([
-        (supabase as any)
-          .from("bodegas")
-          .select("id, nombre, m2, productos_servicios!bodegas_id_producto_fkey(precio_lista)")
-          .eq("id_propiedad", selectedProperty.id)
-          .eq("activo", true),
-        (supabase as any)
-          .from("estacionamientos")
-          .select("id, nombre, m2, productos_servicios!estacionamientos_id_producto_fkey(precio_lista)")
-          .eq("id_propiedad", selectedProperty.id)
-          .eq("activo", true),
-      ]);
-      const mapear = (filas: any[], tipo: "bodega" | "estacionamiento") =>
-        (filas || []).map((f: any) => ({
-          id: `${tipo}-${f.id}`,
-          tipo,
-          nombre: f.nombre as string,
-          costo: ((f.productos_servicios as any)?.precio_lista || 0) * (f.m2 || 0),
-        }));
-      return [
-        ...mapear(bodegasRes.data, "bodega"),
-        ...mapear(estacionamientosRes.data, "estacionamiento"),
-      ];
-    },
+    queryFn: () => fetchExtrasDetalleUnidad(selectedProperty?.id),
     enabled: !!selectedProperty?.id,
   });
   const extrasConCosto = (unidadExtras ?? []).filter((e) => e.costo > 0);
@@ -838,8 +831,8 @@ const UnitCard = React.memo(({ prop, formatPrice, onClick }: {
           {prop.proyecto_nombre}{prop.piso ? ` · Nivel ${prop.piso}` : ""}
         </p>
       </div>
-      {prop.precio_lista > 0 && (
-        <p className="text-base font-bold tabular-nums text-primary">{formatPrice(prop.precio_lista)}</p>
+      {(prop.precio_total ?? prop.precio_lista) > 0 && (
+        <p className="text-base font-bold tabular-nums text-primary">{formatPrice(prop.precio_total ?? prop.precio_lista)}</p>
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-sm font-medium text-muted-foreground">
         {prop.m2_total > 0 && <span className="flex items-center gap-1.5"><Maximize2 className="h-4 w-4 text-primary" /> {prop.m2_total.toFixed(1)} m²</span>}

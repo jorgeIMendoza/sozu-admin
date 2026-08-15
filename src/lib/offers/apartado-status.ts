@@ -10,12 +10,21 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
+/**
+ * Estado de un depósito.
+ *
+ * `en_proceso` es real y no cosmético: `insertar_pago_stp` guarda la fila con
+ * `es_pago_aplicado` en NULL y es el motor de aplicación quien la marca segundos
+ * después. Pintar ese hueco como "rechazado" asustaría al cliente sin motivo.
+ */
+export type EstadoMovimiento = "aplicado" | "en_proceso" | "rechazado";
+
 /** Un depósito visto por STP en la CLABE del apartado. */
 export type MovimientoApartado = {
   claveRastreo: string | null;
   monto: number;
-  /** false = STP lo reportó pero no se aplicó (ver `razonRechazo`). */
-  aplicado: boolean;
+  estado: EstadoMovimiento;
+  /** Solo cuando `estado === "rechazado"`. */
   razonRechazo: string | null;
   /** Primer nombre del ordenante (la RPC no devuelve el nombre completo). */
   ordenante: string | null;
@@ -74,7 +83,10 @@ export async function consultarEstadoApartado(
           ? d.movimientos.map((m: any) => ({
               claveRastreo: m.clave_rastreo ?? null,
               monto: num(m.monto),
-              aplicado: !!m.aplicado,
+              // `estado` lo devuelve la v2 de la RPC. Con la v1 solo llega `aplicado`
+              // (booleano ya colapsado): ahí no se puede distinguir el hueco.
+              estado: (m.estado as EstadoMovimiento) ??
+                (m.aplicado === true ? "aplicado" : m.razon_rechazo ? "rechazado" : "en_proceso"),
               razonRechazo: m.razon_rechazo ?? null,
               ordenante: m.ordenante || null,
               fecha: m.fecha ?? null,

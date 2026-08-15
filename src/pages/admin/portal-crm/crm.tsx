@@ -98,6 +98,7 @@ import {
 } from "@/lib/crm-lead-scoring";
 import { aggregateAgentPerf, fmtNum, fmtPct } from "@/lib/crm-analytics";
 import { type DateRange, RANGE_LABEL, rangeToSince } from "@/lib/crm-marketing";
+import { buscarProspectosExistentes, describirCoincidencia, type ProspectoCoincidencia } from "@/lib/prospectos/duplicados";
 import {
   calculateSlaStatus, getFollowUpPriority, SLA_TONE,
   generateMessage, SEQUENCES, DEFAULT_AUTOMATION_RULES,
@@ -1144,7 +1145,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [duplicates, setDuplicates] = useState<any[]>([]);
+  const [duplicates, setDuplicates] = useState<ProspectoCoincidencia[]>([]);
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", development_id: "", source_platform: "manual", source_name: "Manual", lifecycle_stage: "lead", lead_status: "nuevo", categoria: "", contact_owner: "" });
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
@@ -1155,34 +1156,12 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
     if (uid) setForm((f) => (f.contact_owner ? f : { ...f, contact_owner: uid }));
   }, [user?.id]);
 
-  // Busca personas activas con el mismo correo o los mismos últimos 10 dígitos de teléfono.
-  const findDuplicates = async (email: string, phone: string): Promise<any[]> => {
-    const emailNorm = email.toLowerCase();
-    const digits = phone.replace(/\D/g, "");
-    const tel10 = digits.length >= 10 ? digits.slice(-10) : "";
-    if (!emailNorm && !tel10) return [];
-    const ors: string[] = [];
-    if (emailNorm) ors.push(`email.ilike.${emailNorm}`);
-    if (tel10) ors.push(`telefono.ilike.%${tel10}`);
-    const { data: personas } = await (supabase as any).from("personas")
-      .select("id, nombre_legal, email, telefono").eq("activo", true).or(ors.join(",")).limit(10);
-    if (!personas?.length) return [];
-    const personaIds = personas.map((p: any) => p.id);
-    const { data: ents } = await (supabase as any).from("entidades_relacionadas")
-      .select("id, id_persona, id_tipo_entidad").in("id_persona", personaIds).in("id_tipo_entidad", [2, 7]).eq("activo", true);
-    // compradores = tiene cuenta de cobranza (best-effort; si RLS bloquea, no muestra el badge).
-    const { data: comps } = await (supabase as any).from("compradores").select("id_persona").in("id_persona", personaIds);
-    const compSet = new Set((comps ?? []).map((c: any) => c.id_persona));
-    return personas.map((p: any) => {
-      const es = (ents ?? []).filter((e: any) => e.id_persona === p.id);
-      const clienteEnt = es.find((e: any) => e.id_tipo_entidad === 2);
-      const anyEnt = clienteEnt ?? [...es].sort((a: any, b: any) => b.id - a.id)[0];
-      return {
-        persona_id: p.id, nombre: p.nombre_legal, email: p.email, telefono: p.telefono,
-        es_cliente: !!clienteEnt, tiene_cobranza: compSet.has(p.id), abrir_entidad_id: anyEnt?.id ?? null,
-      };
-    });
-  };
+  // Duplicados: misma búsqueda y mismo veredicto que el alta del Portal Agente
+  // (`@/lib/prospectos/duplicados`). Antes cada portal buscaba distinto y la tarjeta no
+  // decía de quién era el prospecto, así que el mismo lead entraba dos veces con dos
+  // dueños distintos.
+  const findDuplicates = (email: string, phone: string) =>
+    buscarProspectosExistentes({ email, telefono: phone, miAuthUserId: user?.id ?? null });
 
   const submit = async (force = false) => {
     if (!form.full_name) return;
@@ -1284,21 +1263,34 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
               <TriangleAlert className="h-4 w-4 shrink-0" /> Ya existe {duplicates.length === 1 ? "un contacto" : `${duplicates.length} contactos`} con este teléfono o correo
             </div>
             {duplicates.map((d) => (
-              <div key={d.persona_id} className={`flex items-center justify-between gap-2 rounded p-2 border ${d.es_cliente ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "bg-card border-border"}`}>
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{d.nombre}</div>
-                  <div className="text-xs text-muted-foreground truncate">{d.email || "sin correo"} · {d.telefono || "sin teléfono"}</div>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {d.es_cliente && <Badge variant="secondary" className="text-[10px]">Cliente</Badge>}
-                    {d.tiene_cobranza && <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700">Ya tiene cuenta de cobranza</Badge>}
+              <div key={d.idPersona} className={`rounded p-2 border ${d.esCliente ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "bg-card border-border"}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{d.nombre}</div>
+                    <div className="text-xs text-muted-foreground truncate">{d.email || "sin correo"} · {d.telefono || "sin teléfono"} · coincide por {d.motivo}</div>
                   </div>
+                  {d.leads[0] && (
+                    <Button size="sm" variant="outline" className="shrink-0"
+                      onClick={() => { setOpen(false); setDuplicates([]); navigate(`/admin/portal-crm/ventas/contactos/${d.leads[0].idEntidadRelacionada}`); }}>
+                      Abrir
+                    </Button>
+                  )}
                 </div>
-                {d.abrir_entidad_id && (
-                  <Button size="sm" variant="outline" className="shrink-0"
-                    onClick={() => { setOpen(false); setDuplicates([]); navigate(`/admin/portal-crm/ventas/contactos/${d.abrir_entidad_id}`); }}>
-                    Abrir
-                  </Button>
+                <p className="mt-1 text-xs text-amber-800">{describirCoincidencia(d)}</p>
+                {d.leads.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {d.leads.map((l) => (
+                      <li key={l.idEntidadRelacionada} className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{l.proyecto}</span>
+                        <span>·</span>
+                        <span>{l.dueno ?? "otro asesor"}</span>
+                        {l.estatus && (<><span>·</span><span>{l.estatus}</span></>)}
+                        {l.esMio && <Badge variant="secondary" className="text-[10px]">Tuyo</Badge>}
+                      </li>
+                    ))}
+                  </ul>
                 )}
+                {d.esCliente && <Badge variant="secondary" className="mt-1 text-[10px]">Ya es cliente</Badge>}
               </div>
             ))}
             <p className="text-xs text-amber-700">Si de verdad es otra persona, puedes crearlo de todos modos.</p>

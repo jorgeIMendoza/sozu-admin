@@ -129,8 +129,15 @@ export function etapaDeOferta(o: {
  *   - el conteo de ofertas, para que el agente vea que hubo varias versiones.
  */
 export function claveUnidad(o: { id_propiedad?: number | null; id_producto?: number | null }): string {
+  // Una oferta de producto (bodega, estacionamiento, paquete de muebles) trae TAMBIÉN el
+  // id_propiedad de la unidad a la que cuelga: se emite en par con la oferta de la propiedad,
+  // mismo lead y segundos de diferencia. Es un negocio propio, no una recotización de la
+  // propiedad, así que el producto manda en la clave — acotado por la propiedad, porque el
+  // mismo producto se vende en decenas de unidades (Bodegas Daiku: 39). Con el orden inverso
+  // la bodega se agrupaba con su propiedad y, por ser 1 segundo más nueva, la sustituía como
+  // representativa: el renglón mostraba "Bodega" y $30,000 en vez de la unidad y $9,519,120.
+  if (o.id_producto) return `s:${o.id_producto}:${o.id_propiedad ?? 0}`;
   if (o.id_propiedad) return `p:${o.id_propiedad}`;
-  if (o.id_producto) return `s:${o.id_producto}`;
   return "sin-unidad";
 }
 
