@@ -17,14 +17,15 @@ export interface PagoRecord {
   metodo_pago: string | null;
   clabe_stp: string | null;
   cliente: string | null;
-  cliente_email: string | null;
+  cliente_email?: string | null;
   num_propiedad: string | null;
-  modelo: string | null;
+  modelo?: string | null;
   edificio?: string | null;
-  estatus_propiedad: string | null;
+  estatus_propiedad?: string | null;
   producto: string | null;
   tipo_cuenta: 'propiedad' | 'producto' | 'mantenimiento' | 'Propiedad' | 'Producto' | 'Mantenimiento' | null;
-  tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
+  aplicaciones_detalle?: any[];
+  tipo_categoria?: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
   // Agrupación de validación (valido/invalido/error/sin_revisar).
   estatus?: 'valido' | 'invalido' | 'error' | 'sin_revisar';
   // Estado de validación crudo (6 estados).

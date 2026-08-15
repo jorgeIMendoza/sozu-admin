@@ -421,7 +421,7 @@ export async function fetchPersonasExpediente(
       .select('id_persona')
       .eq('id_cuenta_cobranza', args.cuentaId)
       .eq('activo', true);
-    ids = [...new Set((data ?? []).map((c: any) => c.id_persona as number).filter(Boolean))];
+    ids = [...new Set((data ?? []).map((c: any) => c.id_persona as number).filter(Boolean))] as number[];
   }
   if (!ids.length) return [];
 

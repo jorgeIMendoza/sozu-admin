@@ -111,7 +111,6 @@ export const NewModeloDialog = ({ onModeloAdded, proyectos }: NewModeloDialogPro
       setPlanoUrl(null);
       setImagenPortadaUrl("");
       setTour360Url("");
-      setHighlightsText("");
       setOpen(false);
       onModeloAdded();
     } catch (error) {

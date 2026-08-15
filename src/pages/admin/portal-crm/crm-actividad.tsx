@@ -184,7 +184,7 @@ export function Timeline({ notes, tasks, citas = [], deals, pipelineEvents, conv
           if (it.type === "task") {
             return (
               <div key={it.id} className="pb-4 last:pb-0">
-                <TaskCard task={it.data} owners={owners} onComplete={onCompleteTask} onUpdate={onUpdateTask} onDelete={onDeleteTask} />
+                <TaskCard task={(it as any).data} owners={owners} onComplete={onCompleteTask} onUpdate={onUpdateTask} onDelete={onDeleteTask} />
               </div>
             );
           }
@@ -290,7 +290,7 @@ export function DealActivityFeed({ notes, tasks, search, defaultExpanded, expand
             {g.items.map((it) => it.kind === "note" ? (
               <NoteCard key={`n-${it.id}-${expandNonce}`} note={it.data} contactName={contactName ?? ""} defaultExpanded={defaultExpanded} onEdited={onEdited} onDelete={onDeleteNote} />
             ) : (
-              <TaskActivityCard key={`t-${it.id}-${expandNonce}`} task={it.data} defaultExpanded={defaultExpanded} onComplete={onCompleteTask} onDelete={onDeleteTask} />
+              <TaskActivityCard key={`t-${it.id}-${expandNonce}`} task={(it as any).data} defaultExpanded={defaultExpanded} onComplete={onCompleteTask} onDelete={onDeleteTask} />
             ))}
           </div>
         </div>
