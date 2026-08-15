@@ -720,7 +720,7 @@ export function AddProspectoFloatingDialog({ open, onOpenChange, preSelectedPers
                           {c.leads.map((l) => (
                             <li key={l.idEntidadRelacionada} className="text-xs text-muted-foreground">
                               <span className="font-medium text-foreground">{l.proyecto}</span>
-                              {" · "}{l.dueno ?? "sin dueño asignado"}
+                              {" · "}{l.dueno ?? "otro asesor"}
                               {l.estatus ? ` · ${l.estatus}` : ""}
                               {l.esMio ? " · tuyo" : ""}
                             </li>

@@ -1283,7 +1283,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
                       <li key={l.idEntidadRelacionada} className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{l.proyecto}</span>
                         <span>·</span>
-                        <span>{l.dueno ?? "sin dueño asignado"}</span>
+                        <span>{l.dueno ?? "otro asesor"}</span>
                         {l.estatus && (<><span>·</span><span>{l.estatus}</span></>)}
                         {l.esMio && <Badge variant="secondary" className="text-[10px]">Tuyo</Badge>}
                       </li>

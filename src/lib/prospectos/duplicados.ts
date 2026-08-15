@@ -219,8 +219,11 @@ export function describirCoincidencia(c: ProspectoCoincidencia): string {
       return `Ya es tu prospecto en ${c.leads.map((l) => l.proyecto).join(", ")}.`;
     }
     const ajenos = c.leads.filter((l) => !l.esMio);
+    // `dueno` puede venir vacío a propósito: la RPC solo devuelve el nombre de la persona
+    // o del usuario, nunca su correo corporativo. Sin nombre se dice "otro asesor" en vez
+    // de dejar el renglón cojo.
     const detalle = ajenos
-      .map((l) => `${l.proyecto}${l.dueno ? ` · ${l.dueno}` : ""}`)
+      .map((l) => `${l.proyecto} · ${l.dueno ?? "otro asesor"}`)
       .join(" · ");
     return `Ya está registrado y tiene dueño: ${detalle}.`;
   }
