@@ -39,9 +39,6 @@ import { formatoMoneda } from "@/features/precios/lib/formato";
 import { factor4, pct2, pctFirmado } from "@/features/precios/lib/formatoVpn";
 import { TORRES_POR_ID } from "@/features/precios/mocks/inventario";
 
-  component: Cotizador,
-});
-
 const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
 
 /** Fecha del mes n contado desde hoy, formateada mmm aaaa. */
@@ -471,3 +468,5 @@ function Cifra({
     </div>
   );
 }
+
+export default Cotizador;

@@ -45,9 +45,6 @@ import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto"
 import { PROPIEDADES_POR_ID } from "@/features/precios/mocks/inventario";
 import type { OfertaVigente } from "@/features/precios/types/dominio";
 
-  component: Ofertas,
-});
-
 type Pestana = "vigentes" | "por_vencer" | "historial";
 
 const COLOR_ESTADO: Record<OfertaVigente["estado"], string> = {
@@ -443,3 +440,5 @@ function Indicador({ etiqueta, valor }: { etiqueta: string; valor: number }) {
     </span>
   );
 }
+
+export default Ofertas;

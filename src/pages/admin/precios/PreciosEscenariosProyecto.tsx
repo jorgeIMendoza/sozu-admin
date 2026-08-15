@@ -29,9 +29,6 @@ import { descargarCSV } from "@/features/precios/lib/csv";
 import { formatoMoneda } from "@/features/precios/lib/formato";
 import { pct2 } from "@/features/precios/lib/formatoVpn";
 
-  component: EscenariosProyecto,
-});
-
 const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
 const SIN_ESCENARIOS: EscenarioProyecto[] = [];
 
@@ -493,3 +490,5 @@ function Cifra({
     </Card>
   );
 }
+
+export default EscenariosProyecto;

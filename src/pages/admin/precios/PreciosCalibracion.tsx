@@ -71,9 +71,6 @@ import {
   type FilaPrecio,
 } from "@/features/precios/components/PanelDetallePrecio";
 
-  component: CalibracionPagina,
-});
-
 const OBJETIVO_R2 = 0.92;
 
 function Indicador({
@@ -1020,3 +1017,5 @@ function CalibracionPagina() {
     </div>
   );
 }
+
+export default CalibracionPagina;

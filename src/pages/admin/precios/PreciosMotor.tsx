@@ -37,9 +37,6 @@ import {
 } from "@/features/precios/lib/formato";
 import type { TipoFactor } from "@/features/precios/types/dominio";
 
-  component: PantallaMotor,
-});
-
 /**
  * Campo numérico que muestra pesos formateados en reposo y number crudo al editar.
  * Un campo de dinero que dice 69500 obliga a contar ceros; $69,500.00 no.
@@ -680,3 +677,5 @@ function PantallaMotor() {
     </div>
   );
 }
+
+export default PantallaMotor;

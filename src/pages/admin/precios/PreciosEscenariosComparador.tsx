@@ -37,9 +37,6 @@ import {
 } from "@/features/precios/lib/formatoVpn";
 import type { TipoEsquema } from "@/features/precios/types/dominio";
 
-  component: Comparador,
-});
-
 type Orden = "captura" | "vpn" | "realizado";
 
 const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
@@ -812,3 +809,5 @@ function Cifra({ titulo, valor }: { titulo: string; valor: string }) {
     </div>
   );
 }
+
+export default Comparador;

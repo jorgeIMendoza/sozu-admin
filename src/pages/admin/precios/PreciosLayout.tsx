@@ -20,24 +20,6 @@ import {
 } from "@/components/ui/tooltip";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
 
-  head: () => ({
-    meta: [
-      { title: "Precios — SOZU Admin Panel" },
-      {
-        name: "description",
-        content:
-          "Motor de precios hedónico, calibración y estrategia comercial del inventario SOZU.",
-      },
-      { property: "og:title", content: "Precios — SOZU Admin Panel" },
-      {
-        property: "og:description",
-        content: "Motor de precios, calibración y estrategia comercial.",
-      },
-    ],
-  }),
-  component: PreciosLayout,
-});
-
 const PESTANAS = [
   { titulo: "Tabla de Precios", ruta: "/admin/inventario/precios/tabla" },
   { titulo: "Configuración del Motor", ruta: "/admin/inventario/precios/motor" },
@@ -169,3 +151,5 @@ function PreciosLayout() {
     </AdminLayout>
   );
 }
+
+export default PreciosLayout;

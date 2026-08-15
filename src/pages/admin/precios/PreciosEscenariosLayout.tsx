@@ -1,9 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
-  component: EscenariosLayout,
-});
-
 const SUB = [
   { titulo: "Esquemas", ruta: "/admin/inventario/precios/escenarios/esquemas" },
   { titulo: "Comparador", ruta: "/admin/inventario/precios/escenarios/comparador" },
@@ -38,3 +35,5 @@ function EscenariosLayout() {
     </div>
   );
 }
+
+export default EscenariosLayout;

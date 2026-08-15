@@ -80,9 +80,6 @@ import { ModalOverrideMasivo } from "@/features/precios/components/ModalOverride
 import { PlanoTorre } from "@/features/precios/components/PlanoTorre";
 import type { AlertaCalidad } from "@/features/precios/types/dominio";
 
-  component: TablaPrecios,
-});
-
 const COLUMNAS_ORDENABLES = new Set([
   "nivel",
   "area_int",
@@ -1279,3 +1276,5 @@ function TablaPrecios() {
     </TooltipProvider>
   );
 }
+
+export default TablaPrecios;

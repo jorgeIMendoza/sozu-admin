@@ -56,9 +56,6 @@ import { formatoFechaHora, formatoFechaCorta, formatoMoneda } from "@/features/p
 import { PROPIEDADES_POR_ID } from "@/features/precios/mocks/inventario";
 import type { VersionLista } from "@/features/precios/types/dominio";
 
-  component: Versiones,
-});
-
 function Versiones() {
   const idProyecto = useMotorStore((s) => s.idProyectoActivo);
   const versionesPorProyecto = useVersionesStore((s) => s.versionesPorProyecto);
@@ -561,3 +558,5 @@ function Versiones() {
     </TooltipProvider>
   );
 }
+
+export default Versiones;

@@ -16,9 +16,6 @@ import type {
 } from "@/features/precios/types/dominio";
 import { pct2 } from "@/features/precios/lib/formatoVpn";
 
-  component: PantallaEsquemas,
-});
-
 function PantallaEsquemas() {
   const {
     idProyecto,
@@ -364,3 +361,5 @@ function PantallaEsquemas() {
     </div>
   );
 }
+
+export default PantallaEsquemas;

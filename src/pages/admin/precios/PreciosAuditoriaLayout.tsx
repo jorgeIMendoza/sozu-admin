@@ -1,9 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
-  component: AuditoriaLayout,
-});
-
 const SUB = [
   { titulo: "Bitácora", ruta: "/admin/inventario/precios/auditoria/bitacora" },
   { titulo: "Versiones", ruta: "/admin/inventario/precios/auditoria/versiones" },
@@ -37,3 +34,5 @@ function AuditoriaLayout() {
     </div>
   );
 }
+
+export default AuditoriaLayout;

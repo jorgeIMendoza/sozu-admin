@@ -69,8 +69,6 @@ import { formatoFechaHora, formatoMoneda } from "@/features/precios/lib/formato"
 
   validateSearch: (s: Record<string, unknown>): { unidad?: string } =>
     typeof s["unidad"] === "string" ? { unidad: s["unidad"] as string } : {},
-  component: Bitacora,
-});
 
 const COLUMNAS = [
   { clave: "secuencia", titulo: "#" },
@@ -1059,3 +1057,5 @@ function Bitacora() {
     </div>
   );
 }
+
+export default Bitacora;
