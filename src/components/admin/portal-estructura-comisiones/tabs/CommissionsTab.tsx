@@ -278,6 +278,10 @@ export default function CommissionsTab() {
     }
     // Si el rol actual sigue siendo uno de los que ejerce, se conserva.
     const rol = persona.roles.find(r => r.roleId === rule.roleId) ?? persona.roles[0];
+    if (!rol) {
+      toast.error(`${persona.nombre} no tiene rol asignado. Vincúlaselo en Roles y Sueldos.`);
+      return;
+    }
     updateCommissionRule({ ...rule, personalId, roleId: rol.roleId });
   };
 
@@ -676,8 +680,11 @@ export default function CommissionsTab() {
                               className={`${CLASE_SELECT} font-medium ${rule.personalId ? '' : 'border-amber-500 text-amber-600'}`}
                             >
                               {!rule.personalId && <option value="">Sin comisionista asignado</option>}
+                              {/* Solo quien tiene rol: la regla se guarda contra
+                                  uno, así que elegir a alguien sin rol dejaría la
+                                  fila sin nada que imputar. */}
                               {comisionistas
-                                .filter(c => !yaEnCanal.has(c.personalId))
+                                .filter(c => !yaEnCanal.has(c.personalId) && c.roles.length > 0)
                                 .map(c => (
                                   <option key={c.personalId} value={c.personalId}>
                                     {c.nombre} — {c.roles[0].rolNombre}

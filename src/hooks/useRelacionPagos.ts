@@ -17,14 +17,15 @@ export interface PagoRecord {
   metodo_pago: string | null;
   clabe_stp: string | null;
   cliente: string | null;
-  cliente_email: string | null;
+  cliente_email?: string | null;
   num_propiedad: string | null;
-  modelo: string | null;
+  modelo?: string | null;
   edificio?: string | null;
-  estatus_propiedad: string | null;
+  estatus_propiedad?: string | null;
   producto: string | null;
   tipo_cuenta: 'propiedad' | 'producto' | 'mantenimiento' | 'Propiedad' | 'Producto' | 'Mantenimiento' | null;
-  tipo_categoria: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
+  aplicaciones_detalle?: any[];
+  tipo_categoria?: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
   // Agrupación de validación (valido/invalido/error/sin_revisar).
   estatus?: 'valido' | 'invalido' | 'error' | 'sin_revisar';
   // Estado de validación crudo (6 estados).
@@ -33,6 +34,12 @@ export interface PagoRecord {
   // no puede salir "Vencido" porque su acuerdo siga abierto.
   estado_pago?: 'pagado' | 'parcial' | 'sin_aplicar';
   monto_aplicado?: number;
+  // Desglose de aplicaciones del pago. La RPC `get_pcobranza_relacion_pagos` NO lo
+  // devuelve (verificado en dev y prod): sólo lo traen las filas sintéticas que
+  // RelacionPagos arma con queries directas en modo isRpMode. Para las filas de la
+  // RPC queda undefined y `normConcepto` cae a `descripcion`.
+  num_aplicaciones?: number;
+  aplicaciones_detalle?: { concepto: string | null; orden: number | null; monto: number }[];
   atraso?: number;
   proyecto: string | null;
   proyecto_id: number | null;

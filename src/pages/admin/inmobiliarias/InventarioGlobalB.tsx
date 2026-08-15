@@ -1,6 +1,7 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
+import { fetchExtrasPorPropiedad, precioTotalUnidad } from "@/lib/inventario/precio-unidad";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -224,6 +225,15 @@ const InventarioGlobalB = () => {
     }
   }, [hasLoadedInitial, hasMorePages, isFetching, allProperties, data.projectCounts]);
 
+  // Valor de bodegas y estacionamientos: la RPC solo devuelve el conteo.
+  const propiedadIdsVisibles = useMemo(() => allProperties.map((p) => p.id), [allProperties]);
+  const { data: extrasVisibles } = useQuery({
+    queryKey: ["inventario-extras", propiedadIdsVisibles],
+    queryFn: () => fetchExtrasPorPropiedad(propiedadIdsVisibles),
+    enabled: propiedadIdsVisibles.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   // Map accumulated data to UI format
   const displayProperties = useMemo(() => {
     return allProperties.map((p) => {
@@ -232,7 +242,9 @@ const InventarioGlobalB = () => {
       const rawImages = propImgs.length > 0 ? propImgs : modelImgs;
       return {
         id: p.id, numero_propiedad: p.numero_propiedad, numero: p.numero_propiedad, piso: p.numero_piso,
-        precio_lista: p.precio_lista, m2_interiores: p.m2_interiores, m2_exteriores: p.m2_exteriores,
+        precio_lista: p.precio_lista,
+        precio_total: precioTotalUnidad(p.precio_lista, extrasVisibles?.get(p.id)),
+        m2_interiores: p.m2_interiores, m2_exteriores: p.m2_exteriores,
         m2_total: (p.m2_interiores || 0) + (p.m2_exteriores || 0),
         proyecto_id: p.proyecto_id, proyecto_nombre: p.proyecto_nombre, edificio_nombre: p.edificio_nombre,
         modelo_id: p.modelo_id, modelo_nombre: p.modelo_nombre,
@@ -242,7 +254,7 @@ const InventarioGlobalB = () => {
         model_images: rawImages, esquemas_pago: p.esquemas_pago || [],
       };
     });
-  }, [allProperties]);
+  }, [allProperties, extrasVisibles]);
 
   // Filter options come from the server
   const projectsWithAvailable = data.filterOptions.proyectos;
@@ -646,7 +658,7 @@ const ProjectSwipeCarousel = React.memo(({ properties, formatPrice, onSelectProp
                 <PropertyCardImage images={prop.model_images || []} />
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 pb-3 pt-8 pointer-events-none">
                   <h4 className="font-bold text-white text-base truncate drop-shadow-md">Depto. {prop.numero || prop.id}</h4>
-                  {prop.precio_lista > 0 && <p className="text-white/90 text-sm font-semibold drop-shadow-md">{formatPrice(prop.precio_lista)}</p>}
+                  {(prop.precio_total ?? prop.precio_lista) > 0 && <p className="text-white/90 text-sm font-semibold drop-shadow-md">{formatPrice(prop.precio_total ?? prop.precio_lista)}</p>}
                 </div>
               </div>
               <CardContent className="p-3 space-y-2">

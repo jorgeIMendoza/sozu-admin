@@ -812,6 +812,65 @@ export default function Inmobiliarias() {
         }
       }
       
+      // Sincronizar el usuario de sistema de la inmobiliaria ANTES de tocar personas: si el
+      // cambio de correo falla, personas.email queda intacto y no se produce el desalineado
+      // usuarios.email != personas.email, que deja a la agencia sin poder asignar proyectos
+      // (es_usuario_principal en Usuarios.tsx y el trigger sync_inmobiliaria_project_access
+      // resuelven la inmobiliaria comparando ambos correos).
+      if (editingEntity?.id) {
+        const emailAnterior = editingEntity.email?.toLowerCase().trim() || null;
+        const emailNuevo = cleanPersonData.email?.toLowerCase().trim() || null;
+        const cambiaEmail = !!emailNuevo && !!emailAnterior && emailNuevo !== emailAnterior;
+        const cambiaTelefono = cleanPersonData.telefono !== undefined || cleanPersonData.clave_pais_telefono !== undefined;
+
+        if (cambiaEmail || cambiaTelefono) {
+          // El usuario principal es el que trae el correo de la persona; los secundarios
+          // conservan el suyo. Si ninguno coincide, el vínculo ya venía desalineado y no se
+          // adivina a quién renombrar.
+          const { data: usuariosVinculados } = await supabase
+            .from('usuarios')
+            .select('email')
+            .eq('id_persona', editingEntity.id);
+
+          const usuarioPrincipal = (usuariosVinculados || []).find(
+            (u: any) => u.email?.toLowerCase().trim() === emailAnterior
+          );
+
+          if (usuarioPrincipal) {
+            if (cambiaTelefono) {
+              const phoneUpdateData: Record<string, any> = {
+                fecha_actualizacion: new Date().toISOString()
+              };
+              if (cleanPersonData.telefono !== undefined) {
+                phoneUpdateData.telefono = cleanPersonData.telefono;
+              }
+              if (cleanPersonData.clave_pais_telefono !== undefined) {
+                phoneUpdateData.clave_pais_telefono = cleanPersonData.clave_pais_telefono;
+              }
+              await supabase
+                .from('usuarios')
+                .update(phoneUpdateData as any)
+                .eq('email', usuarioPrincipal.email);
+            }
+
+            if (cambiaEmail) {
+              // usuarios.email es PK y auth.users no se toca desde el front: ambos los mueve
+              // la edge function en un solo paso.
+              const { data: emailResult, error: emailError } = await supabase.functions.invoke('update-user-email', {
+                body: { oldEmail: usuarioPrincipal.email, newEmail: emailNuevo },
+              });
+
+              if (emailError) {
+                throw new Error(`No se pudo cambiar el correo del usuario de la inmobiliaria: ${emailError.message}`);
+              }
+              if (emailResult && emailResult.success === false) {
+                throw new Error(emailResult.message || 'No se pudo cambiar el correo del usuario de la inmobiliaria');
+              }
+            }
+          }
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('personas')
         .update(cleanPersonData)
@@ -822,31 +881,6 @@ export default function Inmobiliarias() {
           throw new Error(await buildEmailInUseMessage(cleanPersonData.email, editingEntity?.id));
         }
         throw updateError;
-      }
-      
-      // Sincronizar teléfono con usuarios si la inmobiliaria tiene usuario asociado
-      if (editingEntity?.id && (cleanPersonData.telefono !== undefined || cleanPersonData.clave_pais_telefono !== undefined)) {
-        const { data: usuarioData } = await supabase
-          .from('usuarios')
-          .select('email')
-          .eq('id_persona', editingEntity.id)
-          .maybeSingle();
-          
-        if (usuarioData?.email) {
-          const phoneUpdateData: Record<string, any> = {
-            fecha_actualizacion: new Date().toISOString()
-          };
-          if (cleanPersonData.telefono !== undefined) {
-            phoneUpdateData.telefono = cleanPersonData.telefono;
-          }
-          if (cleanPersonData.clave_pais_telefono !== undefined) {
-            phoneUpdateData.clave_pais_telefono = cleanPersonData.clave_pais_telefono;
-          }
-          await supabase
-            .from('usuarios')
-            .update(phoneUpdateData as any)
-            .eq('email', usuarioData.email);
-        }
       }
       
       // Update representantes
@@ -881,9 +915,11 @@ export default function Inmobiliarias() {
     },
     onSuccess: (_, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['inmobiliarias'] });
-      
+      // El correo puede haber movido al usuario de sistema: refrescar también esa lista.
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+
       // Registrar actividad
-      registrarActualizacion('inmobiliaria', 
+      registrarActualizacion('inmobiliaria',
         { id: editingEntity?.id, nombre_legal: editingEntity?.nombre_legal, email: editingEntity?.email }, 
         { id: editingEntity?.id, nombre_legal: variables.nombre_legal, email: variables.email }
       );

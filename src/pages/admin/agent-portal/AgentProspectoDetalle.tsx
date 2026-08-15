@@ -10,9 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { MODAL_BODY_CLS, MODAL_FOOTER_CLS, ModalFormHeader } from "@/components/ui/modal-form";
 import { ModalViewer } from "@/components/ui/modal-viewer";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useEffectiveAgent } from "@/hooks/useEffectiveAgent";
 import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,9 +39,13 @@ const AgentProspectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
   const personaId = parseInt(id || "0");
   const navigate = useNavigate();
-  const { profile, user } = useAuth();
-  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
-  const agentPersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
+  // Lecturas con la identidad efectiva (al impersonar, la del agente); las escrituras
+  // siguen firmadas por el usuario real (`realAuthUserId`).
+  const {
+    personaId: agentPersonaId,
+    authUserId: effectiveAuthUserId,
+    realAuthUserId,
+  } = useEffectiveAgent();
   const { mask } = useAgentPresentation();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
@@ -103,7 +106,7 @@ const AgentProspectoDetalle = () => {
   // crm_leads_atribucion.id_propietario (CRM). Sin la unión, un lead que entró por el CRM
   // aparecía en la lista pero al abrirlo salía vacío: sin proyectos, notas, citas ni ofertas.
   const { data: entidades = [] } = useQuery({
-    queryKey: ["prospecto-entidades", personaId, agentPersonaId, user?.id],
+    queryKey: ["prospecto-entidades", personaId, agentPersonaId, effectiveAuthUserId],
     queryFn: async () => {
       const sel = "id, id_proyecto, proyectos!entidades_relacionadas_id_proyecto_fkey(id, nombre)";
       const base = () => supabase
@@ -118,11 +121,11 @@ const AgentProspectoDetalle = () => {
         : { data: [] as any[] };
 
       let porAtribucion: any[] = [];
-      if (user?.id) {
+      if (effectiveAuthUserId) {
         const { data: atr } = await (supabase as any)
           .from("crm_leads_atribucion")
           .select("id_entidad_relacionada")
-          .eq("id_propietario", user.id)
+          .eq("id_propietario", effectiveAuthUserId)
           .eq("activo", true);
         const ids = (atr ?? []).map((a: any) => a.id_entidad_relacionada).filter(Boolean);
         if (ids.length > 0) {
@@ -135,26 +138,26 @@ const AgentProspectoDetalle = () => {
       [...((porDueno as any).data ?? []), ...porAtribucion].forEach((e: any) => unicas.set(e.id, e));
       return [...unicas.values()];
     },
-    enabled: personaId > 0 && (!!agentPersonaId || !!user?.id),
+    enabled: personaId > 0 && (!!agentPersonaId || !!effectiveAuthUserId),
   });
 
   const entidadIds = useMemo(() => entidades.map((e) => e.id), [entidades]);
 
   // Notas (crm_notas) por entidad. Nota interna: solo las ve el agente que las creó.
   const { data: notas = [] } = useQuery({
-    queryKey: ["prospecto-notas", entidadIds, user?.id],
+    queryKey: ["prospecto-notas", entidadIds, effectiveAuthUserId],
     queryFn: async () => {
-      if (entidadIds.length === 0 || !user?.id) return [];
+      if (entidadIds.length === 0 || !effectiveAuthUserId) return [];
       const { data } = await (supabase as any)
         .from("crm_notas")
         .select("id, contenido, fecha_creacion, id_usuario")
         .in("id_entidad_relacionada", entidadIds)
         .eq("activo", true)
-        .eq("id_usuario", user.id)
+        .eq("id_usuario", effectiveAuthUserId)
         .order("fecha_creacion", { ascending: false });
       return (data || []) as any[];
     },
-    enabled: entidadIds.length > 0 && !!user?.id,
+    enabled: entidadIds.length > 0 && !!effectiveAuthUserId,
   });
 
   // Citas (visitas)
@@ -265,7 +268,7 @@ const AgentProspectoDetalle = () => {
       if (entidadIds.length === 0) throw new Error("El prospecto no tiene desarrollos asignados");
       const { error } = await (supabase as any).from("crm_notas").insert({
         id_entidad_relacionada: entidadIds[0],
-        id_usuario: user?.id,
+        id_usuario: realAuthUserId,   // la nota la firma quien realmente escribe, no el impersonado
         contenido,
         fecha_actividad: new Date().toISOString().slice(0, 10),
         activo: true,

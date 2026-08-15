@@ -24,7 +24,7 @@ function isWithin3Months(date: Date): boolean {
   return date >= cutoff;
 }
 
-export type PdfValidationResult = { ok: true } | { ok: false; reason: string };
+export type PdfValidationResult = { ok: boolean; reason?: string };
 
 function extractMostRecentDate(text: string): Date | null {
   const dates: Date[] = [];

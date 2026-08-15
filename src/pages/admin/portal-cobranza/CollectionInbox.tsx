@@ -170,7 +170,7 @@ export default function CollectionInboxPage() {
   const [sort, setSort] = filtrosCuentasCobranza.useFiltro('sort') as unknown as
     [{ key: SortKey | null; dir: 'asc' | 'desc' }, (v: { key: SortKey | null; dir: 'asc' | 'desc' }) => void];
   const toggleSort = (key: SortKey) => {
-    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+    setSort(sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
     setPage(1); // el orden cambia el conjunto paginado server-side
   };
 

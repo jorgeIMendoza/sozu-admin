@@ -135,7 +135,7 @@ async function getPaginasComprobante(url: string): Promise<PageResult> {
     const loadingTask = getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
     const pages = pdf.numPages;
-    await pdf.destroy();
+    await loadingTask.destroy();
     console.warn('[PLD] páginas detectadas por pdfjs:', pages);
     return { pages, failedAt: null };
   } catch (err) {
@@ -867,9 +867,13 @@ export function RelacionPagos() {
         metodo_pago: pago.metodos_pago?.nombre ?? 'Otro',
         clabe_stp: null,
         cliente: contextRow?.cliente ?? null,
+        cliente_email: contextRow?.cliente_email ?? null,
         num_propiedad: contextRow?.num_propiedad ?? null,
+        modelo: contextRow?.modelo ?? null,
+        estatus_propiedad: contextRow?.estatus_propiedad ?? null,
         producto: null,           // normProducto('propiedad', null) → 'Propiedad'
         tipo_cuenta: 'propiedad' as const,
+        tipo_categoria: null,     // filas sintéticas no traen categoría: manda tipo_cuenta
         proyecto: proyectoNombre,
         proyecto_id: proyectoId,
         tiene_cep: !!(pago.url_cep || pago.url_recibo),
@@ -1024,9 +1028,13 @@ export function RelacionPagos() {
         metodo_pago: pago.metodos_pago?.nombre ?? 'Otro',
         clabe_stp: null,
         cliente: contextRow?.cliente ?? null,
+        cliente_email: contextRow?.cliente_email ?? null,
         num_propiedad: contextRow?.num_propiedad ?? null,
+        modelo: contextRow?.modelo ?? null,
+        estatus_propiedad: contextRow?.estatus_propiedad ?? null,
         producto: 'Bodegas',          // normProducto('producto','Bodegas') → 'Bodega'
         tipo_cuenta: 'producto' as const,
+        tipo_categoria: null,         // filas sintéticas no traen categoría: manda producto
         proyecto: proyectoNombre,
         proyecto_id: proyectoId,
         tiene_cep: !!(pago.url_cep || pago.url_recibo),
@@ -1179,9 +1187,13 @@ export function RelacionPagos() {
         metodo_pago: pago.metodos_pago?.nombre ?? 'Otro',
         clabe_stp: null,
         cliente: contextRow?.cliente ?? null,
+        cliente_email: contextRow?.cliente_email ?? null,
         num_propiedad: contextRow?.num_propiedad ?? null,
+        modelo: contextRow?.modelo ?? null,
+        estatus_propiedad: contextRow?.estatus_propiedad ?? null,
         producto: 'Estacionamiento',     // normProducto('producto','Estacionamiento') → 'Cajón'
         tipo_cuenta: 'producto' as const,
+        tipo_categoria: null,            // filas sintéticas no traen categoría: manda producto
         proyecto: proyectoNombre,
         proyecto_id: proyectoId,
         tiene_cep: !!(pago.url_cep || pago.url_recibo),

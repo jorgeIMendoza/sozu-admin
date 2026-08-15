@@ -28,7 +28,12 @@ const CAMPOS_VACIOS: CsfCampos = {
   cp: "", calle: "", numExt: "", numInt: "", colonia: "",
 };
 
-/** Mismo formato que exige `guardar_csf_oferta`: si no cuadra, la RPC lo descarta en silencio. */
+/**
+ * Mismo formato que exige `guardar_csf_oferta`: si no cuadra, la RPC lo descarta en
+ * silencio. El RFC además es el único dato con el que el backend valida la
+ * transferencia del apartado (`insertar_pago_stp` compara el RFC del ordenante contra
+ * el del expediente), así que sin RFC válido el pago se devuelve.
+ */
 const RFC_RE = /^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
 
 export interface CsfUploadCardProps {
@@ -142,7 +147,7 @@ export function CsfUploadCard({ onGuardar, required = false, hint }: CsfUploadCa
   const CAMPOS: { key: keyof CsfCampos; label: string; requerido?: boolean }[] = [
     { key: "rfc", label: "RFC", requerido: true },
     { key: "nombre", label: "Nombre / Razón social", requerido: true },
-    { key: "curp", label: "CURP" },
+    { key: "curp", label: "CURP (opcional)" },
     { key: "regimen", label: "Régimen fiscal" },
     { key: "cp", label: "Código postal" },
     { key: "calle", label: "Calle" },
@@ -174,7 +179,7 @@ export function CsfUploadCard({ onGuardar, required = false, hint }: CsfUploadCa
         <>
           <DocDropzone accept="application/pdf" uploading={leyendo} onFile={handleFile} />
           <p className="text-[11px] leading-snug text-muted-foreground">
-            {hint ?? "Sube el PDF que descargas del SAT. Si podemos leerlo, llenamos tus datos solos; si no, los escribes tú y sigues igual."}
+            {hint ?? "Sube el PDF que descargas del SAT. Si podemos leerlo, llenamos tus datos solos; si no, los escribes tú y sigues igual. Tu RFC debe ser el del titular de la cuenta desde la que vas a transferir."}
           </p>
         </>
       )}
@@ -196,7 +201,8 @@ export function CsfUploadCard({ onGuardar, required = false, hint }: CsfUploadCa
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <p className="text-[11px] leading-snug text-amber-800">
                   Tu archivo se guarda igual y tu asesor lo revisa. Solo necesitamos que
-                  escribas el RFC tal como aparece en tu Constancia.
+                  escribas el RFC tal como aparece en tu Constancia: es el dato con el que
+                  validamos tu transferencia.
                 </p>
               </div>
             )}
