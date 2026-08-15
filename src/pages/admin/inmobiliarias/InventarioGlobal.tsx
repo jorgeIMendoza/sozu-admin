@@ -1,6 +1,7 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
+import { fetchExtrasPorPropiedad, precioTotalUnidad } from "@/lib/inventario/precio-unidad";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,19 @@ const InventarioGlobal = () => {
     pageSize: PAGE_SIZE,
   });
 
+  // Valor de bodegas y estacionamientos de las unidades visibles. La RPC solo trae el
+  // conteo; sin esto la tarjeta enseña el precio de lista pelón y no coincide con la oferta.
+  const propiedadIdsPagina = useMemo(
+    () => inventarioData.propiedades.map((p: InventarioPropiedad) => p.id),
+    [inventarioData.propiedades],
+  );
+  const { data: extrasPagina } = useQuery({
+    queryKey: ["inventario-extras", propiedadIdsPagina],
+    queryFn: () => fetchExtrasPorPropiedad(propiedadIdsPagina),
+    enabled: propiedadIdsPagina.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   // Map RPC data to the shape the UI expects
   const pageProperties = useMemo(() => {
     return inventarioData.propiedades.map((p: InventarioPropiedad) => {
@@ -228,6 +242,7 @@ const InventarioGlobal = () => {
         numero: p.numero_propiedad,
         piso: p.numero_piso,
         precio_lista: p.precio_lista,
+        precio_total: precioTotalUnidad(p.precio_lista, extrasPagina?.get(p.id)),
         m2_interiores: p.m2_interiores,
         m2_exteriores: p.m2_exteriores,
         m2_total: (p.m2_interiores || 0) + (p.m2_exteriores || 0),
@@ -246,7 +261,7 @@ const InventarioGlobal = () => {
         esquemas_pago: p.esquemas_pago || [],
       };
     });
-  }, [inventarioData.propiedades]);
+  }, [inventarioData.propiedades, extrasPagina]);
 
   // Filter options from server
   const projectsWithAvailable = inventarioData.filterOptions.proyectos;
@@ -860,8 +875,8 @@ const PropertyCard = React.memo(({ prop, formatPrice, bodegaIcon, onClick }: {
       <PropertyCardCarousel images={prop.model_images || []} />
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 pb-3 pt-8 pointer-events-none">
         <h4 className="font-bold text-white text-base truncate drop-shadow-md">Depto. {prop.numero || prop.id}</h4>
-        {prop.precio_lista > 0 && (
-          <p className="text-white/90 text-sm font-semibold drop-shadow-md">{formatPrice(prop.precio_lista)}</p>
+        {(prop.precio_total ?? prop.precio_lista) > 0 && (
+          <p className="text-white/90 text-sm font-semibold drop-shadow-md">{formatPrice(prop.precio_total ?? prop.precio_lista)}</p>
         )}
       </div>
     </div>

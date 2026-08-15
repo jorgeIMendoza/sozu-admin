@@ -33,6 +33,12 @@ export interface PagoRecord {
   // no puede salir "Vencido" porque su acuerdo siga abierto.
   estado_pago?: 'pagado' | 'parcial' | 'sin_aplicar';
   monto_aplicado?: number;
+  // Desglose de aplicaciones del pago. La RPC `get_pcobranza_relacion_pagos` NO lo
+  // devuelve (verificado en dev y prod): sólo lo traen las filas sintéticas que
+  // RelacionPagos arma con queries directas en modo isRpMode. Para las filas de la
+  // RPC queda undefined y `normConcepto` cae a `descripcion`.
+  num_aplicaciones?: number;
+  aplicaciones_detalle?: { concepto: string | null; orden: number | null; monto: number }[];
   atraso?: number;
   proyecto: string | null;
   proyecto_id: number | null;

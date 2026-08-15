@@ -149,12 +149,20 @@ export async function fetchAgenteProspectos({ authUserId, personaId }: Args): Pr
   rows: ProspectoRow[];
   viaRpc: boolean;
 }> {
-  // ── Camino definitivo: la RPC filtra por auth.uid() del lado de la base ──
+  // Sin identidad efectiva no se lee nada: devolver "todo" sería exponer la cartera
+  // ajena (es justo lo que pasaba al impersonar a un usuario sin cuenta auth).
+  if (!authUserId && !personaId) return { rows: [], viaRpc: false };
+
+  // ── Camino definitivo: la RPC filtra por dueño del lado de la base ──
+  // `p_auth_user_id` = agente a consultar. Va SIEMPRE explícito: cuando un admin
+  // impersona, `auth.uid()` es el del admin y la RPC devolvía la cartera del CRM
+  // del admin dentro del Portal Agente. `fn_agente_actual` valida el permiso de
+  // impersonación en la base antes de aceptar un uid distinto al de la sesión.
   const rpc = await (supabase as any).rpc("get_agente_prospectos", {
     p_search: null,
     p_estatus: null,
     p_proyecto: null,
-    p_auth_user_id: null,
+    p_auth_user_id: authUserId ?? null,
     p_limit: 500,
     p_offset: 0,
   });

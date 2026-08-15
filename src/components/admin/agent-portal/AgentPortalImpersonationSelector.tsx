@@ -46,7 +46,7 @@ export function AgentPortalImpersonationSelector() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("usuarios")
-        .select("email, rol_id, personas(id, nombre_legal)")
+        .select("email, rol_id, auth_user_id, personas(id, nombre_legal)")
         .in("rol_id", roleIds)
         .eq("activo", true)
         .order("email");
@@ -57,6 +57,9 @@ export function AgentPortalImpersonationSelector() {
           email: u.email,
           rolId: u.rol_id,
           personaId: u.personas?.id ?? null,
+          // Necesario para que las consultas que filtran por auth.uid() (prospectos,
+          // atribución, notas) devuelvan la cartera del agente y no la del admin.
+          authUserId: u.auth_user_id ?? null,
           nombre: u.personas?.nombre_legal || u.email,
         }))
         .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
@@ -93,7 +96,7 @@ export function AgentPortalImpersonationSelector() {
                     key={agent.email}
                     value={`${agent.nombre} ${agent.email}`}
                     onSelect={() => {
-                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre, agent.rolId);
+                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre, agent.rolId, agent.authUserId);
                       setOpen(false);
                     }}
                   >

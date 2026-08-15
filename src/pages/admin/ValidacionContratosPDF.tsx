@@ -1085,7 +1085,7 @@ export default function ValidacionContratosPDF() {
         .eq("activo", true);
 
       const proyectoIds = [...new Set((erSozu ?? []).map(r => r.id_proyecto).filter(Boolean))] as number[];
-      if (!proyectoIds.length) return [];
+      if (!proyectoIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 2: proyectos publicados
       const { data: proyectosData } = await supabase
@@ -1097,7 +1097,7 @@ export default function ValidacionContratosPDF() {
 
       const proyMap = new Map<number, string>((proyectosData ?? []).map(p => [p.id, p.nombre]));
       const validProjIds = (proyectosData ?? []).map(p => p.id);
-      if (!validProjIds.length) return [];
+      if (!validProjIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 3: edificios
       const { data: edificiosData } = await supabase
@@ -1110,7 +1110,7 @@ export default function ValidacionContratosPDF() {
         (edificiosData ?? []).map(e => [e.id, { nombre: e.nombre, id_proyecto: e.id_proyecto }])
       );
       const edificioIds = (edificiosData ?? []).map(e => e.id);
-      if (!edificioIds.length) return [];
+      if (!edificioIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 4: edificios_modelos
       const { data: emData } = await supabase
@@ -1122,7 +1122,7 @@ export default function ValidacionContratosPDF() {
         (emData ?? []).map(em => [em.id, { id_edificio: em.id_edificio, id_modelo: em.id_modelo ?? null }])
       );
       const emIds = (emData ?? []).map(em => em.id);
-      if (!emIds.length) return [];
+      if (!emIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 5: parallel — propiedades + modelos
       const modeloIds = [...new Set((emData ?? []).map(em => em.id_modelo).filter(Boolean))] as number[];
@@ -1141,7 +1141,7 @@ export default function ValidacionContratosPDF() {
       const propiedadesData = propiedadesRes.data ?? [];
       const propMap = new Map<number, (typeof propiedadesData)[0]>(propiedadesData.map(p => [p.id, p]));
       const propIds = propiedadesData.map(p => p.id);
-      if (!propIds.length) return [];
+      if (!propIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 6: ofertas (departamento principal — id_producto IS NULL)
       const { data: ofertasData } = await (supabase as any)
@@ -1153,7 +1153,7 @@ export default function ValidacionContratosPDF() {
 
       const ofertaMap = new Map<number, number>((ofertasData ?? []).map((o: any) => [o.id, o.id_propiedad]));
       const ofertaIds = (ofertasData ?? []).map((o: any) => o.id);
-      if (!ofertaIds.length) return [];
+      if (!ofertaIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 7: cuentas_cobranza
       const { data: cuentasData } = await supabase
@@ -1163,7 +1163,7 @@ export default function ValidacionContratosPDF() {
         .eq("activo", true);
 
       const cuentaIds = (cuentasData ?? []).map(c => c.id);
-      if (!cuentaIds.length) return [];
+      if (!cuentaIds.length) return { rows: [], hasFechaColumnas: false };
 
       // Step 8: parallel — documentos + entidades_relacionadas dueños
       const erDuenoIds = [...new Set(propiedadesData.map(p => p.id_entidad_relacionada_dueno).filter(Boolean))] as number[];
