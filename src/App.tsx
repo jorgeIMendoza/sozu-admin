@@ -52,6 +52,19 @@ const ForgotPassword = lazyRetry(() => import("./pages/auth/ForgotPassword"));
 const Proyectos = lazyRetry(() => import("./pages/admin/Proyectos"));
 const Propiedades = lazyRetry(() => import("./pages/admin/Propiedades"));
 const ActivosComerciales = lazyRetry(() => import("./pages/admin/ActivosComerciales"));
+const PreciosLayout = lazyRetry(() => import("./pages/admin/precios/PreciosLayout"));
+const PreciosTabla = lazyRetry(() => import("./pages/admin/precios/PreciosTabla"));
+const PreciosMotor = lazyRetry(() => import("./pages/admin/precios/PreciosMotor"));
+const PreciosCalibracion = lazyRetry(() => import("./pages/admin/precios/PreciosCalibracion"));
+const PreciosEscenariosLayout = lazyRetry(() => import("./pages/admin/precios/PreciosEscenariosLayout"));
+const PreciosEscenariosEsquemas = lazyRetry(() => import("./pages/admin/precios/PreciosEscenariosEsquemas"));
+const PreciosEscenariosComparador = lazyRetry(() => import("./pages/admin/precios/PreciosEscenariosComparador"));
+const PreciosEscenariosCotizador = lazyRetry(() => import("./pages/admin/precios/PreciosEscenariosCotizador"));
+const PreciosEscenariosProyecto = lazyRetry(() => import("./pages/admin/precios/PreciosEscenariosProyecto"));
+const PreciosAuditoriaLayout = lazyRetry(() => import("./pages/admin/precios/PreciosAuditoriaLayout"));
+const PreciosAuditoriaBitacora = lazyRetry(() => import("./pages/admin/precios/PreciosAuditoriaBitacora"));
+const PreciosAuditoriaVersiones = lazyRetry(() => import("./pages/admin/precios/PreciosAuditoriaVersiones"));
+const PreciosAuditoriaOfertas = lazyRetry(() => import("./pages/admin/precios/PreciosAuditoriaOfertas"));
 const ActivosComercialesNuevo = lazyRetry(() => import("./pages/admin/ActivosComercialesNuevo"));
 const ActivosComercialesDetalle = lazyRetry(() => import("./pages/admin/ActivosComercialesDetalle"));
 const Modelos = lazyRetry(() => import("./pages/admin/Modelos"));
@@ -852,6 +865,25 @@ const App = () => (
                   <Route path="proyectos" element={<Proyectos />} />
                   <Route path="propiedades" element={<Propiedades />} />
                   <Route path="activos-comerciales" element={<ActivosComerciales />} />
+                  <Route path="inventario/precios" element={<PreciosLayout />}>
+                    <Route index element={<Navigate to="tabla" replace />} />
+                    <Route path="tabla" element={<PreciosTabla />} />
+                    <Route path="motor" element={<PreciosMotor />} />
+                    <Route path="calibracion" element={<PreciosCalibracion />} />
+                    <Route path="escenarios" element={<PreciosEscenariosLayout />}>
+                      <Route index element={<Navigate to="esquemas" replace />} />
+                      <Route path="esquemas" element={<PreciosEscenariosEsquemas />} />
+                      <Route path="comparador" element={<PreciosEscenariosComparador />} />
+                      <Route path="cotizador" element={<PreciosEscenariosCotizador />} />
+                      <Route path="proyecto" element={<PreciosEscenariosProyecto />} />
+                    </Route>
+                    <Route path="auditoria" element={<PreciosAuditoriaLayout />}>
+                      <Route index element={<Navigate to="bitacora" replace />} />
+                      <Route path="bitacora" element={<PreciosAuditoriaBitacora />} />
+                      <Route path="versiones" element={<PreciosAuditoriaVersiones />} />
+                      <Route path="ofertas" element={<PreciosAuditoriaOfertas />} />
+                    </Route>
+                  </Route>
                   <Route path="activos-comerciales/nuevo" element={<ActivosComercialesNuevo />} />
                  <Route path="activos-comerciales/:id/editar" element={<ActivosComercialesNuevo />} />
                 <Route path="activos-comerciales/:id" element={<ActivosComercialesDetalle />} />
