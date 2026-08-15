@@ -23,7 +23,7 @@ export function AgentImpersonationSelector() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("usuarios")
-        .select("email, rol_id, personas!inner(id, nombre_legal)")
+        .select("email, rol_id, auth_user_id, personas!inner(id, nombre_legal)")
         .in("rol_id", [3, 4, 9])
         .eq("activo", true)
         .order("email");
@@ -34,6 +34,9 @@ export function AgentImpersonationSelector() {
         personaId: u.personas?.id,
         nombre: u.personas?.nombre_legal || u.email,
         rolId: u.rol_id,
+        // Sin el auth_user_id del agente, las vistas que filtran por auth.uid()
+        // devuelven la cartera del admin que impersona.
+        authUserId: (u as any).auth_user_id ?? null,
       })).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
     },
     enabled: canImpersonate,
@@ -75,7 +78,7 @@ export function AgentImpersonationSelector() {
                     key={agent.email}
                     value={`${agent.nombre} ${agent.email}`}
                     onSelect={() => {
-                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre, agent.rolId);
+                      setImpersonatedAgent(agent.email, agent.personaId, agent.nombre, agent.rolId, agent.authUserId);
                       setOpen(false);
                     }}
                   >

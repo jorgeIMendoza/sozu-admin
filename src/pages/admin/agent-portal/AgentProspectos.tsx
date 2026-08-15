@@ -1,8 +1,7 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
+import { useEffectiveAgent } from "@/hooks/useEffectiveAgent";
 import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
 import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloatingDialog";
@@ -30,9 +29,11 @@ const fmtCurrency = (v: number | null) =>
   v == null ? "—" : new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(v);
 
 const AgentProspectos = () => {
-  const { profile, user } = useAuth();
-  const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
-  const effectivePersonaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
+  // Identidad efectiva: al impersonar se lee con la persona **y el auth_user_id** del
+  // agente. Antes solo viajaba la persona, así que la RPC (que filtra por auth.uid())
+  // devolvía los prospectos del admin: el Portal Agente enseñaba la cartera del CRM.
+  const { personaId: effectivePersonaIdHook, authUserId: effectiveAuthUserId, impersonationIncomplete } = useEffectiveAgent();
+  const effectivePersonaId = effectivePersonaIdHook;
   const queryClient = useQueryClient();
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
@@ -64,9 +65,9 @@ const AgentProspectos = () => {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["agent-prospectos", effectivePersonaId, user?.id],
-    queryFn: () => fetchAgenteProspectos({ authUserId: user?.id ?? null, personaId: effectivePersonaId ?? null }),
-    enabled: !!effectivePersonaId || !!user?.id,
+    queryKey: ["agent-prospectos", effectivePersonaId, effectiveAuthUserId],
+    queryFn: () => fetchAgenteProspectos({ authUserId: effectiveAuthUserId, personaId: effectivePersonaId ?? null }),
+    enabled: !!effectivePersonaId || !!effectiveAuthUserId,
   });
 
   const { data: agentes = [] } = useQuery({
@@ -159,6 +160,17 @@ const AgentProspectos = () => {
             <EyeOff className="h-4 w-4 shrink-0 text-orange-700" />
             <span className="text-xs font-semibold text-orange-700">
               Modo presentación · datos de prospectos ocultos. Desactívalo arriba para verlos.
+            </span>
+          </div>
+        )}
+
+        {impersonationIncomplete && (
+          <div className="flex items-center gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5">
+            <EyeOff className="h-4 w-4 shrink-0 text-amber-700" />
+            <span className="text-xs font-semibold text-amber-800">
+              Este usuario no tiene cuenta de acceso, así que no se puede reconstruir su vista de
+              prospectos. La lista se muestra vacía a propósito: llenarla con la tuya sería enseñar
+              una cartera que no es suya.
             </span>
           </div>
         )}
