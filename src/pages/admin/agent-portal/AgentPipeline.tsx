@@ -307,6 +307,21 @@ const AgentPipeline = () => {
         }
       }
 
+      // Qué extras acompañan a cada unidad: la venta con bodega (o paquete de muebles,
+      // condensadora…) se escribe como una oferta aparte que repite el id_propiedad y el
+      // lead. El renglón de la propiedad los declara, porque la unidad los incluye; si no
+      // se agregó ninguno, se queda en "Propiedad" a secas.
+      const extrasPorUnidad = new Map<string, Set<string>>();
+      for (const o of ofertasData) {
+        if (!o.id_producto || !o.id_propiedad) continue;
+        const prod = productoMap.get(o.id_producto);
+        const cat = prod?.id_categoria ? categoriaNombre.get(prod.id_categoria) : null;
+        if (!cat) continue;
+        const k = `${o.id_propiedad}|${o.id_persona_lead ?? 0}`;
+        if (!extrasPorUnidad.has(k)) extrasPorUnidad.set(k, new Set());
+        extrasPorUnidad.get(k)!.add(cat);
+      }
+
       const cuentaByOferta = new Map<number, any>();
       (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaByOferta.set(c.id_oferta, c); });
 
@@ -320,6 +335,7 @@ const AgentPipeline = () => {
         const cuenta = cuentaByOferta.get(o.id);
         const isProducto = !!o.id_producto;
         const categoriaProducto = producto?.id_categoria ? categoriaNombre.get(producto.id_categoria) : null;
+        const extrasUnidad = [...(extrasPorUnidad.get(`${o.id_propiedad}|${o.id_persona_lead ?? 0}`) ?? [])];
         const proyectoNombre = isProducto
           ? (producto?.id_proyecto ? productoToProject.get(producto.id_proyecto) || '' : '')
           : (propToProject.get(o.id_propiedad) || '');
@@ -342,12 +358,12 @@ const AgentPipeline = () => {
           tiene_contrato_firmado: cuenta ? signedSet.has(cuenta.id) : false,
           is_producto: isProducto,
           no_avance: noAvanceMap.get(o.id) || null,
-          // "Producto · Bodega" cuando la categoría se conoce; "Producto" a secas si no.
-          // La propiedad y su bodega son dos ofertas distintas (ver `claveUnidad`), así que
-          // cada renglón dice lo que es en lugar de mezclarlas.
+          // La propiedad declara lo que incluye ("Propiedad · Bodega"); sin extras se queda
+          // en "Propiedad". El renglón del extra dice su categoría, o "Producto" si no la
+          // tiene. Son dos ofertas distintas (ver `claveUnidad`) porque su precio también.
           tipo_label: isProducto
-            ? (categoriaProducto ? `Producto · ${categoriaProducto}` : 'Producto')
-            : 'Propiedad',
+            ? (categoriaProducto ?? 'Producto')
+            : (extrasUnidad.length > 0 ? `Propiedad · ${extrasUnidad.join(' · ')}` : 'Propiedad'),
         };
         enriched.stage = classifyOffer(enriched);
         // Etapa canónica del pipeline `ventas_sozu`, derivada de los mismos hechos que usarán
