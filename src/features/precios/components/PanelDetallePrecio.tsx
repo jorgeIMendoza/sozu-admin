@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { resolverBaseModelo } from "../engine/pricing";
 import { Lock } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { registrarEvento } from "../services/auditoria";
 import { useBitacoraStore } from "../stores/bitacoraStore";
 import { useOfertasStore } from "../stores/ofertasStore";
@@ -473,7 +473,7 @@ export function PanelDetallePrecio({
                         respetar el precio ofertado durante su vigencia.
                       </p>
                       <Link
-                        to="/inventarios/precios/auditoria/ofertas"
+                        to="/admin/inventario/precios/auditoria/ofertas"
                         className="text-primary hover:underline"
                       >
                         Ver oferta
@@ -487,7 +487,7 @@ export function PanelDetallePrecio({
                         Apartada o Vendida en el inventario.
                       </p>
                       <Link
-                        to="/inventarios/propiedades"
+                        to="/admin/propiedades"
                         className="text-emerald-700 hover:underline"
                       >
                         Abrir ficha de la propiedad
@@ -578,7 +578,7 @@ export function PanelDetallePrecio({
                 Historial de esta unidad
               </h3>
               <Link
-                to="/inventarios/precios/auditoria/bitacora"
+                to="/admin/inventario/precios/auditoria/bitacora"
                 search={{ unidad: p.numero }}
                 className="text-sm text-primary hover:underline"
               >

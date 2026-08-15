@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -185,7 +185,7 @@ export function DialogoRegistrarOferta({
             vencimiento o hasta que la canceles con un motivo documentado. Puedes dar
             seguimiento a esta oferta en{" "}
             <Link
-              to="/inventarios/precios/auditoria/ofertas"
+              to="/admin/inventario/precios/auditoria/ofertas"
               className="text-primary hover:underline"
             >
               Ofertas vigentes
