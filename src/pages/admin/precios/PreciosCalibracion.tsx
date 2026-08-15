@@ -208,7 +208,7 @@ function CalibracionPagina() {
     setTimeout(() => {
       const salida = calibrar(conPrecio, config, motor, idsExcluidos);
       if (!salida.ok) {
-        setError(salida.mensaje);
+        setError((salida as { mensaje: string }).mensaje);
         setResultado(null);
       } else {
         setResultado(salida);
