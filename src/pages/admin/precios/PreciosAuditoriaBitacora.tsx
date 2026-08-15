@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
@@ -67,8 +68,6 @@ import type { ResultadoVerificacion } from "@/features/precios/engine/bitacora";
 import type { EventoAuditoria } from "@/features/precios/types/dominio";
 import { formatoFechaHora, formatoMoneda } from "@/features/precios/lib/formato";
 
-  validateSearch: (s: Record<string, unknown>): { unidad?: string } =>
-    typeof s["unidad"] === "string" ? { unidad: s["unidad"] as string } : {},
 
 const COLUMNAS = [
   { clave: "secuencia", titulo: "#" },
@@ -193,7 +192,8 @@ function ParesClaveValor({
 }
 
 function Bitacora() {
-  const search = useSearch({ from: "/admin/inventario/precios/auditoria/bitacora" });
+  const [searchParams] = useSearchParams();
+  const search = { unidad: searchParams.get("unidad") ?? undefined };
   const eventos = useBitacoraStore((s) => s.eventos);
   const verificar = useBitacoraStore((s) => s.verificar);
   const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
