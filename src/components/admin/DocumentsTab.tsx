@@ -1063,6 +1063,7 @@ export function DocumentsTab({
             .eq('id_persona', personaId)
             .eq('rol_id', 23)
             .maybeSingle()
+          )
             .then(({ data: u }) => {
               if (!u?.email) return;
               (supabase as any).from('notificaciones_cliente').insert({
