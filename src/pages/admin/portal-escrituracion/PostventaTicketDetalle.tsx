@@ -51,7 +51,7 @@ type GarantiaEstatus = 'VIGENTE' | 'POR_VENCER' | 'VENCIDA' | 'FUERA_GARANTIA';
 interface EvidenciaItem {
   nombre: string;
   tipo: 'FOTO' | 'VIDEO' | 'DOCUMENTO';
-  url: string;
+  url?: string;
   fecha: string;
   subidoPor: string;
 }

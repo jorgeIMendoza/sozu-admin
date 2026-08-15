@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      _bak_documentos_estatus_20260803: {
+        Row: {
+          bloque: string | null
+          estatus_previo: number | null
+          fecha_creacion: string | null
+          id: number | null
+          id_persona: number | null
+          id_tipo_documento: number | null
+          respaldado_en: string | null
+        }
+        Insert: {
+          bloque?: string | null
+          estatus_previo?: number | null
+          fecha_creacion?: string | null
+          id?: number | null
+          id_persona?: number | null
+          id_tipo_documento?: number | null
+          respaldado_en?: string | null
+        }
+        Update: {
+          bloque?: string | null
+          estatus_previo?: number | null
+          fecha_creacion?: string | null
+          id?: number | null
+          id_persona?: number | null
+          id_tipo_documento?: number | null
+          respaldado_en?: string | null
+        }
+        Relationships: []
+      }
       _bak_personas_ocupacion_20260722: {
         Row: {
           id: number | null
@@ -267,6 +297,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "fk_acpago_cuenta"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "fk_acuerdos_pago_cuenta_cobranza"
             columns: ["id_cuenta_cobranza"]
             isOneToOne: false
@@ -279,6 +316,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "fk_acuerdos_pago_cuenta_cobranza"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
         ]
       }
@@ -394,6 +438,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "amenidades_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "amenidades_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       analytics_events: {
@@ -477,6 +535,30 @@ export type Database = {
             referencedColumns: ["id_pago"]
           },
         ]
+      }
+      app_agente_config: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          key: string
+          value: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          key: string
+          value: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
       }
       app_cliente_config: {
         Row: {
@@ -679,6 +761,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      apps: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+          slug: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre: string
+          orden?: number
+          slug: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          nombre?: string
+          orden?: number
+          slug?: string
+        }
+        Relationships: []
       }
       asignaciones_juridico: {
         Row: {
@@ -1083,6 +1198,75 @@ export type Database = {
         }
         Relationships: []
       }
+      avisos_app_agente: {
+        Row: {
+          canales: string[]
+          categoria: string
+          creado_por: string | null
+          error: string | null
+          estado: string
+          etiqueta_accion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_envio: string | null
+          id: number
+          ids_roles: number[] | null
+          mensaje: string
+          programado_para: string | null
+          tipo: string
+          titulo: string
+          total_destinatarios: number | null
+          total_email: number | null
+          total_push: number | null
+          total_wa: number | null
+          url_accion: string | null
+        }
+        Insert: {
+          canales?: string[]
+          categoria?: string
+          creado_por?: string | null
+          error?: string | null
+          estado?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_envio?: string | null
+          id?: never
+          ids_roles?: number[] | null
+          mensaje: string
+          programado_para?: string | null
+          tipo?: string
+          titulo: string
+          total_destinatarios?: number | null
+          total_email?: number | null
+          total_push?: number | null
+          total_wa?: number | null
+          url_accion?: string | null
+        }
+        Update: {
+          canales?: string[]
+          categoria?: string
+          creado_por?: string | null
+          error?: string | null
+          estado?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_envio?: string | null
+          id?: never
+          ids_roles?: number[] | null
+          mensaje?: string
+          programado_para?: string | null
+          tipo?: string
+          titulo?: string
+          total_destinatarios?: number | null
+          total_email?: number | null
+          total_push?: number | null
+          total_wa?: number | null
+          url_accion?: string | null
+        }
+        Relationships: []
+      }
       avisos_ejecuciones: {
         Row: {
           detalle_error: string | null
@@ -1226,6 +1410,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_avisos_legales_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "fk_avisos_legales_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       avisos_proyectos: {
@@ -1267,6 +1465,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "avisos_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "avisos_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -1634,6 +1846,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "bancos_solicitudes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
         ]
       }
@@ -2374,6 +2593,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "checklist_plantillas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "checklist_plantillas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       citas_calendar_events: {
@@ -2549,6 +2782,74 @@ export type Database = {
           },
         ]
       }
+      comisiones_canal_config: {
+        Row: {
+          activo: boolean
+          comision_externa_pct: number | null
+          comision_max_pct: number | null
+          comision_min_pct: number | null
+          comision_total_pct: number
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_canal: number
+          id_proyecto: number
+        }
+        Insert: {
+          activo?: boolean
+          comision_externa_pct?: number | null
+          comision_max_pct?: number | null
+          comision_min_pct?: number | null
+          comision_total_pct?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal: number
+          id_proyecto: number
+        }
+        Update: {
+          activo?: boolean
+          comision_externa_pct?: number | null
+          comision_max_pct?: number | null
+          comision_min_pct?: number | null
+          comision_total_pct?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal?: number
+          id_proyecto?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_canal_config_id_canal_fkey"
+            columns: ["id_canal"]
+            isOneToOne: false
+            referencedRelation: "comisiones_canales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_canal_config_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_canal_config_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "comisiones_canal_config_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+        ]
+      }
       comisiones_canales: {
         Row: {
           activo: boolean
@@ -2615,6 +2916,172 @@ export type Database = {
         }
         Relationships: []
       }
+      comisiones_escenario_ventas: {
+        Row: {
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_canal: number
+          id_escenario: number
+          orden: number
+        }
+        Insert: {
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal: number
+          id_escenario: number
+          orden: number
+        }
+        Update: {
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal?: number
+          id_escenario?: number
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_escenario_ventas_id_canal_fkey"
+            columns: ["id_canal"]
+            isOneToOne: false
+            referencedRelation: "comisiones_canales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_escenario_ventas_id_escenario_fkey"
+            columns: ["id_escenario"]
+            isOneToOne: false
+            referencedRelation: "comisiones_escenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comisiones_escenarios: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_proyecto: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_proyecto: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_proyecto?: number
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_escenarios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_escenarios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "comisiones_escenarios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+        ]
+      }
+      comisiones_metas_escalon: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_canal: number
+          id_personal: number | null
+          id_proyecto: number
+          incremento_pct: number
+          ventas_meta: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal: number
+          id_personal?: number | null
+          id_proyecto: number
+          incremento_pct?: number
+          ventas_meta: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          id_canal?: number
+          id_personal?: number | null
+          id_proyecto?: number
+          incremento_pct?: number
+          ventas_meta?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comisiones_metas_escalon_id_canal_fkey"
+            columns: ["id_canal"]
+            isOneToOne: false
+            referencedRelation: "comisiones_canales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_metas_escalon_id_personal_fkey"
+            columns: ["id_personal"]
+            isOneToOne: false
+            referencedRelation: "personal_organizacional"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_metas_escalon_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_metas_escalon_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "comisiones_metas_escalon_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+        ]
+      }
       comisiones_propuestas: {
         Row: {
           activo: boolean
@@ -2657,6 +3124,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "comisiones_propuestas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: true
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "comisiones_propuestas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: true
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       comisiones_reglas: {
@@ -2666,6 +3147,7 @@ export type Database = {
           fecha_creacion: string
           id: number
           id_canal: number
+          id_personal: number | null
           id_proyecto: number
           id_rol: string
           pool: string
@@ -2677,6 +3159,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           id_canal: number
+          id_personal?: number | null
           id_proyecto: number
           id_rol: string
           pool?: string
@@ -2688,6 +3171,7 @@ export type Database = {
           fecha_creacion?: string
           id?: never
           id_canal?: number
+          id_personal?: number | null
           id_proyecto?: number
           id_rol?: string
           pool?: string
@@ -2702,11 +3186,32 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "comisiones_reglas_id_personal_fkey"
+            columns: ["id_personal"]
+            isOneToOne: false
+            referencedRelation: "personal_organizacional"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "comisiones_reglas_id_proyecto_fkey"
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_reglas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "comisiones_reglas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -2748,6 +3253,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comisiones_validaciones_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "comisiones_validaciones_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -2804,6 +3323,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "comisionistas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "fk_comisionistas_cuenta"
             columns: ["id_cuenta_cobranza"]
             isOneToOne: false
@@ -2816,6 +3342,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "fk_comisionistas_cuenta"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
         ]
       }
@@ -2860,6 +3393,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "compradores_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "compradores_id_persona_fkey"
             columns: ["id_persona"]
             isOneToOne: false
@@ -2879,6 +3419,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "fk_compradores_cuenta"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
           {
             foreignKeyName: "fk_compradores_persona"
@@ -3003,6 +3550,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configuracion_citas_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "configuracion_citas_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -3255,6 +3816,13 @@ export type Database = {
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
           },
+          {
+            foreignKeyName: "creditos_hipotecarios_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: true
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
         ]
       }
       crm_categorias: {
@@ -3398,6 +3966,8 @@ export type Database = {
           hubspot_id: string | null
           id: number
           id_entidad_relacionada: number
+          id_estatus_lead: number | null
+          id_etapa_ciclo_vida: number | null
           id_propietario: string | null
           meta_ad_id: string | null
           meta_adgroup_id: string | null
@@ -3421,6 +3991,8 @@ export type Database = {
           hubspot_id?: string | null
           id?: number
           id_entidad_relacionada: number
+          id_estatus_lead?: number | null
+          id_etapa_ciclo_vida?: number | null
           id_propietario?: string | null
           meta_ad_id?: string | null
           meta_adgroup_id?: string | null
@@ -3444,6 +4016,8 @@ export type Database = {
           hubspot_id?: string | null
           id?: number
           id_entidad_relacionada?: number
+          id_estatus_lead?: number | null
+          id_etapa_ciclo_vida?: number | null
           id_propietario?: string | null
           meta_ad_id?: string | null
           meta_adgroup_id?: string | null
@@ -3466,6 +4040,58 @@ export type Database = {
             referencedRelation: "entidades_relacionadas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_leads_atribucion_id_estatus_lead_fkey"
+            columns: ["id_estatus_lead"]
+            isOneToOne: false
+            referencedRelation: "crm_estados_lead"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_leads_atribucion_id_etapa_ciclo_vida_fkey"
+            columns: ["id_etapa_ciclo_vida"]
+            isOneToOne: false
+            referencedRelation: "crm_meta_conversion_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_leads_reasignaciones: {
+        Row: {
+          a_propietario: string
+          de_propietario: string | null
+          fecha_creacion: string
+          id: number
+          id_entidad_relacionada: number
+          id_usuario_ejecuta: string | null
+          motivo: string | null
+        }
+        Insert: {
+          a_propietario: string
+          de_propietario?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_entidad_relacionada: number
+          id_usuario_ejecuta?: string | null
+          motivo?: string | null
+        }
+        Update: {
+          a_propietario?: string
+          de_propietario?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_entidad_relacionada?: number
+          id_usuario_ejecuta?: string | null
+          motivo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_leads_reasignaciones_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
         ]
       }
       crm_meta_capi_eventos: {
@@ -3479,6 +4105,7 @@ export type Database = {
           id: number
           id_entidad_relacionada: number | null
           intentos: number
+          match_keys: string | null
           meta_leadgen_id: string | null
           meta_response: Json | null
           status: string
@@ -3494,6 +4121,7 @@ export type Database = {
           id?: never
           id_entidad_relacionada?: number | null
           intentos?: number
+          match_keys?: string | null
           meta_leadgen_id?: string | null
           meta_response?: Json | null
           status: string
@@ -3509,6 +4137,7 @@ export type Database = {
           id?: never
           id_entidad_relacionada?: number | null
           intentos?: number
+          match_keys?: string | null
           meta_leadgen_id?: string | null
           meta_response?: Json | null
           status?: string
@@ -3556,11 +4185,16 @@ export type Database = {
           id: number
           id_entidad_relacionada: number | null
           id_etapa: number
+          id_oferta: number | null
           id_pipeline: number
+          id_producto: number | null
+          id_propiedad: number | null
           id_usuario_propietario: string | null
           moneda: string
           nombre: string
+          ofertas_count: number
           prioridad: string | null
+          requiere_triage: boolean
           tipo_negocio: string | null
           valor: number | null
         }
@@ -3573,11 +4207,16 @@ export type Database = {
           id?: number
           id_entidad_relacionada?: number | null
           id_etapa: number
+          id_oferta?: number | null
           id_pipeline: number
+          id_producto?: number | null
+          id_propiedad?: number | null
           id_usuario_propietario?: string | null
           moneda?: string
           nombre: string
+          ofertas_count?: number
           prioridad?: string | null
+          requiere_triage?: boolean
           tipo_negocio?: string | null
           valor?: number | null
         }
@@ -3590,11 +4229,16 @@ export type Database = {
           id?: number
           id_entidad_relacionada?: number | null
           id_etapa?: number
+          id_oferta?: number | null
           id_pipeline?: number
+          id_producto?: number | null
+          id_propiedad?: number | null
           id_usuario_propietario?: string | null
           moneda?: string
           nombre?: string
+          ofertas_count?: number
           prioridad?: string | null
+          requiere_triage?: boolean
           tipo_negocio?: string | null
           valor?: number | null
         }
@@ -3614,10 +4258,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_negocios_id_oferta_fkey"
+            columns: ["id_oferta"]
+            isOneToOne: false
+            referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_negocios_id_pipeline_fkey"
             columns: ["id_pipeline"]
             isOneToOne: false
             referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_negocios_id_producto_fkey"
+            columns: ["id_producto"]
+            isOneToOne: false
+            referencedRelation: "productos_servicios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_negocios_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
             referencedColumns: ["id"]
           },
         ]
@@ -3754,13 +4419,63 @@ export type Database = {
           },
         ]
       }
+      crm_notas_comentarios_adjuntos: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          id: number
+          id_comentario: number
+          id_usuario: string | null
+          mime: string | null
+          nombre: string
+          tamano_bytes: number | null
+          tipo: string
+          url: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: number
+          id_comentario: number
+          id_usuario?: string | null
+          mime?: string | null
+          nombre: string
+          tamano_bytes?: number | null
+          tipo: string
+          url: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: number
+          id_comentario?: number
+          id_usuario?: string | null
+          mime?: string | null
+          nombre?: string
+          tamano_bytes?: number | null
+          tipo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_notas_comentarios_adjuntos_id_comentario_fkey"
+            columns: ["id_comentario"]
+            isOneToOne: false
+            referencedRelation: "crm_notas_comentarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_pipeline_etapas: {
         Row: {
           activo: boolean
+          clave: string | null
+          color: string | null
           es_ganado: boolean
           es_perdido: boolean
           fecha_actualizacion: string
           fecha_creacion: string
+          hecho_disparador: string | null
           id: number
           id_pipeline: number
           nombre: string
@@ -3769,10 +4484,13 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          clave?: string | null
+          color?: string | null
           es_ganado?: boolean
           es_perdido?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
+          hecho_disparador?: string | null
           id?: number
           id_pipeline: number
           nombre: string
@@ -3781,10 +4499,13 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          clave?: string | null
+          color?: string | null
           es_ganado?: boolean
           es_perdido?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
+          hecho_disparador?: string | null
           id?: number
           id_pipeline?: number
           nombre?: string
@@ -3804,6 +4525,7 @@ export type Database = {
       crm_pipelines: {
         Row: {
           activo: boolean
+          clave: string | null
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -3813,6 +4535,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          clave?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -3822,6 +4545,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          clave?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -3836,6 +4560,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_pipelines_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "crm_pipelines_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -3897,6 +4635,44 @@ export type Database = {
             columns: ["id_entidad_relacionada"]
             isOneToOne: false
             referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_tareas_comentarios: {
+        Row: {
+          activo: boolean
+          contenido: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_tarea: number
+          id_usuario: string | null
+        }
+        Insert: {
+          activo?: boolean
+          contenido: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_tarea: number
+          id_usuario?: string | null
+        }
+        Update: {
+          activo?: boolean
+          contenido?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_tarea?: number
+          id_usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_tareas_comentarios_id_tarea_fkey"
+            columns: ["id_tarea"]
+            isOneToOne: false
+            referencedRelation: "crm_tareas"
             referencedColumns: ["id"]
           },
         ]
@@ -4193,6 +4969,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "cuentas_cobranza_id_cuenta_cobranza_padre_fkey"
+            columns: ["id_cuenta_cobranza_padre"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "cuentas_cobranza_id_tipo_cancelacion_fkey"
             columns: ["id_tipo_cancelacion"]
             isOneToOne: false
@@ -4227,6 +5010,7 @@ export type Database = {
           activo: boolean
           alias: string
           clabe: string | null
+          empresa_stp: string[] | null
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -4237,6 +5021,7 @@ export type Database = {
           activo?: boolean
           alias: string
           clabe?: string | null
+          empresa_stp?: string[] | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -4247,6 +5032,7 @@ export type Database = {
           activo?: boolean
           alias?: string
           clabe?: string | null
+          empresa_stp?: string[] | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -4365,6 +5151,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "demandas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "demandas_id_expediente_fk"
             columns: ["id_expediente"]
             isOneToOne: false
@@ -4391,6 +5184,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demandas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "demandas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -4432,6 +5239,7 @@ export type Database = {
       documentos: {
         Row: {
           activo: boolean
+          descripcion: string | null
           es_draft: boolean
           fecha_actualizacion: string
           fecha_creacion: string
@@ -4448,6 +5256,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          descripcion?: string | null
           es_draft?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -4464,6 +5273,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          descripcion?: string | null
           es_draft?: boolean
           fecha_actualizacion?: string
           fecha_creacion?: string
@@ -4508,6 +5318,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "documentos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "documentos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "documentos_id_tipo_documento_fkey"
             columns: ["id_tipo_documento"]
             isOneToOne: false
@@ -4548,6 +5372,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "fk_documentos_cuenta_cobranza"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
         ]
       }
@@ -4591,11 +5422,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "edificios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "edificios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "fk_edificios_proyecto"
             columns: ["id_proyecto"]
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_edificios_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "fk_edificios_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -4904,6 +5763,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "embajadores_referidos_id_proyecto_interes_fkey"
+            columns: ["id_proyecto_interes"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "embajadores_referidos_id_proyecto_interes_fkey"
+            columns: ["id_proyecto_interes"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       entidades_relacionadas: {
@@ -4990,6 +5863,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "entidades_relacionadas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "entidades_relacionadas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "entidades_relacionadas_id_tipo_entidad_fkey"
             columns: ["id_tipo_entidad"]
             isOneToOne: false
@@ -5016,6 +5903,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_entrel_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "fk_entrel_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -5126,6 +6027,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "entregas_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "entregas_id_propiedad_fkey"
             columns: ["id_propiedad"]
             isOneToOne: false
@@ -5138,6 +6046,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entregas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "entregas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -5663,6 +6585,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "esquemas_pago_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "esquemas_pago_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "fk_esquema_producto"
             columns: ["id_producto"]
             isOneToOne: false
@@ -5675,6 +6611,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_esquema_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "fk_esquema_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -5927,6 +6877,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estados_cuenta_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "estados_cuenta_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -6372,6 +7336,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "expedientes_juridicos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "expedientes_juridicos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       facturas_mantenimientos: {
@@ -6772,6 +7750,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "legal_flow_bitacora_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "legal_flow_bitacora_id_documento_fkey"
             columns: ["id_documento"]
             isOneToOne: false
@@ -6899,6 +7884,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "legal_flow_expedientes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
         ]
       }
@@ -7184,6 +8176,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "modelos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "modelos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       modelos_caracteristicas: {
@@ -7281,6 +8287,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      motivos_no_avance_oferta: {
+        Row: {
+          activo: boolean
+          clave: string
+          descripcion: string | null
+          es_recuperable: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+          requiere_comentario: boolean
+        }
+        Insert: {
+          activo?: boolean
+          clave: string
+          descripcion?: string | null
+          es_recuperable?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+          orden?: number
+          requiere_comentario?: boolean
+        }
+        Update: {
+          activo?: boolean
+          clave?: string
+          descripcion?: string | null
+          es_recuperable?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+          orden?: number
+          requiere_comentario?: boolean
+        }
+        Relationships: []
       }
       multas: {
         Row: {
@@ -7475,6 +8520,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "fk_multimedias_proyecto_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "fk_multimedias_proyecto_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "multimedias_proyecto_id_categoria_fkey"
             columns: ["id_categoria"]
             isOneToOne: false
@@ -7570,6 +8629,88 @@ export type Database = {
         }
         Relationships: []
       }
+      notificaciones_agente: {
+        Row: {
+          activo: boolean
+          categoria: string
+          descartada: boolean
+          descripcion: string
+          email_agente: string
+          etiqueta_accion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_descarte: string | null
+          fecha_lectura: string | null
+          id: number
+          id_cuenta_cobranza: number | null
+          leida: boolean
+          metadata: Json | null
+          tipo: string
+          titulo: string
+          url_accion: string | null
+        }
+        Insert: {
+          activo?: boolean
+          categoria: string
+          descartada?: boolean
+          descripcion: string
+          email_agente: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_descarte?: string | null
+          fecha_lectura?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          leida?: boolean
+          metadata?: Json | null
+          tipo: string
+          titulo: string
+          url_accion?: string | null
+        }
+        Update: {
+          activo?: boolean
+          categoria?: string
+          descartada?: boolean
+          descripcion?: string
+          email_agente?: string
+          etiqueta_accion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_descarte?: string | null
+          fecha_lectura?: string | null
+          id?: never
+          id_cuenta_cobranza?: number | null
+          leida?: boolean
+          metadata?: Json | null
+          tipo?: string
+          titulo?: string
+          url_accion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificaciones_agente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificaciones_agente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "notificaciones_agente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+        ]
+      }
       notificaciones_cliente: {
         Row: {
           activo: boolean
@@ -7642,6 +8783,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "notificaciones_cliente_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
         ]
       }
@@ -7743,6 +8891,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificaciones_log_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "notificaciones_log_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -7873,6 +9035,54 @@ export type Database = {
             columns: ["id_propiedad"]
             isOneToOne: false
             referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ofertas_no_avance: {
+        Row: {
+          activo: boolean
+          comentario: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_motivo: number
+          id_oferta: number
+          registrado_por: string | null
+        }
+        Insert: {
+          activo?: boolean
+          comentario?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_motivo: number
+          id_oferta: number
+          registrado_por?: string | null
+        }
+        Update: {
+          activo?: boolean
+          comentario?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_motivo?: number
+          id_oferta?: number
+          registrado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ofertas_no_avance_id_motivo_fkey"
+            columns: ["id_motivo"]
+            isOneToOne: false
+            referencedRelation: "motivos_no_avance_oferta"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_no_avance_id_oferta_fkey"
+            columns: ["id_oferta"]
+            isOneToOne: false
+            referencedRelation: "ofertas"
             referencedColumns: ["id"]
           },
         ]
@@ -8132,6 +9342,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "fk_pagos_cuenta"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "fk_pagos_metodo"
             columns: ["id_metodos_pago"]
             isOneToOne: false
@@ -8151,6 +9368,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "pagos_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
           {
             foreignKeyName: "pagos_id_metodos_pago_fkey"
@@ -8412,8 +9636,210 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_organizacional: {
+        Row: {
+          activo: boolean
+          costo_externo: number
+          costo_nominal: number
+          costo_social: number
+          costo_total: number | null
+          email_contacto: string | null
+          email_usuario: string | null
+          es_vacante: boolean
+          fecha_actualizacion: string
+          fecha_baja: string | null
+          fecha_creacion: string
+          fecha_ingreso: string | null
+          id: number
+          id_rol: number | null
+          motivo_baja: string | null
+          nombre: string
+          sueldo_base_recibido: number | null
+          telefono: string | null
+          tipo_personal: string
+        }
+        Insert: {
+          activo?: boolean
+          costo_externo?: number
+          costo_nominal?: number
+          costo_social?: number
+          costo_total?: number | null
+          email_contacto?: string | null
+          email_usuario?: string | null
+          es_vacante?: boolean
+          fecha_actualizacion?: string
+          fecha_baja?: string | null
+          fecha_creacion?: string
+          fecha_ingreso?: string | null
+          id?: never
+          id_rol?: number | null
+          motivo_baja?: string | null
+          nombre: string
+          sueldo_base_recibido?: number | null
+          telefono?: string | null
+          tipo_personal?: string
+        }
+        Update: {
+          activo?: boolean
+          costo_externo?: number
+          costo_nominal?: number
+          costo_social?: number
+          costo_total?: number | null
+          email_contacto?: string | null
+          email_usuario?: string | null
+          es_vacante?: boolean
+          fecha_actualizacion?: string
+          fecha_baja?: string | null
+          fecha_creacion?: string
+          fecha_ingreso?: string | null
+          id?: never
+          id_rol?: number | null
+          motivo_baja?: string | null
+          nombre?: string
+          sueldo_base_recibido?: number | null
+          telefono?: string | null
+          tipo_personal?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_organizacional_email_usuario_fkey"
+            columns: ["email_usuario"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["email"]
+          },
+          {
+            foreignKeyName: "personal_organizacional_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "roles_organizacionales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      personal_proyectos: {
+        Row: {
+          activo: boolean
+          asignacion_pct: number
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_fin: string | null
+          fecha_inicio: string | null
+          id: number
+          id_personal: number
+          id_proyecto: number
+          id_rol: number | null
+        }
+        Insert: {
+          activo?: boolean
+          asignacion_pct?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          id?: never
+          id_personal: number
+          id_proyecto: number
+          id_rol?: number | null
+        }
+        Update: {
+          activo?: boolean
+          asignacion_pct?: number
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
+          id?: never
+          id_personal?: number
+          id_proyecto?: number
+          id_rol?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_proyectos_id_personal_fkey"
+            columns: ["id_personal"]
+            isOneToOne: false
+            referencedRelation: "personal_organizacional"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "personal_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "personal_proyectos_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "roles_organizacionales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      personal_roles: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          fecha_fin: string | null
+          id: number
+          id_personal: number
+          id_rol: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin?: string | null
+          id?: never
+          id_personal: number
+          id_rol: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          fecha_fin?: string | null
+          id?: never
+          id_personal?: number
+          id_rol?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_roles_id_personal_fkey"
+            columns: ["id_personal"]
+            isOneToOne: false
+            referencedRelation: "personal_organizacional"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personal_roles_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "roles_organizacionales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       personas: {
         Row: {
+          actividad_economica: string | null
           activo: boolean
           clave_pais_telefono: string | null
           curp: string | null
@@ -8469,6 +9895,7 @@ export type Database = {
           uso_cfdi: string | null
         }
         Insert: {
+          actividad_economica?: string | null
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
@@ -8524,6 +9951,7 @@ export type Database = {
           uso_cfdi?: string | null
         }
         Update: {
+          actividad_economica?: string | null
           activo?: boolean
           clave_pais_telefono?: string | null
           curp?: string | null
@@ -8697,6 +10125,61 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "uso_cfdi"
             referencedColumns: ["codigo"]
+          },
+        ]
+      }
+      personas_relacionadas: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_persona: number
+          id_persona_relacion: number
+          id_tipo_relacion: number
+          porcentaje: number | null
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_persona: number
+          id_persona_relacion: number
+          id_tipo_relacion: number
+          porcentaje?: number | null
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_persona?: number
+          id_persona_relacion?: number
+          id_tipo_relacion?: number
+          porcentaje?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personas_relacionadas_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personas_relacionadas_id_persona_relacion_fkey"
+            columns: ["id_persona_relacion"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personas_relacionadas_id_tipo_relacion_fkey"
+            columns: ["id_tipo_relacion"]
+            isOneToOne: false
+            referencedRelation: "tipos_relacion"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -9240,6 +10723,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "postventa_tickets_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "postventa_tickets_id_entrega_fkey"
             columns: ["id_entrega"]
             isOneToOne: false
@@ -9273,6 +10763,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "postventa_tickets_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
           {
             foreignKeyName: "postventa_tickets_id_responsable_interno_fkey"
@@ -9367,6 +10871,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "productos_servicios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "productos_servicios_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -10399,6 +11917,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "proyectos_acceso_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "proyectos_acceso_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       puestos_organizacionales: {
@@ -10460,6 +11992,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "puestos_organizacionales_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "puestos_organizacionales_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "puestos_organizacionales_id_rol_fkey"
             columns: ["id_rol"]
             isOneToOne: false
@@ -10504,7 +12050,45 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "puntos_interes_proyecto_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "puntos_interes_proyecto_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
+      }
+      push_preferencias_agente: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id_persona: number
+          push_activo: boolean
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id_persona: number
+          push_activo?: boolean
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id_persona?: number
+          push_activo?: boolean
+        }
+        Relationships: []
       }
       push_preferencias_cliente: {
         Row: {
@@ -10521,6 +12105,36 @@ export type Database = {
           id_persona?: number
           push_activo?: boolean
           updated_at?: string
+        }
+        Relationships: []
+      }
+      push_tokens_agente: {
+        Row: {
+          activo: boolean
+          email_agente: string
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          plataforma: string
+          token: string
+        }
+        Insert: {
+          activo?: boolean
+          email_agente: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          plataforma: string
+          token: string
+        }
+        Update: {
+          activo?: boolean
+          email_agente?: string
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: never
+          plataforma?: string
+          token?: string
         }
         Relationships: []
       }
@@ -10912,6 +12526,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "reservas_citas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "reservas_citas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "reservas_citas_id_tipo_cita_fkey"
             columns: ["id_tipo_cita"]
             isOneToOne: false
@@ -10959,6 +12587,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_pagos_detalle"
             referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "residentes_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
           },
           {
             foreignKeyName: "residentes_id_persona_fkey"
@@ -11050,6 +12685,7 @@ export type Database = {
           id: number
           nombre: string
           puede_impersonar: boolean
+          requiere_confirmacion_email: boolean
           ver_filtros_avanzados_eliminados: boolean
           ver_todos_duenos: boolean
           ver_todos_prospectos_compradores: boolean | null
@@ -11066,6 +12702,7 @@ export type Database = {
           id?: never
           nombre: string
           puede_impersonar?: boolean
+          requiere_confirmacion_email?: boolean
           ver_filtros_avanzados_eliminados?: boolean
           ver_todos_duenos?: boolean
           ver_todos_prospectos_compradores?: boolean | null
@@ -11082,12 +12719,52 @@ export type Database = {
           id?: never
           nombre?: string
           puede_impersonar?: boolean
+          requiere_confirmacion_email?: boolean
           ver_filtros_avanzados_eliminados?: boolean
           ver_todos_duenos?: boolean
           ver_todos_prospectos_compradores?: boolean | null
           ver_todos_proyectos_propiedades?: boolean | null
         }
         Relationships: []
+      }
+      roles_apps: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id_app: number
+          id_rol: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id_app: number
+          id_rol: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id_app?: number
+          id_rol?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_apps_id_app_fkey"
+            columns: ["id_app"]
+            isOneToOne: false
+            referencedRelation: "apps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roles_apps_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       roles_estatus_disponibilidad: {
         Row: {
@@ -11134,30 +12811,36 @@ export type Database = {
       roles_organizacionales: {
         Row: {
           activo: boolean
+          descripcion_labores: string | null
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
           nombre: string
+          objetivo: string | null
           participa_comision: boolean
           pertenece_a: string
           tipo: string
         }
         Insert: {
           activo?: boolean
+          descripcion_labores?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: never
           nombre: string
+          objetivo?: string | null
           participa_comision?: boolean
           pertenece_a: string
           tipo: string
         }
         Update: {
           activo?: boolean
+          descripcion_labores?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: never
           nombre?: string
+          objetivo?: string | null
           participa_comision?: boolean
           pertenece_a?: string
           tipo?: string
@@ -11251,6 +12934,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "showrooms_proyecto_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "showrooms_proyecto_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       socio_bancario_desarrollos: {
@@ -11294,6 +12991,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "socio_bancario_desarrollos_id_desarrollo_fkey"
+            columns: ["id_desarrollo"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "socio_bancario_desarrollos_id_desarrollo_fkey"
+            columns: ["id_desarrollo"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
           {
             foreignKeyName: "socio_bancario_desarrollos_id_socio_bancario_fkey"
@@ -11357,6 +13068,13 @@ export type Database = {
             referencedColumns: ["id_cuenta_cobranza"]
           },
           {
+            foreignKeyName: "socio_bancario_revisiones_id_cuenta_cobranza_fkey"
+            columns: ["id_cuenta_cobranza"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+          {
             foreignKeyName: "socio_bancario_revisiones_id_documento_fkey"
             columns: ["id_documento"]
             isOneToOne: false
@@ -11369,6 +13087,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "socio_bancario_revisiones_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "socio_bancario_revisiones_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -11410,6 +13142,106 @@ export type Database = {
           rfc?: string | null
         }
         Relationships: []
+      }
+      solicitudes_propietario: {
+        Row: {
+          activo: boolean
+          antiguedad_compra: string | null
+          case_id: string
+          comentario_revision: string | null
+          consentimiento_datos: boolean
+          email: string
+          estatus: string
+          fecha_actualizacion: string
+          fecha_consentimiento: string | null
+          fecha_creacion: string
+          fecha_envio: string
+          fecha_revision: string | null
+          id: number
+          id_entidad_relacionada: number | null
+          id_persona: number | null
+          id_propiedad: number
+          id_usuario_solicitante: string | null
+          nivel: number
+          revisado_por: string | null
+          ruteo: string[]
+          tipo_compra: string | null
+          tipo_persona: string
+          verificacion: Json | null
+        }
+        Insert: {
+          activo?: boolean
+          antiguedad_compra?: string | null
+          case_id: string
+          comentario_revision?: string | null
+          consentimiento_datos?: boolean
+          email: string
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_consentimiento?: string | null
+          fecha_creacion?: string
+          fecha_envio?: string
+          fecha_revision?: string | null
+          id?: never
+          id_entidad_relacionada?: number | null
+          id_persona?: number | null
+          id_propiedad: number
+          id_usuario_solicitante?: string | null
+          nivel?: number
+          revisado_por?: string | null
+          ruteo?: string[]
+          tipo_compra?: string | null
+          tipo_persona: string
+          verificacion?: Json | null
+        }
+        Update: {
+          activo?: boolean
+          antiguedad_compra?: string | null
+          case_id?: string
+          comentario_revision?: string | null
+          consentimiento_datos?: boolean
+          email?: string
+          estatus?: string
+          fecha_actualizacion?: string
+          fecha_consentimiento?: string | null
+          fecha_creacion?: string
+          fecha_envio?: string
+          fecha_revision?: string | null
+          id?: never
+          id_entidad_relacionada?: number | null
+          id_persona?: number | null
+          id_propiedad?: number
+          id_usuario_solicitante?: string | null
+          nivel?: number
+          revisado_por?: string | null
+          ruteo?: string[]
+          tipo_compra?: string | null
+          tipo_persona?: string
+          verificacion?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitudes_propietario_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_propietario_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_propietario_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       submenus: {
         Row: {
@@ -11582,6 +13414,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tabla_carga_documentos_propiedades_n8n_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "tabla_carga_documentos_propiedades_n8n_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "tabla_carga_documentos_propiedades_n8n_id_tipo_documento_fkey"
             columns: ["id_tipo_documento"]
             isOneToOne: false
@@ -11626,6 +13472,20 @@ export type Database = {
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tabla_carpetas_drive_documentos_n8n_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "tabla_carpetas_drive_documentos_n8n_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
         ]
       }
       tabla_datos_cep: {
@@ -11663,6 +13523,373 @@ export type Database = {
             columns: ["id_tipo_cep"]
             isOneToOne: false
             referencedRelation: "tipos_cep"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_cierre: string | null
+          fecha_creacion: string
+          fuente: string
+          id: number
+          id_categoria: number | null
+          id_entidad_relacionada: number | null
+          id_etapa: number
+          id_pipeline: number
+          id_propiedad: number | null
+          id_usuario_creador: string | null
+          id_usuario_propietario: string | null
+          inmueble: string | null
+          nombre: string
+          numero: number
+          prioridad: Database["public"]["Enums"]["tickets_prioridad"]
+          solicitante: string | null
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_cierre?: string | null
+          fecha_creacion?: string
+          fuente?: string
+          id?: number
+          id_categoria?: number | null
+          id_entidad_relacionada?: number | null
+          id_etapa: number
+          id_pipeline: number
+          id_propiedad?: number | null
+          id_usuario_creador?: string | null
+          id_usuario_propietario?: string | null
+          inmueble?: string | null
+          nombre: string
+          numero?: number
+          prioridad?: Database["public"]["Enums"]["tickets_prioridad"]
+          solicitante?: string | null
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_cierre?: string | null
+          fecha_creacion?: string
+          fuente?: string
+          id?: number
+          id_categoria?: number | null
+          id_entidad_relacionada?: number | null
+          id_etapa?: number
+          id_pipeline?: number
+          id_propiedad?: number | null
+          id_usuario_creador?: string | null
+          id_usuario_propietario?: string | null
+          inmueble?: string | null
+          nombre?: string
+          numero?: number
+          prioridad?: Database["public"]["Enums"]["tickets_prioridad"]
+          solicitante?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "tickets_categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_id_etapa_fkey"
+            columns: ["id_etapa"]
+            isOneToOne: false
+            referencedRelation: "tickets_etapas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_id_pipeline_fkey"
+            columns: ["id_pipeline"]
+            isOneToOne: false
+            referencedRelation: "tickets_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_actividad: {
+        Row: {
+          audio_mime: string | null
+          audio_nombre: string | null
+          audio_url: string | null
+          fecha_creacion: string
+          id: number
+          id_ticket: number
+          id_usuario_autor: string | null
+          texto: string
+          tipo: string
+        }
+        Insert: {
+          audio_mime?: string | null
+          audio_nombre?: string | null
+          audio_url?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_ticket: number
+          id_usuario_autor?: string | null
+          texto: string
+          tipo?: string
+        }
+        Update: {
+          audio_mime?: string | null
+          audio_nombre?: string | null
+          audio_url?: string | null
+          fecha_creacion?: string
+          id?: number
+          id_ticket?: number
+          id_usuario_autor?: string | null
+          texto?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_actividad_id_ticket_fkey"
+            columns: ["id_ticket"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_adjuntos: {
+        Row: {
+          activo: boolean
+          fecha_creacion: string
+          id: number
+          id_ticket: number
+          id_usuario_autor: string | null
+          mime: string | null
+          nombre: string | null
+          tamano_bytes: number | null
+          tipo: string
+          url: string
+        }
+        Insert: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: never
+          id_ticket: number
+          id_usuario_autor?: string | null
+          mime?: string | null
+          nombre?: string | null
+          tamano_bytes?: number | null
+          tipo: string
+          url: string
+        }
+        Update: {
+          activo?: boolean
+          fecha_creacion?: string
+          id?: never
+          id_ticket?: number
+          id_usuario_autor?: string | null
+          mime?: string | null
+          nombre?: string | null
+          tamano_bytes?: number | null
+          tipo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_adjuntos_id_ticket_fkey"
+            columns: ["id_ticket"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_categorias: {
+        Row: {
+          activo: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_pipeline: number | null
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_pipeline?: number | null
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_pipeline?: number | null
+          nombre?: string
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_categorias_id_pipeline_fkey"
+            columns: ["id_pipeline"]
+            isOneToOne: false
+            referencedRelation: "tickets_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_etapas: {
+        Row: {
+          activo: boolean
+          cerrada: boolean
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          id_pipeline: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          cerrada?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_pipeline: number
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          cerrada?: boolean
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          id_pipeline?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_etapas_id_pipeline_fkey"
+            columns: ["id_pipeline"]
+            isOneToOne: false
+            referencedRelation: "tickets_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_pipelines: {
+        Row: {
+          activo: boolean
+          descripcion: string | null
+          fecha_actualizacion: string
+          fecha_creacion: string
+          id: number
+          nombre: string
+          orden: number
+        }
+        Insert: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre: string
+          orden?: number
+        }
+        Update: {
+          activo?: boolean
+          descripcion?: string | null
+          fecha_actualizacion?: string
+          fecha_creacion?: string
+          id?: number
+          nombre?: string
+          orden?: number
+        }
+        Relationships: []
+      }
+      tickets_propietarios: {
+        Row: {
+          fecha_creacion: string
+          id: number
+          id_ticket: number
+          id_usuario: string
+        }
+        Insert: {
+          fecha_creacion?: string
+          id?: number
+          id_ticket: number
+          id_usuario: string
+        }
+        Update: {
+          fecha_creacion?: string
+          id?: number
+          id_ticket?: number
+          id_usuario?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_propietarios_id_ticket_fkey"
+            columns: ["id_ticket"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_solicitantes: {
+        Row: {
+          fecha_creacion: string
+          id: number
+          id_entidad_relacionada: number
+          id_ticket: number
+        }
+        Insert: {
+          fecha_creacion?: string
+          id?: number
+          id_entidad_relacionada: number
+          id_ticket: number
+        }
+        Update: {
+          fecha_creacion?: string
+          id?: number
+          id_entidad_relacionada?: number
+          id_ticket?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_solicitantes_id_entidad_relacionada_fkey"
+            columns: ["id_entidad_relacionada"]
+            isOneToOne: false
+            referencedRelation: "entidades_relacionadas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_solicitantes_id_ticket_fkey"
+            columns: ["id_ticket"]
+            isOneToOne: false
+            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
         ]
@@ -11794,6 +14021,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tipos_cita_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "tipos_cita_proyectos_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "tipos_cita_proyectos_id_tipo_cita_fkey"
             columns: ["id_tipo_cita"]
             isOneToOne: false
@@ -11860,6 +14101,7 @@ export type Database = {
         Row: {
           activo: boolean
           asignado_a: string | null
+          clave: string | null
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -11870,6 +14112,7 @@ export type Database = {
         Insert: {
           activo?: boolean
           asignado_a?: string | null
+          clave?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -11880,6 +14123,7 @@ export type Database = {
         Update: {
           activo?: boolean
           asignado_a?: string | null
+          clave?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -12101,6 +14345,7 @@ export type Database = {
       tipos_relacion: {
         Row: {
           activo: boolean
+          clave: string | null
           fecha_actualizacion: string
           fecha_creacion: string
           id: number
@@ -12109,6 +14354,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          clave?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -12117,6 +14363,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          clave?: string | null
           fecha_actualizacion?: string
           fecha_creacion?: string
           id?: number
@@ -12534,6 +14781,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "fk_id_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "fk_id_proyecto"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
             foreignKeyName: "fk_videos_youtube_propiedad"
             columns: ["id_propiedad"]
             isOneToOne: false
@@ -12577,6 +14838,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "proyectos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vistas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_evidencia_facturas"
+            referencedColumns: ["id_proyecto"]
+          },
+          {
+            foreignKeyName: "vistas_id_proyecto_fkey"
+            columns: ["id_proyecto"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_proyecto"]
           },
         ]
       }
@@ -12645,6 +14920,80 @@ export type Database = {
         }
         Relationships: []
       }
+      v_ofertas_no_avance: {
+        Row: {
+          comentario: string | null
+          email_creador: string | null
+          es_recuperable: boolean | null
+          fecha_creacion: string | null
+          fecha_generacion: string | null
+          id_oferta: number | null
+          id_persona_lead: number | null
+          id_producto: number | null
+          id_propiedad: number | null
+          motivo_clave: string | null
+          motivo_nombre: string | null
+          registrado_por: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_ofertas_persona_lead"
+            columns: ["id_persona_lead"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_ofertas_producto"
+            columns: ["id_producto"]
+            isOneToOne: false
+            referencedRelation: "productos_servicios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_ofertas_propiedad"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_email_creador_fkey"
+            columns: ["email_creador"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["email"]
+          },
+          {
+            foreignKeyName: "ofertas_id_persona_lead_fkey"
+            columns: ["id_persona_lead"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_id_producto_fkey"
+            columns: ["id_producto"]
+            isOneToOne: false
+            referencedRelation: "productos_servicios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_id_propiedad_fkey"
+            columns: ["id_propiedad"]
+            isOneToOne: false
+            referencedRelation: "propiedades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ofertas_no_avance_id_oferta_fkey"
+            columns: ["id_oferta"]
+            isOneToOne: false
+            referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_pagos_detalle: {
         Row: {
           fecha_pago: string | null
@@ -12662,6 +15011,75 @@ export type Database = {
           url_recibo: string | null
         }
         Relationships: []
+      }
+      vw_app_cliente_facturas: {
+        Row: {
+          fecha: string | null
+          id_cuenta: number | null
+          id_cuenta_origen: number | null
+          id_pago: number | null
+          id_propiedad: number | null
+          monto: number | null
+          propiedad: string | null
+          tipo: string | null
+          url_pdf: string | null
+          url_xml: string | null
+        }
+        Relationships: []
+      }
+      vw_evidencia_facturas: {
+        Row: {
+          fecha: string | null
+          id_cuenta: number | null
+          id_cuenta_origen: number | null
+          id_pago: number | null
+          id_propiedad: number | null
+          id_proyecto: number | null
+          monto: number | null
+          numero_propiedad: string | null
+          proyecto: string | null
+          tipo: string | null
+          unidad: string | null
+          url_pdf: string | null
+          url_xml: string | null
+        }
+        Relationships: []
+      }
+      vw_unidad_por_cuenta: {
+        Row: {
+          cuenta_activa: boolean | null
+          id_cuenta: number | null
+          id_cuenta_cobranza_padre: number | null
+          id_cuenta_raiz: number | null
+          id_propiedad: number | null
+          id_proyecto: number | null
+          numero_propiedad: string | null
+          proyecto: string | null
+          unidad: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cuentas_cobranza_id_cuenta_cobranza_padre_fkey"
+            columns: ["id_cuenta_cobranza_padre"]
+            isOneToOne: false
+            referencedRelation: "cuentas_cobranza"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cuentas_cobranza_id_cuenta_cobranza_padre_fkey"
+            columns: ["id_cuenta_cobranza_padre"]
+            isOneToOne: false
+            referencedRelation: "v_pagos_detalle"
+            referencedColumns: ["id_cuenta_cobranza"]
+          },
+          {
+            foreignKeyName: "cuentas_cobranza_id_cuenta_cobranza_padre_fkey"
+            columns: ["id_cuenta_cobranza_padre"]
+            isOneToOne: false
+            referencedRelation: "vw_unidad_por_cuenta"
+            referencedColumns: ["id_cuenta"]
+          },
+        ]
       }
     }
     Functions: {
@@ -12695,6 +15113,14 @@ export type Database = {
         }[]
       }
       actualizar_estatus_reservas: { Args: never; Returns: undefined }
+      admin_set_email_confirmado: {
+        Args: { p_confirmado: boolean; p_email: string }
+        Returns: {
+          auth_confirmado: boolean
+          email: string
+          email_confirmado: boolean
+        }[]
+      }
       agent_claim_or_reactivate_prospect_project:
         | {
             Args: { _persona_id: number; _proyecto_id: number }
@@ -12782,6 +15208,28 @@ export type Database = {
         Args: { id_er_dueno: number }
         Returns: string
       }
+      crm_crear_contacto: {
+        Args: {
+          p_email?: string
+          p_estatus_lead?: string
+          p_etapa_ciclo_vida?: string
+          p_id_categoria?: number
+          p_id_propietario?: string
+          p_id_proyecto?: number
+          p_nombre: string
+          p_telefono?: string
+        }
+        Returns: {
+          entidad_id: number
+          persona_id: number
+        }[]
+      }
+      crm_current_user_is_agente_externo: { Args: never; Returns: boolean }
+      current_agente_dependiente: { Args: never; Returns: boolean }
+      current_es_inmobiliaria_de: {
+        Args: { _id_persona: number }
+        Returns: boolean
+      }
       current_es_super_admin: { Args: never; Returns: boolean }
       current_persona_id: { Args: never; Returns: number }
       current_puede: {
@@ -12794,6 +15242,8 @@ export type Database = {
         Returns: boolean
       }
       current_socio_bancario_id: { Args: never; Returns: number }
+      current_user_is_condominio_admin: { Args: never; Returns: boolean }
+      current_user_supervised_bank: { Args: never; Returns: number }
       desglose_uso_dispositivos_portal: {
         Args: { p_desde?: string; p_hasta?: string; p_portal: string }
         Returns: {
@@ -12818,6 +15268,7 @@ export type Database = {
         Args: { p_id_pago: number; p_motivo?: string }
         Returns: Json
       }
+      es_agente_dependiente: { Args: { _id_persona: number }; Returns: boolean }
       etl_bodegas: { Args: never; Returns: boolean }
       etl_estacionamientos: { Args: never; Returns: boolean }
       etl_propiedades: { Args: never; Returns: boolean }
@@ -12825,6 +15276,21 @@ export type Database = {
         Args: { max_rows?: number; query_text: string }
         Returns: Json
       }
+      fn_agente_actual: { Args: { p_auth_user_id?: string }; Returns: string }
+      fn_auth_user_de_persona: {
+        Args: { p_id_persona: number }
+        Returns: string
+      }
+      fn_crm_avanzar_negocio: {
+        Args: { p_clave_etapa: string; p_id_negocio: number }
+        Returns: undefined
+      }
+      fn_crm_etapa: { Args: { p_clave: string }; Returns: number }
+      fn_persona_de_auth_user: {
+        Args: { p_auth_user_id: string }
+        Returns: number
+      }
+      fn_reconciliar_acuerdos_cuenta: { Args: { p_cc: number }; Returns: Json }
       gen_folio_asunto: { Args: never; Returns: string }
       gen_folio_expediente: { Args: never; Returns: string }
       get_accessible_report_ids: {
@@ -12834,6 +15300,55 @@ export type Database = {
         }[]
       }
       get_active_projects: { Args: never; Returns: Json }
+      get_agente_negocios: {
+        Args: { p_auth_user_id?: string }
+        Returns: {
+          automatica: boolean
+          dias_en_etapa: number
+          etapa_clave: string
+          etapa_nombre: string
+          etapa_orden: number
+          id_negocio: number
+          nombre: string
+          persona: string
+          persona_email: string
+          proyecto: string
+          tipo: string
+          unidad: string
+          valor: number
+        }[]
+      }
+      get_agente_prospectos: {
+        Args: {
+          p_auth_user_id?: string
+          p_estatus?: number
+          p_limit?: number
+          p_offset?: number
+          p_proyecto?: number
+          p_search?: string
+        }
+        Returns: {
+          email: string
+          id_persona: number
+          nombre: string
+          proyectos: Json
+          telefono: string
+          total_personas: number
+        }[]
+      }
+      get_agentes_asignables: {
+        Args: never
+        Returns: {
+          auth_user_id: string
+          email: string
+          nombre: string
+          rol: string
+        }[]
+      }
+      get_apartado_pagos: {
+        Args: { p_oferta_id: number; p_token?: string }
+        Returns: Json
+      }
       get_apartado_status: {
         Args: { p_oferta_id: number; p_token?: string }
         Returns: {
@@ -12844,6 +15359,14 @@ export type Database = {
           id_propiedad: number
           pagado: boolean
           tiene_acceso: boolean
+        }[]
+      }
+      get_asesor_publico_oferta: {
+        Args: { p_oferta_id: number }
+        Returns: {
+          clave_pais: string
+          nombre: string
+          telefono: string
         }[]
       }
       get_bandeja_operativa: {
@@ -12883,6 +15406,7 @@ export type Database = {
         Args: {
           p_categoria?: number
           p_estatus?: string
+          p_force_agente_externo?: boolean
           p_fuente?: string
           p_limit?: number
           p_offset?: number
@@ -13276,6 +15800,8 @@ export type Database = {
           banco_nombre: string
           debe_cambiar_password: boolean
           email: string
+          email_confirmado: boolean
+          es_comprador: boolean
           id_banco: number
           id_notario: number
           id_perfil_juridico: number
@@ -13284,6 +15810,7 @@ export type Database = {
           notaria_nombre: string
           perfil_juridico_nombre: string
           puede_impersonar: boolean
+          requiere_confirmacion_email: boolean
           rol_id: number
           rol_nombre: string
           ver_filtros_avanzados_eliminados: boolean
@@ -13329,6 +15856,22 @@ export type Database = {
         }
         Returns: Json
       }
+      get_oferta_acuerdos_publicos: {
+        Args: { p_oferta_id: number }
+        Returns: {
+          concepto_nombre: string
+          id: number
+          id_concepto: number
+          monto: number
+        }[]
+      }
+      get_oferta_cuenta_publica: {
+        Args: { p_oferta_id: number }
+        Returns: {
+          clabe_stp: string
+          cuenta_id: number
+        }[]
+      }
       get_oferta_financials: { Args: { p_oferta_id: number }; Returns: Json }
       get_offers_with_agent: {
         Args: { property_id: number }
@@ -13367,15 +15910,6 @@ export type Database = {
           url_recibo: string
         }[]
       }
-      get_payments_for_cep_audit: {
-        Args: {
-          p_excluir_proyectos?: string[]
-          p_limit?: number
-          p_metodos?: string[]
-          p_proyecto?: string
-        }
-        Returns: Json
-      }
       get_payments_for_cep_cleanup: {
         Args: {
           p_excluir_proyectos?: string[]
@@ -13391,15 +15925,6 @@ export type Database = {
           p_excluir_proyectos?: string[]
           p_limit?: number
           p_metodos?: string[]
-          p_proyecto?: string
-        }
-        Returns: Json
-      }
-      get_payments_sin_evidencia: {
-        Args: {
-          p_excluir_proyectos?: string[]
-          p_limit?: number
-          p_metodo?: string
           p_proyecto?: string
         }
         Returns: Json
@@ -13483,10 +16008,6 @@ export type Database = {
         Args: { p_after_id?: number; p_limit?: number }
         Returns: Json
       }
-      get_pending_cep_chains: {
-        Args: { p_limit?: number; p_offset?: number }
-        Returns: Json
-      }
       get_pending_contracts: {
         Args: {
           p_excluir_proyectos?: string[]
@@ -13497,11 +16018,13 @@ export type Database = {
       }
       get_pending_payments: {
         Args: {
+          p_anio?: number
           p_banco?: string
           p_cuenta?: string
           p_excluir_metodos?: string[]
           p_excluir_proyectos?: string[]
           p_limit?: number
+          p_mes?: number
           p_metodo?: string
           p_proyecto?: string
         }
@@ -13657,6 +16180,13 @@ export type Database = {
       }
       get_showrooms_contacto: { Args: never; Returns: Json }
       get_stats_respaldo: { Args: never; Returns: Json }
+      get_tickets_proyectos: {
+        Args: never
+        Returns: {
+          id: number
+          nombre: string
+        }[]
+      }
       get_totales_comisiones_sozu: {
         Args: never
         Returns: {
@@ -13749,6 +16279,7 @@ export type Database = {
       }
       is_admin_user: { Args: never; Returns: boolean }
       is_inmob_agent_owner: { Args: { target_email: string }; Returns: boolean }
+      is_rol_de_banco: { Args: { p_rol_id: number }; Returns: boolean }
       is_super_admin:
         | { Args: never; Returns: boolean }
         | { Args: { user_id: string }; Returns: boolean }
@@ -13764,9 +16295,32 @@ export type Database = {
         }[]
       }
       procesar_avisos_app: { Args: never; Returns: undefined }
+      procesar_avisos_app_agente: { Args: never; Returns: undefined }
+      reasignar_lead: {
+        Args: {
+          p_id_entidad_relacionada: number
+          p_motivo?: string
+          p_nuevo_propietario: string
+        }
+        Returns: undefined
+      }
       recalcular_pago_completado_acuerdos: {
         Args: { p_id_cuenta_cobranza?: number }
         Returns: number
+      }
+      reconciliar_acuerdos_precio_final: {
+        Args: { p_dry_run?: boolean; p_id_cuenta_cobranza?: number }
+        Returns: {
+          accion: string
+          diferencia: number
+          id_acuerdo: number
+          id_cuenta_cobranza: number
+          monto_anterior: number
+          monto_nuevo: number
+          motivo: string
+          precio_final: number
+          suma_anterior: number
+        }[]
       }
       regenerar_clabes_faltantes: {
         Args: { p_id_entidad?: number; p_id_proyecto?: number }
@@ -13833,6 +16387,14 @@ export type Database = {
           tipo_dispositivo: string
           ultima_actividad: string
         }[]
+      }
+      set_lead_estatus: {
+        Args: { p_id_entidad_relacionada: number; p_id_estatus_lead: number }
+        Returns: undefined
+      }
+      set_negocio_etapa: {
+        Args: { p_clave_etapa: string; p_id_negocio: number }
+        Returns: undefined
       }
       socio_desarrollos_activos: { Args: never; Returns: number[] }
       socio_tiene_cuenta: { Args: { p_id_cuenta: number }; Returns: boolean }
@@ -13923,7 +16485,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      tickets_prioridad: "alta" | "media" | "baja" | "sin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -14050,6 +16612,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      tickets_prioridad: ["alta", "media", "baja", "sin"],
+    },
   },
 } as const

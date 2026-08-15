@@ -34,6 +34,8 @@ export interface PropertyData {
   imageGradient: string;
   image?: string;
   address?: string;
+  clientName?: string;
+  clientRFC?: string;
 }
 
 export interface FinancialData {
@@ -45,6 +47,7 @@ export interface FinancialData {
   pricePerM2Initial: number;
   pricePerM2Current: number;
   currency: string;
+  clabe?: string;
 }
 
 export interface MaintenanceData {
@@ -59,6 +62,9 @@ export interface PaymentRecord {
   concept: string;
   amount: number;
   status: "pagado" | "pendiente";
+  paymentMethodName?: string;
+  trackingKey?: string;
+  pagoId?: number;
 }
 
 export interface AdditionalProduct {

@@ -459,7 +459,7 @@ export default function Usuarios() {
             .select('id_persona, id_persona_duena_lead, personas!entidades_relacionadas_id_persona_duena_lead_fkey(nombre_comercial, nombre_legal)')
             .eq('id_tipo_entidad', 19) // Agente Inmobiliario
             .eq('activo', true)
-            .in('id_persona', chunk)
+            .in('id_persona', chunk as any)
             .order('id')
             .range(from, to)
         );
@@ -483,7 +483,7 @@ export default function Usuarios() {
             supabase
               .from('proyectos_acceso')
               .select('usuario_id, id_entidad_relacionada_dueno')
-              .in('usuario_id', chunk)
+              .in('usuario_id', chunk as any)
               .eq('activo', true)
               .not('id_entidad_relacionada_dueno', 'is', null)
               // proyectos_acceso no tiene columna id (PK compuesta)
@@ -564,7 +564,7 @@ export default function Usuarios() {
               .select('id_persona, personas!entidades_relacionadas_id_persona_fkey(nombre_comercial, nombre_legal)')
               .eq('id_tipo_entidad', 5) // Inmobiliaria
               .eq('activo', true)
-              .in('id_persona', chunk)
+              .in('id_persona', chunk as any)
               .order('id')
               .range(from, to)
           );
