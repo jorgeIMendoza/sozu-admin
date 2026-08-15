@@ -201,7 +201,7 @@ const AgentPipeline = () => {
           ? (supabase as any).from('cuentas_cobranza').select('id, id_oferta, contrato_draft').in('id_oferta', ofertaIds).eq('activo', true)
           : { data: [] as any[] },
         productoIds.length > 0
-          ? (supabase as any).from('productos_servicios').select('id, nombre, precio_lista, id_proyecto').in('id', productoIds)
+          ? (supabase as any).from('productos_servicios').select('id, nombre, precio_lista, id_proyecto, id_categoria').in('id', productoIds)
           : { data: [] as any[] },
       ]) as [{ data: any[] }, { data: any[] }, { data: any[] }, { data: any[] }];
 
@@ -294,6 +294,19 @@ const AgentPipeline = () => {
         if (!tokenByOferta.has(r.id_oferta)) tokenByOferta.set(r.id_oferta, r.token);
       }
       const productoMap = new Map<number, any>((productosRes.data || []).map((p: any) => [p.id, p]));
+
+      // Tipo de la unidad: Propiedad, o la categoría del producto (Bodega, Estacionamiento…).
+      // En Daiku la unidad y su bodega se venden juntas, así que el tipo va en columna aparte.
+      const categoriaNombre = new Map<number, string>();
+      {
+        const catIds = [...new Set((productosRes.data || []).map((p: any) => p.id_categoria).filter(Boolean))] as number[];
+        if (catIds.length > 0) {
+          const { data: cats } = await (supabase as any)
+            .from('categorias_producto').select('id, nombre').in('id', catIds);
+          (cats || []).forEach((c: any) => categoriaNombre.set(c.id, c.nombre));
+        }
+      }
+
       const cuentaByOferta = new Map<number, any>();
       (cuentaRes.data || []).forEach((c: any) => { if (c.id_oferta) cuentaByOferta.set(c.id_oferta, c); });
 
@@ -328,6 +341,9 @@ const AgentPipeline = () => {
           tiene_contrato_firmado: cuenta ? signedSet.has(cuenta.id) : false,
           is_producto: isProducto,
           no_avance: noAvanceMap.get(o.id) || null,
+          tipo_label: isProducto
+            ? (producto?.id_categoria ? (categoriaNombre.get(producto.id_categoria) ?? 'Producto') : 'Producto')
+            : 'Propiedad',
         };
         enriched.stage = classifyOffer(enriched);
         // Etapa canónica del pipeline `ventas_sozu`, derivada de los mismos hechos que usarán
@@ -602,7 +618,7 @@ const AgentPipeline = () => {
                         <td className="px-3 text-center">
                           <span className={cn('inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
                             negocio.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-muted text-muted-foreground ring-1 ring-border/60')}>
-                            {negocio.is_producto ? 'Producto' : 'Propiedad'}
+                            {negocio.tipo_label}
                           </span>
                         </td>
                         <td className="px-3 text-left">
@@ -737,7 +753,7 @@ const AgentPipeline = () => {
                             </p>
                             <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
                               negocio.is_producto ? 'bg-sky-50 text-sky-700' : 'bg-muted text-muted-foreground')}>
-                              {negocio.is_producto ? 'Producto' : 'Propiedad'}
+                              {negocio.tipo_label}
                             </span>
                           </div>
                           <p className="truncate text-[10px] text-muted-foreground">
