@@ -25,11 +25,13 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Power, PowerOff, Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import ChannelDetailDrawer from '../shared/ChannelDetailDrawer';
 import type { Channel } from '@/lib/portal-estructura-comisiones/types/simulator';
 import {
-  useCanalesConfigProyecto, useGuardarCanalDeProyecto, useProyectosSozuCanales,
+  useCanalesConfigProyecto, useGuardarCanalDeProyecto, useGuardarCanalesDeProyecto,
+  useProyectosSozuCanales,
   resolverCanalesDeProyecto, type CanalDeProyecto,
 } from '@/hooks/usePortalEstructuraComisiones/useCanalesPorProyecto';
 import {
@@ -779,20 +781,38 @@ const fechaHora = (iso: string | null | undefined) => {
  * «Validado» sin decir cuándo, que es justo lo que hace falta para saber si
  * ampara lo que hoy está capturado.
  */
-function CeldaValidacion({ estado, fecha, por, notas, aplica }: {
+function CeldaValidacion({
+  estado, fecha, por, notas, aplica, pendienteDeGuardar, ultimoCambio, ultimoAutor,
+}: {
   estado: EstadoValidacionCanalUI;
   fecha: string | null;
   por: string | null;
   notas: string | null;
   aplica: boolean;
+  /** Hay cambios en borrador sobre este canal. */
+  pendienteDeGuardar?: boolean;
+  /** `fecha_actualizacion` / `actualizado_por` de la configuración guardada. */
+  ultimoCambio?: string | null;
+  ultimoAutor?: string | null;
 }) {
-  if (!aplica) {
+  if (!aplica && !pendienteDeGuardar) {
     return <span className="text-[11px] text-muted-foreground italic">No aplica</span>;
+  }
+
+  // Con cambios en borrador el estatus guardado ya no describe lo que se ve.
+  if (pendienteDeGuardar) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 whitespace-nowrap">
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        {estado === 'validado' ? 'Perderá su validación' : 'Cambios sin guardar'}
+      </span>
+    );
   }
 
   const estilo = ESTILO_VALIDACION[estado];
   const marca = fechaHora(fecha);
   const decidido = estado === 'validado' || estado === 'desactualizado' || estado === 'rechazado';
+  const marcaCambio = fechaHora(ultimoCambio);
 
   const chip = (
     <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap', estilo.clase)}>
@@ -811,11 +831,18 @@ function CeldaValidacion({ estado, fecha, por, notas, aplica }: {
           <TooltipContent className="max-w-xs text-xs">{notas}</TooltipContent>
         </Tooltip>
       ) : chip}
-      {decidido && marca && (
+
+      {decidido && marca ? (
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
           {marca}{por ? ` · ${por}` : ''}
         </span>
-      )}
+      ) : marcaCambio ? (
+        /* Sin decisión de Alta Dirección, lo que hay que rendir cuentas de es el
+           último cambio: cuándo se guardó y quién lo guardó. */
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+          Editado {marcaCambio}{ultimoAutor ? ` · ${ultimoAutor}` : ''}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -827,6 +854,8 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
 }) {
   const { data: config, isLoading } = useCanalesConfigProyecto(idProyecto);
   const guardar = useGuardarCanalDeProyecto(idProyecto);
+  const guardarLote = useGuardarCanalesDeProyecto(idProyecto);
+  const { profile, user } = useAuth();
   const { addChannel } = useSimulator();
   const { data: proyectosSozu = [] } = useProyectosSozuCanales();
   const qc = useQueryClient();
@@ -932,20 +961,81 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resueltos, propuesta, validacionPorCanal]);
 
-  const commit = (c: CanalDeProyecto, cambios: Partial<CanalConfigProyecto>) => {
-    guardar.mutate(
+  /** Config guardada de un canal, tal como está en la base. */
+  const configDe = (c: CanalDeProyecto): CanalConfigProyecto => ({
+    idCanal: c.canal.id,
+    aplica: c.aplica,
+    comisionTotalPct: c.comisionTotalPct,
+    // Solo viaja como override lo que el proyecto capturó; lo heredado
+    // sigue siendo null para no congelar el valor del catálogo.
+    comisionExternaPct: c.overrides.externa ? c.comisionExternaPct : null,
+    comisionMinPct: c.overrides.min ? c.comisionMinPct : null,
+    comisionMaxPct: c.overrides.max ? c.comisionMaxPct : null,
+  });
+
+  /**
+   * Edición en borrador: cada cambio se acumula aquí en vez de guardarse solo.
+   *
+   * Guardar por tecla hacía imposible revisar una tanda antes de aplicarla, y
+   * sobre todo impedía avisar del efecto que tiene sobre la validación: mover
+   * tres porcentajes disparaba tres invalidaciones silenciosas.
+   */
+  const [borrador, setBorrador] = useState<Map<string, CanalConfigProyecto>>(new Map());
+  const hayCambios = borrador.size > 0;
+
+  /** Valor vigente en pantalla: el del borrador si se tocó, si no el guardado. */
+  const vigente = (c: CanalDeProyecto): CanalConfigProyecto =>
+    borrador.get(c.canal.id) ?? configDe(c);
+
+  const editar = (c: CanalDeProyecto, cambios: Partial<CanalConfigProyecto>) => {
+    setBorrador(prev => {
+      const siguiente = new Map(prev);
+      const base = prev.get(c.canal.id) ?? configDe(c);
+      const propuesto = { ...base, ...cambios };
+      const guardado = configDe(c);
+      // Volver al valor original quita el canal del borrador: si nada difiere,
+      // no hay nada que guardar y el botón debe apagarse solo.
+      const igual = (Object.keys(propuesto) as Array<keyof CanalConfigProyecto>)
+        .every(k => propuesto[k] === guardado[k]);
+      if (igual) siguiente.delete(c.canal.id);
+      else siguiente.set(c.canal.id, propuesto);
+      return siguiente;
+    });
+  };
+
+  /** Canales tocados en el borrador que hoy están validados: perderán el visto bueno. */
+  const validadosEnBorrador = [...borrador.keys()]
+    .filter(id => estadoDe(id).estado === 'validado').length;
+
+  const guardarCambios = () => {
+    const cambios = [...borrador.entries()].map(([idCanal, config]) => ({
+      nombre: resueltos.find(r => r.canal.id === idCanal)?.canal.name ?? idCanal,
+      config,
+    }));
+    const validadosAfectados = cambios.filter(
+      ({ config }) => estadoDe(config.idCanal).estado === 'validado',
+    );
+
+    guardarLote.mutate(
+      { cambios, actualizadoPor: profile?.email || user?.email || null },
       {
-        idCanal: c.canal.id,
-        aplica: c.aplica,
-        comisionTotalPct: c.comisionTotalPct,
-        // Solo viaja como override lo que el proyecto capturó; lo heredado
-        // sigue siendo null para no congelar el valor del catálogo.
-        comisionExternaPct: c.overrides.externa ? c.comisionExternaPct : null,
-        comisionMinPct: c.overrides.min ? c.comisionMinPct : null,
-        comisionMaxPct: c.overrides.max ? c.comisionMaxPct : null,
-        ...cambios,
+        onSuccess: () => {
+          setBorrador(new Map());
+          if (validadosAfectados.length > 0) {
+            // El canal validado dejó de estar amparado: se dice en el momento y
+            // con la acción a seguir, no se deja que se descubra después.
+            toast.warning(
+              `${validadosAfectados.length} canal${validadosAfectados.length === 1 ? '' : 'es'} ` +
+              `ya validado${validadosAfectados.length === 1 ? '' : 's'} cambió: ` +
+              'vuelve a enviar la estructura a validar desde el menú Comisiones.',
+              { duration: 8000 },
+            );
+          } else {
+            toast.success(`Cambios guardados en ${nombreProyecto}.`);
+          }
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : 'No se pudieron guardar los cambios'),
       },
-      { onError: (e) => toast.error(e instanceof Error ? e.message : 'No se pudo guardar') },
     );
   };
 
@@ -977,17 +1067,52 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
         </div>
       </div>
 
-      {/* Cualquier cambio aquí necesita el visto bueno de Alta Dirección, y eso
-          se dice antes de tocar nada, no después de guardar. */}
-      <div className="mb-4 flex items-start gap-2 rounded-lg border bg-muted/40 p-3">
-        <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-        <p className="text-xs text-muted-foreground">
-          Los cambios en los canales de un proyecto los valida{' '}
-          <strong className="text-foreground">Portal Alta Dirección → Estructura de Comisiones,
-          Validación por proyecto</strong>. Tras modificar algo, envía la estructura desde el menú{' '}
-          <strong className="text-foreground">Comisiones</strong> con «Enviar a validar»: mientras
-          no lo hagas, la validación anterior sigue amparando la versión previa, no la capturada.
-        </p>
+      {/* Barra de guardado. Con cambios pendientes dice cuántos son y advierte
+          si alguno de ellos ya estaba validado, ANTES de guardar: enterarse
+          después de que la validación se cayó no sirve de nada. */}
+      <div className={cn(
+        'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5',
+        hayCambios ? 'border-amber-500/40 bg-amber-500/10' : 'bg-muted/40',
+      )}>
+        {hayCambios ? (
+          <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-600 shrink-0" />
+            <span>
+              <strong className="text-foreground">
+                {borrador.size} canal{borrador.size === 1 ? '' : 'es'} sin guardar.
+              </strong>
+              {validadosEnBorrador > 0 && (
+                <> Al guardar, {validadosEnBorrador === 1 ? 'un canal ya validado perderá' : `${validadosEnBorrador} canales ya validados perderán`}{' '}
+                su validación y habrá que enviarlos de nuevo desde <strong className="text-foreground">Comisiones</strong>.</>
+              )}
+            </span>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+            <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
+            <span>
+              Los cambios los valida <strong className="text-foreground">Portal Alta Dirección →
+              Estructura de Comisiones, Validación por proyecto</strong>. Tras guardar, envía la
+              estructura desde <strong className="text-foreground">Comisiones</strong> con «Enviar
+              a validar».
+            </span>
+          </p>
+        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {hayCambios && (
+            <Button variant="ghost" size="sm" onClick={() => setBorrador(new Map())} disabled={guardarLote.isPending}>
+              Descartar
+            </Button>
+          )}
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={!hayCambios || guardarLote.isPending}
+            onClick={guardarCambios}
+          >
+            {guardarLote.isPending ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -1011,49 +1136,68 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
               </tr>
             </thead>
             <tbody>
-              {resueltos.map(c => (
-                <tr key={c.canal.id} className={c.aplica ? '' : 'opacity-55'}>
+              {resueltos.map(c => {
+                const v = vigente(c);
+                const tocado = borrador.has(c.canal.id);
+                return (
+                <tr
+                  key={c.canal.id}
+                  className={cn(!v.aplica && 'opacity-55', tocado && 'bg-amber-500/5')}
+                >
                   <td>
                     <Switch
-                      checked={c.aplica}
-                      onCheckedChange={(v) => commit(c, { aplica: v })}
+                      checked={v.aplica}
+                      onCheckedChange={(x) => editar(c, { aplica: x })}
                     />
                   </td>
                   <td>
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-medium">{c.canal.name}</span>
+                      <span className="font-medium flex items-center gap-1.5">
+                        {c.canal.name}
+                        {tocado && (
+                          <span className="text-[10px] font-normal text-amber-600">sin guardar</span>
+                        )}
+                      </span>
                       <span className="text-[11px] text-muted-foreground">
                         {c.canal.category ?? 'Sin categoría'}
                         {c.sinConfigurar && ' · hereda todo del catálogo'}
                       </span>
                     </div>
                   </td>
-                  <td><CeldaValidacion {...estadoDe(c.canal.id)} aplica={c.aplica} /></td>
+                  <td>
+                    <CeldaValidacion
+                      {...estadoDe(c.canal.id)}
+                      aplica={v.aplica}
+                      pendienteDeGuardar={tocado}
+                      ultimoCambio={c.fechaActualizacion}
+                      ultimoAutor={c.actualizadoPor}
+                    />
+                  </td>
                   <td>
                     <PctPorProyecto
-                      valor={c.comisionExternaPct}
-                      esOverride={c.overrides.externa}
+                      valor={v.comisionExternaPct ?? c.canal.externalCommissionPct}
+                      esOverride={v.comisionExternaPct != null}
                       heredado={c.canal.externalCommissionPct}
-                      disabled={!c.aplica}
-                      onCommit={(v) => commit(c, { comisionExternaPct: v })}
+                      disabled={!v.aplica}
+                      onCommit={(x) => editar(c, { comisionExternaPct: x })}
                     />
                   </td>
                   <td>
                     <PctPorProyecto
-                      valor={c.comisionMinPct}
-                      esOverride={c.overrides.min}
+                      valor={v.comisionMinPct ?? c.canal.minCommissionPct}
+                      esOverride={v.comisionMinPct != null}
                       heredado={c.canal.minCommissionPct}
-                      disabled={!c.aplica}
-                      onCommit={(v) => commit(c, { comisionMinPct: v })}
+                      disabled={!v.aplica}
+                      onCommit={(x) => editar(c, { comisionMinPct: x })}
                     />
                   </td>
                   <td>
                     <PctPorProyecto
-                      valor={c.comisionMaxPct}
-                      esOverride={c.overrides.max}
+                      valor={v.comisionMaxPct ?? c.canal.maxCommissionPct}
+                      esOverride={v.comisionMaxPct != null}
                       heredado={c.canal.maxCommissionPct}
-                      disabled={!c.aplica}
-                      onCommit={(v) => commit(c, { comisionMaxPct: v })}
+                      disabled={!v.aplica}
+                      onCommit={(x) => editar(c, { comisionMaxPct: x })}
                     />
                   </td>
                   <td>
@@ -1062,22 +1206,27 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
                       step="0.01"
                       min="0"
                       max="100"
-                      disabled={!c.aplica}
-                      className="w-24 h-8 text-sm font-mono"
-                      defaultValue={c.comisionTotalPct}
+                      disabled={!v.aplica}
+                      className="w-24 h-8 text-sm font-mono text-right"
+                      // `key` con el valor guardado: al descartar el borrador el
+                      // campo debe volver a lo que hay en la base, y un
+                      // defaultValue no se reevalúa solo.
+                      key={`${c.canal.id}-${c.comisionTotalPct}-${tocado}`}
+                      defaultValue={v.comisionTotalPct}
                       onBlur={e => {
-                        const v = Number(e.target.value);
-                        if (!Number.isFinite(v) || v < 0 || v > 100) {
+                        const x = Number(e.target.value);
+                        if (!Number.isFinite(x) || x < 0 || x > 100) {
                           toast.error('La comisión total debe estar entre 0 y 100');
-                          e.target.value = String(c.comisionTotalPct);
+                          e.target.value = String(v.comisionTotalPct);
                           return;
                         }
-                        if (v !== c.comisionTotalPct) commit(c, { comisionTotalPct: v });
+                        if (x !== v.comisionTotalPct) editar(c, { comisionTotalPct: x });
                       }}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
