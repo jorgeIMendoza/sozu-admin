@@ -319,6 +319,7 @@ const AgentPipeline = () => {
         const producto = o.id_producto ? productoMap.get(o.id_producto) : null;
         const cuenta = cuentaByOferta.get(o.id);
         const isProducto = !!o.id_producto;
+        const categoriaProducto = producto?.id_categoria ? categoriaNombre.get(producto.id_categoria) : null;
         const proyectoNombre = isProducto
           ? (producto?.id_proyecto ? productoToProject.get(producto.id_proyecto) || '' : '')
           : (propToProject.get(o.id_propiedad) || '');
@@ -341,8 +342,11 @@ const AgentPipeline = () => {
           tiene_contrato_firmado: cuenta ? signedSet.has(cuenta.id) : false,
           is_producto: isProducto,
           no_avance: noAvanceMap.get(o.id) || null,
+          // "Producto · Bodega" cuando la categoría se conoce; "Producto" a secas si no.
+          // La propiedad y su bodega son dos ofertas distintas (ver `claveUnidad`), así que
+          // cada renglón dice lo que es en lugar de mezclarlas.
           tipo_label: isProducto
-            ? (producto?.id_categoria ? (categoriaNombre.get(producto.id_categoria) ?? 'Producto') : 'Producto')
+            ? (categoriaProducto ? `Producto · ${categoriaProducto}` : 'Producto')
             : 'Propiedad',
         };
         enriched.stage = classifyOffer(enriched);
@@ -579,7 +583,7 @@ const AgentPipeline = () => {
                 <thead className="sozu-thead [&_th]:uppercase [&_th]:tracking-wide [&_th]:px-3">
                   <tr>
                     <th className="w-[206px] text-left">Desarrollo · Unidad</th>
-                    <th className="w-[120px] text-center">Tipo</th>
+                    <th className="w-[152px] text-center">Tipo</th>
                     <th className="w-[190px] text-left">Prospecto</th>
                     <th className="w-[158px] text-center">Etapa</th>
                     <th className="w-[120px] text-center">Valor</th>
@@ -616,7 +620,7 @@ const AgentPipeline = () => {
                           </p>
                         </td>
                         <td className="px-3 text-center">
-                          <span className={cn('inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                          <span className={cn('inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
                             negocio.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-muted text-muted-foreground ring-1 ring-border/60')}>
                             {negocio.tipo_label}
                           </span>
@@ -751,7 +755,7 @@ const AgentPipeline = () => {
                             <p className="truncate text-[12px] font-semibold text-foreground">
                               {negocio.proyecto_nombre || 'Sin desarrollo'}
                             </p>
-                            <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
+                            <span className={cn('shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
                               negocio.is_producto ? 'bg-sky-50 text-sky-700' : 'bg-muted text-muted-foreground')}>
                               {negocio.tipo_label}
                             </span>
@@ -901,10 +905,10 @@ function OfertaCard({ oferta, etapa, formatCurrency, onClick, onShare, onAbrir, 
       {/* Cabecera: tipo + etapa */}
       <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
         <span className={cn(
-          'inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
+          'inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold',
           oferta.is_producto ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-100' : 'bg-card text-muted-foreground ring-1 ring-border',
         )}>
-          {oferta.is_producto ? 'Producto' : 'Propiedad'}
+          {oferta.tipo_label ?? (oferta.is_producto ? 'Producto' : 'Propiedad')}
         </span>
         <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold', etapa.chip)}>
           {etapa.label}
