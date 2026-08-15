@@ -89,17 +89,17 @@ export function MotorComisionesReadOnly({
       const remanente = total - externa - dispersada;
 
       const slices: DonutSlice[] = [];
-      if (externa > 0.005) slices.push({ label: "Externa", value: +externa.toFixed(2), color: EXTERNA_COLOR });
-      if (dispersada > 0.005) slices.push({ label: "Dispersada (equipo interno)", value: +dispersada.toFixed(2), color: DISPERSADA_COLOR });
-      if (remanente > 0.005) slices.push({ label: "Remanente (SOZU)", value: +remanente.toFixed(2), color: REMANENTE_COLOR });
+      if (externa > 0.0005) slices.push({ label: "Externa", value: +externa.toFixed(3), color: EXTERNA_COLOR });
+      if (dispersada > 0.0005) slices.push({ label: "Dispersada (equipo interno)", value: +dispersada.toFixed(3), color: DISPERSADA_COLOR });
+      if (remanente > 0.0005) slices.push({ label: "Remanente (SOZU)", value: +remanente.toFixed(3), color: REMANENTE_COLOR });
 
       return {
         id: ch.id,
         name: ch.name,
-        total: +total.toFixed(2),
-        externa: +externa.toFixed(2),
-        dispersada: +dispersada.toFixed(2),
-        remanente: +remanente.toFixed(2),
+        total: +total.toFixed(3),
+        externa: +externa.toFixed(3),
+        dispersada: +dispersada.toFixed(3),
+        remanente: +remanente.toFixed(3),
         slices,
       };
     });
@@ -162,7 +162,7 @@ export function MotorComisionesReadOnly({
         const sumaDispersada = channelRules.reduce((s, r) => s + (r.percentage || 0), 0);
         const remanente = comisionInterna - sumaDispersada;
 
-        const completo = Math.abs(remanente) < 0.005;
+        const completo = Math.abs(remanente) < 0.0005;
         const statusColor = completo
           ? "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400"
           : remanente > 0
@@ -171,8 +171,8 @@ export function MotorComisionesReadOnly({
         const statusText = completo
           ? "Distribución completa"
           : remanente > 0
-            ? `Falta por dispersar ${remanente.toFixed(2)}%`
-            : `Excedido por ${Math.abs(remanente).toFixed(2)}%`;
+            ? `Falta por dispersar ${remanente.toFixed(3)}%`
+            : `Excedido por ${Math.abs(remanente).toFixed(3)}%`;
         const StatusIcon = completo ? CheckCircle : AlertTriangle;
 
         const estadoCanal = channelStatus?.(ch.id) ?? null;
@@ -233,7 +233,7 @@ export function MotorComisionesReadOnly({
                             )}
                           </div>
                         </td>
-                        <td className="font-mono text-sm">{pct.toFixed(2)}%</td>
+                        <td className="font-mono text-sm">{pct.toFixed(3)}%</td>
                         <td className="font-mono text-sm">
                           {valorEstimado != null ? fmtCurrency(valorEstimado) : "—"}
                         </td>
@@ -278,7 +278,7 @@ function Resumen({ label, value }: { label: string; value: number }) {
   return (
     <div className="text-center">
       <p className="mb-1 text-[10px] uppercase tracking-wide opacity-60">{label}</p>
-      <p className="font-mono text-sm font-bold">{value.toFixed(2)}%</p>
+      <p className="font-mono text-sm font-bold">{value.toFixed(3)}%</p>
     </div>
   );
 }
@@ -354,7 +354,7 @@ function CanalDonut({ canal, estado }: { canal: CanalResumen; estado?: CanalVali
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-base font-bold leading-none tabular-nums">{canal.total.toFixed(2)}%</span>
+              <span className="text-base font-bold leading-none tabular-nums">{canal.total.toFixed(3)}%</span>
               <span className="text-[9px] uppercase tracking-wide text-muted-foreground">total</span>
             </div>
           </div>
@@ -366,7 +366,7 @@ function CanalDonut({ canal, estado }: { canal: CanalResumen; estado?: CanalVali
                 <span className="min-w-0 flex-1 truncate text-muted-foreground" title={s.label}>
                   {s.label}
                 </span>
-                <span className="tabular-nums font-medium">{s.value.toFixed(2)}%</span>
+                <span className="tabular-nums font-medium">{s.value.toFixed(3)}%</span>
               </li>
             ))}
           </ul>
@@ -388,7 +388,7 @@ function DonutSliceTooltip({ active, payload, total }: any) {
         <span className="font-medium text-foreground">{s.label}</span>
       </div>
       <div className="mt-0.5 text-muted-foreground">
-        {s.value.toFixed(2)}% · {share}% del total del canal
+        {s.value.toFixed(3)}% · {share}% del total del canal
       </div>
     </div>
   );

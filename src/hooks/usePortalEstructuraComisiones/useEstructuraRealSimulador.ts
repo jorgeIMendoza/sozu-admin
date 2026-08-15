@@ -331,8 +331,18 @@ export interface RolComisionista {
 export interface ComisionistaReal {
   personalId: string;
   nombre: string;
-  /** Todos los roles que la persona puede ejercer. Nunca vacío. */
+  /**
+   * Todos los roles que la persona puede ejercer. **Vacío** cuando no tiene rol
+   * vinculado: la persona existe y se muestra, pero no se puede dar de alta como
+   * comisionista hasta asignárselo en Roles y Sueldos, porque la regla se guarda
+   * contra un rol.
+   */
   roles: RolComisionista[];
+  /**
+   * El colaborador de Investimento no es empleado directo —su sueldo no lo paga
+   * SOZU— pero sí comisiona por el valor que aporta en el canal.
+   */
+  tipoPersonal: "empleado_sozu" | "colaborador_investimento";
 }
 
 /**
@@ -394,9 +404,23 @@ export function comisionistasDisponibles(
       if (link.id_rol != null) agregar(link.id_rol, "proyecto", nombreProyecto.get(link.id_proyecto));
     }
 
-    // Sin rol vinculado no hay nada que imputar: la regla guarda un rol.
-    if (roles.length === 0) continue;
-    lista.push({ personalId: String(persona.id), nombre: persona.nombre, roles });
+    /*
+     * Quien no tiene rol vinculado sí se devuelve, con `roles` vacío.
+     *
+     * Antes se descartaba en silencio, y como los colaboradores de Investimento
+     * suelen darse de alta sin rol, desaparecían del selector: parecía que se
+     * les excluía por ser de Investimento cuando en realidad les faltaba el rol.
+     * Devolverlos deja que la pantalla lo explique y mande a resolverlo, en vez
+     * de esconder a la persona.
+     */
+    lista.push({
+      personalId: String(persona.id),
+      nombre: persona.nombre,
+      roles,
+      tipoPersonal: persona.tipo_personal === "colaborador_investimento"
+        ? "colaborador_investimento"
+        : "empleado_sozu",
+    });
   }
   return lista;
 }
