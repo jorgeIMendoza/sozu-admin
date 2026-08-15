@@ -1056,7 +1056,8 @@ export function DocumentsTab({
       if (newStatus === 3) {
         const personaId = documento.id_persona ?? (entityType === 'persona' ? entityId : undefined);
         if (personaId) {
-          supabase
+          Promise.resolve(
+            supabase
             .from('usuarios')
             .select('email')
             .eq('id_persona', personaId)

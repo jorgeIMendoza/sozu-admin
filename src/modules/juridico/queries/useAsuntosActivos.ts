@@ -124,10 +124,10 @@ async function fetchAsuntosActivos(): Promise<AsuntoActivoRow[]> {
   if (propiedadesRes.error) throw propiedadesRes.error;
 
   const expedientesMap = new Map(expedientes.map((e) => [e.id, e]));
-  const tiposMap = new Map((tiposRes.data ?? []).map((t: CatalogRow) => [t.id, t]));
-  const etapasMap = new Map((etapasRes.data ?? []).map((e: EtapaRow) => [e.id, e]));
-  const proyectosMap = new Map((proyectosRes.data ?? []).map((p: ProyectoRow) => [p.id, p]));
-  const propiedadesMap = new Map((propiedadesRes.data ?? []).map((p: PropiedadRow) => [p.id, p]));
+  const tiposMap = new Map<number, CatalogRow>((tiposRes.data ?? []).map((t: CatalogRow) => [t.id, t]));
+  const etapasMap = new Map<number, EtapaRow>((etapasRes.data ?? []).map((e: EtapaRow) => [e.id, e]));
+  const proyectosMap = new Map<number, ProyectoRow>((proyectosRes.data ?? []).map((p: ProyectoRow) => [p.id, p]));
+  const propiedadesMap = new Map<number, PropiedadRow>((propiedadesRes.data ?? []).map((p: PropiedadRow) => [p.id, p]));
 
   return buildAsuntoActivoRows(asuntos, expedientesMap, tiposMap, etapasMap, proyectosMap, propiedadesMap);
 }

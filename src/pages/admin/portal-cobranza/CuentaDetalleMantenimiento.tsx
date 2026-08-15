@@ -114,7 +114,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
 
       {/* Info section */}
       <div className="sozu-kpi-card p-0 overflow-hidden">
-        <TabBar tabs={INFO_TABS} active={infoTab} onChange={setInfoTab} />
+        <TabBar tabs={INFO_TABS} active={infoTab} onChange={(t) => setInfoTab(t as InfoTab)} />
 
         {infoTab === 'resumen' && (
           <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -214,7 +214,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
 
       {/* Activity section */}
       <div className="sozu-kpi-card p-0 overflow-hidden">
-        <TabBar tabs={ACTIVITY_TABS} active={activityTab} onChange={setActivityTab} />
+        <TabBar tabs={ACTIVITY_TABS} active={activityTab} onChange={(t) => setActivityTab(t as ActivityTab)} />
 
         {activityTab === 'acuerdos' && (
           <>

@@ -136,7 +136,7 @@ export function useEmbajadoresComisiones(targets: EmbajadorComisionTarget[]) {
             const { data: personas } = await (supabase as any)
               .from('personas').select('id, nombre_legal').in('id', personaIds);
             const pMap = new Map((personas || []).map((p: any) => [p.id, p.nombre_legal as string]));
-            (ers || []).forEach((er: any) => clientNameMap.set(er.id, pMap.get(er.id_persona) ?? 'Referido'));
+            (ers || []).forEach((er: any) => clientNameMap.set(er.id, (pMap.get(er.id_persona) as string) ?? 'Referido'));
           }
         }
 
