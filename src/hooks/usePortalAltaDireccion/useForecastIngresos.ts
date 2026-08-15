@@ -54,49 +54,109 @@ export const ESTATUS_LABEL: Record<number, string> = {
 };
 
 export async function fetchForecast(): Promise<ForecastRow[]> {
-  // 0) Proyectos comercializados por SOZU (entidad relacionada tipo 5).
-  const relsSozu = await fetchAllRows<any>((from, to) =>
-    (supabase as any)
-      .from("entidades_relacionadas")
-      .select("id_proyecto")
-      .eq("id_tipo_entidad", 5)
-      .eq("activo", true)
-      .range(from, to),
-  );
+  // 0) En PARALELO: proyectos SOZU (entidad tipo 5) + cuentas de cobranza con flujo.
+  const [relsSozu, cuentas] = await Promise.all([
+    fetchAllRows<any>((from, to) =>
+      (supabase as any)
+        .from("entidades_relacionadas")
+        .select("id_proyecto")
+        .eq("id_tipo_entidad", 5)
+        .eq("activo", true)
+        .range(from, to),
+    ),
+    fetchAllRows<any>((from, to) =>
+      supabase
+        .from("cuentas_cobranza")
+        .select("id, precio_final, id_propiedad, id_oferta")
+        .eq("activo", true)
+        .is("id_cuenta_cobranza_padre", null)
+        .gt("precio_final", 0)
+        .range(from, to),
+    ),
+  ]);
+
   const sozuProyectoIds = new Set<number>(
     relsSozu.map((r: any) => r.id_proyecto).filter((x: any): x is number => !!x),
   );
   const esProyectoSozu = (proyectoId: number | null) =>
     proyectoId != null && sozuProyectoIds.has(proyectoId);
 
-  // 1) Cuentas de cobranza activas, sin padre, con precio_final > 0.
-  const cuentas = await fetchAllRows<any>((from, to) =>
-    supabase
-      .from("cuentas_cobranza")
-      .select("id, precio_final, id_propiedad, id_oferta")
-      .eq("activo", true)
-      .is("id_cuenta_cobranza_padre", null)
-      .gt("precio_final", 0)
-      .range(from, to),
-  );
+  // 1) Edificios y modelos de los proyectos SOZU. Esto ACOTA el inventario a
+  //    ~cientos de propiedades (SOZU) en vez de traer el catálogo completo
+  //    (decenas de miles) para descartarlo en el cliente, y sirve para resolver
+  //    las dimensiones (proyecto/edificio) sin fetches extra.
+  const sozuProyIdList = Array.from(sozuProyectoIds);
+  const eds = sozuProyIdList.length === 0
+    ? []
+    : await fetchInBatches<any>(sozuProyIdList, (batch) =>
+        (supabase as any)
+          .from("edificios")
+          .select("id, nombre, id_proyecto")
+          .in("id_proyecto", batch as number[]),
+      );
+  const edMap = new Map<number, any>(eds.map((e: any) => [e.id, e]));
+  const sozuEdIds = eds.map((e: any) => e.id);
+  const ems = sozuEdIds.length === 0
+    ? []
+    : await fetchInBatches<any>(sozuEdIds, (batch) =>
+        (supabase as any)
+          .from("edificios_modelos")
+          .select("id, id_edificio")
+          .in("id_edificio", batch as number[]),
+      );
+  const emMap = new Map<number, any>(ems.map((e: any) => [e.id, e]));
+  const sozuEmIds = ems.map((e: any) => e.id);
 
+  // 2) En PARALELO: inventario disponible SOLO de proyectos SOZU (acotado por
+  //    modelo) + ofertas de las cuentas.
   const ofertaIds = Array.from(
     new Set(cuentas.map((c) => c.id_oferta).filter((x): x is number => !!x)),
   );
-  const ofertas = await fetchInBatches<any>(ofertaIds, (batch) =>
-    supabase.from("ofertas").select("id, id_propiedad, id_producto").in("id", batch as number[]),
-  );
+  const [propiedadesDisponibles, ofertas] = await Promise.all([
+    sozuEmIds.length === 0
+      ? Promise.resolve([] as any[])
+      : fetchInBatches<any>(sozuEmIds, (batch) =>
+          (supabase as any)
+            .from("propiedades")
+            .select(
+              "id, numero_propiedad, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
+            )
+            .in("id_edificio_modelo", batch as number[])
+            .eq("activo", true)
+            .eq("id_estatus_disponibilidad", ESTATUS_DISPONIBLE),
+        ),
+    fetchInBatches<any>(ofertaIds, (batch) =>
+      supabase.from("ofertas").select("id, id_propiedad, id_producto").in("id", batch as number[]),
+    ),
+  ]);
   const ofMap = new Map<number, any>(ofertas.map((o) => [o.id, o]));
 
+  // 3) En PARALELO: productos (tipo) + propiedades de las cuentas (por id).
   const productoIds = Array.from(
     new Set(ofertas.map((o) => o.id_producto).filter((x): x is number => !!x)),
   );
-  const productos = await fetchInBatches<any>(productoIds, (batch) =>
-    (supabase as any)
-      .from("productos_servicios")
-      .select("id, nombre, categorias_producto!productos_servicios_id_categoria_fkey(nombre)")
-      .in("id", batch as number[]),
+  const propIdsCuentas = Array.from(
+    new Set([
+      ...cuentas.map((c) => c.id_propiedad).filter((x): x is number => !!x),
+      ...ofertas.map((o) => o.id_propiedad).filter((x): x is number => !!x),
+    ]),
   );
+  const [productos, propsCuentas] = await Promise.all([
+    fetchInBatches<any>(productoIds, (batch) =>
+      (supabase as any)
+        .from("productos_servicios")
+        .select("id, nombre, categorias_producto!productos_servicios_id_categoria_fkey(nombre)")
+        .in("id", batch as number[]),
+    ),
+    fetchInBatches<any>(propIdsCuentas, (batch) =>
+      (supabase as any)
+        .from("propiedades")
+        .select(
+          "id, numero_propiedad, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
+        )
+        .in("id", batch as number[]),
+    ),
+  ]);
   const productoTipoById = new Map<number, Tipo>(
     productos.map((p: any) => [
       p.id,
@@ -106,60 +166,33 @@ export async function fetchForecast(): Promise<ForecastRow[]> {
     ]),
   );
 
-  const propIdsCc = cuentas.map((c) => c.id_propiedad).filter((x): x is number => !!x);
-  const propIdsOf = ofertas.map((o) => o.id_propiedad).filter((x): x is number => !!x);
-  const propIdsCuentas = Array.from(new Set([...propIdsCc, ...propIdsOf]));
+  // Propiedades involucradas: inventario disponible (SOZU) + las de las cuentas.
+  const propMap = new Map<number, any>();
+  [...propsCuentas, ...propiedadesDisponibles].forEach((p: any) => propMap.set(p.id, p));
 
-  const propiedadesDisponibles = await fetchAllRows<any>((from, to) =>
-    (supabase as any)
-      .from("propiedades")
-      .select(
-        "id, numero_propiedad, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
-      )
-      .eq("activo", true)
-      .eq("id_estatus_disponibilidad", ESTATUS_DISPONIBLE)
-      .range(from, to),
+  // 4) En PARALELO: nombres de proyecto + desarrolladores de las propiedades.
+  const projIds = Array.from(
+    new Set(eds.map((e: any) => e.id_proyecto).filter((x: any): x is number => !!x)),
   );
-  const propIdsDisp = propiedadesDisponibles.map((p: any) => p.id);
-
-  const allPropIds = Array.from(new Set([...propIdsCuentas, ...propIdsDisp]));
-  const propiedades = await fetchInBatches<any>(allPropIds, (batch) =>
-    (supabase as any)
-      .from("propiedades")
-      .select(
-        "id, numero_propiedad, precio_lista, id_edificio_modelo, id_entidad_relacionada_dueno, id_estatus_disponibilidad",
-      )
-      .in("id", batch as number[]),
-  );
-  const propMap = new Map<number, any>(propiedades.map((p) => [p.id, p]));
-
-  const emIds = Array.from(
-    new Set(propiedades.map((p) => p.id_edificio_modelo).filter((x): x is number => !!x)),
-  );
-  const ems = await fetchInBatches<any>(emIds, (batch) =>
-    (supabase as any).from("edificios_modelos").select("id, id_edificio").in("id", batch as number[]),
-  );
-  const emMap = new Map<number, any>(ems.map((e) => [e.id, e]));
-  const edIds = Array.from(new Set(ems.map((e) => e.id_edificio).filter((x): x is number => !!x)));
-  const eds = await fetchInBatches<any>(edIds, (batch) =>
-    (supabase as any).from("edificios").select("id, nombre, id_proyecto").in("id", batch as number[]),
-  );
-  const edMap = new Map<number, any>(eds.map((e) => [e.id, e]));
-  const projIds = Array.from(new Set(eds.map((e) => e.id_proyecto).filter((x): x is number => !!x)));
-  const projs = await fetchInBatches<any>(projIds, (batch) =>
-    (supabase as any).from("proyectos").select("id, nombre").in("id", batch as number[]),
-  );
-  const projMap = new Map<number, any>(projs.map((p) => [p.id, p]));
-
   const entIds = Array.from(
-    new Set(propiedades.map((p) => p.id_entidad_relacionada_dueno).filter((x): x is number => !!x)),
+    new Set(
+      [...propsCuentas, ...propiedadesDisponibles]
+        .map((p: any) => p.id_entidad_relacionada_dueno)
+        .filter((x: any): x is number => !!x),
+    ),
   );
-  const ents = await fetchInBatches<any>(entIds, (batch) =>
-    (supabase as any)
-      .from("entidades_relacionadas")
-      .select("id, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
-      .in("id", batch as number[]),
-  );
+  const [projs, ents] = await Promise.all([
+    fetchInBatches<any>(projIds, (batch) =>
+      (supabase as any).from("proyectos").select("id, nombre").in("id", batch as number[]),
+    ),
+    fetchInBatches<any>(entIds, (batch) =>
+      (supabase as any)
+        .from("entidades_relacionadas")
+        .select("id, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+        .in("id", batch as number[]),
+    ),
+  ]);
+  const projMap = new Map<number, any>(projs.map((p: any) => [p.id, p]));
   const entMap = new Map<number, { id: number; nombre: string }>(
     ents.map((e: any) => [
       e.id,

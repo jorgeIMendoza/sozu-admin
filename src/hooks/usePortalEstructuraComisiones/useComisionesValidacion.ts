@@ -186,7 +186,128 @@ export function useValidacionesHistorial(idProyecto?: number | null) {
         .eq("id_proyecto", idProyecto)
         .order("fecha_validacion", { ascending: false });
       if (error || !data) return [];
-      return data as ComisionValidacion[];
+      // Excluir las filas de validación POR CANAL (marcadas es_canal en snapshot).
+      return (data as ComisionValidacion[]).filter((r) => !(r.snapshot as any)?.es_canal);
     },
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Validación POR CANAL — una decisión por canal, sobre la MISMA tabla
+ * `comisiones_validaciones` (sin DDL nuevo). Cada decisión por canal es una
+ * fila cuyo `snapshot` lleva el marcador `es_canal: true` + `id_canal` +
+ * `snapshot_fecha` (la fecha de la propuesta validada). La decisión vigente de
+ * un canal es la fila más reciente para ese canal. El proyecto se valida cuando
+ * todos sus canales están validados.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+const VALIDACIONES_CANAL_KEY = "comisiones-validaciones-canal";
+
+export type EstadoValidacionCanal = "validada" | "rechazada";
+
+export interface ValidacionCanal {
+  id: number;
+  id_proyecto: number;
+  id_canal: string;
+  nombre_canal: string | null;
+  estado: EstadoValidacionCanal;
+  notas: string | null;
+  validado_por: string | null;
+  /** `fecha_actualizacion` de la propuesta que se estaba validando. */
+  snapshot_fecha: string;
+  fecha_validacion: string;
+}
+
+/** Decisiones vigentes por canal de un proyecto (última por canal). */
+export function useValidacionesCanal(idProyecto?: number | null) {
+  return useQuery<ValidacionCanal[]>({
+    queryKey: [VALIDACIONES_CANAL_KEY, idProyecto ?? "all"],
+    enabled: idProyecto != null,
+    staleTime: 15_000,
+    queryFn: async () => {
+      if (idProyecto == null) return [];
+      const { data, error } = await (supabase as any)
+        .from("comisiones_validaciones")
+        .select("id, id_proyecto, snapshot, estado, notas, validado_por, fecha_validacion")
+        .eq("id_proyecto", idProyecto)
+        .order("fecha_validacion", { ascending: false });
+      if (error || !data) return [];
+      // Solo filas por-canal; nos quedamos con la más reciente de cada canal.
+      const vistos = new Set<string>();
+      const out: ValidacionCanal[] = [];
+      for (const r of data as any[]) {
+        const s = r.snapshot ?? {};
+        if (!s.es_canal || !s.id_canal || vistos.has(s.id_canal)) continue;
+        vistos.add(s.id_canal);
+        out.push({
+          id: r.id,
+          id_proyecto: r.id_proyecto,
+          id_canal: s.id_canal,
+          nombre_canal: s.nombre_canal ?? null,
+          estado: r.estado as EstadoValidacionCanal,
+          notas: r.notas ?? null,
+          validado_por: r.validado_por ?? null,
+          snapshot_fecha: s.snapshot_fecha ?? "",
+          fecha_validacion: r.fecha_validacion,
+        });
+      }
+      return out;
+    },
+  });
+}
+
+export interface ValidarCanalInput {
+  id_proyecto: number;
+  id_canal: string;
+  nombre_canal: string;
+  estado: EstadoValidacionCanal;
+  notas: string | null;
+  validado_por: string | null;
+  /** `fecha_actualizacion` de la propuesta vigente. */
+  snapshot_fecha: string;
+}
+
+/** Registra la decisión de UN canal (fila en comisiones_validaciones, marcada es_canal). */
+export function useValidarCanalComision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ValidarCanalInput) => {
+      const { error } = await (supabase as any).from("comisiones_validaciones").insert({
+        id_proyecto: input.id_proyecto,
+        estado: input.estado,
+        notas: input.notas,
+        validado_por: input.validado_por,
+        snapshot: {
+          es_canal: true,
+          id_canal: input.id_canal,
+          nombre_canal: input.nombre_canal,
+          snapshot_fecha: input.snapshot_fecha,
+        },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [VALIDACIONES_CANAL_KEY] });
+      qc.invalidateQueries({ queryKey: [VALIDACIONES_KEY] });
+    },
+  });
+}
+
+/**
+ * Actualiza SOLO el `estado` agregado de la propuesta (derivado de los canales).
+ * NO toca `fecha_actualizacion`: hacerlo invalidaría el `snapshot_fecha` con el
+ * que se compararon las decisiones por canal (aparecerían como pendientes).
+ */
+export function useActualizarEstadoPropuesta() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { propuestaId: number; estado: EstadoPropuesta }) => {
+      const { error } = await (supabase as any)
+        .from("comisiones_propuestas")
+        .update({ estado: input.estado })
+        .eq("id", input.propuestaId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [PROPUESTAS_KEY] }),
   });
 }
