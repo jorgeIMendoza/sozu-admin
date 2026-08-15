@@ -144,6 +144,10 @@ export default function CommissionsTab() {
    * Para "Sincronizar comisionistas" se toma el rol primario de cada persona —el
    * del proyecto del motor si lo tiene, si no su rol base— y solo si ese rol
    * participa en comisión. Elegir otro rol es una decisión manual.
+   *
+   * No se filtra por tipo de personal: el colaborador de Investimento comisiona
+   * igual que el empleado directo, aunque su sueldo no lo pague SOZU. Lo único
+   * que excluye a alguien es no tener rol, porque la regla se guarda contra uno.
    */
   const comisionistasComision = useMemo(
     () => comisionistas
@@ -157,15 +161,18 @@ export default function CommissionsTab() {
     [comisionistas],
   );
 
-  // La matriz canal×puesto es del proyecto seleccionado — se sincroniza cada
-  // vez que cambia el proyecto. Espera a que `motorLoading` termine: si esto
-  // corriera mientras la carga de `commissionRules` del proyecto nuevo sigue
-  // en vuelo, calcularía "faltantes" contra datos todavía del proyecto
-  // anterior (o vacíos) y agregaría filas duplicadas.
-  useEffect(() => {
-    if (motorProjectId != null && !motorLoading) syncMissingCommissionRules(comisionistasComision);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [motorProjectId, motorLoading, comisionistasComision]);
+  /*
+   * NO se sincroniza solo al entrar.
+   *
+   * Antes un `useEffect` metía a todo el personal con rol que comisiona cada vez
+   * que se abría el menú o se cambiaba de proyecto. Eso deshacía el trabajo del
+   * usuario: quien quitaba un comisionista lo veía volver al siguiente ingreso,
+   * y la matriz guardada dejaba de ser la que se había decidido. Dar de alta a
+   * alguien es una decisión, no un efecto de navegar.
+   *
+   * La sincronización sigue existiendo, pero solo cuando se pide: el botón
+   * «Sincronizar» del encabezado o el alta puntual con «Agregar comisionista».
+   */
 
   // Ya no autoguarda: avisa antes de cerrar/recargar si hay cambios sin guardar.
   useEffect(() => {
@@ -947,7 +954,9 @@ function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAg
     );
   }, [comisionistas, busqueda]);
 
-  const disponibles = filtrados.filter(c => !yaEnCanal.has(c.personalId)).length;
+  // Solo quien realmente se puede agregar: sin rol no hay regla que guardar.
+  const disponibles = filtrados.filter(c => !yaEnCanal.has(c.personalId) && c.roles.length > 0).length;
+  const sinRolCount = filtrados.filter(c => c.roles.length === 0).length;
 
   return (
     <Dialog open={canal !== null} onOpenChange={(open) => { if (!open) cerrar(); }}>
@@ -955,14 +964,15 @@ function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAg
         <DialogHeader>
           <DialogTitle>Agregar comisionista</DialogTitle>
           <DialogDescription>
-            Personal de la organización dado de alta en <strong>Roles y Sueldos</strong>.
+            Personal de la organización dado de alta en <strong>Roles y Sueldos</strong>, incluidos
+            los colaboradores de Investimento: no son empleados directos, pero sí comisionan.
             Se agregará al canal <strong>{canal?.name}</strong> con 0% para que captures su porcentaje.
           </DialogDescription>
         </DialogHeader>
 
         {comisionistas.length === 0 ? (
           <p className="text-sm text-muted-foreground italic py-4">
-            No hay personal con rol vinculado. Da de alta personal y asígnale un rol en Roles y Sueldos.
+            No hay personal dado de alta. Regístralo en Roles y Sueldos.
           </p>
         ) : (
           <>
@@ -977,32 +987,53 @@ function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAg
                 <p className="text-sm text-muted-foreground italic py-4">Ningún resultado para la búsqueda.</p>
               ) : filtrados.map(persona => {
                 const yaEsta = yaEnCanal.has(persona.personalId);
+                const sinRol = persona.roles.length === 0;
                 const multiRol = persona.roles.length > 1;
-                const rolId = rolElegido[persona.personalId] ?? persona.roles[0].roleId;
+                const rolId = rolElegido[persona.personalId] ?? persona.roles[0]?.roleId;
                 const rol = persona.roles.find(r => r.roleId === rolId) ?? persona.roles[0];
+                const esInvestimento = persona.tipoPersonal === 'colaborador_investimento';
 
                 return (
                   <div
                     key={persona.personalId}
-                    className={`rounded-lg border px-3 py-2 ${yaEsta ? 'opacity-55 bg-muted/40' : ''}`}
+                    className={`rounded-lg border px-3 py-2 ${yaEsta || sinRol ? 'opacity-70 bg-muted/40' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-medium truncate">{persona.nombre}</span>
-                        {!multiRol && (
+                        <span className="text-sm font-medium truncate flex items-center gap-1.5">
+                          {persona.nombre}
+                          {/* El colaborador de Investimento comisiona igual: se
+                              distingue para saber que su sueldo no es de SOZU. */}
+                          {esInvestimento && (
+                            <Badge variant="outline" className="text-[10px] font-normal shrink-0">
+                              Investimento
+                            </Badge>
+                          )}
+                        </span>
+                        {sinRol ? (
+                          <span className="text-xs text-amber-600 truncate">
+                            Sin rol asignado — vincúlale uno en Roles y Sueldos para poder comisionar
+                          </span>
+                        ) : !multiRol && (
                           <span className="text-xs text-muted-foreground truncate">
                             {rol.rolNombre} · {rol.belongsTo === 'sozu_central' ? 'SOZU Central' : 'Proyecto'}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {!rol.participaComision && (
+                        {!sinRol && !rol.participaComision && (
                           <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">
                             Rol sin comisión
                           </Badge>
                         )}
                         {yaEsta ? (
                           <Badge variant="secondary" className="text-[10px]">Ya en el canal</Badge>
+                        ) : sinRol ? (
+                          // La regla se guarda contra un rol: sin rol no hay qué
+                          // guardar, así que se dice en vez de fallar al hacer clic.
+                          <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">
+                            Falta su rol
+                          </Badge>
                         ) : (
                           <Button size="sm" variant="outline" className="h-7 gap-1"
                             onClick={() => { onAgregar(persona, rol); cerrar(); }}>
@@ -1041,8 +1072,9 @@ function AltaComisionistaDialog({ canal, comisionistas, yaEnCanal, onClose, onAg
             </div>
             <p className="text-xs text-muted-foreground">
               {disponibles === 0
-                ? 'Todo el personal listado ya comisiona en este canal.'
-                : `${disponibles} persona(s) disponible(s) para agregar.`}
+                ? 'Nadie más se puede agregar a este canal.'
+                : `${disponibles} persona${disponibles === 1 ? '' : 's'} para agregar.`}
+              {sinRolCount > 0 && ` ${sinRolCount} sin rol asignado.`}
             </p>
           </>
         )}
