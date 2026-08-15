@@ -60,12 +60,12 @@ const ESTILO_CUADRE: Record<Cuadre, { chip: string; texto: string; etiqueta: (e:
   falta: {
     chip: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
     texto: 'text-amber-600',
-    etiqueta: (e) => `Falta por dispersar ${e.remanente.toFixed(2)}%`,
+    etiqueta: (e) => `Falta por dispersar ${e.remanente.toFixed(3)}%`,
   },
   excedido: {
     chip: 'border-destructive/40 bg-destructive/10 text-destructive',
     texto: 'text-destructive',
-    etiqueta: (e) => `Excedido por ${Math.abs(e.remanente).toFixed(2)}%`,
+    etiqueta: (e) => `Excedido por ${Math.abs(e.remanente).toFixed(3)}%`,
   },
   sin_definir: {
     chip: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
@@ -335,7 +335,7 @@ export default function CommissionsTab() {
         comisionistas: reglas.length,
         conPorcentaje: reglas.filter(r => r.percentage > 0).length,
         cuadre: !totalDefinido ? 'sin_definir'
-          : Math.abs(remanente) < 0.005 ? 'completo'
+          : Math.abs(remanente) < 0.0005 ? 'completo'
             : remanente > 0 ? 'falta' : 'excedido',
       });
     }
@@ -578,7 +578,7 @@ export default function CommissionsTab() {
                   <span className="text-xs text-muted-foreground whitespace-nowrap">Comisión total</span>
                   <Input
                     type="number"
-                    step="0.1"
+                    step="0.001"
                     min="0"
                     max="100"
                     placeholder="Sin definir"
@@ -653,7 +653,7 @@ export default function CommissionsTab() {
                       <Tooltip>
                         <TooltipTrigger><Info className="ml-1 inline h-3 w-3" /></TooltipTrigger>
                         <TooltipContent className="max-w-xs text-xs">
-                          Qué parte de la Comisión a Dispersar del canal ({comisionInterna.toFixed(2)}%) se lleva esta persona. Se calcula solo.
+                          Qué parte de la Comisión a Dispersar del canal ({comisionInterna.toFixed(3)}%) se lleva esta persona. Se calcula solo.
                         </TooltipContent>
                       </Tooltip>
                     </th>
@@ -736,7 +736,7 @@ export default function CommissionsTab() {
                         <td className="text-right">
                           <Input
                             type="number"
-                            step="0.01"
+                            step="0.001"
                             min="0"
                             className="w-24 h-8 text-sm font-mono text-right ml-auto"
                             value={rule.percentage}
@@ -751,7 +751,7 @@ export default function CommissionsTab() {
                         {/* Dato derivado: se muestra como texto. Como campo
                             deshabilitado parecía editable pero averiado. */}
                         <td className="text-right font-mono text-sm text-foreground/70">
-                          {Number.isFinite(sharePct) ? sharePct.toFixed(2) : '0.00'}%
+                          {Number.isFinite(sharePct) ? sharePct.toFixed(3) : '0.000'}%
                         </td>
                         <td>
                           <select
@@ -778,7 +778,7 @@ export default function CommissionsTab() {
                     <td className="font-semibold text-sm">Total dispersado</td>
                     <td></td>
                     <td className="text-right font-bold font-mono text-sm">
-                      {sumaDispersada.toFixed(2)}%
+                      {sumaDispersada.toFixed(3)}%
                     </td>
                     <td className="text-right font-bold font-mono text-sm whitespace-nowrap">
                       {precioPromUnidad > 0
@@ -786,7 +786,7 @@ export default function CommissionsTab() {
                         : '—'}
                     </td>
                     <td className="text-right font-bold font-mono text-sm">
-                      {comisionInterna > 0 ? ((sumaDispersada / comisionInterna) * 100).toFixed(2) : '0.00'}%
+                      {comisionInterna > 0 ? ((sumaDispersada / comisionInterna) * 100).toFixed(3) : '0.000'}%
                     </td>
                     <td colSpan={2}></td>
                   </tr>
@@ -934,7 +934,7 @@ function CifraCanal({ etiqueta, valor, destacado, color, ayuda }: {
         )}
       </p>
       <p className={`text-base font-bold font-mono mt-0.5 ${destacado ? color ?? '' : 'text-foreground'}`}>
-        {valor.toFixed(2)}%
+        {valor.toFixed(3)}%
       </p>
     </div>
   );
