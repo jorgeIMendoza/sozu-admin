@@ -578,8 +578,7 @@ export function PanelDetallePrecio({
                 Historial de esta unidad
               </h3>
               <Link
-                to="/admin/inventario/precios/auditoria/bitacora"
-                search={{ unidad: p.numero }}
+                to={`/admin/inventario/precios/auditoria/bitacora?unidad=${encodeURIComponent(p.numero)}`}
                 className="text-sm text-primary hover:underline"
               >
                 Ver en bitácora
