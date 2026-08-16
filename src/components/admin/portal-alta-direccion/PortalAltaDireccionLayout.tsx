@@ -76,7 +76,7 @@ const navGroups: NavGroup[] = [
     label: "Comercial",
     items: [
       { label: "Citas Comerciales", path: "/admin/portal-alta-direccion/citas",      icon: CalendarCheck },
-      { label: "Prospectos",        path: "/admin/portal-alta-direccion/prospectos", icon: UserSearch },
+      { label: "Contactos",         path: "/admin/portal-alta-direccion/prospectos", icon: UserSearch },
       { label: "Pipeline",          path: "/admin/portal-alta-direccion/pipeline",   icon: Briefcase },
     ],
   },

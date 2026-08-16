@@ -1,25 +1,34 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, DollarSign, Lock, Info } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, DollarSign, Lock, Info, ExternalLink, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { buildOfferUrl } from "@/lib/offers/offer-links";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   card: any;
   stageInfo: { key: string; label: string; color: string };
+  /**
+   * Base del Ciclo de Venta del portal que abre el diálogo (ej.
+   * "/admin/portal-alta-direccion/ciclo-venta"). Si se provee y la oferta ya
+   * tiene cuenta de cobranza, se muestra el CTA para abrir el Expediente de
+   * Venta. Se omite en portales sin acceso a esa ruta (Inmobiliaria).
+   */
+  cicloVentaBasePath?: string;
 }
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(v);
 
-export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stageInfo }: Props) {
+export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stageInfo, cicloVentaBasePath }: Props) {
   const [expandedSchemes, setExpandedSchemes] = useState(true);
 
   const isProducto = card?.is_producto;
@@ -28,6 +37,18 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
   const ofertaLabel = isProducto
     ? `OP-${String(card?.id).padStart(6, "0")}`
     : `O-${String(card?.id).padStart(6, "0")}`;
+
+  // Link a la oferta digital pública (mismo host canónico que el board).
+  const ofertaUrl = card?.id != null ? buildOfferUrl(card.id) : null;
+
+  // Folio de la cuenta de cobranza (mismo formato que muestra el board) — es
+  // también el `?caso=` que espera el Expediente de Venta del Ciclo de Venta.
+  const cuentaFolio = card?.cuenta_cobranza_id
+    ? `${isProducto ? "CCP" : "CC"}-${String(card.cuenta_cobranza_id).padStart(6, "0")}`
+    : null;
+  const cicloVentaHref = cicloVentaBasePath && cuentaFolio
+    ? `${cicloVentaBasePath}?caso=${cuentaFolio}`
+    : null;
 
   // Fetch property details for resolving project
   const { data: propertyDetail } = useQuery({
@@ -184,7 +205,20 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
             {/* Info */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground font-mono">Oferta: {ofertaLabel}</span>
+                {ofertaUrl ? (
+                  <a
+                    href={ofertaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Abrir la oferta digital"
+                    className="text-[10px] text-primary font-mono inline-flex items-center gap-1 hover:underline"
+                  >
+                    Oferta: {ofertaLabel}
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground font-mono">Oferta: {ofertaLabel}</span>
+                )}
                 <Badge className={cn("text-[10px] border-0", stageInfo.color)}>{stageInfo.label}</Badge>
               </div>
 
@@ -230,6 +264,27 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
                 )}
               </div>
             </div>
+
+            {/* CTA: Ciclo de Venta del Expediente de Venta (solo si hay cuenta de
+                cobranza y el portal expone la ruta) */}
+            {cicloVentaHref && (
+              <Link
+                to={cicloVentaHref}
+                onClick={() => onOpenChange(false)}
+                className="flex items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5 transition-colors hover:bg-primary/10"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  <span className="flex flex-col min-w-0">
+                    <span className="text-xs font-semibold text-primary">Ver Ciclo de Venta</span>
+                    <span className="text-[11px] text-muted-foreground truncate">
+                      Expediente {cuentaFolio} · timeline y flujo de la transacción
+                    </span>
+                  </span>
+                </span>
+                <ArrowRight className="h-4 w-4 text-primary shrink-0" />
+              </Link>
+            )}
 
             {/* Price */}
             {isProducto && tieneMetraje && precioPorM2 != null && precioPorM2 > 0 ? (

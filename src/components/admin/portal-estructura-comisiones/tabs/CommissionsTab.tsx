@@ -3,8 +3,9 @@ import { useSimulator } from '@/lib/portal-estructura-comisiones/stores/Simulato
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2, Save, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Plus, Trash2, RefreshCw, Info, History, Send, Loader2, Building2, Save, ChevronRight, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
@@ -90,10 +91,13 @@ export default function CommissionsTab() {
     channels: catalogoCanales, roles, roleAssignments, motorConfig, updateMotorConfig, motorProjectId, setMotorProjectId,
     motorLoading, motorDirty, motorSaving, saveMotorComisiones,
     commissionRules, addCommissionRule, updateCommissionRule, deleteCommissionRule, syncMissingCommissionRules,
+    copyChannelRules,
   } = useSimulator();
   const [syncOpen, setSyncOpen] = useState(false);
   /** Canal para el que está abierto el selector de "Agregar comisionista". */
   const [altaCanal, setAltaCanal] = useState<string | null>(null);
+  /** Canal cuya configuración se está copiando a otro. */
+  const [copiarDesde, setCopiarDesde] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SyncHistoryEntry[]>(loadHistory);
 
@@ -295,6 +299,39 @@ export default function CommissionsTab() {
       roleId,
       pool: rol?.belongsTo === 'sozu_central' ? 'sozu' : 'project',
     });
+  };
+
+  /**
+   * Copia la configuración de un canal a otro: comisión total y la lista
+   * completa de comisionistas con su rol, su % y su pool.
+   *
+   * `reemplazar` decide qué pasa con lo que ya había en el destino. Sustituir es
+   * lo que se espera de «copiar», pero borra trabajo hecho, así que el diálogo
+   * lo pregunta en vez de asumirlo. En modo agregar, quien ya esté en el destino
+   * se respeta —no se le pisa el porcentaje— y se informa a cuántos se omitió.
+   *
+   * `%  del reparto` y `valor estimado` no se copian porque no se capturan: el
+   * primero se deriva de la comisión interna del canal y el segundo del precio
+   * promedio del proyecto. Copiar el % y la comisión total los reproduce solos.
+   */
+  const copiarCanal = (idOrigen: string, idDestino: string, reemplazar: boolean) => {
+    const { copiadas, omitidas } = copyChannelRules(idOrigen, idDestino, reemplazar);
+
+    // La comisión total viaja con el canal: sin ella el destino no sabría
+    // cuánto tiene que repartir entre los comisionistas que acaba de recibir.
+    const totalOrigen = motorConfig.channelTotals[idOrigen];
+    if (totalOrigen !== undefined) {
+      updateMotorConfig({ channelTotals: { ...motorConfig.channelTotals, [idDestino]: totalOrigen } });
+    }
+
+    const nombreDestino = channels.find(c => c.id === idDestino)?.name ?? 'el canal';
+    toast.success(
+      `${copiadas} comisionista${copiadas === 1 ? '' : 's'} copiado${copiadas === 1 ? '' : 's'} a ${nombreDestino}` +
+      (omitidas > 0 ? `; ${omitidas} ya estaba${omitidas === 1 ? '' : 'n'} y se conservó su porcentaje` : '') +
+      '. Presiona «Guardar cambios» para persistirlo.',
+      { duration: 7000 },
+    );
+    setCopiarDesde(null);
   };
 
   const updateRule = (ruleId: string, updates: Partial<typeof commissionRules[0]>) => {
@@ -595,6 +632,20 @@ export default function CommissionsTab() {
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
                 <ChipCuadre cuadre={estado.cuadre} texto={estilo.etiqueta(estado)} />
+                {/* Copiar solo tiene sentido con algo que copiar y con adónde. */}
+                {estado.comisionistas > 0 && channels.length > 1 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="sm" onClick={() => setCopiarDesde(ch.id)} className="h-8">
+                        <Copy className="h-3 w-3 mr-1" /> Copiar a…
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">
+                      Lleva la comisión total y los comisionistas de {ch.name} —con su rol,
+                      su porcentaje y su pool— a otro canal de este proyecto.
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 <Button variant="outline" size="sm" onClick={() => setAltaCanal(ch.id)} className="h-8">
                   <Plus className="h-3 w-3 mr-1" /> Agregar comisionista
                 </Button>
@@ -849,6 +900,17 @@ export default function CommissionsTab() {
         </div>
       )}
 
+      <CopiarCanalDialog
+        origen={channels.find(c => c.id === copiarDesde) ?? null}
+        canales={channels}
+        estadoPorCanal={estadoPorCanal}
+        comisionistaPorId={comisionistaPorId}
+        reglas={commissionRules}
+        precioPromUnidad={precioPromUnidad}
+        onClose={() => setCopiarDesde(null)}
+        onCopiar={copiarCanal}
+      />
+
       <AltaComisionistaDialog
         canal={channels.find(c => c.id === altaCanal) ?? null}
         comisionistas={comisionistas}
@@ -937,6 +999,159 @@ function CifraCanal({ etiqueta, valor, destacado, color, ayuda }: {
         {valor.toFixed(3)}%
       </p>
     </div>
+  );
+}
+
+/**
+ * Copiar la configuración de un canal a otro.
+ *
+ * Muestra qué se va a copiar y qué hay hoy en el destino **antes** de hacerlo:
+ * la operación puede borrar trabajo, así que la decisión se toma viendo las dos
+ * columnas, no de memoria.
+ */
+function CopiarCanalDialog({
+  origen, canales, estadoPorCanal, comisionistaPorId, reglas, precioPromUnidad, onClose, onCopiar,
+}: {
+  origen: { id: string; name: string } | null;
+  canales: Array<{ id: string; name: string }>;
+  estadoPorCanal: Map<string, EstadoCanal>;
+  comisionistaPorId: Map<string, ComisionistaReal>;
+  reglas: Array<{ id: string; channelId: string; roleId: string; personalId: string | null; percentage: number; pool: 'sozu' | 'project' }>;
+  precioPromUnidad: number;
+  onClose: () => void;
+  onCopiar: (idOrigen: string, idDestino: string, reemplazar: boolean) => void;
+}) {
+  const [destino, setDestino] = useState<string>('');
+  const [reemplazar, setReemplazar] = useState(true);
+
+  useEffect(() => {
+    if (origen) { setDestino(''); setReemplazar(true); }
+  }, [origen]);
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
+
+  const aCopiar = origen ? reglas.filter(r => r.channelId === origen.id) : [];
+  const estadoOrigen = origen ? estadoPorCanal.get(origen.id) : undefined;
+  const estadoDestino = destino ? estadoPorCanal.get(destino) : undefined;
+  const nombreDestino = canales.find(c => c.id === destino)?.name ?? '';
+
+  return (
+    <Dialog open={origen !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>Copiar la configuración de {origen?.name}</DialogTitle>
+          <DialogDescription>
+            Se copian la comisión total y cada comisionista con su rol, su % sobre venta y su pool.
+            El % del reparto y el valor estimado se recalculan solos, porque se derivan de esos datos.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
+          <div className="rounded-lg border p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Qué se va a copiar
+              </p>
+              <span className="text-xs font-mono">
+                Comisión total {(estadoOrigen?.comisionTotal ?? 0).toFixed(3)}%
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Comisionista</th>
+                    <th>Rol</th>
+                    <th className="text-right">% s/ venta</th>
+                    <th className="text-right">Valor estimado</th>
+                    <th>Pool</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aCopiar.map(r => {
+                    const persona = r.personalId ? comisionistaPorId.get(r.personalId) : undefined;
+                    return (
+                      <tr key={r.id}>
+                        <td className="text-sm whitespace-nowrap">{persona?.nombre ?? 'Sin comisionista'}</td>
+                        <td className="text-xs text-muted-foreground">
+                          {persona?.roles.find(x => x.roleId === r.roleId)?.rolNombre ?? '—'}
+                        </td>
+                        <td className="text-right font-mono text-sm">{r.percentage.toFixed(3)}%</td>
+                        <td className="text-right font-mono text-sm">
+                          {precioPromUnidad > 0 ? fmt(r.percentage / 100 * precioPromUnidad) : '—'}
+                        </td>
+                        <td className="text-xs">{r.pool === 'sozu' ? 'SOZU' : 'Proyecto'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Canal destino</Label>
+            <Select value={destino} onValueChange={setDestino}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Elige a qué canal copiarlo" />
+              </SelectTrigger>
+              <SelectContent>
+                {canales.filter(c => c.id !== origen?.id).map(c => {
+                  const e = estadoPorCanal.get(c.id);
+                  return (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                      {e && e.comisionistas > 0 && ` · ${e.comisionistas} comisionista${e.comisionistas === 1 ? '' : 's'}`}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Solo se pregunta cuando hay algo que perder. */}
+          {estadoDestino && estadoDestino.comisionistas > 0 && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+              <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-600 shrink-0" />
+                <span>
+                  <strong className="text-foreground">{nombreDestino}</strong> ya tiene{' '}
+                  {estadoDestino.comisionistas} comisionista{estadoDestino.comisionistas === 1 ? '' : 's'}
+                  {' '}y una comisión total de {estadoDestino.comisionTotal.toFixed(3)}%.
+                </span>
+              </p>
+              <div className="space-y-1.5 pl-5">
+                <label className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input type="radio" checked={reemplazar} onChange={() => setReemplazar(true)} className="mt-0.5" />
+                  <span>
+                    <span className="font-medium">Sustituir</span> — quita los actuales y deja
+                    exactamente los de {origen?.name}.
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input type="radio" checked={!reemplazar} onChange={() => setReemplazar(false)} className="mt-0.5" />
+                  <span>
+                    <span className="font-medium">Agregar los que falten</span> — conserva a quien
+                    ya está y su porcentaje; solo suma a los que no estén.
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="shrink-0 border-t pt-3">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={!destino || !origen}
+            onClick={() => origen && onCopiar(origen.id, destino, reemplazar)}
+          >
+            Copiar a {nombreDestino || '…'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

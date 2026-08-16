@@ -476,11 +476,14 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
       if (propietarioFilter !== "all" && c.propietario !== propietarioFilter) return false;
       if (q) {
         const hay = [
-          c.folio,
+          c.folio,                    // ID Cuenta (CC-/CCP-/COB-)
           c.proyecto_nombre,
           c.modelo_nombre,
-          c.numero_departamento,
+          c.numero_departamento,      // No. Departamento
           c.propietario,
+          c.cliente_lead,             // Cliente / Contacto / Prospecto (lead de la oferta)
+          c.compradores.join(" "),    // Cliente(s) / comprador(es) de la cuenta
+          c.agente,                   // Agente
         ]
           .map(norm)
           .join(" ");
@@ -515,7 +518,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cuenta, proyecto, modelo, depto o propietario…"
+            placeholder="Buscar por ID cuenta, No. depto, cliente/contacto/prospecto o agente…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -603,6 +606,7 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                   <TableHead className="text-xs">Modelo</TableHead>
                   <TableHead className="text-xs">No. Departamento</TableHead>
                   <TableHead className="text-xs">Propietario</TableHead>
+                  <TableHead className="text-xs">Agente</TableHead>
                   <TableHead className="text-xs text-right">Precio/m²</TableHead>
                   <TableHead className="text-xs text-right">Precio Final</TableHead>
                   <TableHead className="text-xs">Días</TableHead>
@@ -621,6 +625,9 @@ function IndiceView({ onOpen }: { onOpen: (folio: string) => void }) {
                     <TableCell className="text-sm">{c.numero_departamento || "-"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {c.propietario || "-"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {c.agente || "-"}
                     </TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
                       {c.precio_m2 > 0 ? fmtMxn(c.precio_m2) : "-"}
