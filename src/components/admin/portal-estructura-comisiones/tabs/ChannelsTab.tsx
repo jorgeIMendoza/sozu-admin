@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import ChannelDetailDrawer from '../shared/ChannelDetailDrawer';
+import ComparativoCanalesProyectos from '../shared/ComparativoCanalesProyectos';
 import type { Channel } from '@/lib/portal-estructura-comisiones/types/simulator';
 import {
   useCanalesConfigProyecto, useGuardarCanalDeProyecto, useGuardarCanalesDeProyecto,
@@ -395,6 +396,10 @@ export default function ChannelsTab() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Comparativo entre proyectos: solo lo ya guardado, para contrastar la
+          propuesta vigente de cada desarrollo. */}
+      <ComparativoCanalesProyectos catalogo={channels} />
 
       {/* Tabla del catálogo maestro. Con un proyecto elegido arriba conviven dos
           alcances en pantalla, así que se dice cuál es cuál. */}
