@@ -63,6 +63,15 @@ interface SimulatorContextType extends AppState {
   updateCommissionRule: (rule: CommissionRule) => void;
   deleteCommissionRule: (id: string) => void;
   /**
+   * Copia las reglas de un canal a otro. `replace` sustituye lo que hubiera en
+   * el destino; si no, conserva a quien ya esté y solo suma a los que falten.
+   */
+  copyChannelRules: (
+    fromChannelId: string,
+    toChannelId: string,
+    replace: boolean,
+  ) => { copiadas: number; omitidas: number };
+  /**
    * Agrega localmente los comisionistas que falten: cada persona activa cuyo rol
    * participa en comisión, en cada canal donde aún no esté. No persiste —
    * requiere `saveMotorComisiones`.
@@ -351,6 +360,58 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       update(s => ({ ...s, commissionRules: s.commissionRules.filter(r => r.id !== id) }));
       if (!id.startsWith('local-')) setPendingDeletes(prev => [...prev, id]);
       setMotorDirty(true);
+    },
+    /**
+     * Copia las reglas de un canal a otro, conservando persona, rol, porcentaje
+     * y pool.
+     *
+     * Vive aquí y no en la pantalla porque `addCommissionRule` genera el id
+     * internamente: crear y luego actualizar desde fuera no encontraría la fila
+     * recién creada. Con una sola pasada sobre el estado, las reglas nacen ya
+     * con su porcentaje.
+     *
+     * Devuelve cuántas se copiaron y cuántas se omitieron por estar ya en el
+     * destino, para que quien llame pueda decirlo sin volver a calcularlo.
+     */
+    copyChannelRules: (fromChannelId, toChannelId, replace) => {
+      let copiadas = 0;
+      let omitidas = 0;
+
+      update(s => {
+        const origen = s.commissionRules.filter(r => r.channelId === fromChannelId);
+        const previas = s.commissionRules.filter(r => r.channelId === toChannelId);
+
+        // Las que ya estaban en el destino y venían del servidor deben borrarse
+        // allá también; las locales basta con no volver a incluirlas.
+        if (replace) {
+          const delServidor = previas.filter(r => !r.id.startsWith('local-')).map(r => r.id);
+          if (delServidor.length) setPendingDeletes(prev => [...prev, ...delServidor]);
+        }
+
+        const conservadas = replace
+          ? s.commissionRules.filter(r => r.channelId !== toChannelId)
+          : s.commissionRules;
+
+        const yaEnDestino = replace
+          ? new Set<string>()
+          : new Set(previas.map(r => r.personalId).filter(Boolean) as string[]);
+
+        const nuevas: CommissionRule[] = [];
+        for (const r of origen) {
+          if (r.personalId && yaEnDestino.has(r.personalId)) { omitidas++; continue; }
+          nuevas.push({
+            ...r,
+            id: `local-${crypto.randomUUID()}`,
+            channelId: toChannelId,
+          });
+          copiadas++;
+        }
+
+        return { ...s, commissionRules: [...conservadas, ...nuevas] };
+      });
+
+      setMotorDirty(true);
+      return { copiadas, omitidas };
     },
     // Agrega localmente (sin tocar el servidor) las combinaciones canal×puesto
     // que falten para los roles que participan en comisión. Antes esto

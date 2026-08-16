@@ -163,6 +163,116 @@ export function useGuardarCanalDeProyecto(idProyecto: number | null) {
   });
 }
 
+/** Un canal de un proyecto, ya resuelto, para comparar entre desarrollos. */
+export interface CanalComparado {
+  idProyecto: number;
+  proyecto: string;
+  idCanal: string;
+  canal: string;
+  comisionTotalPct: number;
+  comisionExternaPct: number;
+  /** Lo que queda para repartir entre el equipo interno. */
+  comisionInternaPct: number;
+  /** El % externo es propio del proyecto, no heredado del catálogo. */
+  externaEsPropia: boolean;
+  fechaActualizacion: string | null;
+  actualizadoPor: string | null;
+}
+
+/**
+ * Configuración guardada de canales de **todos** los proyectos.
+ *
+ * Solo trae lo que está persistido: un proyecto que nunca guardó cambios no
+ * aparece. Es deliberado — la comparación es entre propuestas reales, y mostrar
+ * a los demás con los valores del catálogo insinuaría una decisión que nadie
+ * tomó.
+ *
+ * Waterfall explícito (patrón #1 de CLAUDE.md): config → proyectos, por
+ * separado. El embed de PostgREST sobre `proyectos` devuelve `null` sin error y
+ * dejaría filas sin nombre de proyecto.
+ */
+export function useCanalesDeTodosLosProyectos() {
+  return useQuery<Array<CanalConfigProyecto & { idProyecto: number; proyecto: string }> | null>({
+    queryKey: ["canales-config-todos"],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("comisiones_canal_config")
+        .select(
+          "id_proyecto, id_canal, activo, comision_total_pct, comision_externa_pct, " +
+          "comision_min_pct, comision_max_pct, fecha_actualizacion, actualizado_por",
+        );
+      if (error) {
+        // Sin la columna de autoría se relee sin ella; sin la tabla no hay nada.
+        const reintento = await (supabase as any)
+          .from("comisiones_canal_config")
+          .select("id_proyecto, id_canal, activo, comision_total_pct, comision_externa_pct, comision_min_pct, comision_max_pct, fecha_actualizacion");
+        if (reintento.error || !reintento.data) return null;
+        return conNombreDeProyecto(reintento.data as any[]);
+      }
+      return conNombreDeProyecto((data ?? []) as any[]);
+    },
+  });
+}
+
+async function conNombreDeProyecto(filas: any[]) {
+  if (!filas.length) return [];
+  const ids = Array.from(new Set(filas.map(f => f.id_proyecto as number)));
+  const { data: proyectos } = await supabase
+    .from("proyectos")
+    .select("id, nombre")
+    .in("id", ids);
+  const nombre = new Map((proyectos ?? []).map(p => [p.id as number, p.nombre as string]));
+
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  return filas.map(f => ({
+    idProyecto: f.id_proyecto as number,
+    proyecto: nombre.get(f.id_proyecto as number) ?? `Proyecto ${f.id_proyecto}`,
+    idCanal: String(f.id_canal),
+    aplica: f.activo ?? true,
+    comisionTotalPct: Number(f.comision_total_pct ?? 0),
+    comisionExternaPct: num(f.comision_externa_pct),
+    comisionMinPct: num(f.comision_min_pct),
+    comisionMaxPct: num(f.comision_max_pct),
+    fechaActualizacion: f.fecha_actualizacion ?? null,
+    actualizadoPor: f.actualizado_por ?? null,
+  }));
+}
+
+/**
+ * Cruza esa configuración con el catálogo maestro para dejar cada canal listo
+ * para comparar: el % externo vacío hereda del catálogo, igual que en la
+ * pantalla del proyecto.
+ */
+export function compararCanalesEntreProyectos(
+  catalogo: Channel[],
+  config: Array<CanalConfigProyecto & { idProyecto: number; proyecto: string }> | null | undefined,
+): CanalComparado[] {
+  if (!config?.length) return [];
+  const porId = new Map(catalogo.map(c => [c.id, c]));
+
+  return config
+    .filter(c => c.aplica)
+    .map(c => {
+      const canal = porId.get(c.idCanal);
+      const externa = c.comisionExternaPct ?? canal?.externalCommissionPct ?? 0;
+      return {
+        idProyecto: c.idProyecto,
+        proyecto: c.proyecto,
+        idCanal: c.idCanal,
+        canal: canal?.name ?? `Canal ${c.idCanal}`,
+        comisionTotalPct: c.comisionTotalPct,
+        comisionExternaPct: externa,
+        comisionInternaPct: c.comisionTotalPct - externa,
+        externaEsPropia: c.comisionExternaPct != null,
+        fechaActualizacion: c.fechaActualizacion ?? null,
+        actualizadoPor: c.actualizadoPor ?? null,
+      };
+    })
+    // Canal y luego proyecto: se compara el mismo canal entre desarrollos.
+    .sort((a, b) => a.canal.localeCompare(b.canal) || a.proyecto.localeCompare(b.proyecto));
+}
+
 export interface ProyectoSozu {
   id: number;
   nombre: string;

@@ -22,7 +22,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, CalendarDays, Clock, Building2, User, UserCircle, Hash } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Clock, Building2, User, UserCircle, Hash, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/admin/portal-alta-direccion/ui";
 import {
@@ -203,6 +203,7 @@ function CitaDetalleDialog({ cita, onClose }: { cita: CitaRow | null; onClose: (
   if (!cita) return null;
   const { label, tone } = getEstadoDisplay(cita);
   const agente = nombreAgente(cita);
+  const ubicacion = cita.ubicacion || "—";
   const creada = fmtCreacion(cita.fecha_creacion);
   const fechaLegible = cita.fecha
     ? format(parseFechaLocal(cita.fecha), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
@@ -227,7 +228,8 @@ function CitaDetalleDialog({ cita, onClose }: { cita: CitaRow | null; onClose: (
           <DetalleRow icon={Hash} label="Tipo" value={cita.tipos_cita?.nombre || "—"} />
           <DetalleRow icon={User} label="Cliente / Asistente" value={nombreAsistente(cita)} />
           <DetalleRow icon={Building2} label="Desarrollo" value={cita.proyectos?.nombre || "—"} />
-          <DetalleRow icon={UserCircle} label="Agente" value={agente.value} muted={agente.noAplica} />
+          <DetalleRow icon={MapPin} label="Ubicación" value={ubicacion} />
+          <DetalleRow icon={UserCircle} label="Agente" value={agente} />
           <DetalleRow
             icon={CalendarDays}
             label="Creada"

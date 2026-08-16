@@ -286,7 +286,8 @@ const AppNotariaLogin       = lazyRetry(() => import("./pages/notaria/AppNotaria
 // Portal Alta Dirección
 const AltaDireccionDashboard = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionDashboard })));
 const AltaDireccionCitas = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionCitas })));
-const AltaDireccionProspectos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionProspectos })));
+const AltaDireccionContactos = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionContactosPage").then(m => ({ default: m.AltaDireccionContactos })));
+const AltaDireccionContactoDetalle = lazyRetry(() => import("./pages/admin/portal-alta-direccion/AltaDireccionContactoDetallePage").then(m => ({ default: m.AltaDireccionContactoDetalle })));
 const AltaDireccionPipeline = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionPipeline })));
 const AltaDireccionOffers = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionOffers })));
 const AltaDireccionCobranza = lazyRetry(() => import("./pages/admin/portal-alta-direccion/index").then(m => ({ default: m.AltaDireccionCobranza })));
@@ -1220,7 +1221,8 @@ const App = () => (
 
                   <Route path="portal-alta-direccion/dashboard" element={<AltaDireccionDashboard />} />
                   <Route path="portal-alta-direccion/citas" element={<AltaDireccionCitas />} />
-                  <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionProspectos />} />
+                  <Route path="portal-alta-direccion/prospectos" element={<AltaDireccionContactos />} />
+                  <Route path="portal-alta-direccion/prospectos/:contactId" element={<AltaDireccionContactoDetalle />} />
                   <Route path="portal-alta-direccion/pipeline" element={<AltaDireccionPipeline />} />
                   <Route path="portal-alta-direccion/offers" element={<AltaDireccionOffers />} />
                   <Route path="portal-alta-direccion/cobranza" element={<AltaDireccionCobranza />} />

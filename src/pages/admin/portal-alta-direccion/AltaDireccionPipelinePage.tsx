@@ -468,6 +468,7 @@ export default function AltaDireccionPipelinePage() {
           onOpenChange={(v) => { if (!v) setSelectedCard(null); }}
           card={selectedCard}
           stageInfo={STAGES.find((s) => s.key === selectedCard.stage) || STAGES[0]}
+          cicloVentaBasePath="/admin/portal-alta-direccion/ciclo-venta"
         />
       )}
     </div>
