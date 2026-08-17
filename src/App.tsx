@@ -252,6 +252,18 @@ const PTPrioridadesConfig = lazyRetry(() =>
 const PTEquipoConfig = lazyRetry(() =>
   import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.EquipoConfigPage })),
 );
+
+// Portal del Personal
+const PPersInicio = lazyRetry(() => import("./pages/admin/portal-personal/InicioPage"));
+const PPersInventario = lazyRetry(() => import("./pages/admin/portal-personal/InventarioPage"));
+const PPersInventarioDetalle = lazyRetry(() => import("./pages/admin/portal-personal/InventarioDetallePage"));
+const PPersSimulador = lazyRetry(() => import("./pages/admin/portal-personal/SimuladorPage"));
+const PPersReferidos = lazyRetry(() => import("./pages/admin/portal-personal/ReferidosPage"));
+const PPersNegocios = lazyRetry(() => import("./pages/admin/portal-personal/NegociosPage"));
+const PPersGanancias = lazyRetry(() => import("./pages/admin/portal-personal/GananciasPage"));
+const PPersKit = lazyRetry(() => import("./pages/admin/portal-personal/KitPage"));
+const PPersPerfil = lazyRetry(() => import("./pages/admin/portal-personal/PerfilPage"));
+const PPersReglas = lazyRetry(() => import("./pages/admin/portal-personal/ReglasPage"));
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
