@@ -15134,6 +15134,17 @@ export type Database = {
             }
             Returns: number
           }
+      buscar_prospecto_existente: {
+        Args: { p_auth_user_id?: string; p_email?: string; p_telefono?: string }
+        Returns: {
+          email: string
+          es_cliente: boolean
+          id_persona: number
+          leads: Json
+          nombre: string
+          telefono: string
+        }[]
+      }
       cambiar_etapa_asunto: {
         Args: {
           p_descripcion: string

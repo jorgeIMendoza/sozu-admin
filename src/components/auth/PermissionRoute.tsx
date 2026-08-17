@@ -166,6 +166,24 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
       : <Navigate to="/admin/access-denied" replace />;
   }
 
+  // Portal del Personal: Super Admin (1) y Administrador de Proyectos (2),
+  // o cualquier rol con permiso explícito en la BD.
+  if (location.pathname.startsWith('/admin/portal-personal')) {
+    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
+      return <>{children}</>;
+    }
+    let tieneAccesoPers = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/portal-personal')) {
+        tieneAccesoPers = true;
+        break;
+      }
+    }
+    return tieneAccesoPers
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   if (location.pathname.startsWith('/admin/portal-embajador')) {
     // El rol Cliente (23) entra al portal de Embajadores por rol, sin fila en
     // user_roles: todo cliente puede referir con su misma cuenta.

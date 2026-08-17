@@ -17,6 +17,12 @@ const ETIQUETA_CAMPO: Record<string, string> = {
  * Acciones del motor que dejan constancia en la bitácora.
  * La auditoría vive en el punto de llamada: el store no se reescribe.
  */
+/** Cómo se nombra cada campo de la base de un modelo en la bitácora. */
+const ETIQUETA_BASE: Record<"precio_base_m2" | "factor_modelo" | "m2_referencia", string> = {
+  precio_base_m2: "Precio por m² resultante",
+  factor_modelo: "Factor sobre el precio base del proyecto",
+  m2_referencia: "M² de referencia",
+};
 export function useMotorAuditado() {
   const store = useMotorStore();
 
@@ -61,9 +67,30 @@ export function useMotorAuditado() {
     });
   };
 
+  /**
+   * Precio por m² base del proyecto: el dato del que varía todo el desarrollo.
+   * Se audita aparte de las bases por modelo porque mueve el inventario
+   * completo de una sola vez.
+   */
+  const actualizarPrecioBaseProyecto = (valor: number) => {
+    const antes = motorActual();
+    if (antes.precio_base_m2_proyecto === valor) return;
+    store.actualizarPrecioBaseProyecto(valor);
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.parametro_actualizado",
+      entidad: {
+        tipo: "motor",
+        id: antes.id_motor,
+        etiqueta: "Precio por m² base del proyecto",
+      },
+      antes: { precio_base_m2_proyecto: antes.precio_base_m2_proyecto },
+      despues: { precio_base_m2_proyecto: valor },
+    });
+  };
   const actualizarBaseModelo = (
     idModelo: string,
-    campo: "precio_base_m2" | "m2_referencia",
+    campo: "precio_base_m2" | "factor_modelo" | "m2_referencia",
     valor: number,
   ) => {
     const antes = motorActual();
@@ -76,7 +103,7 @@ export function useMotorAuditado() {
       entidad: {
         tipo: "base_modelo",
         id: idModelo,
-        etiqueta: `${b.nombre_modelo} · ${campo === "precio_base_m2" ? "Precio base por m²" : "M² de referencia"}`,
+        etiqueta: `${b.nombre_modelo} · ${ETIQUETA_BASE[campo]}`,
       },
       antes: { [campo]: b[campo] },
       despues: { [campo]: valor },
@@ -167,6 +194,7 @@ export function useMotorAuditado() {
   };
 
   return {
+    actualizarPrecioBaseProyecto,
     actualizarParametro,
     actualizarConfigNivel,
     actualizarConfigTamano,

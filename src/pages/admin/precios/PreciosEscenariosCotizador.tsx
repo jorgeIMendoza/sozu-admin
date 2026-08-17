@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { estatusBloqueaReprecio } from "@/features/precios/engine/pricing";
 
 import { Download, FileCheck2, Lock, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -37,9 +38,8 @@ import {
 } from "@/features/precios/components/DialogoRegistrarOferta";
 import { formatoMoneda } from "@/features/precios/lib/formato";
 import { factor4, pct2, pctFirmado } from "@/features/precios/lib/formatoVpn";
-import { TORRES_POR_ID } from "@/features/precios/mocks/inventario";
+import { useIndicesActivos } from "@/features/precios/hooks/useInventarioActivo";
 
-const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
 
 /** Fecha del mes n contado desde hoy, formateada mmm aaaa. */
 function mesFecha(n: number): string {
@@ -70,6 +70,7 @@ function Cotizador() {
     tasaMes,
   } = useEsquemasVPN();
   const { propiedades, desgloses } = usePreciosProyecto();
+  const { torresPorId } = useIndicesActivos();
   const ofertas = useOfertasStore((s) => s.ofertas);
 
   const [idUnidad, setIdUnidad] = useState<string>("");
@@ -87,7 +88,7 @@ function Cotizador() {
     activos[0] ??
     null;
 
-  const torre = propiedad ? TORRES_POR_ID[propiedad.id_torre] : undefined;
+  const torre = propiedad ? torresPorId[propiedad.id_torre] : undefined;
   const horizonteTorre =
     horizontesPorTorre.find((h) => h.torre.id_torre === propiedad?.id_torre)?.meses ??
     horizonteMinimo;
@@ -149,7 +150,7 @@ function Cotizador() {
     };
   }, [propiedad, desglose, esquema, porTorre, esquemaBase, horizonteTorre, tasaMes]);
 
-  const bloqueada = propiedad ? ESTATUS_BLOQUEADOS.includes(propiedad.estatus) : false;
+  const bloqueada = propiedad ? estatusBloqueaReprecio(propiedad.estatus) : false;
   const ofertaVigenteUnidad = propiedad
     ? (ofertas.find(
         (o) =>

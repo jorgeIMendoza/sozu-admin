@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GraficoCurva } from "@/features/precios/components/GraficoCurva";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CampoPrecioM2 } from "@/features/precios/components/CampoPrecioM2";
 import { Slider } from "@/components/ui/slider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -96,6 +97,7 @@ function PantallaMotor() {
     actualizarParametro,
     actualizarConfigNivel,
     actualizarConfigTamano,
+    actualizarPrecioBaseProyecto,
     actualizarBaseModelo,
     declararCalibradoManualmente,
     restablecer,
@@ -190,15 +192,39 @@ function PantallaMotor() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl font-semibold">Unidad Ancla</CardTitle>
+          <CardTitle className="text-xl font-semibold">
+            Precio por m² base del proyecto
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-foreground">{motor.ancla.descripcion}</p>
-          <p className="text-xs text-muted-foreground">
-            Es la combinación de condiciones de menor valor del proyecto. Todos los factores
-            multiplicativos valen exactamente 1.0000 en esta combinación, y el precio base de
-            cada modelo es el precio por m² que tendría ese modelo aquí.
-          </p>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="precio-base-proyecto" className="text-sm">
+                Precio por m² base
+              </Label>
+              <CampoPrecioM2
+                id="precio-base-proyecto"
+                valor={motor.precio_base_m2_proyecto}
+                onChange={actualizarPrecioBaseProyecto}
+                className="w-60 text-lg"
+              />
+            </div>
+            <p className="pb-2 text-sm text-muted-foreground">
+              Todo el desarrollo parte de aquí. Al moverlo, el precio de cada modelo se
+              recalcula con su factor y el inventario completo se reprecia.
+            </p>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-xs font-medium text-foreground">
+              Aplica en: {motor.ancla.descripcion}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Es la combinación de condiciones de menor valor del proyecto, donde todos los
+              factores multiplicativos valen exactamente 1.0000. A partir de este precio, cada
+              unidad varía según su modelo, torre, nivel, vista, orientación, extras y tamaño.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -215,7 +241,10 @@ function PantallaMotor() {
                     Modelo
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio base por m² (ancla)
+                    Factor s/ base
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Precio por m² resultante
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     M² de referencia
@@ -234,16 +263,28 @@ function PantallaMotor() {
                     <td className="px-3 py-1.5">
                       <Input
                         type="number"
-                        step={100}
-                        value={b.precio_base_m2}
+                        step={0.001}
+                        value={b.factor_modelo}
                         onChange={(e) =>
                           actualizarBaseModelo(
                             b.id_modelo,
-                            "precio_base_m2",
+                            "factor_modelo",
                             Number(e.target.value),
                           )
                         }
-                        className="w-44 tabular-nums"
+                        className="w-28 tabular-nums"
+                      />
+                    </td>
+                    {/* Precio y factor son la misma cifra vista de dos formas:
+                        capturar cualquiera de los dos actualiza el otro. */}
+                    <td className="px-3 py-1.5">
+                      <CampoPrecioM2
+                        aria-label={`Precio por m² resultante de ${b.nombre_modelo}`}
+                        valor={b.precio_base_m2}
+                        onChange={(v) =>
+                          actualizarBaseModelo(b.id_modelo, "precio_base_m2", v)
+                        }
+                        className="w-52"
                       />
                     </td>
                     <td className="px-3 py-1.5">
@@ -270,9 +311,9 @@ function PantallaMotor() {
             </table>
           </div>
           <p className="text-xs text-muted-foreground">
-            El precio del modelo ya no se expresa como un multiplicador. Se captura
-            directamente el precio por m² de la unidad ancla de cada modelo, que es como SOZU
-            define precios en la realidad.
+            El modelo es una variable más sobre el precio base del proyecto: su factor dice
+            cuánto se separa de él. Puedes capturar el factor o el precio por m² resultante —
+            son la misma cifra vista de dos formas y el otro se recalcula solo.
           </p>
         </CardContent>
       </Card>
