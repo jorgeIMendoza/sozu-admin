@@ -74,7 +74,7 @@ export type HoldReleaseReason = "payment" | "expired" | "voluntary" | "manual";
 
 // ── Hold de tarjeta — apartado provisional (F.1) ──
 export interface HoldData {
-  /** Mock authorization ID. SWAP POINT: real Stripe/Conekta auth ID */
+  /** Mock authorization ID. SWAP POINT: id real de la pasarela cuando exista */
   holdAuthorizationId: string;
   cardLast4: string;
   cardBrand: "visa" | "mastercard" | "amex" | "unknown";

@@ -3,8 +3,9 @@ import type { HoldData } from "./formal-reservation-data";
 export const HOLD_AMOUNT_MXN = 10000;
 export const HOLD_DAYS = 5;
 
-// SWAP POINT: en producción integrar Stripe Payment Intents (manual capture)
-// o Conekta Orders con preauth. Este mock simula el comportamiento de un hold real.
+// SWAP POINT: mock. La pasarela de tarjeta no está aprobada todavía; este módulo
+// simula el comportamiento de un hold real (preautorización + captura diferida)
+// para que el flujo exista de punta a punta sin cobrar nada.
 
 export interface CardInput {
   cardNumber: string;
