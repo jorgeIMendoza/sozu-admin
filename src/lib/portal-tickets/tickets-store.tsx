@@ -130,6 +130,22 @@ export function enviarCorreoCierre(destinatarios: Destinatario[], info: CorreoTi
   );
 }
 
+// Correo "nueva nota" a propietarios + creador (menos el autor de la nota). Solo
+// correo por decisión de producto: las notas son frecuentes y saturarían el WhatsApp.
+export function enviarCorreoNota(destinatarios: Destinatario[], info: CorreoTicketInfo, nota: string) {
+  const asunto = `Ticket #${info.folio} — nueva nota: ${info.nombre}`;
+  const filaNota =
+    `<tr><td style="padding:6px 12px;color:#6b7280;white-space:nowrap;vertical-align:top;">Nota</td>` +
+    `<td style="padding:6px 12px;">${escHtml(nota)}</td></tr>`;
+  enviarCorreoTicket(
+    destinatarios,
+    asunto,
+    `Nueva nota en el ticket #${info.folio}: ${info.nombre}`,
+    detallesHtml(info, "Nota de") + filaNota,
+    textoWa(info, "Nueva nota", "Nota de"),
+  );
+}
+
 type NuevoTicket = {
   nombre: string;
   pipelineId: string;
@@ -479,6 +495,34 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
     [agentes, autor, pipelineNombre],
   );
 
+  // Al agregar una nota avisa SOLO por correo a propietarios + creador, MENOS el
+  // autor de la nota (uid). Solo correo: las notas son frecuentes → evita ruido en WhatsApp.
+  const notificarNota = useCallback(
+    (tk: Ticket, nota: string) => {
+      const ids = Array.from(
+        new Set([...(tk.propietarios ?? []), tk.creadoPorId].filter(Boolean) as string[]),
+      ).filter((id) => id !== uid);
+      const destinatarios = ids
+        .map((id) => agentes.find((a) => a.id === id))
+        .filter((a): a is Agente => !!a?.email)
+        .map((a) => ({ email: a.email, nombre: a.nombre })); // sin teléfono → solo correo
+      if (destinatarios.length === 0) return;
+      enviarCorreoNota(
+        destinatarios,
+        {
+          folio: tk.numero,
+          nombre: tk.nombre,
+          pipeline: pipelineNombre(tk.pipelineId),
+          proyecto: tk.inmueble,
+          descripcion: tk.descripcion,
+          por: autor,
+        },
+        nota,
+      );
+    },
+    [agentes, autor, uid, pipelineNombre],
+  );
+
   const crearTicket = useCallback(
     async (data: NuevoTicket) => {
       const sols = (data.solicitantes ?? []).filter(Boolean);
@@ -685,9 +729,11 @@ export function TicketsProvider({ children }: { children: ReactNode; autor?: str
         if (up) audio = { url: up.url, nombre: up.nombre, mime: up.mime };
       }
       await registrarActividad(id, texto || "Nota de voz", "nota", audio);
+      const tk = tickets.find((t) => t.id === id);
+      if (tk) notificarNota(tk, texto || "Nota de voz");
       invalidate("tickets-list");
     },
-    [registrarActividad, invalidate],
+    [registrarActividad, invalidate, tickets, notificarNota],
   );
 
   // ─── Catálogos (upsert por id vacío = insert / id existente = update) ─────────
