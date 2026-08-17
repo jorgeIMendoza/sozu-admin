@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Project, Role, RoleAssignment } from "@/lib/portal-estructura-comisiones/types/simulator";
+import { defaultRoles } from "@/lib/portal-estructura-comisiones/utils/seed-data";
 
 /**
  * Puente entre el Directorio real de personal ("Roles y Sueldos") y el simulador.
@@ -423,4 +425,20 @@ export function comisionistasDisponibles(
     });
   }
   return lista;
+}
+
+/**
+ * Comisionistas del Directorio indexados por `personalId`, para resolver el rol
+ * y el perfil VIGENTES de cada comisionista (Empleado SOZU / Colaborador
+ * Investimento). Útil fuera del `SimulatorProvider` (ej. la validación por
+ * proyecto), donde no hay acceso a los roles del simulador: aquí se derivan de
+ * la semilla, que es determinista y produce los mismos ids.
+ */
+export function useComisionistasPorId(idProyecto?: number | null) {
+  const { data: raw } = useEstructuraRealRaw();
+  return useMemo(() => {
+    const rolesSim = derivarRolesSimulador(raw, defaultRoles) ?? defaultRoles;
+    const lista = comisionistasDisponibles(raw, rolesSim, idProyecto ?? null);
+    return new Map<string, ComisionistaReal>(lista.map((c) => [c.personalId, c]));
+  }, [raw, idProyecto]);
 }

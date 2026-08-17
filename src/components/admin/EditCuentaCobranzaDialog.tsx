@@ -3,6 +3,7 @@ import { getTipoPersonaLabel } from '@/utils/tipo-persona';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { PropertyProgressTimeline } from './PropertyProgressTimeline';
+import EstructuraCanalVentaCuenta from './comisiones/EstructuraCanalVentaCuenta';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { usePagePermissions } from '@/hooks/usePagePermissions';
@@ -449,6 +450,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
             edificios!edificios_modelos_id_edificio_fkey(
               nombre,
               proyectos!edificios_id_proyecto_fkey(
+                id,
                 nombre,
                 direccion
               )
@@ -1108,6 +1110,21 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
     },
     enabled: !!propiedadDetalle?.id_entidad_relacionada_dueno
   });
+
+  /**
+   * Proyecto al que pertenece la propiedad vendida — el que decide qué canales
+   * de venta aplican en la sección de Estructura de Comisiones.
+   *
+   * Sale del mismo embed que ya alimenta el tab Propiedad
+   * (`propiedades → edificios_modelos → edificios → proyectos`); aquí solo se
+   * lee el `id` además del nombre. Una cuenta de producto sin propiedad
+   * asociada no tiene proyecto, y la sección lo dice en vez de quedar vacía.
+   */
+  const proyectoDeLaPropiedad = useMemo(() => {
+    const proyecto = (propiedadDetalle as any)?.edificios_modelos?.edificios?.proyectos;
+    if (!proyecto?.id) return { id: null as number | null, nombre: null as string | null };
+    return { id: Number(proyecto.id), nombre: (proyecto.nombre as string) ?? null };
+  }, [propiedadDetalle]);
 
   // Get notarios — only those enabled for SOZU operational assignments
   const { data: notariosBase } = useQuery({
@@ -5144,6 +5161,17 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                 </div>
               </CardContent>
             </Card>
+
+            {/* Estructura de Comisiones del Canal de Venta (Portal Estructura de
+                comisiones). Consulta de solo lectura: muestra cómo se reparte la
+                comisión de cada canal del proyecto y cuánto vale en esta venta. */}
+            <EstructuraCanalVentaCuenta
+              idProyecto={proyectoDeLaPropiedad.id}
+              nombreProyecto={proyectoDeLaPropiedad.nombre}
+              precioFinal={cuentaDetalle?.precio_final ?? null}
+              idCuentaCobranza={cuenta.id}
+              readOnly={isReadOnly}
+            />
           </TabsContent>
         </Tabs>
         </div>{/* end scrollable body */}
