@@ -1097,6 +1097,18 @@ const App = () => (
                   <Route path="portal-tickets/configuracion/categorias" element={<PTCategoriasConfig />} />
                   <Route path="portal-tickets/configuracion/prioridades" element={<PTPrioridadesConfig />} />
                   <Route path="portal-tickets/configuracion/equipo" element={<PTEquipoConfig />} />
+
+                  {/* Portal del Personal */}
+                  <Route path="portal-personal" element={<PPersInicio />} />
+                  <Route path="portal-personal/inventario" element={<PPersInventario />} />
+                  <Route path="portal-personal/inventario/:slug" element={<PPersInventarioDetalle />} />
+                  <Route path="portal-personal/simulador" element={<PPersSimulador />} />
+                  <Route path="portal-personal/referidos" element={<PPersReferidos />} />
+                  <Route path="portal-personal/negocios" element={<PPersNegocios />} />
+                  <Route path="portal-personal/ganancias" element={<PPersGanancias />} />
+                  <Route path="portal-personal/kit" element={<PPersKit />} />
+                  <Route path="portal-personal/perfil" element={<PPersPerfil />} />
+                  <Route path="portal-personal/reglas" element={<PPersReglas />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
