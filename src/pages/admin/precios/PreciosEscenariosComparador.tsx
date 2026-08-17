@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { estatusBloqueaReprecio } from "@/features/precios/engine/pricing";
 
 import { ChevronDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -39,7 +40,6 @@ import type { TipoEsquema } from "@/features/precios/types/dominio";
 
 type Orden = "captura" | "vpn" | "realizado";
 
-const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
 const TASAS = [0.08, 0.1, 0.12, 0.14, 0.16, 0.18, 0.2];
 
 function Comparador() {
@@ -169,7 +169,7 @@ function Comparador() {
   const disponibles = useMemo(() => {
     const bloqueadas = new Set(
       propiedades
-        .filter((p) => ESTATUS_BLOQUEADOS.includes(p.estatus))
+        .filter((p) => estatusBloqueaReprecio(p.estatus))
         .map((p) => p.id_propiedad),
     );
     return desgloses.filter((d) => !bloqueadas.has(d.id_propiedad));

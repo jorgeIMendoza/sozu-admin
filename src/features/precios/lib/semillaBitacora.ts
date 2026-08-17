@@ -4,7 +4,7 @@
  * ni reinicia la cadena existente: solo agrega eventos nuevos al final.
  */
 import { ACTOR_DEMO, registrarEvento } from "../services/auditoria";
-import { PROPIEDADES } from "../mocks/inventario";
+import { useInventarioStore } from "../stores/inventarioStore";
 import type { DatosEvento } from "../services/auditoria";
 
 function haceDias(dias: number, horas = 9): string {
@@ -16,7 +16,12 @@ function haceDias(dias: number, horas = 9): string {
 
 /** Genera y registra 25 eventos de demostración, distribuidos en los últimos 20 días. */
 export async function sembrarBitacoraDemo(idProyecto: string): Promise<void> {
-  const props = PROPIEDADES.filter((p) => p.activo && p.id_proyecto === idProyecto);
+  // Inventario real ya cargado del proyecto: la semilla de demo se apoya en
+  // unidades que existen, no en un catálogo aparte.
+  const props = useInventarioStore
+    .getState()
+    .inventarioDe(idProyecto)
+    .propiedades.filter((p) => p.activo);
   const u = (i: number) => props[i % props.length]!;
 
   // Distribución de días hacia atrás, ascendente en el tiempo (el evento 0 es el más antiguo).

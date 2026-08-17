@@ -21,22 +21,28 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { FactorPrecio, Propiedad, TipoFactor } from "../types/dominio";
-import { MODELOS_POR_ID, TORRES_POR_ID } from "../mocks/inventario";
+import { useIndicesActivos } from "../hooks/useInventarioActivo";
+import type { IndicesProyecto } from "../stores/inventarioStore";
 import { useMotorAuditado } from "../hooks/useMotorAuditado";
 import { usePreciosProyecto } from "../hooks/usePreciosProyecto";
 import { formatoMoneda } from "../lib/formato";
 
-function contarUnidades(tipo: TipoFactor, clave: string, props: Propiedad[]): number {
+function contarUnidades(
+  tipo: TipoFactor,
+  clave: string,
+  props: Propiedad[],
+  indices: IndicesProyecto,
+): number {
   return props.filter((p) => {
     switch (tipo) {
       case "torre":
-        return TORRES_POR_ID[p.id_torre]?.nombre === clave;
+        return indices.torresPorId[p.id_torre]?.nombre === clave;
       case "vista":
         return p.vista === clave;
       case "orientacion":
         return p.orientacion === clave;
       case "plano":
-        return MODELOS_POR_ID[p.id_modelo]?.nombre === clave;
+        return indices.modelosPorId[p.id_modelo]?.nombre === clave;
       case "extras":
         return p.caracteristicas_extra.includes(clave);
       default:
@@ -79,6 +85,7 @@ export function TablaFactores({
 }) {
   const { actualizarFactor, agregarFactor, cambiarActivo } = useMotorAuditado();
   const { desgloses } = usePreciosProyecto();
+  const indices = useIndicesActivos();
 
   const esExtra = tipo === "extras";
   const [abierto, setAbierto] = useState(false);
@@ -89,9 +96,9 @@ export function TablaFactores({
   const conteos = useMemo(
     () =>
       Object.fromEntries(
-        factores.map((f) => [f.id_factor, contarUnidades(tipo, f.clave, propiedades)]),
+        factores.map((f) => [f.id_factor, contarUnidades(tipo, f.clave, propiedades, indices)]),
       ),
-    [factores, tipo, propiedades],
+    [factores, tipo, propiedades, indices],
   );
 
   /**
@@ -117,7 +124,7 @@ export function TablaFactores({
           const sin = Math.max(d.f_extras - f.valor, 0.0001);
           total += d.componente_exento * (1 - sin / d.f_extras);
         } else {
-          if (contarUnidades(tipo, f.clave, [p]) === 0) continue;
+          if (contarUnidades(tipo, f.clave, [p], indices) === 0) continue;
           if (f.valor <= 0) continue;
           total += d.componente_exento * (1 - 1 / f.valor);
         }
@@ -125,7 +132,7 @@ export function TablaFactores({
       salida[f.id_factor] = total;
     }
     return salida;
-  }, [factores, propiedades, desgloses, tipo, esExtra]);
+  }, [factores, propiedades, desgloses, tipo, esExtra, indices]);
 
   const crear = () => {
     if (!clave.trim()) return;

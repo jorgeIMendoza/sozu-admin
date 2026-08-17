@@ -22,6 +22,24 @@ export default {
       },
       colors: {
         border: "hsl(var(--border))",
+        /* Paleta del Portal del Personal (tokens dedicados) */
+        verde: {
+          DEFAULT: "var(--pp-verde)",
+          oscuro: "var(--pp-verde-oscuro)",
+          profundo: "var(--pp-verde-profundo)",
+          claro: "var(--pp-verde-claro)",
+          borde: "var(--pp-verde-borde)",
+        },
+        gris: {
+          DEFAULT: "var(--pp-gris)",
+          suave: "var(--pp-gris-suave)",
+        },
+        negro: "var(--pp-negro)",
+        ambar: {
+          DEFAULT: "var(--pp-ambar)",
+          claro: "var(--pp-ambar-claro)",
+          borde: "var(--pp-ambar-borde)",
+        },
         "border-light": "hsl(var(--border-light, 220 14% 96%))",
         "border-soft": "hsl(var(--border-soft))",
         "border-subtle": "hsl(var(--border-subtle))",
