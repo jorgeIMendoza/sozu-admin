@@ -1239,3 +1239,39 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     background: hsl(var(--border));
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Portal del Personal — tokens y utilidades propias.
+   Se declaran como variables para no hardcodear color en los componentes.
+--------------------------------------------------------------------------- */
+:root {
+  --pp-negro: oklch(0 0 0);
+  --pp-verde: oklch(0.6814 0.1198 153.21);
+  --pp-verde-oscuro: oklch(0.596 0.1274 163.23);
+  --pp-verde-profundo: oklch(0.3864 0.0832 157.54);
+  --pp-verde-claro: oklch(0.958 0.0182 155.81);
+  --pp-verde-borde: oklch(0.8823 0.0596 155.81);
+  --pp-gris: oklch(0.4568 0 89.88);
+  --pp-gris-suave: oklch(0.551 0.0234 264.36);
+  --pp-ambar: oklch(0.6658 0.1574 58.32);
+  --pp-ambar-claro: oklch(0.9619 0.058 95.62);
+  --pp-ambar-borde: oklch(0.9243 0.1151 95.75);
+}
+
+@layer utilities {
+  .card-sozu {
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 3%);
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}

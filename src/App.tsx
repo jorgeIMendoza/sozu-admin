@@ -252,6 +252,18 @@ const PTPrioridadesConfig = lazyRetry(() =>
 const PTEquipoConfig = lazyRetry(() =>
   import("./pages/admin/portal-tickets/ConfiguracionPages").then((m) => ({ default: m.EquipoConfigPage })),
 );
+
+// Portal del Personal
+const PPersInicio = lazyRetry(() => import("./pages/admin/portal-personal/InicioPage"));
+const PPersInventario = lazyRetry(() => import("./pages/admin/portal-personal/InventarioPage"));
+const PPersInventarioDetalle = lazyRetry(() => import("./pages/admin/portal-personal/InventarioDetallePage"));
+const PPersSimulador = lazyRetry(() => import("./pages/admin/portal-personal/SimuladorPage"));
+const PPersReferidos = lazyRetry(() => import("./pages/admin/portal-personal/ReferidosPage"));
+const PPersNegocios = lazyRetry(() => import("./pages/admin/portal-personal/NegociosPage"));
+const PPersGanancias = lazyRetry(() => import("./pages/admin/portal-personal/GananciasPage"));
+const PPersKit = lazyRetry(() => import("./pages/admin/portal-personal/KitPage"));
+const PPersPerfil = lazyRetry(() => import("./pages/admin/portal-personal/PerfilPage"));
+const PPersReglas = lazyRetry(() => import("./pages/admin/portal-personal/ReglasPage"));
 const EscDashboard = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscDashboard })));
 const EscRelacionPagos = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscRelacionPagos })));
 const EscExpedientes = lazyRetry(() => import("./pages/admin/portal-escrituracion/index").then(m => ({ default: m.EscExpedientes })));
@@ -1085,6 +1097,18 @@ const App = () => (
                   <Route path="portal-tickets/configuracion/categorias" element={<PTCategoriasConfig />} />
                   <Route path="portal-tickets/configuracion/prioridades" element={<PTPrioridadesConfig />} />
                   <Route path="portal-tickets/configuracion/equipo" element={<PTEquipoConfig />} />
+
+                  {/* Portal del Personal */}
+                  <Route path="portal-personal" element={<PPersInicio />} />
+                  <Route path="portal-personal/inventario" element={<PPersInventario />} />
+                  <Route path="portal-personal/inventario/:slug" element={<PPersInventarioDetalle />} />
+                  <Route path="portal-personal/simulador" element={<PPersSimulador />} />
+                  <Route path="portal-personal/referidos" element={<PPersReferidos />} />
+                  <Route path="portal-personal/negocios" element={<PPersNegocios />} />
+                  <Route path="portal-personal/ganancias" element={<PPersGanancias />} />
+                  <Route path="portal-personal/kit" element={<PPersKit />} />
+                  <Route path="portal-personal/perfil" element={<PPersPerfil />} />
+                  <Route path="portal-personal/reglas" element={<PPersReglas />} />
                   <Route path="portal-escrituracion/dashboard" element={<EscDashboard />} />
                   <Route path="portal-escrituracion/relacion-pagos" element={<EscRelacionPagos />} />
                   <Route path="portal-escrituracion/expedientes" element={<EscExpedientes />} />
