@@ -39,7 +39,7 @@ import {
   guardarCanalConfigProyecto, type CanalConfigProyecto,
 } from '@/hooks/usePortalEstructuraComisiones/useMotorComisionesSync';
 import {
-  useComisionesPropuestas, useValidacionesCanal,
+  useComisionesPropuestas, useValidacionesCanal, fingerprintCanal,
 } from '@/hooks/usePortalEstructuraComisiones/useComisionesValidacion';
 
 const CATEGORIES = [
@@ -934,9 +934,11 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
   );
 
   /**
-   * La validación se compara contra `fecha_actualizacion` de la propuesta: es la
-   * versión sobre la que Alta Dirección decidió. Si la estructura se volvió a
-   * enviar después, la decisión anterior ya no ampara lo que está capturado.
+   * La validación es POR CANAL y por CONTENIDO: sigue vigente mientras la huella
+   * del canal no cambie, aunque la propuesta se haya reenviado por cambios en
+   * OTROS canales. Solo el o los canales modificados quedan `desactualizado` y
+   * hay que revalidarlos. Las filas viejas sin `canal_hash` caen al criterio
+   * anterior (por `fecha_actualizacion` de la propuesta).
    */
   const estadoDe = (idCanal: string): { estado: EstadoValidacionCanalUI; fecha: string | null; por: string | null; notas: string | null } => {
     if (!propuesta) return { estado: 'sin_propuesta', fecha: null, por: null, notas: null };
@@ -944,7 +946,9 @@ function CanalesDeProyectoPanel({ idProyecto, nombreProyecto, catalogo }: {
     if (!v) return { estado: 'pendiente', fecha: null, por: null, notas: null };
     const base = { fecha: v.fecha_validacion, por: v.validado_por, notas: v.notas };
     if (v.estado === 'rechazada') return { estado: 'rechazado', ...base };
-    const vigente = v.snapshot_fecha === propuesta.fecha_actualizacion;
+    const vigente = v.canal_hash != null
+      ? v.canal_hash === fingerprintCanal(propuesta.snapshot, idCanal)
+      : v.snapshot_fecha === propuesta.fecha_actualizacion;
     return { estado: vigente ? 'validado' : 'desactualizado', ...base };
   };
 

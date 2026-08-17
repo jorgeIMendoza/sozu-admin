@@ -147,8 +147,41 @@ function desglosarCostoPorProyecto(
     central: central.costo,
   };
 }
-const notifyError = (e: unknown) =>
-  toast.error(e instanceof Error ? e.message : 'No se pudo guardar el cambio');
+/**
+ * Traduce el error a algo que el usuario pueda accionar.
+ *
+ * `TypeError: Failed to fetch` es el mensaje crudo del navegador cuando la
+ * petición no llega a salir —red caída, sesión que no se pudo refrescar, o una
+ * extensión que la bloquea—. Mostrarlo tal cual no dice qué hacer, y peor:
+ * parece un error del formulario cuando el dato capturado está bien.
+ */
+const mensajeDeError = (e: unknown): { texto: string; descripcion?: string } => {
+  if (!(e instanceof Error)) return { texto: 'No se pudo guardar el cambio' };
+
+  const esDeRed = e.name === 'TypeError' && /fetch|network|load failed/i.test(e.message);
+  if (esDeRed) {
+    return {
+      texto: 'No se pudo contactar al servidor',
+      descripcion:
+        'El cambio no se guardó. Revisa tu conexión y vuelve a intentarlo; si persiste, ' +
+        'recarga la página para renovar la sesión.',
+    };
+  }
+
+  if (/jwt|token|expired|not authenticated/i.test(e.message)) {
+    return {
+      texto: 'Tu sesión expiró',
+      descripcion: 'Recarga la página para volver a iniciar sesión; el cambio no se guardó.',
+    };
+  }
+
+  return { texto: e.message };
+};
+
+const notifyError = (e: unknown) => {
+  const { texto, descripcion } = mensajeDeError(e);
+  toast.error(texto, descripcion ? { description: descripcion, duration: 8000 } : undefined);
+};
 
 export default function DirectorioPuestosTab() {
   const { data: schemaReady = true, isLoading: schemaLoading } = useDirectorioSchemaReady();
