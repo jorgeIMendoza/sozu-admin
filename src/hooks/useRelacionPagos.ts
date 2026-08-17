@@ -24,7 +24,6 @@ export interface PagoRecord {
   estatus_propiedad?: string | null;
   producto: string | null;
   tipo_cuenta: 'propiedad' | 'producto' | 'mantenimiento' | 'Propiedad' | 'Producto' | 'Mantenimiento' | null;
-  aplicaciones_detalle?: any[];
   tipo_categoria?: 'Propiedad' | 'Bodega' | 'Estacionamiento' | 'Producto' | 'Mantenimiento' | 'Adicional' | null;
   // Agrupación de validación (valido/invalido/error/sin_revisar).
   estatus?: 'valido' | 'invalido' | 'error' | 'sin_revisar';

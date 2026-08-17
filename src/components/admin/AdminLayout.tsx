@@ -23,6 +23,7 @@ import { PortalEstructuraComisionesLayout } from "./portal-estructura-comisiones
 import { PortalProductosLayout } from "./portal-productos/PortalProductosLayout";
 import { PortalSocioBancarioLayout } from "./portal-socio-bancario/PortalSocioBancarioLayout";
 import { PortalTicketsLayout } from "./portal-tickets/PortalTicketsLayout";
+import { PortalPersonalLayout } from "./portal-personal/PortalPersonalLayout";
 
 const SIMPLIFIED_ROLES = ["Agente Inmobiliario"];
 
@@ -114,6 +115,10 @@ export const AdminLayout = () => {
 
   if (location.pathname.startsWith("/admin/portal-tickets")) {
     return <PortalTicketsLayout />;
+  }
+
+  if (location.pathname.startsWith("/admin/portal-personal")) {
+    return <PortalPersonalLayout />;
   }
 
   // Este render solo se alcanza en el panel admin (todos los portales retornan
