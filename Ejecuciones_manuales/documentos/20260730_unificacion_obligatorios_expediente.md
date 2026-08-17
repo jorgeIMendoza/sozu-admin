@@ -193,3 +193,36 @@ ORDER BY p.nombre_legal;
   9 para PM.
 - Un mismo expediente da el mismo resultado en todos los portales que exijan el mismo
   subconjunto; donde difiera, es porque el `portales` del grupo lo dice, no por accidente.
+
+---
+
+## Sincronización con el Portal del Cliente nuevo — 2026-08-17
+
+El Portal del Cliente de producción ya no es el de `sozu-admin`: vive en el repo hermano
+`sozu-cliente-app` (Flutter). Su edge function `cliente-expediente` se adelantó a la lista
+canónica y el back office contaba distinto que el cliente. Ya sincronizado en código
+(`src/utils/expediente-obligatorios.ts` y sus cinco consumidores):
+
+| Cambio | Detalle |
+|---|---|
+| Acta de matrimonio (tipo 11) | Grupo **condicional**: obligatorio solo si `personas.id_estado_civil ∈ (2,3)`, mismo criterio que `ESTADOS_CIVIL_CASADO` de la edge function. También se le exige al cónyuge ligado por `id_conyuge`, que por definición está casado |
+| Los seis del representante legal | Se le suman **acta de nacimiento** (`acta_rep`) y su acta de matrimonio condicional: la edge function reusa una sola lista de persona física para titular, representante y accionista |
+| Beneficiario controlador (tipo 64) | Grupo **informativo**: se muestra y se puede subir desde el admin, pero no cuenta para el avance. La edge function lo excluye del portal a propósito porque lo sube el área legal |
+| Representante legal | Se resuelve por la **unión** de `personas_relacionadas` (`tipos_relacion.clave = 'REPRESENTANTE_LEGAL'`) y el legacy `personas.id_entidad_relacionada_rep_leg`, con el primero mandando. Igual que `ligadasDe()` en la edge function |
+| Anexos (tipo 69, "Otros documentos") | Documentado como slot múltiple: **no** entra a `TIPOS_PERSONALES_SIMPLES`, o subir un anexo expiraría a los anteriores |
+
+Impacto medido en producción el 2026-08-17: 331 compradores casados, de los cuales **102 no
+tienen acta de matrimonio validada**; 125 compradores con cónyuge ligado; 16 representantes
+legales de PM compradoras, de los cuales **10 no tienen acta de nacimiento validada**. Esos
+expedientes bajan un punto hasta que se suban los documentos.
+
+`personas_relacionadas` existe en prod pero está **vacía** (0 filas), así que la unión hoy no
+cambia ningún resultado. Se hizo ahora porque el día que el cliente registre a su
+representante desde el portal, el admin lo vería como "sin representante ligado": 1,087 de
+las 1,156 personas morales de producción no tienen la columna legacy.
+
+### Pendiente de este mismo frente
+
+`useUnidadesListasEscriturar` y `AppJuridicoDashboard` siguen sin importar la fuente única
+(ver el inventario de arriba). Mientras no lo hagan, pueden discrepar con los otros cinco
+portales sobre si un expediente está completo.
