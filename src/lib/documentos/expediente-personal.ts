@@ -18,13 +18,12 @@ import { ID_DOC_TIPO_IDS, OTROS_DOCUMENTOS_TIPO_ID, REFORMAS_TIPO_ID } from '@/u
 
 /**
  * Documentos con una vigente por tipo: acta de nacimiento (1), CURP (5), CSF (6),
- * domicilio (8) y acta de matrimonio (11).
+ * domicilio (8), acta de matrimonio (11) y reformas al acta constitutiva (57).
  *
- * "Otros documentos" (69) queda FUERA a propósito: es el único slot múltiple del
- * portal del cliente — varios anexos conviven y subir uno nuevo no expira a los
- * demás. Meterlo aquí borraría el anexo anterior en cada carga.
+ * "Otros documentos" (69) queda FUERA a propósito: es el ÚNICO slot múltiple del
+ * portal del cliente. Meterlo aquí borraría el anexo anterior en cada carga.
  */
-export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
+export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11, REFORMAS_TIPO_ID] as const;
 
 /**
  * Grupo identidad: una vigente por GRUPO, no por tipo. Son formatos alternativos
@@ -37,14 +36,18 @@ export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
 export const TIPOS_IDENTIDAD: readonly number[] = ID_DOC_TIPO_IDS;
 
 /**
- * Tipos MÚLTIPLES: varios documentos del mismo tipo conviven y ninguno reemplaza
- * al anterior. Hoy son los anexos de persona moral — "Otros documentos" (69) y su
- * antecesor "Reformas…" (57), que se usó mientras el 69 no existía.
+ * Tipos MÚLTIPLES: varios documentos conviven y ninguno reemplaza al anterior.
  *
- * No basta con dejarlos fuera de la regla de vigencia única: cualquier pantalla
- * que colapse "un documento por tipo" los esconde y parece que se borraron.
+ * Es exactamente UNO: "Otros documentos" (69). Para eso se creó — cada anexo lleva
+ * su `descripcion`, que es lo que los distingue; reemplazar uno concreto es una
+ * acción aparte, no un efecto de subir el siguiente. Todo lo demás sigue la regla
+ * de una sola versión vigente, incluidas las reformas al acta constitutiva (57),
+ * que solo hicieron de anexo mientras el tipo 69 no existía.
+ *
+ * No basta con dejarlo fuera de la regla de vigencia única: cualquier pantalla que
+ * colapse "un documento por tipo" lo esconde y parece que se borró.
  */
-export const TIPOS_MULTIPLES: readonly number[] = [OTROS_DOCUMENTOS_TIPO_ID, REFORMAS_TIPO_ID];
+export const TIPOS_MULTIPLES: readonly number[] = [OTROS_DOCUMENTOS_TIPO_ID];
 
 /** ¿De este tipo pueden convivir varios documentos vigentes? */
 export function esTipoMultiple(tipoId: number): boolean {
