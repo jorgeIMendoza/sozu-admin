@@ -79,6 +79,24 @@ const formSchema = z.object({
   youtube_handle: z.string().optional(),
 });
 
+/**
+ * Normaliza un valor de fecha de BD al formato que exige `<Input type="date">`
+ * ("YYYY-MM-DD").
+ *
+ * `proyectos.fecha_lanzamiento` y `proyectos.fecha_entrega` son `timestamp` en BD
+ * (a diferencia de `fecha_inicio_construccion`, que es `date`), así que PostgREST
+ * devuelve "2026-07-31T06:00:00". El input descartaba ese valor y pintaba el campo
+ * vacío aunque la fecha existiera en BD.
+ *
+ * Se recorta la parte de fecha con regex en vez de construir un `Date`: parsear y
+ * reformatear correría el día una jornada según la zona horaria del navegador.
+ */
+const toDateInputValue = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : "";
+};
+
 interface EditProjectDialogProps {
   projectId: number;
   onProjectUpdated: () => void;
@@ -516,9 +534,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         id_tipo_uso: project.id_tipo_uso?.toString() || "",
         id_estatus_proyecto: project.id_estatus_proyecto?.toString() || "",
         precio_m2_actual: (project as any).precio_m2_actual?.toString() || "",
-        fecha_lanzamiento: project.fecha_lanzamiento || "",
-        fecha_inicio_construccion: project.fecha_inicio_construccion || "",
-        fecha_entrega: project.fecha_entrega || "",
+        fecha_lanzamiento: toDateInputValue(project.fecha_lanzamiento),
+        fecha_inicio_construccion: toDateInputValue(project.fecha_inicio_construccion),
+        fecha_entrega: toDateInputValue(project.fecha_entrega),
         direccion_id_pais: project.direccion_id_pais || "",
         direccion_id_estado: project.direccion_id_estado?.toString() || "",
         direccion_id_municipio: project.direccion_id_municipio?.toString() || "",
