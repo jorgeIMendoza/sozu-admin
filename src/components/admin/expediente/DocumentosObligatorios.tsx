@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { usePagePermissions } from '@/hooks/usePagePermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Loader2, FileText, Eye, ChevronDown, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PersonasLigadasCard } from './PersonasLigadasCard';
 import {
   gruposObligatorios,
   grupoAplica,
@@ -89,6 +92,7 @@ export function DocumentosObligatorios({
   personaIds,
   portal = 'escrituracion',
   titulo = 'Documentos obligatorios del expediente',
+  gestionarPersonasLigadas = true,
   className,
 }: {
   /** Cuenta de cobranza: el componente resuelve sus compradores activos. */
@@ -97,9 +101,20 @@ export function DocumentosObligatorios({
   personaIds?: number[];
   portal?: PortalExpediente;
   titulo?: string;
+  /**
+   * Permite ligar representante legal y accionistas de una persona moral. Aun en
+   * true, la tarjeta solo aparece si el rol tiene permiso de crear o actualizar en
+   * la vista donde se monta: la policy de `personas_relacionadas` deja escribir a
+   * cualquier rol marcado como interno —agentes e inmobiliarias incluidos—, así que
+   * el gate real es este. Se apaga donde el expediente es de solo consulta.
+   */
+  gestionarPersonasLigadas?: boolean;
   className?: string;
 }) {
   const [historicoAbierto, setHistoricoAbierto] = useState<Record<string, boolean>>({});
+  const { pathname } = useLocation();
+  const { canCreate, canUpdate } = usePagePermissions(pathname);
+  const puedeLigarPersonas = gestionarPersonasLigadas && (canCreate || canUpdate);
 
   const idsKey = [...(personaIds ?? [])].sort((a, b) => a - b).join(',');
   const habilitado = !!cuentaId || (personaIds?.length ?? 0) > 0;
@@ -210,6 +225,7 @@ export function DocumentosObligatorios({
                 <p className="text-[11px] text-amber-700">
                   Esta empresa no tiene representante legal ligado, así que sus documentos
                   (poder notarial, identificación, CURP, CSF y domicilio) no se pueden validar.
+                  Se puede ligar abajo.
                 </p>
               </div>
             )}
@@ -284,6 +300,15 @@ export function DocumentosObligatorios({
                 );
               })}
             </div>
+
+            {/* Solo una persona moral tiene representante y accionistas colgando. */}
+            {puedeLigarPersonas && persona.tipoPersona === 'pm' && (
+              <PersonasLigadasCard
+                personaId={persona.personaId}
+                nombreEmpresa={persona.nombre}
+                className="m-3 rounded-lg"
+              />
+            )}
           </div>
         );
       })}
