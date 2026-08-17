@@ -6,7 +6,8 @@ import {
   buildLatestPorPersonaTipo,
   evaluarCuenta,
   fetchDocsObligatorios,
-  personasDelExpediente,
+  personasDeCompradores,
+  fetchPersonasExpediente,
   type EvaluacionExpediente,
 } from '@/utils/expediente-obligatorios';
 import { useState, useMemo, useEffect } from 'react';
@@ -789,7 +790,16 @@ export function ExpedientesDashboard() {
       const conyugePersonaIds = allPersonaIds
         .map(pid => personaMap[pid]?.id_conyuge)
         .filter((v): v is number => v != null);
-      const personaIdsParaDocs = [...new Set([...allPersonaIds, ...repPersonaIds, ...conyugePersonaIds])];
+      let personaIdsParaDocs = [...new Set([...allPersonaIds, ...repPersonaIds, ...conyugePersonaIds])];
+
+      // Fuente única: compradores + rep legal (los dos caminos) + cónyuge + la rama
+      // de accionistas. La resolución a mano de arriba deja fuera a los accionistas.
+      const personasExpediente = await fetchPersonasExpediente({ personaIds: allPersonaIds }, supabase);
+      personaIdsParaDocs = [...new Set([
+        ...personaIdsParaDocs,
+        ...personasExpediente.map(p => p.personaId),
+        ...personasExpediente.map(p => p.repPersonaId).filter((v): v is number => v != null),
+      ])];
 
       const rawDocs = await fetchDocsObligatorios(personaIdsParaDocs, supabase);
       const latestPorPersonaTipo = buildLatestPorPersonaTipo(rawDocs);
@@ -812,7 +822,11 @@ export function ExpedientesDashboard() {
               : null,
           };
         });
-        docsByCuenta[cuentaId] = evaluarCuenta(personasDelExpediente(compradores), latestPorPersonaTipo, 'escrituracion');
+        docsByCuenta[cuentaId] = evaluarCuenta(
+          personasDeCompradores(personasExpediente, compradores.map(c => c.personaId)),
+          latestPorPersonaTipo,
+          'escrituracion',
+        );
       });
 
       // Paso 5: Construir filas

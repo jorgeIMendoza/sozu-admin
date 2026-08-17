@@ -5,7 +5,7 @@ import {
   evaluarCuenta,
   fetchDocsObligatorios,
   fetchPersonasExpediente,
-  type PersonaExpedienteResuelta,
+  personasDeCompradores,
 } from '@/utils/expediente-obligatorios';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -303,9 +303,7 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
       // Las personas del expediente son los compradores MÁS su representante legal
       // (persona moral) y su cónyuge: sus documentos viven bajo su propia persona.
       const personasExpediente = await fetchPersonasExpediente({ personaIds }, supabase as never);
-      const personaExpedienteById = new Map<number, PersonaExpedienteResuelta>(
-        personasExpediente.map(p => [p.personaId, p]),
-      );
+
       const idsParaDocs = [...new Set([
         ...personasExpediente.map(p => p.personaId),
         ...personasExpediente.map(p => p.repPersonaId).filter((v): v is number => v != null),
@@ -394,10 +392,9 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
 
         const compradores = comprsByPropId[prop.id] ?? [];
         // Conservador en copropiedad: vale lo que el comprador peor documentado.
+        // Entran también sus cónyuges y su rama de accionistas.
         const evaluacion = evaluarCuenta(
-          compradores
-            .map(c => personaExpedienteById.get(c.id_persona))
-            .filter((p): p is PersonaExpedienteResuelta => !!p),
+          personasDeCompradores(personasExpediente, compradores.map(c => c.id_persona)),
           latestDocByKey,
           'escrituracion',
         );

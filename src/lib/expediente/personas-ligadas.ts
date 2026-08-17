@@ -21,18 +21,21 @@
  * normal es que el representante ya esté capturado.
  */
 
-import { REL_CLAVE_REP_LEGAL } from '@/utils/expediente-obligatorios';
+import {
+  REL_CLAVE_ACCIONISTA,
+  REL_CLAVE_REP_LEGAL,
+  UMBRAL_ACCIONISTA,
+} from '@/utils/expediente-obligatorios';
+
+export { UMBRAL_ACCIONISTA };
 
 export type RolLigado = 'representante' | 'accionista';
 
 /** `tipos_relacion.clave` de cada rol. */
 export const CLAVE_DE_ROL: Record<RolLigado, string> = {
   representante: REL_CLAVE_REP_LEGAL,
-  accionista: 'ACCIONISTA',
+  accionista: REL_CLAVE_ACCIONISTA,
 };
-
-/** Porcentaje a partir del cual un accionista necesita expediente propio. */
-export const UMBRAL_ACCIONISTA = 25;
 
 const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** Los teléfonos que se capturan son de México: 10 dígitos, sin lada de país. */

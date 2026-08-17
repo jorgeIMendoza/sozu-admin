@@ -42,6 +42,24 @@ export const ESTADOS_CIVIL_CASADO = [2, 3];
 
 /** `tipos_relacion.clave` del representante legal en `personas_relacionadas`. */
 export const REL_CLAVE_REP_LEGAL = 'REPRESENTANTE_LEGAL';
+/** `tipos_relacion.clave` del accionista. */
+export const REL_CLAVE_ACCIONISTA = 'ACCIONISTA';
+
+/**
+ * Porcentaje a partir del cual un accionista necesita expediente propio. Mismo
+ * valor que `UMBRAL_ACCIONISTA` de la edge function `cliente-expediente`: por
+ * debajo, la ley no lo exige y pedirlo sería trabajo inútil para el cliente.
+ */
+export const UMBRAL_ACCIONISTA = 25;
+
+/**
+ * Hasta dónde se baja por el árbol de personas ligadas. Una empresa accionista no
+ * es una hoja: tiene su representante y sus propios accionistas, y la rama solo
+ * termina en personas físicas. Mismo valor que `PROFUNDIDAD_MAX` de la edge
+ * function. La base tiene un trigger que rechaza los ciclos; esto es la segunda
+ * red, para que un dato raro no cuelgue la pantalla recorriendo para siempre.
+ */
+export const PROFUNDIDAD_MAX_ARBOL = 5;
 
 export type TipoPersona = 'pf' | 'pm';
 /** De quién es el documento: de la persona del expediente o de su representante legal. */
@@ -374,6 +392,38 @@ export function evaluarPersona(
 }
 
 /**
+ * De la lista completa del expediente, las personas que cuelgan de esos compradores:
+ * ellos mismos, sus cónyuges y toda la rama de accionistas, a cualquier profundidad.
+ *
+ * `fetchPersonasExpediente` devuelve una lista plana de varias cuentas a la vez; esto
+ * la recorta a una. Sin esto, el avance de una cuenta ignoraría a los accionistas y
+ * diría que está completa cuando su portal dice que no.
+ */
+export function personasDeCompradores(
+  personas: PersonaExpedienteResuelta[],
+  compradorIds: number[],
+): PersonaExpedienteResuelta[] {
+  const raices = new Set(compradorIds);
+  const porId = new Map(personas.map(p => [p.personaId, p]));
+  const cuelgaDe = (p: PersonaExpedienteResuelta): number | null =>
+    p.esConyugeDe ?? p.esAccionistaDe ?? null;
+
+  return personas.filter(p => {
+    let actual: PersonaExpedienteResuelta | undefined = p;
+    // Sube por la cadena hasta una raíz; el tope es la profundidad del árbol más
+    // el cónyuge, y `vistos` corta cualquier ciclo que se colara en los datos.
+    const vistos = new Set<number>();
+    while (actual && !vistos.has(actual.personaId)) {
+      if (raices.has(actual.personaId)) return true;
+      vistos.add(actual.personaId);
+      const padre = cuelgaDe(actual);
+      actual = padre != null ? porId.get(padre) : undefined;
+    }
+    return false;
+  });
+}
+
+/**
  * Evalúa una cuenta completa. Conservador en copropiedad: el expediente vale lo que el
  * comprador peor documentado (no se puede escriturar a medias).
  */
@@ -461,6 +511,41 @@ export async function fetchRepLegalRegistrado(
   return out;
 }
 
+/**
+ * Accionistas ligados en `personas_relacionadas`, **todos los activos**.
+ *
+ * El {@link UMBRAL_ACCIONISTA} NO se aplica aquí: en la edge function es una regla
+ * del ALTA (no se registra a quien tiene 25% o menos), no de la lectura. Quien ya
+ * está ligado tiene expediente aunque su porcentaje sea menor —y quitárselo aquí
+ * haría que el admin le pidiera menos documentos que su propio portal—.
+ */
+export async function fetchAccionistas(
+  personaIds: number[],
+  cliente: { from: (t: string) => any },
+): Promise<Record<number, Array<{ personaId: number; porcentaje: number | null }>>> {
+  const out: Record<number, Array<{ personaId: number; porcentaje: number | null }>> = {};
+  const ids = [...new Set(personaIds)];
+  if (!ids.length) return out;
+  const CHUNK = 100;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data, error } = await cliente
+      .from('personas_relacionadas')
+      .select('id_persona, id_persona_relacion, porcentaje, tipos_relacion!inner(clave)')
+      .in('id_persona', ids.slice(i, i + CHUNK))
+      .eq('activo', true)
+      .eq('tipos_relacion.clave', REL_CLAVE_ACCIONISTA);
+    // La tabla puede no existir todavía en un ambiente: sin accionistas, el
+    // expediente queda como antes en vez de romperse.
+    if (error) return out;
+    for (const r of (data ?? []) as Array<{ id_persona: number; id_persona_relacion: number | null; porcentaje: number | null }>) {
+      if (!r.id_persona_relacion) continue;
+      const pct = r.porcentaje == null ? null : Number(r.porcentaje);
+      (out[r.id_persona] ??= []).push({ personaId: r.id_persona_relacion, porcentaje: pct });
+    }
+  }
+  return out;
+}
+
 /** `personas.id_estado_civil` de las personas dadas: decide el acta de matrimonio. */
 export async function fetchEstadoCivil(
   personaIds: number[],
@@ -533,6 +618,10 @@ export interface PersonaExpedienteResuelta {
   idEstadoCivil: number | null;
   /** Idem del representante legal. */
   repIdEstadoCivil: number | null;
+  /** Presente cuando la persona entra como accionista mayoritario de esa empresa. */
+  esAccionistaDe?: number;
+  /** Su porcentaje de acciones (solo cuando `esAccionistaDe` está presente). */
+  porcentajeAcciones?: number | null;
 }
 
 /**
@@ -637,7 +726,7 @@ export async function fetchPersonasExpediente(
   }
 
   const nombrePorId = new Map(base.map(b => [b.personaId, b.nombre]));
-  return expandidas.map(p => ({
+  const salida: PersonaExpedienteResuelta[] = expandidas.map(p => ({
     personaId: p.personaId,
     nombre: p.nombre ?? nombreConyuge[p.personaId] ?? nombrePorId.get(p.personaId) ?? `Persona ${p.personaId}`,
     tipoPersona: p.tipoPersona,
@@ -647,4 +736,82 @@ export async function fetchPersonasExpediente(
     idEstadoCivil: p.idEstadoCivil ?? null,
     repIdEstadoCivil: p.repIdEstadoCivil ?? null,
   }));
+
+  // ── Accionistas mayoritarios ────────────────────────────────────────────────
+  // Cada uno es una entidad más del expediente, igual que el cónyuge: se le pide su
+  // propio juego de documentos según sea persona física o moral. Una empresa
+  // accionista no es una hoja —tiene su representante y sus propios accionistas—,
+  // así que se baja por el árbol hasta PROFUNDIDAD_MAX_ARBOL.
+  const vistos = new Set(salida.map(p => p.personaId));
+  let frontera = salida.filter(p => p.tipoPersona === 'pm').map(p => p.personaId);
+
+  for (let nivel = 0; nivel < PROFUNDIDAD_MAX_ARBOL && frontera.length; nivel++) {
+    const porEmpresa = await fetchAccionistas(frontera, cliente);
+    const nuevos: Array<{ empresaId: number; personaId: number; porcentaje: number | null }> = [];
+    for (const [empresaId, lista] of Object.entries(porEmpresa)) {
+      for (const a of lista) {
+        if (vistos.has(a.personaId)) continue;
+        vistos.add(a.personaId);
+        nuevos.push({ empresaId: Number(empresaId), personaId: a.personaId, porcentaje: a.porcentaje });
+      }
+    }
+    if (!nuevos.length) break;
+
+    const nuevosIds = nuevos.map(n => n.personaId);
+    const { data: filas } = await cliente
+      .from('personas')
+      .select('id, nombre_legal, nombre_comercial, tipo_persona, id_entidad_relacionada_rep_leg, id_estado_civil')
+      .in('id', nuevosIds);
+    const filaPorId = new Map(((filas ?? []) as PersonaRow[]).map(r => [r.id, r]));
+
+    // Su representante legal, por los mismos dos caminos que el titular.
+    const repRegistradoNuevos = await fetchRepLegalRegistrado(nuevosIds, cliente);
+    const entidadesNuevas = [...new Set(
+      nuevosIds
+        .filter(id => !repRegistradoNuevos[id])
+        .map(id => filaPorId.get(id)?.id_entidad_relacionada_rep_leg)
+        .filter((v): v is number => v != null),
+    )];
+    const repPorEntidadNuevas: Record<number, number> = {};
+    if (entidadesNuevas.length) {
+      const { data: ers } = await cliente
+        .from('entidades_relacionadas').select('id, id_persona').in('id', entidadesNuevas);
+      for (const r of (ers ?? []) as Array<{ id: number; id_persona: number | null }>) {
+        if (r.id_persona) repPorEntidadNuevas[r.id] = r.id_persona;
+      }
+    }
+    const repDeNuevo = (id: number): number | null => {
+      const fila = filaPorId.get(id);
+      return repRegistradoNuevos[id]
+        ?? (fila?.id_entidad_relacionada_rep_leg != null ? repPorEntidadNuevas[fila.id_entidad_relacionada_rep_leg] ?? null : null);
+    };
+    const estadoCivilRepNuevos = await fetchEstadoCivil(
+      nuevosIds.map(repDeNuevo).filter((v): v is number => v != null),
+      cliente,
+    );
+
+    const nombreDeEmpresa = (id: number) => salida.find(p => p.personaId === id)?.nombre;
+    for (const n of nuevos) {
+      const fila = filaPorId.get(n.personaId);
+      const repPersonaId = repDeNuevo(n.personaId);
+      salida.push({
+        personaId: n.personaId,
+        nombre: fila ? nombreDe(fila) : `Persona ${n.personaId}`,
+        tipoPersona: normalizarTipoPersona(fila?.tipo_persona),
+        repPersonaId,
+        idEstadoCivil: fila?.id_estado_civil ?? null,
+        repIdEstadoCivil: repPersonaId == null ? null : estadoCivilRepNuevos[repPersonaId] ?? null,
+        esAccionistaDe: n.empresaId,
+        porcentajeAcciones: n.porcentaje,
+        nombreTitular: nombreDeEmpresa(n.empresaId),
+      });
+    }
+
+    // Siguiente nivel: solo las empresas recién agregadas tienen accionistas.
+    frontera = nuevos
+      .filter(n => normalizarTipoPersona(filaPorId.get(n.personaId)?.tipo_persona) === 'pm')
+      .map(n => n.personaId);
+  }
+
+  return salida;
 }

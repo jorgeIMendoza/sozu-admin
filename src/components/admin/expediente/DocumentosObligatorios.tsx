@@ -203,9 +203,16 @@ export function DocumentosObligatorios({
           latest,
         );
         const completo = evaluacion.total > 0 && evaluacion.completos >= evaluacion.total;
+        const tipoLabel = persona.tipoPersona === 'pm' ? 'Persona moral' : 'Persona física';
         const subtitulo = persona.esConyugeDe
           ? `Cónyuge de ${persona.nombreTitular ?? 'comprador'}`
-          : persona.tipoPersona === 'pm' ? 'Persona moral' : 'Persona física';
+          : persona.esAccionistaDe
+            // Accionista: se le pide su propio juego de documentos, y si es empresa
+            // el árbol sigue bajando hasta dar con personas físicas.
+            ? `Accionista de ${persona.nombreTitular ?? 'la empresa'}`
+              + (persona.porcentajeAcciones != null ? ` · ${persona.porcentajeAcciones}%` : '')
+              + ` · ${tipoLabel}`
+            : tipoLabel;
 
         return (
           <div key={persona.personaId} className="rounded-xl border overflow-hidden">

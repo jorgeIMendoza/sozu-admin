@@ -22,10 +22,9 @@ import {
   ALL_TIPO_IDS_OBLIGATORIOS,
   buildLatestPorPersonaTipo,
   evaluarCuenta,
-  fetchRepLegalRegistrado,
-  fetchEstadoCivil,
+  fetchPersonasExpediente,
+  personasDeCompradores,
   normalizarTipoPersona,
-  personasDelExpediente,
 } from '@/utils/expediente-obligatorios';
 
 /**
@@ -1428,37 +1427,18 @@ async function fetchExpedientes(idProyecto: number): Promise<ExpedienteRow[]> {
   const repPersonaPorEntidad = new Map<number, number>(repRows.filter((r: any) => r.id_persona).map((r: any) => [r.id, r.id_persona]));
   const conyugeIds = [...new Set(buyerDetailRows.map((r: any) => r.id_conyuge).filter(Boolean))] as number[];
 
-  // El representante puede venir por `personas_relacionadas` (lo registra el cliente
-  // desde el portal) o por la columna legacy. Mismo orden que la edge function.
-  const repRegistrado = await fetchRepLegalRegistrado(buyerPersonIds, supabase as never);
-  const repDe = (r: any): number | null =>
-    repRegistrado[r.id]
-    ?? (r.id_entidad_relacionada_rep_leg ? repPersonaPorEntidad.get(r.id_entidad_relacionada_rep_leg) ?? null : null);
-  const estadoCivilRep = await fetchEstadoCivil(
-    buyerDetailRows.map(repDe).filter((v: number | null): v is number => v != null),
-    supabase as never,
-  );
-
-  // Miembros del expediente por comprador (comprador + rep + cónyuge).
-  const expedienteInfoById = new Map<number, { personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null; idEstadoCivil: number | null; repIdEstadoCivil: number | null }>(
-    buyerDetailRows.map((r: any) => {
-      const repPersonaId = repDe(r);
-      return [r.id, {
-        personaId: r.id,
-        tipoPersona: normalizarTipoPersona(r.tipo_persona),
-        repPersonaId,
-        conyugePersonaId: r.id_conyuge ?? null,
-        idEstadoCivil: r.id_estado_civil ?? null,
-        repIdEstadoCivil: repPersonaId == null ? null : estadoCivilRep[repPersonaId] ?? null,
-      }];
-    }),
-  );
+  // Personas del expediente resueltas por la fuente única: compradores, su
+  // representante legal (por `personas_relacionadas` y por la columna legacy), su
+  // cónyuge y toda la rama de accionistas. Armarlo a mano aquí dejaba fuera a los
+  // accionistas y repetía una resolución que ya vive en un solo lugar.
+  const personasExpediente = await fetchPersonasExpediente({ personaIds: buyerPersonIds }, supabase as never);
 
   const docPersonIds = [...new Set([
     ...buyerPersonIds,
     ...conyugeIds,
     ...repRows.map((r: any) => r.id_persona).filter(Boolean),
-    ...Object.values(repRegistrado),
+    ...personasExpediente.map((p) => p.personaId),
+    ...personasExpediente.map((p) => p.repPersonaId).filter((v): v is number => v != null),
   ])] as number[];
   const docsObligatoriosRows = await fetchInBatchesPaged<any>(docPersonIds, (b, from, to) => (supabase as any).from('documentos')
     .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
@@ -1609,9 +1589,7 @@ async function fetchExpedientes(idProyecto: number): Promise<ExpedienteRow[]> {
       const m2Exteriores = Number(property.m2_exteriores || 0);
       // Documentos obligatorios + completitud de datos de los compradores.
       const buyerPids = (buyersByAccount.get(account.id) || []).map((bp) => bp.id);
-      const miembrosExpediente = personasDelExpediente(
-        buyerPids.map((pid) => expedienteInfoById.get(pid)).filter(Boolean) as Array<{ personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null; idEstadoCivil: number | null; repIdEstadoCivil: number | null }>,
-      );
+      const miembrosExpediente = personasDeCompradores(personasExpediente, buyerPids);
       const docsObligatorios = evaluarCuenta(miembrosExpediente, latestObligatorioByKey, 'socio_bancario');
       const seccionesFaltantes = [...new Set(buyerPids.flatMap((pid) => {
         const det = buyerDetailById.get(pid);
