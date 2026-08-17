@@ -50,6 +50,17 @@ export interface MotorSnapshot {
     percentage: number;
     pool: "sozu" | "project";
     comisionista?: string | null;
+    /**
+     * Nombre del rol VIGENTE en el Directorio (Roles y Sueldos). Override de
+     * `roleId` para mostrar: si a la persona le cambiaron el rol después de
+     * grabarse la regla, se muestra el actual en vez del obsoleto.
+     */
+    rolNombre?: string | null;
+    /**
+     * Perfil de la persona en la organización, para la columna "Perfil":
+     * empleado directo de SOZU o colaborador del Grupo Investimento.
+     */
+    perfil?: "empleado_sozu" | "colaborador_investimento" | null;
   }>;
 }
 
@@ -205,6 +216,37 @@ const VALIDACIONES_CANAL_KEY = "comisiones-validaciones-canal";
 
 export type EstadoValidacionCanal = "validada" | "rechazada";
 
+/** Hash determinista corto (djb2) → base36. */
+function hashStr(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Huella del CONTENIDO de un canal dentro de un snapshot de propuesta: lo que
+ * define su estructura de comisión (comisión externa, total, activo, y por cada
+ * comisionista su nombre + % + pool). Si esto no cambia, la validación previa
+ * del canal SIGUE vigente aunque se reenvíe la propuesta por un cambio en OTRO
+ * canal. Se ignora el rol/perfil (se derivan del Directorio y no son una
+ * modificación del canal). Se calcula sobre el snapshot CRUDO de la propuesta.
+ */
+export function fingerprintCanal(snapshot: MotorSnapshot | null | undefined, idCanal: string): string {
+  if (!snapshot) return "";
+  const ch = snapshot.channels?.find((c) => c.id === idCanal);
+  const reglas = (snapshot.commissionRules ?? [])
+    .filter((r) => r.channelId === idCanal)
+    .map((r) => ({ c: r.comisionista ?? null, p: r.percentage ?? 0, pool: r.pool }))
+    .sort((a, b) => `${a.c}`.localeCompare(`${b.c}`) || a.pool.localeCompare(b.pool) || a.p - b.p);
+  const payload = JSON.stringify({
+    ext: ch?.externalCommissionPct ?? null,
+    tot: ch?.totalCommissionPct ?? snapshot.totalCommissionPct ?? null,
+    active: ch?.active ?? null,
+    reglas,
+  });
+  return hashStr(payload);
+}
+
 export interface ValidacionCanal {
   id: number;
   id_proyecto: number;
@@ -213,8 +255,15 @@ export interface ValidacionCanal {
   estado: EstadoValidacionCanal;
   notas: string | null;
   validado_por: string | null;
-  /** `fecha_actualizacion` de la propuesta que se estaba validando. */
+  /** `fecha_actualizacion` de la propuesta que se estaba validando (compat). */
   snapshot_fecha: string;
+  /**
+   * Huella del contenido del canal al validarse (ver `fingerprintCanal`). La
+   * decisión sigue vigente mientras coincida con la huella actual del canal, sin
+   * importar que se haya reenviado la propuesta por cambios en otros canales.
+   * `null` en filas viejas guardadas antes de este esquema (caen a `snapshot_fecha`).
+   */
+  canal_hash: string | null;
   fecha_validacion: string;
 }
 
@@ -248,6 +297,7 @@ export function useValidacionesCanal(idProyecto?: number | null) {
           notas: r.notas ?? null,
           validado_por: r.validado_por ?? null,
           snapshot_fecha: s.snapshot_fecha ?? "",
+          canal_hash: s.canal_hash ?? null,
           fecha_validacion: r.fecha_validacion,
         });
       }
@@ -265,6 +315,8 @@ export interface ValidarCanalInput {
   validado_por: string | null;
   /** `fecha_actualizacion` de la propuesta vigente. */
   snapshot_fecha: string;
+  /** Huella del contenido del canal validado (ver `fingerprintCanal`). */
+  canal_hash: string;
 }
 
 /** Registra la decisión de UN canal (fila en comisiones_validaciones, marcada es_canal). */
@@ -282,6 +334,7 @@ export function useValidarCanalComision() {
           id_canal: input.id_canal,
           nombre_canal: input.nombre_canal,
           snapshot_fecha: input.snapshot_fecha,
+          canal_hash: input.canal_hash,
         },
       });
       if (error) throw error;
