@@ -207,7 +207,7 @@ const AgentPipeline = () => {
 
       // Build proyecto map from propiedades (edificios_modelos -> edificios -> proyectos)
       const edModeloIds = [...new Set((propRes.data || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
-      let propToProject = new Map<number, string>();
+      const propToProject = new Map<number, string>();
 
       if (edModeloIds.length > 0) {
         const { data: edModelos } = await (supabase as any)
@@ -235,7 +235,7 @@ const AgentPipeline = () => {
 
       // Also get project names for productos
       const productoProjIds = [...new Set((productosRes.data || []).map((p: any) => p.id_proyecto).filter(Boolean))] as number[];
-      let productoToProject = new Map<number, string>();
+      const productoToProject = new Map<number, string>();
       if (productoProjIds.length > 0) {
         const { data: projs } = await (supabase as any)
           .from('proyectos').select('id, nombre').in('id', productoProjIds);
@@ -244,7 +244,7 @@ const AgentPipeline = () => {
 
       // Check for signed contracts
       const cuentaIds = (cuentaRes.data || []).map((c: any) => c.id);
-      let signedSet = new Set<number>();
+      const signedSet = new Set<number>();
       if (cuentaIds.length > 0) {
         const { data: docs } = await (supabase as any)
           .from('documentos')

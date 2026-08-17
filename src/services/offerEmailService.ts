@@ -163,7 +163,8 @@ async function shouldShowBankingForProduct(offerId: number): Promise<boolean> {
  */
 export async function sendOfferEmailAfterDownload(params: SendOfferEmailParams): Promise<boolean> {
   try {
-    let { offerId, propertyNumber, recipientEmail, recipientName, tipo } = params;
+    const { offerId, propertyNumber, tipo } = params;
+    let { recipientEmail, recipientName } = params;
 
     // Validar si la oferta muestra datos bancarios
     const isProduct = tipo === 'producto';
@@ -255,7 +256,8 @@ export async function sendMultipleOffersEmail(params: {
   preGeneratedAttachments?: { base64: string; filename: string; offerId: number; tipo: string }[];
 }): Promise<boolean> {
   try {
-    let { offerIds, propertyNumber, recipientEmail, recipientName, preGeneratedAttachments } = params;
+    const { offerIds, propertyNumber, preGeneratedAttachments } = params;
+    let { recipientEmail, recipientName } = params;
 
     if (!offerIds.length) return false;
 
@@ -356,7 +358,8 @@ export async function sendMultipleOffersEmailDirect(params: {
   reservationLink?: string;
 }): Promise<void> {
   try {
-    let { offerIds, propertyNumber, recipientEmail, recipientName, preGeneratedAttachments, reservationLink } = params;
+    const { offerIds, propertyNumber, preGeneratedAttachments, reservationLink } = params;
+    let { recipientEmail, recipientName } = params;
 
     if (!offerIds.length) return;
 
@@ -486,7 +489,8 @@ async function resolveRecipient(
  */
 export async function sendDigitalOfferEmail(params: SendDigitalOfferEmailParams): Promise<boolean> {
   try {
-    let { offerIds, reservationLink, propertyNumber, recipientEmail, recipientName, includePdf = false, silent } = params;
+    const { offerIds, reservationLink, propertyNumber, includePdf = false, silent } = params;
+    let { recipientEmail, recipientName } = params;
 
     if (!offerIds.length) return false;
 
@@ -554,7 +558,8 @@ export async function sendDigitalOfferEmail(params: SendDigitalOfferEmailParams)
 
 export async function sendOfferEmailDirect(params: SendOfferEmailParams): Promise<void> {
   try {
-    let { offerId, propertyNumber, recipientEmail, recipientName } = params;
+    const { offerId, propertyNumber } = params;
+    let { recipientEmail, recipientName } = params;
 
     // Verificar que la oferta tenga un PDF generado (url no nula)
     const { data: ofertaCheck } = await supabase

@@ -63,7 +63,7 @@ export function OnboardingINECapture({ open, onOpenChange, isDesktop, onResult }
       stopCamera();
       resetState();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open]);
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export function OnboardingINECapture({ open, onOpenChange, isDesktop, onResult }
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [phase, countdown]);
 
   useEffect(() => {

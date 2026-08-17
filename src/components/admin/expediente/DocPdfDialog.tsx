@@ -69,7 +69,7 @@ export function DocPdfDialog({
   useEffect(() => {
     if (!open) setArchivo(null);
     return () => { if (previewRef.current) URL.revokeObjectURL(previewRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open]);
 
   const pick = (f?: File | null) => {

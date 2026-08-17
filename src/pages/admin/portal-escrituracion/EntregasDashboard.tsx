@@ -317,7 +317,7 @@ export function EntregasDashboard() {
       });
 
       // ── 6. Entregas (si la tabla existe) ──────────────────────────────────
-      let entregaByPropId: Record<number, any> = {};
+      const entregaByPropId: Record<number, any> = {};
       if (entregasExist) {
         const { data: entregasData } = await (supabase as any)
           .from('entregas')

@@ -68,7 +68,7 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
       stopCamera();
       resetState();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open]);
 
   // Countdown 3-2-1-0 then start camera
@@ -81,7 +81,7 @@ export function ClienteINECaptureDialog({ open, onOpenChange, personaId, cliente
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [phase, countdown]);
 
   // Re-attach stream when overlay video element remounts after upload spinner

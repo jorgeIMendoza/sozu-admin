@@ -447,7 +447,7 @@ export default function Usuarios() {
         .filter(u => (u.rol_id === ROLE_AGENTE_INMOBILIARIO || u.rol_id === ROLE_AGENTE_INTERNO || u.rol_id === ROLE_INMOBILIARIA) && u.id_persona)
         .map(u => u.id_persona as number);
       
-      let inmobByPersona = new Map<number, string>();
+      const inmobByPersona = new Map<number, string>();
       const inmobiliariaPersonaIds = new Set<number>();
       
       if (personaIdsForLookup.length > 0) {

@@ -1268,6 +1268,7 @@ function useLeadStatesList() {
 
 // Genera una clave estable (slug) a partir del nombre para guardar en estatus_lead.
 const slugifyLeadState = (s: string) =>
+  // eslint-disable-next-line no-control-regex -- el rango ASCII completo es intencional
   s.toLowerCase().normalize("NFD").replace(/[^\x00-\x7f]/g, "")
     .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "estado";
 

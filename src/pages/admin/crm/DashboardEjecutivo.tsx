@@ -114,9 +114,9 @@ export default function DashboardEjecutivo() {
       if (!ofertasData) { setOfertas([]); setLoading(false); return; }
 
       const propIds = [...new Set(ofertasData.map((o: any) => o.id_propiedad).filter(Boolean))] as number[];
-      let propMap = new Map<number, any>();
-      let edModeloToProyecto = new Map<number, number>();
-      let proyectoMap = new Map<number, { id: number; nombre: string }>();
+      const propMap = new Map<number, any>();
+      const edModeloToProyecto = new Map<number, number>();
+      const proyectoMap = new Map<number, { id: number; nombre: string }>();
 
       if (propIds.length > 0) {
         const { data: props } = await supabase.from('propiedades').select('id, precio_lista, id_estatus_disponibilidad, id_edificio_modelo').in('id', propIds) as any;

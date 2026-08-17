@@ -384,8 +384,8 @@ export default function WorkflowOffers() {
 
       // Fetch cuentas_cobranza by id_oferta (the actual FK)
       const ofertaIds = ofertasData.map((o: any) => o.id);
-      let cuentaByOferta = new Map<number, any>();
-      let cuentaContratoFirmado = new Set<number>();
+      const cuentaByOferta = new Map<number, any>();
+      const cuentaContratoFirmado = new Set<number>();
       if (ofertaIds.length > 0) {
         const { data: cuentasData } = await supabase
           .from('cuentas_cobranza')

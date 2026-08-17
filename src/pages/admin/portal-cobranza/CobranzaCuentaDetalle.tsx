@@ -37,7 +37,7 @@ import { CuentaDetalleProducto } from './CuentaDetalleProducto';
 // devuelve la RPC ya trae el shape exacto que consumen las sub-vistas (mismas
 // llaves camelCase), por eso se retorna tal cual. Ver Ejecuciones_manuales/P30.
 async function fetchCuentaDetalle(cuentaId: number) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (supabase as any).rpc('get_pcobranza_cuenta_detalle', { p_cuenta_id: cuentaId });
   if (error) throw error;
   if (!data) throw new Error('Cuenta no encontrada');

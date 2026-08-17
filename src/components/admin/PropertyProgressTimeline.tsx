@@ -94,7 +94,7 @@ export function PropertyProgressTimeline({
       tipos_documento: TipoDocumentoRow | null;
     }>> => {
       // Cast supabase to any to avoid deep type instantiation errors
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const supabaseAny = supabase as any;
       
       const { data: rawDocs, error } = await supabaseAny

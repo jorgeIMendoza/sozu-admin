@@ -113,7 +113,7 @@ export default function MisAgentes() {
 
       // Get user status for agents
       const personaIds = (data || []).map((item: any) => item.id);
-      let userStatusMap: Record<number, boolean | null> = {};
+      const userStatusMap: Record<number, boolean | null> = {};
       
       if (personaIds.length > 0) {
         const { data: usuariosData } = await supabase
@@ -177,7 +177,7 @@ export default function MisAgentes() {
 
       // Get user status for agents
       const personaIds = (data || []).map((item: any) => item.id);
-      let userStatusMap: Record<number, boolean | null> = {};
+      const userStatusMap: Record<number, boolean | null> = {};
       
       if (personaIds.length > 0) {
         const { data: usuariosData } = await supabase

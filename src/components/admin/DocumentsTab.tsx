@@ -237,7 +237,7 @@ export function DocumentsTab({
       
       // Get compradores names if they exist
       const personaIds = docsData?.filter(doc => doc.id_persona).map(doc => doc.id_persona) || [];
-      let personasMap = new Map<number, string>();
+      const personasMap = new Map<number, string>();
       
       if (personaIds.length > 0) {
         const { data: personasData } = await supabase

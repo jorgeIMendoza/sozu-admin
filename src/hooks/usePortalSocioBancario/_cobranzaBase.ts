@@ -329,7 +329,7 @@ export async function fetchCobranzaBase(
       );
       acuerdos.push(...batch);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn("[cobranza-base] acuerdos_pago fetch falló:", err);
     }
   }
@@ -351,7 +351,7 @@ export async function fetchCobranzaBase(
       );
       aplicaciones.push(...batch);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn("[cobranza-base] aplicaciones_pago fetch falló:", err);
     }
   }

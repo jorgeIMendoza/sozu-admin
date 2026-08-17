@@ -2285,7 +2285,7 @@ function FirmaTitularActions({
           body: { id_cuenta_cobranza: idCuentaCobranza },
         });
       } catch (efErr) {
-        // eslint-disable-next-line no-console
+         
         console.warn('[firma-titular] check-property-sold-status falló:', efErr);
       }
     },

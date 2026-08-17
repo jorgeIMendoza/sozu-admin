@@ -169,7 +169,7 @@ export function OwnerHistoryDialog({
       const personaIds = (compradoresData || []).map(c => c.id_persona);
       
       // Fetch personas separately
-      let personasMap: Record<number, { nombre_legal: string; rfc: string | null }> = {};
+      const personasMap: Record<number, { nombre_legal: string; rfc: string | null }> = {};
       if (personaIds.length > 0) {
         const { data: personasData } = await supabase
           .from('personas')
@@ -204,7 +204,7 @@ export function OwnerHistoryDialog({
         .filter(c => c.id_tipo_cancelacion !== null)
         .map(c => c.id);
 
-      let productAccountsByParent: Record<number, CuentaProducto[]> = {};
+      const productAccountsByParent: Record<number, CuentaProducto[]> = {};
 
       if (cancelledCuentaIds.length > 0) {
         const { data: productOfertasData } = await supabase

@@ -187,7 +187,7 @@ export default function AgentesLanding() {
           ? "Ese correo ya tiene una cuenta de agente. Inicia sesión."
           : (msg || "No pudimos completar tu registro. Inténtalo de nuevo."),
       );
-      // eslint-disable-next-line no-console
+       
       console.error("[registro-publico] error:", e);
     } finally {
       setSubmitting(false);

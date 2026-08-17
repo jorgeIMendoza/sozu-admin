@@ -1027,7 +1027,7 @@ const [dateRangeFilter, setDateRangeFilter] = useState<{ from: Date; to: Date }>
     try {
       // Export applies the SAME filters the user selected on-screen so the CSV
       // matches the visible table (e.g. filtering by proyecto = bottura).
-      let exportFilters: Record<string, string> = { ...filtros };
+      const exportFilters: Record<string, string> = { ...filtros };
 
       if (isPagosMensualesReport) {
         // Pagos Mensuales report requires the date range filter - use first/last day of selected months

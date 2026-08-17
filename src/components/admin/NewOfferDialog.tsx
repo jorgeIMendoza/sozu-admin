@@ -515,7 +515,7 @@ export function NewOfferDialog({ propertyId, propertyNumber, forceManualMode = f
       ].filter((id): id is number => !!id);
       console.log('[DEBUG] extracted entidadIds:', entidadIds);
 
-      let entidadesMap: Record<number, { cuenta_madre_stp: string | null; nombre_dueno: string }> = {};
+      const entidadesMap: Record<number, { cuenta_madre_stp: string | null; nombre_dueno: string }> = {};
       if (entidadIds.length > 0) {
         const { data: entidades, error: entidadesError } = await supabase
           .from("entidades_relacionadas")

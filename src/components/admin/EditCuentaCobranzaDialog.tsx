@@ -3752,6 +3752,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           )}
 
           {/* Nueva pestaña: Datos de facturación - OCULTA */}
+          {/* eslint-disable-next-line no-constant-binary-expression -- se deja apagada hasta que facturación se libere */}
           {false && (
             <TabsContent value="facturacion" className="space-y-3">
             <Card>

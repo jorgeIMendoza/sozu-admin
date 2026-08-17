@@ -743,7 +743,7 @@ const Propiedades = () => {
       // Aplicar búsqueda - buscar por proyecto, edificio, propietario, o número de propiedad
       if (searchTerm) {
         // Collect all property IDs that match the search term
-        let matchingPropertyIds: number[] = [];
+        const matchingPropertyIds: number[] = [];
         let hasProjectMatch = false;
         
         // 1. Find by project name
@@ -1751,9 +1751,9 @@ const Propiedades = () => {
       .map((p: any) => p.id);
     
     // Get inactive ofertas for Reventa properties to find previous buyers
-    let reventaOfertasMap: Record<number, any> = {};
-    let reventaCuentasMap: Record<number, any> = {};
-    let reventaCompradoresMap: Record<number, { nombre: string; porcentaje: number }[]> = {};
+    const reventaOfertasMap: Record<number, any> = {};
+    const reventaCuentasMap: Record<number, any> = {};
+    const reventaCompradoresMap: Record<number, { nombre: string; porcentaje: number }[]> = {};
     
     if (reventaPropertyIds.length > 0) {
       // Get the most recent offer for each Reventa property (regardless of active status)
@@ -1800,7 +1800,7 @@ const Propiedades = () => {
           
           // Get persona names
           const reventaPersonaIds = (reventaCompradores || []).map((c: any) => c.id_persona);
-          let reventaPersonasMap: Record<number, string> = {};
+          const reventaPersonasMap: Record<number, string> = {};
           if (reventaPersonaIds.length > 0) {
             const { data: personasData } = await supabase
               .from('personas')
@@ -1887,8 +1887,8 @@ const Propiedades = () => {
 
     // Fetch compradores for all active cuentas to determine current owner
     const cuentaIdsAll = activeCuentas.map(c => c.id);
-    let compradoresPorCuenta: Record<number, { nombre: string; porcentaje: number }[]> = {};
-    let cuentasConMantenimiento: Set<number> = new Set(); // Track which cuentas have maintenance accounts
+    const compradoresPorCuenta: Record<number, { nombre: string; porcentaje: number }[]> = {};
+    const cuentasConMantenimiento: Set<number> = new Set(); // Track which cuentas have maintenance accounts
     
     if (cuentaIdsAll.length > 0) {
       // Fetch compradores (separate query, no join to avoid issues)
@@ -1913,7 +1913,7 @@ const Propiedades = () => {
 
       // Get persona IDs and fetch personas separately
       const personaIds = (compradoresResult.data || []).map((c: any) => c.id_persona);
-      let personasMap: Record<number, string> = {};
+      const personasMap: Record<number, string> = {};
       
       if (personaIds.length > 0) {
         const { data: personasData } = await supabase
@@ -2000,7 +2000,7 @@ const Propiedades = () => {
       const acuerdoIds = acuerdosData.map(a => a.id);
       
       let aplicacionesMap: any = {};
-      let pagosPorMetodo: any = {};
+      const pagosPorMetodo: any = {};
       if (acuerdoIds.length > 0) {
         // Batch aplicaciones_pago queries as well
         const ACUERDO_BATCH_SIZE = 100;
@@ -2162,7 +2162,7 @@ const Propiedades = () => {
         }, {})
       ).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id);
       
-      let paymentStatus = cuentaCobranzaData?.id && paymentStatusMap[cuentaCobranzaData.id] 
+      const paymentStatus = cuentaCobranzaData?.id && paymentStatusMap[cuentaCobranzaData.id] 
         ? paymentStatusMap[cuentaCobranzaData.id] 
         : null;
       
@@ -2533,7 +2533,7 @@ const Propiedades = () => {
           const propietarioEntityIds = matchingPropietarios?.map((p: any) => p.id) || [];
           
           // Build OR query including all search criteria
-          let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+          const orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
           
           if (propertyIdsFromCuentas.length > 0) {
             orConditions.push(`id.in.(${propertyIdsFromCuentas.join(',')})`);
@@ -2960,7 +2960,7 @@ const Propiedades = () => {
           const propietarioEntityIds = matchingPropietarios?.map((p: any) => p.id) || [];
           
           // Build OR query including all search criteria
-          let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+          const orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
           
           if (propertyIdsFromCuentas.length > 0) {
             orConditions.push(`id.in.(${propertyIdsFromCuentas.join(',')})`);
@@ -3379,7 +3379,7 @@ const Propiedades = () => {
           const propietarioEntityIds = matchingPropietarios?.map((p: any) => p.id) || [];
           
           // Build OR query including all search criteria
-          let orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
+          const orConditions = [`numero_propiedad.ilike.%${searchTerm}%`, `clabe_stp_tmp_apartado.ilike.%${searchTerm}%`];
           
           if (propertyIdsFromCuentas.length > 0) {
             orConditions.push(`id.in.(${propertyIdsFromCuentas.join(',')})`);
@@ -3718,7 +3718,7 @@ const Propiedades = () => {
 
     // For each offer that has a cuenta_clabe_stp, get the cuenta_cobranza ID and fetch lead RFC
     const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
-      let enrichedOffer = { ...offer };
+      const enrichedOffer = { ...offer };
       
       // Get offer display options from ofertas table
       try {
@@ -3878,7 +3878,7 @@ const Propiedades = () => {
         }
       }
       
-      let enrichedOffer = {
+      const enrichedOffer = {
         ...offer,
         product_name: producto?.nombre || 'N/A',
         product_precio_lista: producto?.precio_lista || 0,
@@ -4986,7 +4986,7 @@ const Propiedades = () => {
                       case 'proyecto':
                         return <TableCell key={column.key} className="font-medium">{property.proyecto}</TableCell>;
                       
-                      case 'propietario':
+                      case 'propietario': {
                         // Check if property is Reventa (ID 2), has maintenance account (has been transferred to buyer) OR specific status
                         const esReventa = property.id_tipo_transaccion === 2;
                         // Solo mostrar comprador si el estatus es: 9 (Pagada completamente), 7 (Escrituración), 8 (Entregado), 10 (Asignado)
@@ -5033,6 +5033,7 @@ const Propiedades = () => {
                             </div>
                           </TableCell>
                         );
+                      }
                       
                       case 'edificio':
                         return <TableCell key={column.key}>{property.edificio}</TableCell>;
@@ -5117,7 +5118,7 @@ const Propiedades = () => {
                           </TableCell>
                         );
                       
-                      case 'precio':
+                      case 'precio': {
                         // Para Reventa (ID 2), siempre mostrar precio_lista
                         const precioReventa = property.id_tipo_transaccion === 2;
                         return (
@@ -5140,8 +5141,9 @@ const Propiedades = () => {
                             </TooltipProvider>
                           </TableCell>
                         );
+                      }
                       
-                      case 'precio_m2':
+                      case 'precio_m2': {
                         // Para Reventa (ID 2), usar precio_lista en lugar de precio_final
                         const precioParaM2 = property.id_tipo_transaccion === 2 
                           ? property.precio_lista 
@@ -5155,6 +5157,7 @@ const Propiedades = () => {
                             )}
                           </TableCell>
                         );
+                      }
                       
                       case 'estacionamientos':
                         return (
@@ -5219,7 +5222,7 @@ const Propiedades = () => {
                           </TableCell>
                         );
                       
-                      case 'ofertas_productos':
+                      case 'ofertas_productos': {
                         // Para Reventa (ID 2), siempre mostrar N/A
                         const esReventaProductos = property.id_tipo_transaccion === 2;
                         // Show product offers when property has existing offers OR is at least Apartado (id_estatus_disponibilidad > 3)
@@ -5261,6 +5264,7 @@ const Propiedades = () => {
                             )}
                           </TableCell>
                         );
+                      }
                       
                       case 'esquemas_pago':
                         return (
@@ -5363,7 +5367,7 @@ const Propiedades = () => {
                           </TableCell>
                         );
                       
-                      case 'precio_final':
+                      case 'precio_final': {
                         // Para Reventa, no mostrar precio_final de cuenta de cobranza
                         const esPropiedadReventa = property.tipo_transaccion === "Re-venta";
                         return (
@@ -5438,6 +5442,7 @@ const Propiedades = () => {
                           ) : '-'}
                           </TableCell>
                         );
+                      }
                       
                       case 'apartado': {
                         const apartadoInfo = getApartadoInfo(property);

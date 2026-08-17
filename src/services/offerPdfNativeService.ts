@@ -507,7 +507,7 @@ export class OfertaPdfNativeService {
     });
 
     // Icons column (iconX / iconAreaWidth definidos arriba)
-    let iconY = propStartY;
+    const iconY = propStartY;
     const iconSize = 5;
     const iconSpacing = 12;
 

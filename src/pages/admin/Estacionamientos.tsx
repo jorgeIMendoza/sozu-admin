@@ -114,7 +114,7 @@ const Estacionamientos = () => {
   const { data: activeData, isLoading: isLoadingActive } = useQuery({
     queryKey: ['estacionamientos', 'active', currentPageActive, searchTerm, proyectoFilter, cuentaFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      let query = supabase
+      const query = supabase
         .from('estacionamientos')
         .select(`
           *,
@@ -150,8 +150,8 @@ const Estacionamientos = () => {
           .eq('activo', true)
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
-        let cuentaByOferta: Record<number, number> = {};
-        let precioByOferta: Record<number, number> = {};
+        const cuentaByOferta: Record<number, number> = {};
+        const precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')
@@ -243,7 +243,7 @@ const Estacionamientos = () => {
   const { data: deletedData, isLoading: isLoadingDeleted } = useQuery({
     queryKey: ['estacionamientos', 'deleted', currentPageDeleted, searchTerm, proyectoFilter, cuentaFilter, accessibleProjectIds, hasUnrestrictedAccess],
     queryFn: async () => {
-      let query = supabase
+      const query = supabase
         .from('estacionamientos')
         .select(`
           *,
@@ -277,8 +277,8 @@ const Estacionamientos = () => {
           .eq('activo', true)
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
-        let cuentaByOferta: Record<number, number> = {};
-        let precioByOferta: Record<number, number> = {};
+        const cuentaByOferta: Record<number, number> = {};
+        const precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')

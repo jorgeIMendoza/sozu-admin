@@ -37,7 +37,7 @@ export const NOTIFICATION_TEMPLATES: NotificationTemplate[] = [
     channels: ["email", "whatsapp"],
     email: {
       subject: "Tu pre-apartado de {{propertyLabel}} está confirmado ✓",
-      preheader: "Folio {{reservationId}} · Retención de \${{amountMXN}} MXN registrada",
+      preheader: "Folio {{reservationId}} · Retención de ${{amountMXN}} MXN registrada",
       body: `Hola {{firstName}},
 
 ¡Bienvenido! Tu pre-apartado quedó registrado exitosamente. Aquí están los detalles:
