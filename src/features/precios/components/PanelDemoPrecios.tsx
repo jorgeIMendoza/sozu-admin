@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { FlaskConical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PROPIEDADES } from "../mocks/inventario";
+import { usePropiedadesActivas } from "../hooks/useInventarioActivo";
 import { sembrarBitacoraDemo } from "../lib/semillaBitacora";
 import { useDemoStore } from "../stores/demoStore";
 import { useListaStore } from "../stores/listaStore";
@@ -21,9 +21,10 @@ export function PanelDemoPrecios() {
   const criticas = useDemoStore((s) => s.criticasForzadas);
   const [sembrando, setSembrando] = useState(false);
 
+  const propiedadesProyecto = usePropiedadesActivas();
   const propsProyecto = useMemo(
-    () => PROPIEDADES.filter((p) => p.activo && p.id_proyecto === idProyectoActivo),
-    [idProyectoActivo],
+    () => propiedadesProyecto.filter((p) => p.activo),
+    [propiedadesProyecto],
   );
 
   const acciones: Array<[string, () => void]> = [

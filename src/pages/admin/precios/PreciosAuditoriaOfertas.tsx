@@ -42,7 +42,7 @@ import {
   tiempoRestante,
 } from "@/features/precios/lib/formato";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
-import { PROPIEDADES_POR_ID } from "@/features/precios/mocks/inventario";
+import { useIndicesActivos } from "@/features/precios/hooks/useInventarioActivo";
 import type { OfertaVigente } from "@/features/precios/types/dominio";
 
 type Pestana = "vigentes" | "por_vencer" | "historial";
@@ -72,6 +72,7 @@ function Ofertas() {
   const marcarConvertida = useOfertasStore((s) => s.marcarConvertida);
   // Corre recalcularVencimientos() de forma idempotente al montar el módulo.
   usePreciosProyecto();
+  const { propiedadesPorId } = useIndicesActivos();
 
   const [pestana, setPestana] = useState<Pestana>("vigentes");
   const [cancelando, setCancelando] = useState<string | null>(null);
@@ -92,7 +93,7 @@ function Ofertas() {
   const historial = [...vencidas, ...convertidas, ...canceladas];
 
   const pendientesInventario = convertidas.filter((o) => {
-    const p = PROPIEDADES_POR_ID[o.id_propiedad];
+    const p = propiedadesPorId[o.id_propiedad];
     return p && p.estatus !== "Apartada" && p.estatus !== "Vendida";
   });
 
@@ -115,7 +116,7 @@ function Ofertas() {
       entidad: {
         tipo: "oferta",
         id: oferta.id_oferta,
-        etiqueta: `Unidad ${PROPIEDADES_POR_ID[oferta.id_propiedad]?.numero ?? oferta.id_propiedad}`,
+        etiqueta: `Unidad ${propiedadesPorId[oferta.id_propiedad]?.numero ?? oferta.id_propiedad}`,
       },
       antes: { estado: "vigente" },
       despues: { estado: "cancelada" },
@@ -133,7 +134,7 @@ function Ofertas() {
       entidad: {
         tipo: "oferta",
         id: o.id_oferta,
-        etiqueta: `Unidad ${PROPIEDADES_POR_ID[o.id_propiedad]?.numero ?? o.id_propiedad}`,
+        etiqueta: `Unidad ${propiedadesPorId[o.id_propiedad]?.numero ?? o.id_propiedad}`,
       },
       antes: { estado: "vigente" },
       despues: { estado: "convertida" },
@@ -158,7 +159,7 @@ function Ofertas() {
         "Notas",
       ],
       lista.map((o) => [
-        PROPIEDADES_POR_ID[o.id_propiedad]?.numero ?? o.id_propiedad,
+        propiedadesPorId[o.id_propiedad]?.numero ?? o.id_propiedad,
         o.precio_ofertado,
         o.nombre_esquema,
         o.descuento_adicional,
@@ -267,7 +268,7 @@ function Ofertas() {
             </thead>
             <tbody>
               {lista.map((o) => {
-                const propiedad = PROPIEDADES_POR_ID[o.id_propiedad];
+                const propiedad = propiedadesPorId[o.id_propiedad];
                 const dias = diasParaVencer(o.vence_en);
                 const proximaAVencer = o.estado === "vigente" && dias <= 3;
                 const pendiente =
@@ -394,7 +395,7 @@ function Ofertas() {
               <span>
                 Unidad{" "}
                 <span className="font-semibold tabular-nums">
-                  {PROPIEDADES_POR_ID[oferta.id_propiedad]?.numero ?? oferta.id_propiedad}
+                  {propiedadesPorId[oferta.id_propiedad]?.numero ?? oferta.id_propiedad}
                 </span>{" "}
                 · oferta de{" "}
                 <span className="tabular-nums">{formatoMoneda(oferta.precio_ofertado)}</span>.

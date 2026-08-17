@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { estatusBloqueaReprecio } from "@/features/precios/engine/pricing";
 
 import { Archive, Copy, Download, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -29,7 +30,6 @@ import { descargarCSV } from "@/features/precios/lib/csv";
 import { formatoMoneda } from "@/features/precios/lib/formato";
 import { pct2 } from "@/features/precios/lib/formatoVpn";
 
-const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
 const SIN_ESCENARIOS: EscenarioProyecto[] = [];
 
 const FORMAS: Array<[FormaAbsorcion, string]> = [
@@ -114,7 +114,7 @@ function EscenariosProyecto() {
   const disponibles = useMemo(() => {
     const bloqueadas = new Set(
       propiedades
-        .filter((p) => ESTATUS_BLOQUEADOS.includes(p.estatus))
+        .filter((p) => estatusBloqueaReprecio(p.estatus))
         .map((p) => p.id_propiedad),
     );
     return desgloses.filter((d) => !bloqueadas.has(d.id_propiedad));

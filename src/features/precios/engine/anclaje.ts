@@ -122,6 +122,10 @@ export function reanclarMotor(
     ...motor,
     nivel: rn.nivel,
     factores,
+    // El precio base del proyecto se reexpresa igual que los de modelo: los
+    // factores por modelo son razones y no cambian, así que ningún precio se
+    // mueve. Dejar el base sin compensar rompería `base × factor = efectivo`.
+    precio_base_m2_proyecto: (motor.precio_base_m2_proyecto ?? 0) * compensacion,
     bases_modelo: motor.bases_modelo.map((b) => ({
       ...b,
       precio_base_m2: b.precio_base_m2 * compensacion,
@@ -213,10 +217,26 @@ export function migrarMotorAAnclaje(
       nombre_modelo: mod.nombre,
       precio_base_m2:
         baseGlobal * fPlano * productoAncla * compTamano * rn.factorBase,
+      // Se completa abajo, cuando ya se conoce el base del proyecto.
+      factor_modelo: 1,
       m2_referencia: m2ref,
       activo: mod.activo,
     };
   });
+
+  /*
+   * Precio base del PROYECTO en el formato anterior: el escalar del motor,
+   * reexpresado contra el ancla nueva. Cada modelo guarda su separación
+   * respecto a él, que en este formato es exactamente su factor de plano.
+   */
+  const precio_base_m2_proyecto =
+    baseGlobal * productoAncla * rn.factorBase;
+  for (const b of bases_modelo) {
+    b.factor_modelo =
+      precio_base_m2_proyecto > 0
+        ? +(b.precio_base_m2 / precio_base_m2_proyecto).toFixed(6)
+        : 1;
+  }
 
   // Pasos 5 y 6 — renormalizar familias y eliminar plano y el base global.
   const factores = motorViejo.factores
@@ -232,6 +252,7 @@ export function migrarMotorAAnclaje(
   const nuevo: MotorPrecio = {
     ...motorViejo,
     ancla,
+    precio_base_m2_proyecto,
     bases_modelo,
     nivel: rn.nivel,
     tamano: { theta },

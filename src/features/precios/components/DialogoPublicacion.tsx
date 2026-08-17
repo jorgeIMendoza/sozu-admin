@@ -29,7 +29,7 @@ import {
 } from "../lib/versiones";
 import { registrarEvento } from "../services/auditoria";
 import { formatoFechaCorta, formatoMoneda } from "../lib/formato";
-import { PROYECTOS } from "../mocks/inventario";
+import { useProyectosPrecios } from "../hooks/useInventarioActivo";
 
 /** Mínimo de caracteres exigido a las notas de publicación. */
 const MIN_NOTAS = 20;
@@ -55,9 +55,10 @@ export function DialogoPublicacion({
   const [expandido, setExpandido] = useState<string | null>(null);
   const [avisado, setAvisado] = useState(false);
 
+  const proyectos = useProyectosPrecios();
   const idProyecto = motor.id_proyecto;
   const nombreProyecto =
-    PROYECTOS.find((p) => p.id_proyecto === idProyecto)?.nombre ?? idProyecto;
+    proyectos.find((p) => p.id_proyecto === idProyecto)?.nombre ?? idProyecto;
 
   const listaProyecto = versiones[idProyecto] ?? [];
   const publicada = useMemo(() => {

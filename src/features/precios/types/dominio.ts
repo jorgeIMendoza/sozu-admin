@@ -103,11 +103,22 @@ export interface AnclaProyecto {
   descripcion: string;
 }
 
-/** Precio por m² de la unidad ancla de un modelo y su área tipo. */
+/**
+ * Precio por m² de la unidad ancla de un modelo y su área tipo.
+ *
+ * `precio_base_m2` es el valor EFECTIVO que usa el motor, y es derivado:
+ * `precio_base_m2_proyecto × factor_modelo`. El dato que se captura es el
+ * precio base del desarrollo; el modelo solo dice cuánto se separa de él.
+ */
 export interface BaseModelo {
   id_modelo: string;
   nombre_modelo: string;
   precio_base_m2: number;
+  /**
+   * Cuánto vale el m² de este modelo respecto al precio base del proyecto.
+   * 1.0000 = igual que el base. Es una variable más, como la torre o la vista.
+   */
+  factor_modelo: number;
   m2_referencia: number;
   activo: boolean;
 }
@@ -118,7 +129,16 @@ export interface MotorPrecio {
   nombre: string;
   /** Unidad ancla del proyecto. */
   ancla: AnclaProyecto;
-  /** Precio base por m² y m² de referencia, por modelo. */
+  /**
+   * PRECIO POR M² BASE DEL PROYECTO.
+   *
+   * Es el dato primario del motor: el precio por m² del desarrollo en la
+   * combinación ancla. Todo lo demás varía a partir de aquí — el modelo por su
+   * `factor_modelo`, y el resto por los factores de torre, nivel, vista,
+   * orientación, extras y tamaño.
+   */
+  precio_base_m2_proyecto: number;
+  /** Factor y m² de referencia por modelo, con su precio efectivo derivado. */
   bases_modelo: BaseModelo[];
   /** Solo presente en snapshots de versiones publicadas en el formato anterior. */
   precio_base_m2?: number;

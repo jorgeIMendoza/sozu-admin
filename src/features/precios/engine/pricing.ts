@@ -138,8 +138,39 @@ export function calcularFactorExtras(prop: Propiedad, motor: MotorPrecio): numbe
   return Math.min(1 + suma, TOPE_EXTRAS);
 }
 
-/** Estatus de inventario que impiden modificar el precio de lista. */
-const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
+/**
+ * Estatus de inventario que impiden modificar el precio de lista.
+ *
+ * Son los nombres reales del catálogo `estatus_disponibilidad`. Cualquier
+ * unidad que ya tenga una operación en firme —apartada, vendida, escriturada,
+ * entregada, pagada, asignada, rentada, en demanda o dada en pago— tiene un
+ * precio ya ofrecido y no se puede reprecliar.
+ *
+ * Repreciables: `Inventario`, `Disponible` y `Listo`.
+ *
+ * Se conservan `Apartada` y `Vendida` (en femenino) porque así se llamaban en
+ * el inventario de prueba y siguen apareciendo en los snapshots de versiones ya
+ * publicadas, que son inmutables por diseño.
+ */
+export const ESTATUS_APARTADO = ["Apartado", "Apartada"];
+
+const ESTATUS_BLOQUEADOS = [
+  ...ESTATUS_APARTADO,
+  "Vendido",
+  "Vendida",
+  "Escrituración",
+  "Entregado",
+  "Pagada completamente",
+  "Asignado",
+  "Rentado",
+  "En demanda",
+  "Dación en pago",
+];
+
+/** ¿El estatus de inventario impide modificar el precio? */
+export function estatusBloqueaReprecio(estatus: string): boolean {
+  return ESTATUS_BLOQUEADOS.includes(estatus);
+}
 
 /**
  * Una propiedad está bloqueada para reprecio cuando ya existe una oferta o una
@@ -163,8 +194,10 @@ export function motivoBloqueoReprecio(
   conOfertaVigente = false,
   conConversionPendiente = false,
 ): "apartada" | "vendida" | "oferta_vigente" | "conversion_pendiente" | null {
-  if (prop.estatus === "Apartada") return "apartada";
-  if (prop.estatus === "Vendida") return "vendida";
+  if (ESTATUS_APARTADO.includes(prop.estatus)) return "apartada";
+  // El resto de los estatus en firme se reportan como venta: para el reprecio
+  // da igual si está escriturada o entregada, el precio ya se ofreció.
+  if (estatusBloqueaReprecio(prop.estatus)) return "vendida";
   if (conOfertaVigente) return "oferta_vigente";
   if (conConversionPendiente) return "conversion_pendiente";
   return null;
