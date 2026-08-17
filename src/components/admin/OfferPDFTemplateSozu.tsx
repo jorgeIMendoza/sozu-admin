@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import { calcDynamicScheme, mesesMensualidadesRestantes } from '@/utils/escalonadoUtils';
+import { useMensualidadesFijas } from '@/lib/offers/mensualidades-fijas';
 import recamarasIcon from '@/assets/icons/recamaras.png';
 import banosIcon from '@/assets/icons/banos.png';
 import mediosBanosIcon from '@/assets/icons/medios-banos.png';
@@ -125,6 +126,12 @@ interface OfferPDFTemplateSozuProps {
 
 export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateSozuProps>(
   ({ offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas }, ref) => {
+    // Mensualidades fijas (unidad → proyecto). `null` = se calculan contra la entrega.
+    const mensualidadesFijas = useMensualidadesFijas(
+      (propertyDetails as any)?.id,
+      propertyDetails.projectData?.id,
+    );
+
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat('es-MX', {
         style: 'currency',
@@ -519,8 +526,8 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
               {filteredPaymentSchemes.map((scheme, index) => {
                 const isSchemeEscalonado = !!(scheme.tramos_mensualidad && scheme.tramos_mensualidad.length > 0);
                 const fechaEntregaStr = propertyDetails.projectData?.fecha_entrega ?? null;
-                const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaStr && scheme.porcentaje_mensualidades > 0)
-                  ? mesesMensualidadesRestantes(fechaEntregaStr)
+                const mesesEfectivos = (!isSchemeEscalonado && scheme.porcentaje_mensualidades > 0)
+                  ? mesesMensualidadesRestantes(fechaEntregaStr, new Date(), mensualidadesFijas)
                   : 0;
                 const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
                 const isSelected = offerData.id_esquema_pago_seleccionado === scheme.id;

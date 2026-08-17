@@ -465,14 +465,6 @@ Su código fuente vive en el repo `sozu-edge-functions`, no en este. Ahí se edi
 | `create-user` | Crear usuario en auth + tabla usuarios |
 | `create-client-user` | Crear usuario Cliente (rol 23) |
 | `ai-database-query` | Consultas IA en lenguaje natural (Gemini) |
-| `create-hold-payment-intent` | Crea PaymentIntent Stripe con `capture_method: manual` — devuelve `clientSecret` |
-| `capture-hold-payment-intent` | Captura (`action: "capture"`) o libera (`action: "cancel"`) hold Stripe |
-
----
-
-## Stripe — Hold de Tarjeta (Apartado Provisional)
-
-Flujo de hold de tarjeta (apartado provisional) → skill `.claude/skills/stripe-hold/SKILL.md` (se carga al trabajar en reservas / ReservarPage / card holds).
 
 ---
 

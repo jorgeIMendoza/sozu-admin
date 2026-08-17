@@ -89,7 +89,7 @@ import {
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, PRIORIDAD_PILL, firePurchaseIfWon,
+  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -2261,6 +2261,16 @@ export function CrmDeals() {
         }
       }
 
+      // Perfil del comprador por negocio (para el badge del Kanban). Fail-soft si la tabla no existe.
+      const perfilByNegocio = new Map<number, any>();
+      {
+        const negIds = list.map((n: any) => n.id);
+        const pfRes = await (supabase as any).from("crm_negocios_perfil_comprador")
+          .select("id_negocio, tipo_asistente, rango_edad, intencion_uso, proyeccion_cierre")
+          .in("id_negocio", negIds).eq("activo", true);
+        if (!pfRes.error) for (const p of (pfRes.data ?? [])) perfilByNegocio.set(p.id_negocio, p);
+      }
+
       const rows = list.map((n: any) => {
         const et: any = etapaMap.get(n.id_etapa);
         return {
@@ -2273,6 +2283,7 @@ export function CrmDeals() {
           propietario_nombre: n.id_usuario_propietario ? (ownerMap.get(n.id_usuario_propietario) ?? "—") : "—",
           contacto_nombre: n.id_entidad_relacionada ? (erMap.get(n.id_entidad_relacionada) ?? null) : null,
           ultima_actividad: n.id_entidad_relacionada ? (lastActByEr.get(n.id_entidad_relacionada) ?? null) : null,
+          perfil: perfilByNegocio.get(n.id) ?? null,
         };
       });
       return { rows, truncated: list.length === 1000 };
@@ -2939,6 +2950,7 @@ export function CrmDealDetail() {
               <TabsList className="justify-start rounded-none bg-transparent h-auto px-4 gap-0">
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
                 <TabsTrigger value="actividades" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Actividades</TabsTrigger>
+                <TabsTrigger value="perfil" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Perfil del comprador</TabsTrigger>
               </TabsList>
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
@@ -3002,6 +3014,9 @@ export function CrmDealDetail() {
                   onUpdateCita={updateCitaStatus} onDeleteCita={deleteCita}
                 />
               )}
+            </TabsContent>
+            <TabsContent value="perfil" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
+              <DealPerfilComprador dealId={String(dealId)} />
             </TabsContent>
           </Tabs>
         </section>

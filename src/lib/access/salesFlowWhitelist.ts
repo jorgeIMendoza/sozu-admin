@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
  *
  * Solo estos usuarios ven el botón "Continuar con el pago" y el flujo de
  * compra/pago mientras el flujo está en fase de aprobación interna. El pago es
- * por transferencia SPEI (sin Stripe). Cuando el flujo se libere a producción
+ * por transferencia SPEI (sin pasarela de tarjeta). Cuando el flujo se libere a producción
  * para todos, sustituir este gate por un permiso de rol/submenu.
  */
 export const SALES_FLOW_WHITELIST: readonly string[] = [

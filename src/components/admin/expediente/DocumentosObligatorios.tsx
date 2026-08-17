@@ -1,13 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { usePagePermissions } from '@/hooks/usePagePermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Loader2, FileText, Eye, ChevronDown, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PersonasLigadasCard } from './PersonasLigadasCard';
 import {
   gruposObligatorios,
+  grupoAplica,
   buildLatestPorPersonaTipo,
   evaluarPersona,
   fetchDocsObligatorios,
@@ -88,6 +92,8 @@ export function DocumentosObligatorios({
   personaIds,
   portal = 'escrituracion',
   titulo = 'Documentos obligatorios del expediente',
+  gestionarPersonasLigadas = true,
+  rutaPermisos,
   className,
 }: {
   /** Cuenta de cobranza: el componente resuelve sus compradores activos. */
@@ -96,9 +102,27 @@ export function DocumentosObligatorios({
   personaIds?: number[];
   portal?: PortalExpediente;
   titulo?: string;
+  /**
+   * Permite ligar representante legal y accionistas de una persona moral. Aun en
+   * true, la tarjeta solo aparece si el rol tiene permiso de crear o actualizar en
+   * la vista donde se monta: la policy de `personas_relacionadas` deja escribir a
+   * cualquier rol marcado como interno —agentes e inmobiliarias incluidos—, así que
+   * el gate real es este. Se apaga donde el expediente es de solo consulta.
+   */
+  gestionarPersonasLigadas?: boolean;
+  /**
+   * Ruta con la que se consultan los permisos. Hace falta cuando la pantalla vive
+   * en una ruta con parámetros (`.../cuentas-cobranza/:id/detalle`), porque
+   * `usePagePermissions` compara EXACTO contra `submenus.vista_front_end` y ahí no
+   * hay submenú que coincida. Por defecto, la ruta actual.
+   */
+  rutaPermisos?: string;
   className?: string;
 }) {
   const [historicoAbierto, setHistoricoAbierto] = useState<Record<string, boolean>>({});
+  const { pathname } = useLocation();
+  const { canCreate, canUpdate } = usePagePermissions(rutaPermisos ?? pathname);
+  const puedeLigarPersonas = gestionarPersonasLigadas && (canCreate || canUpdate);
 
   const idsKey = [...(personaIds ?? [])].sort((a, b) => a - b).join(',');
   const habilitado = !!cuentaId || (personaIds?.length ?? 0) > 0;
@@ -162,15 +186,33 @@ export function DocumentosObligatorios({
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{titulo}</p>
 
       {personas.map(persona => {
-        const grupos = gruposObligatorios(persona.tipoPersona, portal);
+        // Los condicionales que no le aplican no se pintan: un acta de matrimonio en
+        // el expediente de un soltero solo confunde a quien valida. Los informativos
+        // sí se pintan, marcados como que no bloquean.
+        const grupos = gruposObligatorios(persona.tipoPersona, portal)
+          .filter(g => g.informativo || grupoAplica(g, persona));
         const evaluacion = evaluarPersona(
-          { personaId: persona.personaId, tipoPersona: persona.tipoPersona, repPersonaId: persona.repPersonaId, portal },
+          {
+            personaId: persona.personaId,
+            tipoPersona: persona.tipoPersona,
+            repPersonaId: persona.repPersonaId,
+            idEstadoCivil: persona.idEstadoCivil,
+            repIdEstadoCivil: persona.repIdEstadoCivil,
+            portal,
+          },
           latest,
         );
         const completo = evaluacion.total > 0 && evaluacion.completos >= evaluacion.total;
+        const tipoLabel = persona.tipoPersona === 'pm' ? 'Persona moral' : 'Persona física';
         const subtitulo = persona.esConyugeDe
           ? `Cónyuge de ${persona.nombreTitular ?? 'comprador'}`
-          : persona.tipoPersona === 'pm' ? 'Persona moral' : 'Persona física';
+          : persona.esAccionistaDe
+            // Accionista: se le pide su propio juego de documentos, y si es empresa
+            // el árbol sigue bajando hasta dar con personas físicas.
+            ? `Accionista de ${persona.nombreTitular ?? 'la empresa'}`
+              + (persona.porcentajeAcciones != null ? ` · ${persona.porcentajeAcciones}%` : '')
+              + ` · ${tipoLabel}`
+            : tipoLabel;
 
         return (
           <div key={persona.personaId} className="rounded-xl border overflow-hidden">
@@ -198,6 +240,7 @@ export function DocumentosObligatorios({
                 <p className="text-[11px] text-amber-700">
                   Esta empresa no tiene representante legal ligado, así que sus documentos
                   (poder notarial, identificación, CURP, CSF y domicilio) no se pueden validar.
+                  Se puede ligar abajo.
                 </p>
               </div>
             )}
@@ -223,7 +266,12 @@ export function DocumentosObligatorios({
                       <span className={cn('size-1.5 rounded-full shrink-0',
                         cumplido ? 'bg-emerald-500' : vigente ? 'bg-amber-400' : 'bg-muted-foreground/25')} />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-medium truncate">{grupo.label}</p>
+                        <p className="text-[12px] font-medium truncate">
+                          {grupo.label}
+                          {grupo.informativo && (
+                            <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">· no bloquea</span>
+                          )}
+                        </p>
                         <p className="text-[10px] text-muted-foreground">
                           {vigente ? `Vigente · ${fmtFecha(docVigente?.fecha_creacion ?? null)}` : 'Sin documento'}
                         </p>
@@ -267,6 +315,15 @@ export function DocumentosObligatorios({
                 );
               })}
             </div>
+
+            {/* Solo una persona moral tiene representante y accionistas colgando. */}
+            {puedeLigarPersonas && persona.tipoPersona === 'pm' && (
+              <PersonasLigadasCard
+                personaId={persona.personaId}
+                nombreEmpresa={persona.nombre}
+                className="m-3 rounded-lg"
+              />
+            )}
           </div>
         );
       })}

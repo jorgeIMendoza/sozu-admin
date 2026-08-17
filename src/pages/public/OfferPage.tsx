@@ -678,7 +678,7 @@ const OfferPage = () => {
                 </div>
 
                 {/* CTA — también en los links con reservationId: el pago del apartado
-                    ya es por SPEI (sin Stripe), así que el cliente puede continuar. */}
+                    ya es por SPEI (sin pasarela de tarjeta), así que el cliente puede continuar. */}
                 <div className="pt-4">
                   {isExpired ? (
                     <div className="rounded-md bg-destructive/8 border border-destructive/20 px-3 py-3 text-center space-y-1.5">

@@ -33,7 +33,6 @@ const Reservas = () => {
     return () => clearInterval(interval);
   }, [queryClient]);
 
-  // @ts-ignore - Tablas no están en types aún
   const { data: reservas, isLoading } = useQuery({
     queryKey: ["reservas"],
     queryFn: async () => {

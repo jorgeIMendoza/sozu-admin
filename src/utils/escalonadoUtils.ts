@@ -15,17 +15,30 @@ export function mesesEntreFechas(desde: Date | string, hasta: Date | string): nu
 }
 
 /**
- * Meses de mensualidades RESTANTES para una oferta (regla de negocio SOZU):
- * de `desde` (hoy por defecto) a la fecha de entrega, MENOS 1 mes — el mes de
- * entrega es el Pago a escrituración, no una mensualidad. Si ya estamos en/después
- * del mes de entrega devuelve 0 → todo el saldo pasa al Pago a escrituración.
+ * Meses de mensualidades de una oferta. Dos modos, según lo configurado en BD:
+ *
+ * - **Fijo** (`mensualidadesFijas` no nulo, de `propiedades.mensualidades_fijas` o
+ *   `proyectos.mensualidades_fijas`): ese número tal cual, sin mirar la fecha de
+ *   entrega. Es el número de MENSUALIDADES; el pago a escrituración va aparte, así
+ *   que 35 fijas = 36 meses de plan. Un `0` explícito se respeta (venta de contado).
+ * - **Dinámico** (`mensualidadesFijas` nulo/undefined, comportamiento histórico): de
+ *   `desde` (hoy por defecto) a la fecha de entrega, MENOS 1 mes — el mes de entrega
+ *   es el Pago a escrituración, no una mensualidad. Si ya estamos en/después del mes
+ *   de entrega devuelve 0 → todo el saldo pasa al Pago a escrituración.
+ *
+ * Espejo en TS de la cascada que resuelve el RPC `get_oferta_financials` (autoritativo);
+ * esto solo aplica cuando el RPC no está disponible o en vistas que no lo consumen.
  *
  * Fuente única para oferta digital, PDF comercial y vistas de agente.
  */
 export function mesesMensualidadesRestantes(
   fechaEntrega: Date | string | null | undefined,
-  desde: Date | string = new Date()
+  desde: Date | string = new Date(),
+  mensualidadesFijas?: number | null
 ): number {
+  if (mensualidadesFijas != null && Number.isFinite(Number(mensualidadesFijas))) {
+    return Math.max(0, Math.trunc(Number(mensualidadesFijas)));
+  }
   if (!fechaEntrega) return 0;
   return Math.max(0, mesesEntreFechas(desde, fechaEntrega) - 1);
 }

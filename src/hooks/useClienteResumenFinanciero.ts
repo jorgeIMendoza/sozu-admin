@@ -132,8 +132,8 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
       // Get next unpaid maintenance acuerdo for each child cuenta
       const allChildIds = (childCuentas || []).map(c => c.id);
-      let nextMaintenanceMap = new Map<number, string>(); // mainCuentaId → next date
-      let overdueMaintenanceMap = new Map<number, number>(); // mainCuentaId → overdue count
+      const nextMaintenanceMap = new Map<number, string>(); // mainCuentaId → next date
+      const overdueMaintenanceMap = new Map<number, number>(); // mainCuentaId → overdue count
       if (allChildIds.length > 0) {
         const { data: mantoAcuerdos } = await supabase
           .from("acuerdos_pago")
@@ -168,9 +168,9 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
 
       // Get edificios_modelos → edificios → proyectos for precio_m2_actual
       const emIds = [...new Set((propiedades || []).map((p) => p.id_edificio_modelo).filter(Boolean))];
-      let buildingMap = new Map<number, { edificio: string; proyecto: string; proyectoId: number; modeloId: number; modeloPortadaUrl?: string | null }>();
-      let projectPriceMap = new Map<number, number>();
-      let projectInfoMap = new Map<number, { direccion: string; fechaEntrega: string | null; imageUrl: string }>();
+      const buildingMap = new Map<number, { edificio: string; proyecto: string; proyectoId: number; modeloId: number; modeloPortadaUrl?: string | null }>();
+      const projectPriceMap = new Map<number, number>();
+      const projectInfoMap = new Map<number, { direccion: string; fechaEntrega: string | null; imageUrl: string }>();
 
       if (emIds.length > 0) {
         const { data: emData } = await supabase
@@ -226,7 +226,7 @@ export function useClienteResumenFinanciero(personaId: number | null | undefined
       }
 
       // Fetch property multimedia images (fallback before model multimedia)
-      let propMultimediaMap = new Map<number, string>();
+      const propMultimediaMap = new Map<number, string>();
       if (propiedadIds.length > 0) {
         const { data: propImages } = await supabase
           .from("multimedias_propiedad")

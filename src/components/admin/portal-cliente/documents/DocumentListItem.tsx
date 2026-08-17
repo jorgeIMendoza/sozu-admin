@@ -19,7 +19,7 @@ const iconBgByTone: Record<string, string> = {
 const DocumentListItem = ({ document, onClick }: ListItemProps) => {
   const typeInfo = getTypeInfo(document.type);
   const statusInfo = getStatusInfo(document.status);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const Icon = ((Icons as any)[typeInfo.icon] ?? Icons.FileText) as React.ComponentType<{
     className?: string;
   }>;

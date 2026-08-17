@@ -32,7 +32,7 @@ function extractMostRecentDate(text: string): Date | null {
   const norm = normalizeSpaces(text);
 
   // DD/MM/YYYY or DD-MM-YYYY
-  const reDMY = /\b(\d{1,2})[/\-](\d{2})[/\-](\d{4})\b/g;
+  const reDMY = /\b(\d{1,2})[/-](\d{2})[/-](\d{4})\b/g;
   let m: RegExpExecArray | null;
   while ((m = reDMY.exec(norm)) !== null) {
     const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));

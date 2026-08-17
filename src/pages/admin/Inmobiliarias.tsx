@@ -156,7 +156,7 @@ export default function Inmobiliarias() {
 
     const allRepIds = [...new Set([...repLegIds, ...repComIds])];
 
-    let repsMap = new Map<number, string>();
+    const repsMap = new Map<number, string>();
 
     if (allRepIds.length > 0) {
       const { data: repsData, error: repsError } = await supabase
@@ -181,9 +181,9 @@ export default function Inmobiliarias() {
     const inmobiliariaPersonaIds = (data || []).map(item => item.id).filter(Boolean);
     
     // Get users with Inmobiliaria role (4) and their project access in batch queries
-    let projectCounts: { [personaId: number]: number } = {};
-    let userCounts: { [personaId: number]: number } = {};
-    let userEmailsByPersonaId: { [personaId: number]: string } = {};
+    const projectCounts: { [personaId: number]: number } = {};
+    const userCounts: { [personaId: number]: number } = {};
+    const userEmailsByPersonaId: { [personaId: number]: string } = {};
     
     if (inmobiliariaPersonaIds.length > 0) {
       // Get users with rol_id = 4 (Inmobiliaria) whose id_persona matches the inmobiliaria persona id
@@ -402,7 +402,7 @@ export default function Inmobiliarias() {
     const etiquetas = [...tiposEntidad, ...rolesUsuario];
     const descripcion = etiquetas.length > 0 ? etiquetas.join(', ') : 'sin rol identificado';
 
-    return `El correo ${normalizedEmail} ya está dado de alta para \"${personaExistente.nombre_legal}\" con: ${descripcion}.`;
+    return `El correo ${normalizedEmail} ya está dado de alta para "${personaExistente.nombre_legal}" con: ${descripcion}.`;
   };
 
   const createMutation = useMutation({

@@ -1448,7 +1448,7 @@ export function DemandasDashboard() {
       const allCuentaIds = allCuentas.map((c: any) => c.id);
 
       // Cargar demandas PRIMERO para usarlas en el filtro client-side
-      let demandaMap: Record<number, any> = {};
+      const demandaMap: Record<number, any> = {};
       if (tablesExist) {
         const { data: demandas, error: eD } = await (supabase as any)
           .from('demandas').select('*')

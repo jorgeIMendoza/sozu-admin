@@ -5,6 +5,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
 import { fetchExtrasDetalleUnidad, fetchExtrasPorPropiedad, precioTotalUnidad } from "@/lib/inventario/precio-unidad";
+import { resolverMensualidadesFijas } from "@/lib/offers/mensualidades-fijas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ModalFilters, FilterSelect, FilterField } from "@/components/ui/modal-filters";
@@ -334,9 +335,22 @@ const AgentUnidadesProyecto = () => {
   });
   // Misma prioridad que la oferta digital: fecha_entrega_proyecto ?? fecha_entrega
   const fechaEntregaEfectiva = selectedProjectData?.fecha_entrega_proyecto ?? selectedProjectData?.fecha_entrega;
-  // Mensualidades restantes: hoy → entrega − 1 mes (mes de entrega = escrituración),
-  // misma regla que la oferta digital / PDF (mesesMensualidadesRestantes).
-  const efectivaMesesAgente = mesesMensualidadesRestantes(fechaEntregaEfectiva);
+
+  // Modo fijo de mensualidades (unidad → proyecto). Si no está configurado, `null` y
+  // se conserva la regla dinámica de siempre.
+  const { data: mensualidadesFijasAgente } = useQuery({
+    queryKey: ["mensualidades-fijas-agente", selectedProperty?.id, selectedProperty?.proyecto_id],
+    queryFn: () => resolverMensualidadesFijas(selectedProperty?.id, selectedProperty?.proyecto_id),
+    enabled: !!selectedProperty?.proyecto_id,
+  });
+
+  // Mensualidades: si el proyecto/unidad las fija, ese número; si no, hoy → entrega − 1
+  // mes (el mes de entrega es la escrituración). Misma regla que la oferta digital / PDF.
+  const efectivaMesesAgente = mesesMensualidadesRestantes(
+    fechaEntregaEfectiva,
+    new Date(),
+    mensualidadesFijasAgente,
+  );
 
   // Esquemas del proyecto traídos directo de la tabla (incluye tramos_mensualidad),
   // igual que la oferta digital. El RPC del listado no devuelve tramos, así que los

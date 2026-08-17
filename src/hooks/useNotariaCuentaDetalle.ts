@@ -158,7 +158,7 @@ export function useNotariaCuentaDetalle({
         .map((c: any) => c.id_persona as number)
         .filter(Boolean);
 
-      let compradores: NotariaCompradorDetalle[] = [];
+      const compradores: NotariaCompradorDetalle[] = [];
 
       if (personaIds.length) {
         const { data: personas } = await supabase

@@ -55,14 +55,14 @@ export function usePropietariosProyecto(proyectoId: number | null) {
       )];
       if (!entIds.length) return [];
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: ents } = await (supabase as any)
         .from('entidades_relacionadas')
         .select('id, personas!fk_entrel_persona(nombre_legal, nombre_comercial)')
         .in('id', entIds);
 
       return (ents ?? [])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         .map((e: any) => ({
           id: e.id as number,
           nombre: (e.personas?.nombre_comercial ?? e.personas?.nombre_legal ?? `Propietario ${e.id}`) as string,

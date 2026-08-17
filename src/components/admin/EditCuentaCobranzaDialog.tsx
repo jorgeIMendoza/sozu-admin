@@ -55,6 +55,7 @@ import { InfoRow, EstadoBadge, fmtCurrency as fmtMXN, fmtDate as fmtFecha } from
 import { ConfirmEscrituraDialog } from './ConfirmEscrituraDialog';
 import { FacturasTab } from './FacturasTab';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { etiquetaConcepto } from '@/utils/conceptos-pago';
 
 interface Comprador {
   porcentaje_copropiedad: number;
@@ -2842,7 +2843,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
               1: 'Apartado',
               2: 'Enganche', 
               5: 'Parcialidad',
-              3: 'Contra entrega'
+              3: 'A escrituración'
             };
             toast.error(`${conceptNames[activeItem.id_concepto]} no puede ir antes de ${conceptNames[overItem.id_concepto]}`);
             return;
@@ -2855,7 +2856,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
               1: 'Apartado',
               2: 'Enganche',
               5: 'Parcialidad', 
-              3: 'Contra entrega'
+              3: 'A escrituración'
             };
             toast.error(`${conceptNames[activeItem.id_concepto]} no puede ir después de ${conceptNames[overItem.id_concepto]}`);
             return;
@@ -3752,6 +3753,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
           )}
 
           {/* Nueva pestaña: Datos de facturación - OCULTA */}
+          {/* eslint-disable-next-line no-constant-binary-expression -- se deja apagada hasta que facturación se libere */}
           {false && (
             <TabsContent value="facturacion" className="space-y-3">
             <Card>
@@ -4708,7 +4710,7 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
                              const montoNum = parseFloat(draftMonto) || 0;
                              return (
                                <SortableItem key={acuerdo.id} id={acuerdo.id.toString()} disabled={sortDisabled}>
-                                <TableCell className="px-3 py-2 text-center text-[12px] font-medium">{acuerdo.concepto_nombre}</TableCell>
+                                <TableCell className="px-3 py-2 text-center text-[12px] font-medium">{etiquetaConcepto(acuerdo.concepto_nombre)}</TableCell>
                                 <TableCell className="px-3 py-2 text-center">
                                   {editable ? (
                                     <Input

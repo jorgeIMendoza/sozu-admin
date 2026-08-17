@@ -46,7 +46,7 @@ export default function HoldTarjetaPage() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true);
-    // TODO: call Stripe/Conekta API to create PaymentIntent with capture_method: "manual"
+    // Mock: aquí iría la preautorización de la pasarela, cuando haya una aprobada.
     setTimeout(() => {
       const last4 = rawCard.slice(-4);
       activateHold(last4);

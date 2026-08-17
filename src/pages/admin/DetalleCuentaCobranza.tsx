@@ -153,6 +153,7 @@ interface Multa {
 
 import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
+import { etiquetaConcepto } from "@/utils/conceptos-pago";
 import { mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
@@ -1395,8 +1396,8 @@ export default function DetalleCuentaCobranza() {
         );
         
         // Apply payments sequentially to penalties
-        let pagosRestantes = totalPagosPenalidad;
-        let pagosPenalidadRestantes = [...pagosPenalidad]; // Copy to track remaining payments
+        const pagosRestantes = totalPagosPenalidad;
+        const pagosPenalidadRestantes = [...pagosPenalidad]; // Copy to track remaining payments
         
         const multasConEstado = multasOrdenadas.map(multa => {
           let pagosAplicados = 0;
@@ -1847,7 +1848,7 @@ export default function DetalleCuentaCobranza() {
       const allProductIds = [...new Set([...bodegaProductIds, ...estProductIds])];
 
       // Find ofertas for these products scoped to THIS property
-      let ofertasByProduct = new Map<number, number[]>();
+      const ofertasByProduct = new Map<number, number[]>();
       if (allProductIds.length > 0) {
         const { data: ofertas } = await supabase
           .from('ofertas')
@@ -1864,7 +1865,7 @@ export default function DetalleCuentaCobranza() {
 
       // Find cuentas for those ofertas
       const allOfertaIds = Array.from(ofertasByProduct.values()).flat();
-      let cuentasByOferta = new Map<number, number>();
+      const cuentasByOferta = new Map<number, number>();
       if (allOfertaIds.length > 0) {
         const { data: cuentas } = await supabase
           .from('cuentas_cobranza')
@@ -4504,7 +4505,7 @@ export default function DetalleCuentaCobranza() {
                 
                 const conceptoDisplay = acuerdo.concepto?.toLowerCase().includes('parcialidad') 
                   ? `Parcialidad #${parcialidadNumber}`
-                  : acuerdo.concepto;
+                  : etiquetaConcepto(acuerdo.concepto);
 
                 // Calculate percentage based on total price
                 const porcentaje = cuentaDetalle?.precio_final 
@@ -5345,7 +5346,7 @@ export default function DetalleCuentaCobranza() {
                                             ? 'Multa' 
                                             : (concepto.toLowerCase() === 'parcialidad' && parcialidadNumber 
                                               ? `Parcialidad ${parcialidadNumber}` 
-                                              : concepto);
+                                              : etiquetaConcepto(concepto));
                                           
                                           return (
                                             <TableRow key={aplicacion.id} className={esMulta ? 'bg-warning/10' : ''}>

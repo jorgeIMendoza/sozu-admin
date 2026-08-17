@@ -327,7 +327,7 @@ const Proyectos = () => {
       }
       
       // Add precio_m2_actual from raw query if available
-      let projects = ((data || []) as any[]).map((project: any) => ({
+      const projects = ((data || []) as any[]).map((project: any) => ({
         ...project,
         precio_m2_actual: project.precio_m2_actual || null
       }));

@@ -157,7 +157,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
   const { data: totals, isLoading: loadingTotals, error: errorTotales } = useQuery({
     queryKey: ['relacion-pagos-totales', ...filtroKeySinProyecto],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (supabase as any).rpc('get_pcobranza_relacion_pagos', {
         ...rpcArgs, p_limit: 0, p_offset: 0, p_incluir_totales: true,
       } as any);
@@ -180,7 +180,7 @@ export function useRelacionPagos(filters: RelacionPagosFilters): RelacionPagosRe
   const { data, isLoading, error } = useQuery({
     queryKey: ['relacion-pagos', ...filtroKey, filters.sortKey, filters.sortDir, filters.page, filters.pageSize],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (supabase as any).rpc('get_pcobranza_relacion_pagos', {
         ...rpcArgs,
         p_limit: filters.pageSize,

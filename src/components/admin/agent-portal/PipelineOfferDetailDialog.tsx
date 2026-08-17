@@ -135,7 +135,7 @@ export function PipelineOfferDetailDialog({
         ...((estacs || []).filter((e: any) => !e.es_incluido).map((e: any) => e.id_producto)),
       ].filter(Boolean);
 
-      let prodMap = new Map<number, any>();
+      const prodMap = new Map<number, any>();
       if (prodIds.length > 0) {
         const { data: prods } = await (supabase as any).from('productos_servicios').select('id, nombre, precio_lista').in('id', prodIds);
         (prods || []).forEach((p: any) => prodMap.set(p.id, p));

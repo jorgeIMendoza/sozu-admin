@@ -256,8 +256,8 @@ type Venta = {
          .filter((o: any) => o.id_producto && o.id_propiedad)
          .map((o: any) => ({ id_propiedad: o.id_propiedad, id_producto: o.id_producto, oferta_id: o.id }));
  
-       let bodegasNombresMap: Record<string, string> = {};
-       let estacionamientosNombresMap: Record<string, string> = {};
+       const bodegasNombresMap: Record<string, string> = {};
+       const estacionamientosNombresMap: Record<string, string> = {};
  
        if (propiedadProductoLinks.length > 0) {
          // Get bodegas linked to these properties/products

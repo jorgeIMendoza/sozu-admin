@@ -1,5 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  buildLatestPorPersonaTipo,
+  evaluarCuenta,
+  fetchDocsObligatorios,
+  fetchPersonasExpediente,
+  personasDeCompradores,
+} from '@/utils/expediente-obligatorios';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -11,19 +18,10 @@ const ESCRITURABLE_PRODUCTOS_IDS = [4, 10];
 
 const CEP_CUTOFF_BUSINESS_DAYS = 10;
 
-// Grupos de documentos obligatorios (mismo patrón que ExpedientesDashboard)
-export const OBLIGATORIO_GRUPOS = [
-  { key: 'csf',       label: 'Constancia de Situación Fiscal', ids: [6] },
-  { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8] },
-  { key: 'ine',       label: 'INE / Identificación oficial',   ids: [2, 59, 63] }, // 63 = INE completo (frente y reverso en un PDF)
-  { key: 'curp',      label: 'CURP',                           ids: [5] },
-  { key: 'acta',      label: 'Acta de nacimiento',             ids: [1] },
-] as const;
-
-const ALL_OBLIGATORIO_IDS = OBLIGATORIO_GRUPOS.flatMap(g => [...g.ids]);
-
-const ID_TO_GROUP_KEY: Record<number, string> = {};
-OBLIGATORIO_GRUPOS.forEach(g => g.ids.forEach(id => { ID_TO_GROUP_KEY[id] = g.key; }));
+// Los grupos obligatorios salen de la FUENTE ÚNICA (`utils/expediente-obligatorios`),
+// no de una copia local: la que vivía aquí no distinguía persona física de moral,
+// ignoraba al representante legal y listaba el tipo 59 —del que no hay un solo
+// documento validado en producción— mientras dejaba fuera el pasaporte.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,8 +52,10 @@ export interface UnidadEscriturable {
   pagosCepPendiente: number; // STP sin CEP dentro de los últimos 10 hábiles (no bloqueante)
 
   // Expediente
-  docsCompletos: number;     // grupos obligatorios con doc validado (0–5)
-  expedienteOk: boolean;     // docsCompletos >= 5
+  docsCompletos: number;     // grupos obligatorios con doc validado
+  docsTotal: number;         // total exigido: depende de PF/PM y del estado civil
+  docsFaltantes: string[];   // etiquetas de lo que falta
+  expedienteOk: boolean;     // docsCompletos >= docsTotal
 
   // Morosidad — fuente: get_bandeja_operativa (mismo origen que portal-cobranza)
   diasSinPagar: number;       // bloquear solo si > 30
@@ -109,36 +109,6 @@ function buildLatestValidacionByPago(
     }
   }
   return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, { estado: v.estado }]));
-}
-
-function buildLatestDocByKey(
-  docs: { id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null }[]
-): Record<string, { id: number; estatusId: number }> {
-  const map: Record<string, { id: number; estatusId: number; fecha: string }> = {};
-  docs.forEach(d => {
-    if (!d.id_persona) return;
-    const groupKey = ID_TO_GROUP_KEY[d.id_tipo_documento];
-    if (!groupKey) return;
-    const key = `${d.id_persona}__${groupKey}`;
-    const fecha = d.fecha_creacion ?? '9999-12-31T23:59:59Z';
-    const ex = map[key];
-    if (!ex || fecha > ex.fecha || (fecha === ex.fecha && d.id > ex.id)) {
-      map[key] = { id: d.id, estatusId: d.id_estatus_verificacion, fecha };
-    }
-  });
-  return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, { id: v.id, estatusId: v.estatusId }]));
-}
-
-function countValidatedGroups(
-  personaId: number,
-  latestDocByKey: Record<string, { id: number; estatusId: number }>
-): number {
-  let count = 0;
-  for (const grupo of OBLIGATORIO_GRUPOS) {
-    const latest = latestDocByKey[`${personaId}__${grupo.key}`];
-    if (latest && latest.estatusId === 2) count++;
-  }
-  return count;
 }
 
 // ─── Main Hook ────────────────────────────────────────────────────────────────
@@ -329,21 +299,18 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
         });
       });
 
-      // ── Paso 10: documentos obligatorios (chunks 100) ─────────────────────
-      type DocRow = { id: number; id_persona: number; id_tipo_documento: number; id_estatus_verificacion: number; fecha_creacion: string | null };
-      const allDocs: DocRow[] = [];
-      for (const chunk of chunkArray(personaIds, 100)) {
-        const { data } = await (supabase as any)
-          .from('documentos')
-          .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
-          .in('id_persona', chunk)
-          .in('id_tipo_documento', ALL_OBLIGATORIO_IDS)
-          .eq('activo', true)
-          .eq('es_draft', false)
-          .limit(5000);
-        if (data) allDocs.push(...data);
-      }
-      const latestDocByKey = buildLatestDocByKey(allDocs);
+      // ── Paso 10: expediente por la fuente única ───────────────────────────
+      // Las personas del expediente son los compradores MÁS su representante legal
+      // (persona moral) y su cónyuge: sus documentos viven bajo su propia persona.
+      const personasExpediente = await fetchPersonasExpediente({ personaIds }, supabase as never);
+
+      const idsParaDocs = [...new Set([
+        ...personasExpediente.map(p => p.personaId),
+        ...personasExpediente.map(p => p.repPersonaId).filter((v): v is number => v != null),
+      ])];
+      const latestDocByKey = buildLatestPorPersonaTipo(
+        await fetchDocsObligatorios(idsParaDocs, supabase),
+      );
 
       // ── Paso 11: morosidad via get_bandeja_operativa (fuente oficial) ─────
       const today = new Date();
@@ -424,14 +391,16 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
         const parcialidadesVencidas = parcialidadesVencidasByPropId[prop.id] ?? 0;
 
         const compradores = comprsByPropId[prop.id] ?? [];
-        const allPersonaIds = compradores.map(c => c.id_persona);
-        let docsCompletos = 0;
-        if (allPersonaIds.length > 0) {
-          // Conservador: mínimo entre todos los compradores
-          const counts = allPersonaIds.map(pid => countValidatedGroups(pid, latestDocByKey));
-          docsCompletos = Math.min(...counts);
-        }
-        const expedienteOk = docsCompletos >= OBLIGATORIO_GRUPOS.length;
+        // Conservador en copropiedad: vale lo que el comprador peor documentado.
+        // Entran también sus cónyuges y su rama de accionistas.
+        const evaluacion = evaluarCuenta(
+          personasDeCompradores(personasExpediente, compradores.map(c => c.id_persona)),
+          latestDocByKey,
+          'escrituracion',
+        );
+        const docsCompletos = evaluacion.completos;
+        const docsTotal = evaluacion.total;
+        const expedienteOk = docsTotal > 0 && docsCompletos >= docsTotal;
 
         const blockers: string[] = [];
         const warnings: string[] = [];
@@ -440,7 +409,7 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
         if (diasSinPagar > 30) blockers.push(`Morosidad: ${diasSinPagar} días sin pago`);
 
         if (pagosSinValidar > 0) warnings.push(`${pagosSinValidar} pago(s) sin validar`);
-        if (!expedienteOk) warnings.push(`Expediente: ${docsCompletos}/${OBLIGATORIO_GRUPOS.length} grupos`);
+        if (!expedienteOk) warnings.push(`Expediente: ${docsCompletos}/${docsTotal} grupos`);
         if (pagosCepPendiente > 0) warnings.push(`${pagosCepPendiente} CEP pendiente`);
 
         const bloqueada = blockers.length > 0;
@@ -461,6 +430,8 @@ export function useUnidadesListasEscriturar(proyectoId: number | null): UseUnida
           pagosCoincide,
           pagosCepPendiente,
           docsCompletos,
+          docsTotal,
+          docsFaltantes: evaluacion.faltantes,
           expedienteOk,
           diasSinPagar,
           parcialidadesVencidas,

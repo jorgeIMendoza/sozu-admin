@@ -89,7 +89,7 @@ const DocumentDetailSheet = ({ document, open, onClose }: DetailSheetProps) => {
 
   const typeInfo = getTypeInfo(document.type);
   const statusInfo = getStatusInfo(document.status);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const TypeIcon = ((Icons as any)[typeInfo.icon] ?? Icons.FileText) as React.ComponentType<{
     className?: string;
   }>;

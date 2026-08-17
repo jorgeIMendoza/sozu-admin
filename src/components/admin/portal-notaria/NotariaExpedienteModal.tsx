@@ -145,7 +145,13 @@ export function NotariaExpedienteModal({
             {!isLoading && compradores.length > 0 && (
               <div className="space-y-3">
                 {/* Fuente única del expediente (PF/PM, rep legal, cónyuge, histórico). */}
-                <DocumentosObligatorios cuentaId={idCuentaCobranza} portal="notaria" titulo="Documentos del expediente" />
+                <DocumentosObligatorios
+                  cuentaId={idCuentaCobranza}
+                  portal="notaria"
+                  titulo="Documentos del expediente"
+                  /* El notario consulta el expediente; ligar personas es del back office. */
+                  gestionarPersonasLigadas={false}
+                />
 
                 <div className="flex flex-wrap gap-1.5">
                   {compradores.map((comprador) => (

@@ -66,7 +66,6 @@ export class EstadoCuentaService {
       const acuerdoIds = (acuerdos || []).map((a: any) => a.id);
       let multas: any[] = [];
       if (acuerdoIds.length > 0) {
-        // @ts-ignore - Type instantiation too deep
         const multasResult = await supabase
           .from("multas")
           .select("id, monto, descripcion, es_pagada, fecha_creacion, id_acuerdo_pago")
@@ -500,7 +499,7 @@ export class EstadoCuentaService {
     
     if (porcentajeEntrega > 0) {
       const montoEntrega = precioBase * (porcentajeEntrega / 100);
-      detailsRight.push({ label: "Contraentrega:", value: `${porcentajeEntrega}%  ${formatMoney(montoEntrega)}` });
+      detailsRight.push({ label: "A escrituración:", value: `${porcentajeEntrega}%  ${formatMoney(montoEntrega)}` });
     }
 
     detailsRight.forEach((item) => {

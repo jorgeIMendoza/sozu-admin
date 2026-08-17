@@ -166,7 +166,7 @@ export function useClienteActividad(personaId: number | null | undefined) {
       // Fetch building/project info separately to avoid nested join issues
       const edificioModeloIds = [...new Set(propiedades?.map((p: any) => p.id_edificio_modelo).filter(Boolean) || [])];
       
-      let buildingMap = new Map<number, { edificioNombre: string; proyectoNombre: string }>();
+      const buildingMap = new Map<number, { edificioNombre: string; proyectoNombre: string }>();
       
       if (edificioModeloIds.length > 0) {
         const { data: emData, error: emError } = await supabase

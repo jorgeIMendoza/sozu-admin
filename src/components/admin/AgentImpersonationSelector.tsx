@@ -16,7 +16,6 @@ export function AgentImpersonationSelector() {
   const [open, setOpen] = useState(false);
 
   const canImpersonate = profile?.puede_impersonar === true;
-  if (!canImpersonate) return null;
 
   const { data: agents = [], isLoading } = useQuery({
     queryKey: ["all-agents-for-impersonation"],
@@ -41,6 +40,10 @@ export function AgentImpersonationSelector() {
     },
     enabled: canImpersonate,
   });
+
+  // Después de los hooks: `profile` llega async, así que salir antes cambiaría
+  // el orden de hooks entre renders.
+  if (!canImpersonate) return null;
 
   return (
     <div className="flex items-center gap-2 mb-4 p-3 rounded-lg border border-primary/20 bg-primary/5">

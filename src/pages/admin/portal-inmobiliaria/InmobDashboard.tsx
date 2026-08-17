@@ -1085,7 +1085,7 @@ export default function InmobDashboard() {
   const { data: areaChartRaw } = useQuery({
     queryKey: ["inmob-dash-area", isSozu ? sozuPropertyIds.length : agentEmails.join(","), isSozu, inmobAgentEmails.size],
     queryFn: async () => {
-      let allCuentaIds: number[] = [];
+      const allCuentaIds: number[] = [];
       const cuentaInfoMap = new Map<number, { precio_final: number; porcentaje_comision_venta: number; id_propiedad: number; fecha_creacion?: string; fecha_generacion?: string; fecha_pago_comision?: string | null }>();
       const ofertaIdToCuentaId = new Map<number, number>();
 

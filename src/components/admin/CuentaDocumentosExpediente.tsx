@@ -161,6 +161,9 @@ export function CuentaDocumentosExpediente({
           cuentaId={cuentaId}
           personaIds={personaIds.length ? personaIds : undefined}
           portal="cobranza"
+          /* El detalle vive en `.../cuentas-cobranza/:id/detalle`, que no es un
+             submenú: los permisos son los de la bandeja de cuentas. */
+          rutaPermisos="/admin/portal-cobranza/cuentas-cobranza"
         />
       </div>
 

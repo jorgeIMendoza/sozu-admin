@@ -2044,7 +2044,7 @@ class HTMLToPDFService {
               React.createElement('p', {
                 key: 'label',
                 className: 'text-xs text-muted-foreground'
-              }, 'Contra Entrega'),
+              }, 'A escrituración'),
               React.createElement('p', {
                 key: 'amount',
                 className: 'font-bold text-xs'

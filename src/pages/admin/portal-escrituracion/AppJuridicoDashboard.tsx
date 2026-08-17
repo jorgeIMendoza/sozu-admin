@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { ID_DOC_TIPO_IDS } from '@/utils/expediente-obligatorios';
 import { useAsuntosActivos } from '@/modules/juridico/queries/useAsuntosActivos';
 import { useEtapasPorTipoAsunto } from '@/modules/juridico/queries/useEtapasPorTipoAsunto';
 import { CrearExpedienteDialog } from '@/modules/juridico/components/CrearExpedienteDialog';
@@ -780,7 +781,7 @@ function AppJuridicoDashboardInner() {
         row.personaId
           ? (supabase as any).from('documentos')
               .select('id_tipo_documento, url, fecha_creacion')
-              .eq('id_persona', row.personaId).in('id_tipo_documento', [2, 59, 5, 6, 8])
+              .eq('id_persona', row.personaId).in('id_tipo_documento', [...ID_DOC_TIPO_IDS, 5, 6, 8])
               .eq('activo', true).eq('es_draft', false)
               .order('fecha_creacion', { ascending: false })
           : Promise.resolve({ data: [] as any[] }),
@@ -794,7 +795,11 @@ function AppJuridicoDashboardInner() {
       const notificacion = (notifRes.data ?? [])[0];
       const kycLatest = (ids: number[]) =>
         (kycRes.data ?? []).find((d: any) => ids.includes(d.id_tipo_documento));
-      const ine       = kycLatest([2, 59]);
+      // Identificación oficial: la fuente única manda (INE completo, pasaporte y el
+      // par frente/reverso legacy). La lista fija de antes traía el tipo 59 —del que no
+      // hay un solo documento validado en producción— y dejaba fuera el INE completo
+      // (63) y el pasaporte (4): 29 personas salían aquí sin identificación teniéndola.
+      const ine       = kycLatest([...ID_DOC_TIPO_IDS]);
       const curp      = kycLatest([5]);
       const csf       = kycLatest([6]);
       const domicilio = kycLatest([8]);
@@ -802,7 +807,7 @@ function AppJuridicoDashboardInner() {
       return [
         { key: 'contrato',     label: 'Contrato totalmente firmado',              url: contrato?.url ?? null,           isPrivate: false, fecha: contrato?.fecha_creacion ?? null },
         { key: 'notificacion', label: 'Notificación',                              url: notificacion?.url_archivo ?? null, isPrivate: true,  fecha: notificacion?.fecha_creacion ?? null },
-        { key: 'ine',          label: 'INE',                                       url: ine?.url ?? null,                isPrivate: false, fecha: ine?.fecha_creacion ?? null },
+        { key: 'ine',          label: 'Identificación oficial',                    url: ine?.url ?? null,                isPrivate: false, fecha: ine?.fecha_creacion ?? null },
         { key: 'curp',         label: 'CURP',                                      url: curp?.url ?? null,               isPrivate: false, fecha: curp?.fecha_creacion ?? null },
         { key: 'csf',          label: 'Constancia de situación fiscal (CSF)',      url: csf?.url ?? null,                isPrivate: false, fecha: csf?.fecha_creacion ?? null },
         { key: 'domicilio',    label: 'Comprobante de domicilio',                  url: domicilio?.url ?? null,          isPrivate: false, fecha: domicilio?.fecha_creacion ?? null },

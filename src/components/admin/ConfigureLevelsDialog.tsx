@@ -374,7 +374,7 @@ export const ConfigureLevelsDialog = ({ open, onOpenChange, building }: Configur
 
     toast({
       title: "Plano asignado",
-      description: `El plano \"${draggedImage.fileName}\" fue asignado al nivel ${nivel}. Ahora sí puedes guardar.`,
+      description: `El plano "${draggedImage.fileName}" fue asignado al nivel ${nivel}. Ahora sí puedes guardar.`,
     });
   };
 

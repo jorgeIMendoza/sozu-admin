@@ -97,7 +97,7 @@ export async function submitSolicitudPropietario(
         .uploadToSignedUrl(slot.path, slot.token, doc.blob, { contentType: doc.contentType });
       if (upErr) {
         // No abortamos por un doc: el resto sube y el área de SOZU pide el faltante.
-        // eslint-disable-next-line no-console
+         
         console.warn(`[onboarding] subida falló (${slot.tipo}):`, upErr.message);
         continue;
       }

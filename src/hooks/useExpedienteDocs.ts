@@ -94,7 +94,7 @@ export function useExpedienteDocs({ personaId, tipos, queryKey }: Params) {
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: key });
-  }, [queryClient, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queryClient, key]);  
 
   /**
    * Sube un archivo al bucket `documentos`, desactiva la versión anterior del mismo

@@ -135,7 +135,7 @@ async function fetchCompradores(
       );
       compradoresRows.push(...batch);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn("[aging-detalle] compradores fetch falló:", err);
     }
   }
@@ -162,7 +162,7 @@ async function fetchCompradores(
         );
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn("[aging-detalle] personas fetch falló:", err);
     }
   }

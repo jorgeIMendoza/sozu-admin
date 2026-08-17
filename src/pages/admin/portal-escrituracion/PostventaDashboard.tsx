@@ -447,7 +447,7 @@ export function PostventaDashboard() {
       const erIds = [...new Set((rawTickets as any[])
         .flatMap((t: any) => [t.id_responsable_interno, t.id_proveedor_externo])
         .filter(Boolean))] as number[];
-      let erNombreMap: Record<number, string> = {};
+      const erNombreMap: Record<number, string> = {};
       if (erIds.length) {
         const { data: erRows } = await supabase
           .from('entidades_relacionadas')

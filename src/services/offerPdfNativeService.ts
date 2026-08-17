@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import { isValidRFC } from "@/utils/fiscalDataValidation";
 import { mesesEntreFechas, calcDynamicScheme, mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
+import { resolverMensualidadesFijas } from "@/lib/offers/mensualidades-fijas";
 
 // Icon imports - we'll convert them to base64 on load
 import recamarasIcon from "@/assets/icons/recamaras.png";
@@ -132,6 +133,13 @@ export class OfertaPdfNativeService {
       format: "a4",
       compress: true,
     });
+
+    // Mensualidades fijas del proyecto/unidad (unidad → proyecto → dinámico). El PDF
+    // debe coincidir con la oferta digital, que resuelve la misma cascada server-side.
+    const mensualidadesFijas = await resolverMensualidadesFijas(
+      (data.propertyDetails as any)?.id,
+      data.propertyDetails.projectData?.id,
+    );
 
     // Valor de bodegas incluidas (es_incluido): suma a la BASE del precio final,
     // no al precio de lista mostrado. costo = precio/m² del producto × m2 (calculado
@@ -507,7 +515,7 @@ export class OfertaPdfNativeService {
     });
 
     // Icons column (iconX / iconAreaWidth definidos arriba)
-    let iconY = propStartY;
+    const iconY = propStartY;
     const iconSize = 5;
     const iconSpacing = 12;
 
@@ -691,8 +699,8 @@ export class OfertaPdfNativeService {
         const fechaEntregaProyecto = data.propertyDetails.projectData?.fecha_entrega;
         // Mensualidades restantes: hoy → entrega − 1 mes (mes de entrega = escrituración).
         // Misma regla que la oferta digital (mesesMensualidadesRestantes).
-        const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
-          ? mesesMensualidadesRestantes(fechaEntregaProyecto)
+        const mesesEfectivos = (!isSchemeEscalonado && scheme.porcentaje_mensualidades > 0)
+          ? mesesMensualidadesRestantes(fechaEntregaProyecto ?? null, new Date(), mensualidadesFijas)
           : 0;
         const amounts = calculatePaymentAmounts(scheme, mesesEfectivos);
         const hasSavings = amounts.adjustment < 0;

@@ -94,7 +94,7 @@ export function extractCURPFields(text: string): CURPExtractedFields {
 
   const fechaNacimiento =
     (curp ? fechaFromCurp(curp) : null) ??
-    t.match(/(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/)?.[0] ??
+    t.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)?.[0] ??
     null;
 
   return { curp, nombre, fechaNacimiento, sexo };
@@ -130,7 +130,7 @@ export function extractActaNacimientoFields(text: string): ActaExtractedFields {
 
   const fechaNacimiento =
     (curp ? fechaFromCurp(curp) : null) ??
-    t.match(/(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/)?.[0] ??
+    t.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)?.[0] ??
     null;
 
   const lugarNacimiento = t.match(/Lugar\s+de\s+Nacimiento\s*:?\s*([A-ZÁÉÍÓÚÑ ]{3,40}?)(?=\s{2,}|Datos|CURP|$)/i)?.[1]?.trim() ?? null;

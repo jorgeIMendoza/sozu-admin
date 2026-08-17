@@ -36,7 +36,6 @@ export function CrmImpersonationSelector() {
   const [open, setOpen] = useState(false);
 
   const canImpersonate = profile?.puede_impersonar === true;
-  if (!canImpersonate) return null;
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["crm-users-for-impersonation"],
@@ -82,6 +81,10 @@ export function CrmImpersonationSelector() {
     },
     enabled: canImpersonate,
   });
+
+  // Después de los hooks: `profile` llega async, así que salir antes cambiaría
+  // el orden de hooks entre renders.
+  if (!canImpersonate) return null;
 
   return (
     <div className="flex items-center gap-2">

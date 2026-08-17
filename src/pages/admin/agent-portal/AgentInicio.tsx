@@ -86,7 +86,7 @@ const AgentInicio = () => {
 
       // Get cuentas for precio_final and oferta link
       const cuentaIds = [...new Set(comisionistas.map((c: any) => c.id_cuenta_cobranza).filter(Boolean))] as number[];
-      let cuentaMap = new Map<number, any>();
+      const cuentaMap = new Map<number, any>();
 
       if (cuentaIds.length > 0) {
         const { data: cuentas } = await (supabase as any)
@@ -96,7 +96,7 @@ const AgentInicio = () => {
 
         if (cuentas) {
           const ofertaIds = cuentas.map((c: any) => c.id_oferta).filter(Boolean);
-          let propStatusMap = new Map<number, number>();
+          const propStatusMap = new Map<number, number>();
 
           if (ofertaIds.length > 0) {
             const { data: ofertas } = await (supabase as any)
@@ -105,7 +105,7 @@ const AgentInicio = () => {
               .in('id', ofertaIds);
 
             const propIds = (ofertas || []).map((o: any) => o.id_propiedad).filter(Boolean);
-            let ofertaToProp = new Map<number, number>();
+            const ofertaToProp = new Map<number, number>();
             (ofertas || []).forEach((o: any) => { if (o.id_propiedad) ofertaToProp.set(o.id, o.id_propiedad); });
 
             if (propIds.length > 0) {
