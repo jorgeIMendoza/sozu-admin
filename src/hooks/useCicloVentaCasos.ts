@@ -48,7 +48,7 @@ const nombreDePersona = (p: { nombre_legal?: string | null; nombre_comercial?: s
  */
 async function selectIn<T>(
   ids: Array<number | string>,
-  run: (chunk: Array<number | string>) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  run: (chunk: any[]) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
   const unique = Array.from(new Set(ids));
   if (unique.length === 0) return [];

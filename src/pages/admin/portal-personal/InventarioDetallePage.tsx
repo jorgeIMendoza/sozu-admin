@@ -624,8 +624,7 @@ function ModalUnidad({
                 </Button>
                 <Button asChild variant="outline" className="border-verde text-verde-oscuro">
                   <Link
-                    to="/admin/portal-personal/simulador"
-                    search={{ unidad: unidad.id, desarrollo: slug }}
+                    to={`/admin/portal-personal/simulador?unidad=${encodeURIComponent(unidad.id)}&desarrollo=${encodeURIComponent(slug)}`}
                     onClick={onClose}
                   >
                     Simular esta unidad
