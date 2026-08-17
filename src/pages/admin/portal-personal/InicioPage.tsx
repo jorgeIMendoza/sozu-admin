@@ -56,10 +56,10 @@ export default function InicioPage() {
     .filter((n) => n.etapa === "escriturado").length;
 
   const kpis = [
-    { label: "Ya cobrado", valor: mxn(yaCobrado), sub: "en tu cuenta", color: "text-verde", to: "/ganancias" as const, oculto: true },
-    { label: "Por cobrar", valor: mxn(porCobrar), sub: "en proceso", color: "text-ambar", to: "/ganancias" as const, oculto: true },
-    { label: "Referidos activos", valor: String(activos), sub: "en pipeline", color: "text-negro", to: "/referidos" as const, oculto: false },
-    { label: "Cerrados", valor: String(cerrados), sub: "escriturados", color: "text-negro", to: "/negocios" as const, oculto: false },
+    { label: "Ya cobrado", valor: mxn(yaCobrado), sub: "en tu cuenta", color: "text-verde", to: "/admin/portal-personal/ganancias", oculto: true },
+    { label: "Por cobrar", valor: mxn(porCobrar), sub: "en proceso", color: "text-ambar", to: "/admin/portal-personal/ganancias", oculto: true },
+    { label: "Referidos activos", valor: String(activos), sub: "en pipeline", color: "text-negro", to: "/admin/portal-personal/referidos", oculto: false },
+    { label: "Cerrados", valor: String(cerrados), sub: "escriturados", color: "text-negro", to: "/admin/portal-personal/negocios", oculto: false },
   ];
 
   return (
@@ -243,7 +243,7 @@ function AccionRapida({
   titulo,
   subtitulo,
 }: {
-  to: "/simulador" | "/inventario";
+  to: string;
   icon: typeof Calculator;
   titulo: string;
   subtitulo: string;
