@@ -85,6 +85,9 @@ export function AltaDireccionCitas() {
   const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
   const [vista, setVista] = useState<"lista" | "calendario">("lista");
+  // Periodo de análisis personalizado (rango por fecha de la CITA). Vacío = sin filtro.
+  const [analisisDesde, setAnalisisDesde] = useState<string>("");
+  const [analisisHasta, setAnalisisHasta] = useState<string>("");
   const queryClient = useQueryClient();
 
   // Filtro por fecha de CREACIÓN (citas "generadas") dirigido por URL, para
@@ -107,7 +110,7 @@ export function AltaDireccionCitas() {
       const { data, error } = await (supabase as any)
         .from("reservas_citas")
         .select(
-          "id, fecha, hora_inicio, hora_fin, fecha_creacion, id_estatus_cita, id_tipo_cita, estatus, activo, " +
+          "id, fecha, hora_inicio, hora_fin, fecha_creacion, id_estatus_cita, id_tipo_cita, ubicacion, estatus, activo, " +
           "proyectos(nombre), estatus_cita(nombre), tipos_cita(nombre), " +
           "prospecto:personas!reservas_citas_id_persona_prospecto_fkey(nombre_legal), " +
           "persona:personas!reservas_citas_id_persona_fkey(nombre_legal), " +
@@ -206,9 +209,15 @@ export function AltaDireccionCitas() {
         if (creadoDesde && cd < new Date(creadoDesde + "T00:00:00")) return false;
         if (creadoHasta && cd > new Date(creadoHasta + "T23:59:59.999")) return false;
       }
+      // Periodo de análisis personalizado (por fecha de la cita).
+      if (analisisDesde || analisisHasta) {
+        const d = parseFecha(c.fecha);
+        if (analisisDesde && d < parseFecha(analisisDesde)) return false;
+        if (analisisHasta && d > parseFecha(analisisHasta)) return false;
+      }
       return true;
     });
-  }, [citas, filters, estadoFilter, kpiFilter, semanaRange, creadoDesde, creadoHasta]);
+  }, [citas, filters, estadoFilter, kpiFilter, semanaRange, creadoDesde, creadoHasta, analisisDesde, analisisHasta]);
 
   // Conteos de KPI sobre los filtros globales (proyecto/canal/periodo/búsqueda/estado)
   // — pero ignorando el kpiFilter mismo, para que el usuario no pierda el conteo
@@ -255,7 +264,7 @@ export function AltaDireccionCitas() {
     return { semana, confirmadas, pendientes };
   }, [kpiBaseList, semanaRange]);
 
-  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all" || kpiFilter !== "all" || creadoDesde || creadoHasta);
+  const hayFiltros = !!(filters.projectId || filters.channel || filters.period || filters.search || estadoFilter !== "all" || kpiFilter !== "all" || creadoDesde || creadoHasta || analisisDesde || analisisHasta);
   const totalDesc = hayFiltros
     ? `${filtradas.length} de ${citas.length} citas`
     : `${citas.length} citas en total`;
@@ -264,7 +273,37 @@ export function AltaDireccionCitas() {
     setKpiFilter((prev) => (prev === next ? "all" : next));
 
   const panelActions = (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-1.5" title="Periodo de análisis por fecha de la cita">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">Periodo:</span>
+        <input
+          type="date"
+          value={analisisDesde}
+          max={analisisHasta || undefined}
+          onChange={(e) => setAnalisisDesde(e.target.value)}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="Periodo desde"
+        />
+        <span className="text-xs text-muted-foreground">–</span>
+        <input
+          type="date"
+          value={analisisHasta}
+          min={analisisDesde || undefined}
+          onChange={(e) => setAnalisisHasta(e.target.value)}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="Periodo hasta"
+        />
+        {(analisisDesde || analisisHasta) && (
+          <button
+            type="button"
+            onClick={() => { setAnalisisDesde(""); setAnalisisHasta(""); }}
+            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Limpiar periodo"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
       <Select value={estadoFilter} onValueChange={setEstadoFilter}>
         <SelectTrigger className="h-8 w-[200px] text-xs">
           <SelectValue />
@@ -351,7 +390,7 @@ export function AltaDireccionCitas() {
                 <TableHead>Folio</TableHead><TableHead>Tipo</TableHead><TableHead>Cliente / Asistente</TableHead>
                 <TableHead>Cita (fecha · hora)</TableHead>
                 <TableHead>Creada (fecha · hora)</TableHead>
-                <TableHead>Desarrollo</TableHead><TableHead>Agente</TableHead><TableHead>Estado</TableHead>
+                <TableHead>Desarrollo</TableHead><TableHead>Ubicación</TableHead><TableHead>Agente</TableHead><TableHead>Estado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -385,14 +424,8 @@ export function AltaDireccionCitas() {
                       <div className="text-xs text-muted-foreground">{creada.hora}</div>
                     </TableCell>
                     <TableCell>{c.proyectos?.nombre || "—"}</TableCell>
-                    <TableCell>
-                      {(() => {
-                        const ag = nombreAgente(c);
-                        return ag.noAplica
-                          ? <span className="italic text-muted-foreground">{ag.value}</span>
-                          : ag.value;
-                      })()}
-                    </TableCell>
+                    <TableCell>{c.ubicacion || "—"}</TableCell>
+                    <TableCell>{nombreAgente(c)}</TableCell>
                     <TableCell><Pill className={tone}>{estadoLabel}</Pill></TableCell>
                   </TableRow>
                 );

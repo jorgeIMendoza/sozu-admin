@@ -29,13 +29,15 @@ export type CitaRow = {
   /** Quien reserva / asiste (FK id_persona). En Capacitación es el único que se llena. */
   persona: { nombre_legal: string } | null;
   agente: CitaAgente | null;
+  /** Ubicación de la cita (p. ej. "Presencial", dirección del showroom). */
+  ubicacion: string | null;
 };
 
 /**
- * Tipos de cita que por diseño NO tienen cliente-prospecto ni agente
- * acompañante (p. ej. Capacitación: es un agente tomando capacitación, no una
- * visita comercial). Para estos, un agente/cliente vacío es "No aplica", no un
- * dato faltante. Mantener como constante nombrada — mañana pueden ser más.
+ * Tipos de cita que NO tienen un agente acompañante distinto (p. ej.
+ * Capacitación: es un agente tomando capacitación, no una visita comercial —
+ * el asistente ES el agente). Mantener como constante nombrada — mañana pueden
+ * ser más.
  */
 export const TIPOS_CITA_SIN_CLIENTE_NI_AGENTE = new Set<number>([
   1, // Capacitación
@@ -55,14 +57,15 @@ export function nombreAsistente(c: CitaRow): string {
 }
 
 /**
- * Nombre del agente a mostrar. Distingue "No aplica" (el tipo de cita no tiene
- * agente por diseño) de "—" (dato faltante que alguien debe corregir).
- * `noAplica` permite a la UI atenuar/italizar el texto.
+ * Nombre del agente a mostrar. Prioriza el agente acompañante (id_agente); en
+ * citas de Capacitación no hay agente acompañante pero el asistente ES el agente
+ * que se capacita, así que se muestra su nombre (antes salía "No aplica"). Si no
+ * hay dato, "—".
  */
-export function nombreAgente(c: CitaRow): { value: string; noAplica: boolean } {
-  if (c.agente?.nombre_legal) return { value: c.agente.nombre_legal, noAplica: false };
-  if (esCitaSinAgentePorDiseno(c)) return { value: "No aplica", noAplica: true };
-  return { value: "—", noAplica: false };
+export function nombreAgente(c: CitaRow): string {
+  if (c.agente?.nombre_legal) return c.agente.nombre_legal;
+  if (esCitaSinAgentePorDiseno(c) && c.persona?.nombre_legal) return c.persona.nombre_legal;
+  return "—";
 }
 
 /** Tono (clases Tailwind) por id de estatus de cita. */

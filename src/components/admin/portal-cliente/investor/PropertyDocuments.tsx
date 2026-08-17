@@ -26,6 +26,7 @@ const STATUS_CONFIG: Record<
   recibido: { Icon: Clock,        label: "Recibido",  classes: "bg-primary/15 text-primary" },
   pendiente:{ Icon: AlertCircle,  label: "Pendiente", classes: "bg-warning/15 text-warning" },
   rechazado:{ Icon: AlertCircle,  label: "Rechazado", classes: "bg-destructive/15 text-destructive" },
+  vencido:  { Icon: AlertCircle,  label: "Vencido",   classes: "bg-destructive/15 text-destructive" },
 };
 
 const PropertyDocuments = ({ propertyId }: Props) => {

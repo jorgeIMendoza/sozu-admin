@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Clock, SlidersHorizontal, Loader2, History, Building2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, XCircle, Clock, SlidersHorizontal, Loader2, History, Building2, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -13,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProyectosFiltro } from "@/hooks/usePortalAltaDireccion/useProyectosFiltro";
 import { useProyectosMotorComisiones } from "@/hooks/usePortalEstructuraComisiones/useProyectosMotorComisiones";
 import { useProyectosSozuReales } from "@/hooks/usePortalEstructuraComisiones/useProyectosTallwoodReales";
-import { useEstructuraRealRaw, comisionistasDisponibles } from "@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador";
+import { useEstructuraRealRaw, comisionistasDisponibles, useComisionistasPorId, type ComisionistaReal } from "@/hooks/usePortalEstructuraComisiones/useEstructuraRealSimulador";
 import { SimulatorProvider, useSimulator } from "@/lib/portal-estructura-comisiones/stores/SimulatorContext";
 import { MotorComisionesReadOnly } from "@/components/admin/portal-alta-direccion/MotorComisionesReadOnly";
 import BrokerIncentivesTab from "@/components/admin/portal-estructura-comisiones/tabs/BrokerIncentivesTab";
@@ -23,6 +24,7 @@ import {
   useValidacionesCanal,
   useValidarCanalComision,
   useActualizarEstadoPropuesta,
+  fingerprintCanal,
   type ComisionPropuesta,
   type EstadoPropuesta,
   type EstadoValidacionCanal,
@@ -39,6 +41,9 @@ const ESTADO_BADGE: Record<EstadoPropuesta, { label: string; cls: string }> = {
 
 const fmtFecha = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/** Normaliza nombres para casar comisionista por nombre (sin acentos, minúsculas). */
+const normNombre = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
 
 export default function AltaDireccionEstructuraComisionesPage() {
   return (
@@ -79,10 +84,41 @@ export default function AltaDireccionEstructuraComisionesPage() {
   );
 }
 
+/** Claves react-query de los datos que alimentan la Estructura de Comisiones. */
+const CLAVES_ESTRUCTURA = [
+  ["estructura-real-simulador"],      // personal, roles y comisionistas (Roles y Sueldos)
+  ["proyectos-motor-comisiones"],     // proyectos con motor
+  ["proyectos-sozu-reales"],          // precio de referencia por proyecto
+  ["comisiones-propuestas"],          // validaciones — propuestas
+  ["comisiones-validaciones"],        // validaciones — historial
+  ["comisiones-validaciones-canal"],  // validaciones — por canal
+];
+
 /* ─── Consulta del motor (real, por proyecto, solo lectura) ─── */
 function MotorConsulta() {
-  const { channels, roles, roleAssignments, commissionRules, motorConfig, motorProjectId, setMotorProjectId } = useSimulator();
+  const { channels, roles, roleAssignments, commissionRules, motorConfig, motorProjectId, setMotorProjectId, reloadMotor } = useSimulator();
   const { data: proyectosMotor = [], isLoading: isLoadingProyectos } = useProyectosMotorComisiones();
+  const qc = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Actualiza todo lo que el sistema alimenta a esta pantalla: relee del
+  // servidor los canales + la matriz del proyecto (datos imperativos) e invalida
+  // la caché de personal/comisionistas/proyectos/validaciones para que react-query
+  // los vuelva a pedir. Cubre los cambios hechos en "Personal / Roles y Sueldos".
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        reloadMotor(),
+        ...CLAVES_ESTRUCTURA.map((queryKey) => qc.invalidateQueries({ queryKey })),
+      ]);
+      toast.success("Información actualizada");
+    } catch {
+      toast.error("No se pudo actualizar la información. Intenta de nuevo.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Precio de venta de referencia = precio promedio PONDERADO de la oferta
   // disponible (id_estatus_disponibilidad = 2) del proyecto. Misma fuente que
@@ -116,13 +152,29 @@ function MotorConsulta() {
     })),
     roles: roles.map((r) => ({ id: r.id, name: r.name, belongsTo: r.belongsTo })),
     roleAssignments: roleAssignments.map((a) => ({ roleId: a.roleId, baseSalary: a.baseSalary })),
-    commissionRules: commissionRules.map((r) => ({
-      channelId: r.channelId,
-      roleId: r.roleId,
-      percentage: r.percentage,
-      pool: r.pool,
-      comisionista: r.personalId ? comisionistaPorId.get(r.personalId)?.nombre ?? null : null,
-    })),
+    // El rol y el pool se resuelven contra el DIRECTORIO actual (Roles y Sueldos),
+    // no contra lo que quedó grabado en la regla: si a la persona le cambiaron el
+    // rol después de crearse la regla, `comisiones_reglas.id_rol` queda obsoleto
+    // (ej. Alma Castellón salía como "Data & IA / SOZU" siendo ya "Administración
+    // y Contabilidad"). Se conserva el rol de la regla solo si la persona aún lo
+    // ejerce; si no, se cae a su rol base vigente y el pool sigue a su `belongsTo`.
+    commissionRules: commissionRules.map((r) => {
+      const c = r.personalId ? comisionistaPorId.get(r.personalId) : null;
+      const rolVigente =
+        c?.roles.find((x) => x.roleId === r.roleId) ??
+        c?.roles.find((x) => x.origen === "base") ??
+        c?.roles[0] ??
+        null;
+      return {
+        channelId: r.channelId,
+        roleId: rolVigente?.roleId ?? r.roleId,
+        rolNombre: rolVigente?.rolNombre ?? null,
+        percentage: r.percentage,
+        pool: rolVigente ? (rolVigente.belongsTo === "sozu_central" ? "sozu" : "project") : r.pool,
+        perfil: c?.tipoPersonal ?? null,
+        comisionista: c?.nombre ?? null,
+      };
+    }),
   };
 
   return (
@@ -140,6 +192,18 @@ function MotorConsulta() {
             {proyectosMotor.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
           </SelectContent>
         </Select>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto h-9 gap-1.5"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Vuelve a leer del sistema canales, comisiones, comisionistas y validaciones"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+          {refreshing ? "Actualizando…" : "Actualizar"}
+        </Button>
       </div>
 
       {motorProjectId == null ? (
@@ -241,23 +305,70 @@ function ValidacionSheet({
   );
   const [notas, setNotas] = useState("");
 
+  // El snapshot de la propuesta está congelado y puede traer roles obsoletos
+  // (ej. Alma Castellón como "Data & IA"). Se corrige contra el Directorio
+  // vigente por NOMBRE de comisionista (el snapshot no guarda id de persona), y
+  // se agrega el Perfil (Empleado SOZU / Colaborador Investimento) para la columna.
+  const comisionistasPorId = useComisionistasPorId(propuesta?.id_proyecto);
+  const comisionistaPorNombre = useMemo(() => {
+    const m = new Map<string, ComisionistaReal>();
+    comisionistasPorId.forEach((c) => m.set(normNombre(c.nombre), c));
+    return m;
+  }, [comisionistasPorId]);
+  const snapshotCorregido = useMemo<MotorSnapshot | null>(() => {
+    if (!propuesta) return null;
+    const s = propuesta.snapshot;
+    return {
+      ...s,
+      commissionRules: s.commissionRules.map((r) => {
+        const c = r.comisionista ? comisionistaPorNombre.get(normNombre(r.comisionista)) : null;
+        if (!c) return r;
+        const rolVigente =
+          c.roles.find((x) => x.roleId === r.roleId) ??
+          c.roles.find((x) => x.origen === "base") ??
+          c.roles[0] ??
+          null;
+        return {
+          ...r,
+          roleId: rolVigente?.roleId ?? r.roleId,
+          rolNombre: rolVigente?.rolNombre ?? null,
+          pool: rolVigente ? (rolVigente.belongsTo === "sozu_central" ? "sozu" : "project") : r.pool,
+          perfil: c.tipoPersonal ?? null,
+        };
+      }),
+    };
+  }, [propuesta, comisionistaPorNombre]);
+
   const canales = propuesta?.snapshot?.channels ?? [];
 
-  // Decisiones vigentes: solo las que coinciden con la versión (fecha) de la
-  // propuesta actual; si se reenvió a validar, las viejas quedan descartadas.
+  // Decisión VIGENTE por canal: se conserva mientras la HUELLA del canal no
+  // cambie, aunque la propuesta se haya reenviado por cambios en OTROS canales.
+  // Solo si ESTE canal se modificó (huella distinta) vuelve a quedar pendiente y
+  // se rehabilita su validación. Las filas viejas sin `canal_hash` caen al
+  // criterio anterior (por fecha de la propuesta). Se conserva quién y cuándo validó.
   const decisionPorCanal = useMemo(() => {
-    const m = new Map<string, EstadoValidacionCanal>();
+    const m = new Map<string, { estado: EstadoValidacionCanal; fecha_validacion: string; validado_por: string | null }>();
     if (!propuesta) return m;
     for (const v of validacionesCanal) {
-      if (v.snapshot_fecha === propuesta.fecha_actualizacion) m.set(v.id_canal, v.estado);
+      const vigente = v.canal_hash != null
+        ? v.canal_hash === fingerprintCanal(propuesta.snapshot, v.id_canal)
+        : v.snapshot_fecha === propuesta.fecha_actualizacion;
+      if (vigente && !m.has(v.id_canal)) {
+        m.set(v.id_canal, { estado: v.estado, fecha_validacion: v.fecha_validacion, validado_por: v.validado_por });
+      }
     }
     return m;
   }, [validacionesCanal, propuesta]);
 
+  const estadoPorCanal = useMemo(
+    () => new Map<string, EstadoValidacionCanal>([...decisionPorCanal].map(([k, v]) => [k, v.estado])),
+    [decisionPorCanal],
+  );
+
   const resumen = useMemo(() => {
     let validados = 0, rechazados = 0;
     for (const ch of canales) {
-      const e = decisionPorCanal.get(ch.id);
+      const e = estadoPorCanal.get(ch.id);
       if (e === "validada") validados++;
       else if (e === "rechazada") rechazados++;
     }
@@ -267,7 +378,7 @@ function ValidacionSheet({
       rechazados,
       pendientes: canales.length - validados - rechazados,
     };
-  }, [canales, decisionPorCanal]);
+  }, [canales, estadoPorCanal]);
 
   /** Estado agregado del proyecto derivado de sus canales. */
   const derivarEstado = (m: Map<string, EstadoValidacionCanal>): EstadoPropuesta => {
@@ -293,11 +404,12 @@ function ValidacionSheet({
         notas: estado === "rechazada" ? notas.trim() : null,
         validado_por: validadoPor,
         snapshot_fecha: propuesta.fecha_actualizacion,
+        canal_hash: fingerprintCanal(propuesta.snapshot, canal.id),
       },
       {
         onSuccess: () => {
           // Recalcular el estado agregado y reflejarlo en la propuesta.
-          const next = new Map(decisionPorCanal);
+          const next = new Map(estadoPorCanal);
           next.set(canal.id, estado);
           const agg = derivarEstado(next);
           if (agg !== propuesta.estado) {
@@ -314,61 +426,84 @@ function ValidacionSheet({
   };
 
   const renderChannelAction = (canal: { id: string; name: string }) => {
-        const e = decisionPorCanal.get(canal.id);
+        const d = decisionPorCanal.get(canal.id);
+        const e = d?.estado;
         return (
-          <div className="flex items-center gap-1.5">
-            {e === "validada" && (
-              <Badge className="border-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                Validado
-              </Badge>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-1.5">
+              {e === "validada" && (
+                <Badge className="border-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  Validado
+                </Badge>
+              )}
+              {e === "rechazada" && (
+                <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                  Rechazado
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 px-2 text-[11px]"
+                disabled={validarCanal.isPending || e === "validada"}
+                onClick={() => decidirCanal(canal, "validada")}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Validar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 border-red-300 px-2 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                disabled={validarCanal.isPending || e === "rechazada"}
+                onClick={() => decidirCanal(canal, "rechazada")}
+              >
+                <XCircle className="h-3.5 w-3.5" /> Rechazar
+              </Button>
+            </div>
+            {/* Día, hora y usuario que dejó vigente la decisión de ESTE canal. */}
+            {d && (
+              <span className="text-[10px] text-muted-foreground">
+                {e === "validada" ? "Validado" : "Rechazado"} por {d.validado_por || "—"} · {fmtFecha(d.fecha_validacion)}
+              </span>
             )}
-            {e === "rechazada" && (
-              <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                Rechazado
-              </Badge>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 px-2 text-[11px]"
-              disabled={validarCanal.isPending || e === "validada"}
-              onClick={() => decidirCanal(canal, "validada")}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Validar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 border-red-300 px-2 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-              disabled={validarCanal.isPending || e === "rechazada"}
-              onClick={() => decidirCanal(canal, "rechazada")}
-            >
-              <XCircle className="h-3.5 w-3.5" /> Rechazar
-            </Button>
           </div>
         );
       };
 
-  const estadoActual = derivarEstado(decisionPorCanal);
+  const estadoActual = derivarEstado(estadoPorCanal);
 
   return (
     <Sheet open={!!propuesta} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
         {propuesta && (
           <>
-            <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
+            <SheetHeader className="shrink-0 space-y-1 border-b border-border px-6 py-5 text-left">
+              <SheetTitle className="flex flex-wrap items-center gap-2 text-lg">
                 {propuesta.proyecto_nombre}
                 <Badge variant="secondary" className={cn("text-[10px]", ESTADO_BADGE[estadoActual].cls)}>
                   {ESTADO_BADGE[estadoActual].label}
                 </Badge>
               </SheetTitle>
+              <SheetDescription>
+                Valida cada Canal de Venta. El proyecto queda Validado cuando todos sus canales lo están.
+                {propuesta.propuesta_por ? ` · Propuesto por ${propuesta.propuesta_por}` : ""}
+              </SheetDescription>
             </SheetHeader>
 
-            <div className="mt-4 space-y-5">
+            <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
               {(
                 <div className="rounded-xl border bg-card p-4">
-                  <p className="mb-2 text-sm font-semibold">Validación por canal</p>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">Validación por canal</p>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {resumen.validados + resumen.rechazados} / {resumen.total} decididos
+                    </span>
+                  </div>
+                  {/* Barra de progreso: validados (verde) + rechazados (rojo) sobre el total. */}
+                  <div className="mb-3 flex h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="bg-emerald-500 transition-all" style={{ width: `${resumen.total ? (resumen.validados / resumen.total) * 100 : 0}%` }} />
+                    <div className="bg-red-500 transition-all" style={{ width: `${resumen.total ? (resumen.rechazados / resumen.total) * 100 : 0}%` }} />
+                  </div>
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
                     <Badge className="border-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                       {resumen.validados} validados
@@ -397,10 +532,10 @@ function ValidacionSheet({
               )}
 
               <MotorComisionesReadOnly
-                snapshot={propuesta.snapshot}
+                snapshot={snapshotCorregido ?? propuesta.snapshot}
                 precioReferenciaInicial={precioReferencia || undefined}
                 renderChannelAction={renderChannelAction}
-                channelStatus={(id) => decisionPorCanal.get(id) ?? "pendiente"}
+                channelStatus={(id) => estadoPorCanal.get(id) ?? "pendiente"}
               />
 
               <div className="rounded-xl border bg-card p-4">

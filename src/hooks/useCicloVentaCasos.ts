@@ -15,6 +15,10 @@ export interface CasoVenta {
   modelo_nombre: string;
   compradores: string[];
   propietario: string;
+  /** Lead de la oferta (cliente / contacto / prospecto que la originó). */
+  cliente_lead: string;
+  /** Agente creador de la oferta (nombre de la persona, si se resuelve). */
+  agente: string;
   dias_desde_compra: number;
   precio_final: number;
   metraje: number;
@@ -26,20 +30,62 @@ const ESTATUS_APARTADO = 4;
 const ESTATUS_VENDIDO = 5;
 const ESTATUS_EN_CICLO = [ESTATUS_APARTADO, ESTATUS_VENDIDO];
 
-function diffDays(from: string, to: Date) {
-  const d = new Date(from);
-  return Math.round((to.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+/**
+ * Límite de elementos por filtro `.in(...)`. PostgREST arma el filtro en el
+ * query-string; una lista larga (cientos de correos o ids) revienta el límite
+ * de longitud de URL del proxy y la petición falla con "TypeError: Failed to
+ * fetch". Por eso las consultas por lista se parten en lotes.
+ */
+const IN_CHUNK = 150;
+
+const nombreDePersona = (p: { nombre_legal?: string | null; nombre_comercial?: string | null } | null | undefined) =>
+  p?.nombre_comercial || p?.nombre_legal || "";
+
+/**
+ * `SELECT ... WHERE col IN (ids)` a prueba de URLs largas: parte los ids en
+ * lotes y los corre en paralelo. `run` recibe cada lote y devuelve la respuesta
+ * de Supabase. Deduplica ids y omite la consulta si no hay ninguno.
+ */
+async function selectIn<T>(
+  ids: Array<number | string>,
+  run: (chunk: Array<number | string>) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const unique = Array.from(new Set(ids));
+  if (unique.length === 0) return [];
+  const chunks: Array<Array<number | string>> = [];
+  for (let i = 0; i < unique.length; i += IN_CHUNK) chunks.push(unique.slice(i, i + IN_CHUNK));
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await run(chunk);
+      if (error) throw error;
+      return data ?? [];
+    }),
+  );
+  return results.flat();
 }
 
+const diffDays = (from: string, to: Date) =>
+  Math.round((to.getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24));
+
+/**
+ * Expedientes en ciclo de venta: cuentas de cobranza aprobadas cuya propiedad
+ * está en estatus Apartado (4) o Vendido (5).
+ *
+ * Estrategia: se traen las cuentas candidatas y sus ofertas, se acota el
+ * universo a las propiedades EN CICLO y, a partir de ahí, TODO el enriquecimiento
+ * (proyecto, modelo, compradores, propietario, agente, lead) se hace SOLO sobre
+ * las cuentas que sobreviven ese filtro. Así no se hidratan cientos de cuentas
+ * que luego se descartan, y las listas `.in(...)` quedan chicas.
+ */
 export function useCicloVentaCasos() {
   return useQuery({
     queryKey: ["ciclo_venta_casos_vendidas"],
+    staleTime: 60_000,
     queryFn: async (): Promise<CasoVenta[]> => {
+      // 1) Cuentas candidatas (aprobadas, principales, con fecha de compra).
       const { data: cuentas, error: ccErr } = await supabase
         .from("cuentas_cobranza")
-        .select(
-          "id, id_oferta, precio_final, fecha_compra, es_aprobado, activo",
-        )
+        .select("id, id_oferta, precio_final, fecha_compra")
         .eq("activo", true)
         .eq("es_aprobado", true)
         .is("id_cuenta_cobranza_padre", null)
@@ -47,274 +93,187 @@ export function useCicloVentaCasos() {
         .order("fecha_compra", { ascending: false })
         .limit(1000);
       if (ccErr) throw ccErr;
-      if (!cuentas || cuentas.length === 0) return [];
+      if (!cuentas?.length) return [];
 
-      const ofertaIds = Array.from(
-        new Set(cuentas.map((c: any) => c.id_oferta).filter((v): v is number => v != null)),
+      // 2) Ofertas de esas cuentas (para llegar a la propiedad/producto/lead/agente).
+      const ofertaIds = cuentas.map((c) => c.id_oferta).filter((v): v is number => v != null);
+      const ofertas = await selectIn<{
+        id: number;
+        id_propiedad: number | null;
+        id_producto: number | null;
+        email_creador: string | null;
+        id_persona_lead: number | null;
+      }>(ofertaIds, (chunk) =>
+        supabase
+          .from("ofertas")
+          .select("id, id_propiedad, id_producto, email_creador, id_persona_lead")
+          .in("id", chunk),
       );
+      const ofertaById = new Map(ofertas.map((o) => [o.id, o]));
 
-      const { data: ofertas, error: ofErr } = ofertaIds.length
-        ? await supabase
-            .from("ofertas")
-            .select("id, id_propiedad, id_producto")
-            .in("id", ofertaIds)
-        : { data: [] as Array<{ id: number; id_propiedad: number | null; id_producto: number | null }>, error: null };
-      if (ofErr) throw ofErr;
-
-      const propiedadIdsFromOfertas = Array.from(
-        new Set(
-          (ofertas || [])
-            .map((o) => o.id_propiedad)
-            .filter((v): v is number => v != null),
-        ),
+      // 3) Propiedades EN CICLO (estatus 4/5). Define el universo que sobrevive.
+      const propIds = ofertas.map((o) => o.id_propiedad).filter((v): v is number => v != null);
+      const propiedades = await selectIn<any>(propIds, (chunk) =>
+        supabase
+          .from("propiedades")
+          .select(
+            "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, id_estatus_disponibilidad",
+          )
+          .in("id", chunk)
+          .in("id_estatus_disponibilidad", ESTATUS_EN_CICLO)
+          .eq("activo", true),
       );
+      if (!propiedades.length) return [];
 
-      const { data: propiedadesVendidas, error: propErr } = propiedadIdsFromOfertas.length
-        ? await supabase
-            .from("propiedades")
-            .select(
-              "id, numero_propiedad, id_edificio_modelo, id_entidad_relacionada_dueno, m2_interiores, m2_exteriores, m2_loft, precio_lista, id_estatus_disponibilidad",
-            )
-            .in("id", propiedadIdsFromOfertas)
-            .in("id_estatus_disponibilidad", ESTATUS_EN_CICLO)
-            .eq("activo", true)
-        : { data: [] as Array<any>, error: null };
-      if (propErr) throw propErr;
-      if (!propiedadesVendidas || propiedadesVendidas.length === 0) return [];
-
-      const ofertaToPropiedad = new Map<number, number>();
-      const ofertaToProducto = new Map<number, number | null>();
-      (ofertas || []).forEach((o) => {
-        if (o.id_propiedad != null) ofertaToPropiedad.set(o.id, o.id_propiedad);
-        ofertaToProducto.set(o.id, o.id_producto);
-      });
-
-      const propiedadMap = new Map<number, { numero: string; idEdificioModelo: any; idEntidadDueno: any; metraje: number; precioLista: number; }>(
-        propiedadesVendidas.map((p): [number, { numero: string; idEdificioModelo: any; idEntidadDueno: any; metraje: number; precioLista: number; }] => [
+      const propiedadMap = new Map<number, { numero: string; idEdificioModelo: number | null; idEntidadDueno: number | null; metraje: number }>(
+        propiedades.map((p) => [
           p.id,
           {
             numero: p.numero_propiedad ?? "",
-            idEdificioModelo: p.id_edificio_modelo,
-            idEntidadDueno: p.id_entidad_relacionada_dueno,
-            metraje:
-              (Number(p.m2_interiores) || 0) +
-              (Number(p.m2_exteriores) || 0) +
-              (Number((p as any).m2_loft) || 0),
-            precioLista: Number(p.precio_lista) || 0,
+            idEdificioModelo: p.id_edificio_modelo ?? null,
+            idEntidadDueno: p.id_entidad_relacionada_dueno ?? null,
+            metraje: (Number(p.m2_interiores) || 0) + (Number(p.m2_exteriores) || 0) + (Number(p.m2_loft) || 0),
           },
         ]),
       );
 
-      const emIds = Array.from(
-        new Set(
-          propiedadesVendidas
-            .map((p) => p.id_edificio_modelo)
-            .filter((v): v is number => v != null),
+      // 4) Cuentas que sobreviven: su oferta apunta a una propiedad EN CICLO.
+      const cuentasVigentes = cuentas.filter((c) => {
+        const oferta = c.id_oferta != null ? ofertaById.get(c.id_oferta) : undefined;
+        return oferta?.id_propiedad != null && propiedadMap.has(oferta.id_propiedad);
+      });
+      if (!cuentasVigentes.length) return [];
+
+      const ofertasVigentes = cuentasVigentes
+        .map((c) => (c.id_oferta != null ? ofertaById.get(c.id_oferta) : undefined))
+        .filter((o): o is NonNullable<typeof o> => !!o);
+
+      // 5) Enriquecimiento acotado a lo que sobrevive.
+      const emIds = propiedades.map((p) => p.id_edificio_modelo).filter((v): v is number => v != null);
+      const productoIds = ofertasVigentes.map((o) => o.id_producto).filter((v): v is number => v != null);
+      const cuentaVigenteIds = cuentasVigentes.map((c) => c.id);
+      const duenoIds = propiedades.map((p) => p.id_entidad_relacionada_dueno).filter((v): v is number => v != null);
+      const emails = ofertasVigentes.map((o) => o.email_creador).filter((v): v is string => !!v);
+      const leadIds = ofertasVigentes.map((o) => o.id_persona_lead).filter((v): v is number => v != null);
+
+      // Ola A — todo depende sólo del universo ya acotado; corre en paralelo.
+      const [edms, productos, compradores, duenos, usuariosAgente] = await Promise.all([
+        selectIn<{ id: number; id_edificio: number | null; id_modelo: number | null }>(emIds, (ch) =>
+          supabase.from("edificios_modelos").select("id, id_edificio, id_modelo").in("id", ch),
         ),
-      );
-
-      const { data: edms, error: emErr } = emIds.length
-        ? await supabase
-            .from("edificios_modelos")
-            .select("id, id_edificio, id_modelo")
-            .in("id", emIds)
-        : { data: [] as Array<{ id: number; id_edificio: number | null; id_modelo: number | null }>, error: null };
-      if (emErr) throw emErr;
-
-      const emMap = new Map(
-        (edms || []).map((em) => [
-          em.id,
-          { idEdificio: em.id_edificio, idModelo: em.id_modelo },
-        ]),
-      );
-
-      const modeloIds = Array.from(
-        new Set((edms || []).map((em) => em.id_modelo).filter((v): v is number => v != null)),
-      );
-      const { data: modelos, error: mdErr } = modeloIds.length
-        ? await supabase.from("modelos").select("id, nombre").in("id", modeloIds)
-        : { data: [] as Array<{ id: number; nombre: string | null }>, error: null };
-      if (mdErr) throw mdErr;
-      const modeloMap = new Map((modelos || []).map((m) => [m.id, m.nombre ?? ""]));
-
-      const edificioIds = Array.from(
-        new Set(
-          Array.from(emMap.values())
-            .map((v) => v.idEdificio)
-            .filter((v): v is number => v != null),
-        ),
-      );
-
-      const { data: edificios, error: edErr } = edificioIds.length
-        ? await supabase
-            .from("edificios")
-            .select("id, nombre, id_proyecto")
-            .in("id", edificioIds)
-        : { data: [] as Array<{ id: number; nombre: string | null; id_proyecto: number | null }>, error: null };
-      if (edErr) throw edErr;
-
-      const edificioMap = new Map(
-        (edificios || []).map((e) => [
-          e.id,
-          { nombre: e.nombre ?? "", idProyecto: e.id_proyecto },
-        ]),
-      );
-
-      const proyectoIds = Array.from(
-        new Set(
-          (edificios || []).map((e) => e.id_proyecto).filter((v): v is number => v != null),
-        ),
-      );
-
-      const { data: proyectos, error: prjErr } = proyectoIds.length
-        ? await supabase.from("proyectos").select("id, nombre").in("id", proyectoIds)
-        : { data: [] as Array<{ id: number; nombre: string | null }>, error: null };
-      if (prjErr) throw prjErr;
-      const proyectoMap = new Map((proyectos || []).map((p) => [p.id, p.nombre ?? ""]));
-
-      const productoIds = Array.from(
-        new Set(
-          (ofertas || [])
-            .map((o) => o.id_producto)
-            .filter((v): v is number => v != null),
-        ),
-      );
-
-      const { data: productos, error: prodErr } = productoIds.length
-        ? await (supabase as any)
+        selectIn<{ id: number; categorias_producto: { nombre: string | null } | null }>(productoIds, (ch) =>
+          (supabase as any)
             .from("productos_servicios")
-            .select(
-              "id, nombre, id_categoria, categorias_producto!productos_servicios_id_categoria_fkey(nombre)",
-            )
-            .in("id", productoIds)
-        : { data: [] as any[], error: null };
-      if (prodErr) throw prodErr;
-
-      const productoMap = new Map<number, { categoria: string }>(
-        ((productos || []) as Array<{ id: number; categorias_producto: { nombre: string | null } | null }>).map((p) => [
-          p.id,
-          { categoria: (p.categorias_producto?.nombre || "").toLowerCase() },
-        ]),
-      );
-
-      const cuentaIds = cuentas.map((c: any) =>
-        typeof c.id === "string" ? Number(c.id) : c.id,
-      );
-
-      const { data: compradores, error: compErr } = cuentaIds.length
-        ? await supabase
-            .from("compradores")
-            .select("id_cuenta_cobranza, id_persona, porcentaje_copropiedad")
-            .in("id_cuenta_cobranza", cuentaIds)
-            .eq("activo", true)
-        : { data: [] as Array<{ id_cuenta_cobranza: number; id_persona: number; porcentaje_copropiedad: number }>, error: null };
-      if (compErr) throw compErr;
-
-      const compradorPersonaIds = Array.from(
-        new Set((compradores || []).map((c) => c.id_persona).filter((v): v is number => v != null)),
-      );
-
-      const entidadDuenoIds = Array.from(
-        new Set(
-          propiedadesVendidas
-            .map((p) => p.id_entidad_relacionada_dueno)
-            .filter((v): v is number => v != null),
+            .select("id, categorias_producto!productos_servicios_id_categoria_fkey(nombre)")
+            .in("id", ch),
         ),
-      );
-
-      const { data: entidadesDueno, error: entErr } = entidadDuenoIds.length
-        ? await (supabase as any)
+        selectIn<{ id_cuenta_cobranza: number; id_persona: number }>(cuentaVigenteIds, (ch) =>
+          supabase.from("compradores").select("id_cuenta_cobranza, id_persona").in("id_cuenta_cobranza", ch).eq("activo", true),
+        ),
+        selectIn<{ id: number; personas: { nombre_legal: string | null; nombre_comercial: string | null } | null }>(duenoIds, (ch) =>
+          (supabase as any)
             .from("entidades_relacionadas")
-            .select("id, id_persona, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
-            .in("id", entidadDuenoIds)
-        : { data: [] as any[], error: null };
-      if (entErr) throw entErr;
+            .select("id, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
+            .in("id", ch),
+        ),
+        selectIn<{ email: string; id_persona: number | null; nombre: string | null }>(emails, (ch) =>
+          (supabase as any).from("usuarios").select("email, id_persona, nombre").in("email", ch),
+        ),
+      ]);
 
-      const entidadDuenoNombre = new Map<number, string>(
-        ((entidadesDueno || []) as Array<{ id: number; personas: { nombre_legal: string | null; nombre_comercial: string | null } | null }>).map((e) => [
-          e.id,
-          e.personas?.nombre_comercial || e.personas?.nombre_legal || "",
-        ]),
+      const emMap = new Map(edms.map((em) => [em.id, { idEdificio: em.id_edificio, idModelo: em.id_modelo }]));
+      const productoCategoria = new Map<number, string>(
+        productos.map((p) => [p.id, (p.categorias_producto?.nombre || "").toLowerCase()]),
       );
+      const duenoNombre = new Map<number, string>(duenos.map((e) => [e.id, nombreDePersona(e.personas)]));
 
-      const { data: personasComp, error: pErr } = compradorPersonaIds.length
-        ? await (supabase as any)
-            .from("personas")
-            .select("id, nombre_legal, nombre_comercial")
-            .in("id", compradorPersonaIds)
-        : { data: [] as any[], error: null };
-      if (pErr) throw pErr;
+      // Ola B — depende de la ola A.
+      const modeloIds = edms.map((em) => em.id_modelo).filter((v): v is number => v != null);
+      const edificioIds = edms.map((em) => em.id_edificio).filter((v): v is number => v != null);
+      const compradorPersonaIds = compradores.map((c) => c.id_persona).filter((v): v is number => v != null);
+      const agentePersonaIds = usuariosAgente.map((u) => u.id_persona).filter((v): v is number => v != null);
 
-      const personaCompMap = new Map<number, string>(
-        ((personasComp || []) as Array<{ id: number; nombre_legal: string | null; nombre_comercial: string | null }>).map((p) => [
-          p.id,
-          p.nombre_comercial || p.nombre_legal || "",
-        ]),
+      const [modelos, edificios, personasComp, personasLeadAgente] = await Promise.all([
+        selectIn<{ id: number; nombre: string | null }>(modeloIds, (ch) =>
+          supabase.from("modelos").select("id, nombre").in("id", ch),
+        ),
+        selectIn<{ id: number; nombre: string | null; id_proyecto: number | null }>(edificioIds, (ch) =>
+          supabase.from("edificios").select("id, nombre, id_proyecto").in("id", ch),
+        ),
+        selectIn<{ id: number; nombre_legal: string | null; nombre_comercial: string | null }>(compradorPersonaIds, (ch) =>
+          (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", ch),
+        ),
+        selectIn<{ id: number; nombre_legal: string | null; nombre_comercial: string | null }>(
+          [...leadIds, ...agentePersonaIds],
+          (ch) => (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", ch),
+        ),
+      ]);
+
+      const modeloNombre = new Map(modelos.map((m) => [m.id, m.nombre ?? ""]));
+      const edificioMap = new Map(edificios.map((e) => [e.id, { nombre: e.nombre ?? "", idProyecto: e.id_proyecto }]));
+      const personaCompMap = new Map<number, string>(personasComp.map((p) => [p.id, nombreDePersona(p)]));
+      const personaLeadAgenteMap = new Map<number, string>(personasLeadAgente.map((p) => [p.id, nombreDePersona(p)]));
+
+      // Ola C — proyectos (dependen de edificios).
+      const proyectoIds = edificios.map((e) => e.id_proyecto).filter((v): v is number => v != null);
+      const proyectos = await selectIn<{ id: number; nombre: string | null }>(proyectoIds, (ch) =>
+        supabase.from("proyectos").select("id, nombre").in("id", ch),
       );
+      const proyectoNombre = new Map(proyectos.map((p) => [p.id, p.nombre ?? ""]));
 
+      // Índices finales por cuenta / oferta.
       const compradoresPorCuenta = new Map<number, string[]>();
-      (compradores || []).forEach((c) => {
-        if (c.id_cuenta_cobranza == null) return;
-        const nombre = personaCompMap.get(c.id_persona) || "";
+      compradores.forEach((c) => {
+        const nombre = personaCompMap.get(c.id_persona);
         if (!nombre) return;
         const list = compradoresPorCuenta.get(c.id_cuenta_cobranza) ?? [];
         list.push(nombre);
         compradoresPorCuenta.set(c.id_cuenta_cobranza, list);
       });
 
+      const agenteNombrePorEmail = new Map<string, string>();
+      usuariosAgente.forEach((u) => {
+        const nombre = (u.id_persona != null ? personaLeadAgenteMap.get(u.id_persona) : "") || u.nombre || u.email?.split("@")[0] || "";
+        agenteNombrePorEmail.set(u.email, nombre);
+      });
+
       const now = new Date();
 
-      return cuentas
-        .map((c: any): CasoVenta | null => {
-          const idNum = typeof c.id === "string" ? Number(c.id) : c.id;
-          const idOferta = c.id_oferta as number | null;
-          const idPropiedad = idOferta != null ? ofertaToPropiedad.get(idOferta) : undefined;
-          if (idPropiedad == null) return null;
-          const prop = propiedadMap.get(idPropiedad);
-          if (!prop) return null;
-          const emInfo = prop.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
-          const idEdificio = emInfo?.idEdificio ?? null;
-          const edif = idEdificio != null ? edificioMap.get(idEdificio) : undefined;
-          const proyectoNombre = edif?.idProyecto != null ? proyectoMap.get(edif.idProyecto) ?? "" : "";
-          const modeloNombre = emInfo?.idModelo != null ? modeloMap.get(emInfo.idModelo) ?? "" : "";
-          const idProducto = idOferta != null ? ofertaToProducto.get(idOferta) ?? null : null;
-          const producto = idProducto != null ? productoMap.get(idProducto) : undefined;
+      return cuentasVigentes
+        .map((c): CasoVenta | null => {
+          const oferta = c.id_oferta != null ? ofertaById.get(c.id_oferta) : undefined;
+          const prop = oferta?.id_propiedad != null ? propiedadMap.get(oferta.id_propiedad) : undefined;
+          if (!oferta || !prop) return null;
 
-          let tipo: TipoCuentaCaso = "Propiedad";
-          if (producto) {
-            tipo = producto.categoria === "servicios" ? "Servicio" : "Producto";
-          }
+          const emInfo = prop.idEdificioModelo != null ? emMap.get(prop.idEdificioModelo) : undefined;
+          const edif = emInfo?.idEdificio != null ? edificioMap.get(emInfo.idEdificio) : undefined;
+          const idProducto = oferta.id_producto ?? null;
+          const categoria = idProducto != null ? productoCategoria.get(idProducto) : undefined;
+
+          const tipo: TipoCuentaCaso =
+            categoria == null ? "Propiedad" : categoria === "servicios" ? "Servicio" : "Producto";
 
           const precioFinal = Number(c.precio_final) || 0;
           const metraje = prop.metraje;
-          const precioM2 = metraje > 0 ? +(precioFinal / metraje).toFixed(2) : 0;
-
-          const fechaCompra = c.fecha_compra
-            ? new Date(c.fecha_compra).toISOString().slice(0, 10)
-            : "";
-          const dias = fechaCompra ? diffDays(fechaCompra, now) : 0;
-
-          const propietario = prop.idEntidadDueno != null
-            ? entidadDuenoNombre.get(prop.idEntidadDueno) ?? ""
-            : "";
-
-          const propiedadLabel = [edif?.nombre, prop.numero].filter(Boolean).join(" · ");
+          const fechaCompra = c.fecha_compra ? new Date(c.fecha_compra).toISOString().slice(0, 10) : "";
 
           return {
-            id_cuenta_cobranza: idNum,
-            folio: formatCuentaCobranzaId(idNum, tipo),
+            id_cuenta_cobranza: c.id,
+            folio: formatCuentaCobranzaId(c.id, tipo),
             tipo,
-            proyecto_nombre: proyectoNombre,
-            propiedad_label: propiedadLabel || proyectoNombre,
+            proyecto_nombre: edif?.idProyecto != null ? proyectoNombre.get(edif.idProyecto) ?? "" : "",
+            propiedad_label: [edif?.nombre, prop.numero].filter(Boolean).join(" · ") || (edif?.nombre ?? ""),
             numero_departamento: prop.numero,
             edificio_nombre: edif?.nombre ?? "",
-            modelo_nombre: modeloNombre,
-            compradores: compradoresPorCuenta.get(idNum) ?? [],
-            propietario,
-            dias_desde_compra: dias,
+            modelo_nombre: emInfo?.idModelo != null ? modeloNombre.get(emInfo.idModelo) ?? "" : "",
+            compradores: compradoresPorCuenta.get(c.id) ?? [],
+            propietario: prop.idEntidadDueno != null ? duenoNombre.get(prop.idEntidadDueno) ?? "" : "",
+            cliente_lead: oferta.id_persona_lead != null ? personaLeadAgenteMap.get(oferta.id_persona_lead) ?? "" : "",
+            agente: oferta.email_creador ? agenteNombrePorEmail.get(oferta.email_creador) ?? oferta.email_creador : "",
+            dias_desde_compra: fechaCompra ? diffDays(fechaCompra, now) : 0,
             precio_final: precioFinal,
             metraje,
-            precio_m2: precioM2,
+            precio_m2: metraje > 0 ? +(precioFinal / metraje).toFixed(2) : 0,
             fecha_compra: fechaCompra,
           };
         })

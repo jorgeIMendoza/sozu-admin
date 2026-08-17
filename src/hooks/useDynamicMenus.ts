@@ -411,6 +411,24 @@ const PORTAL_LANDING_URL_OVERRIDES: Array<{ match: RegExp; href: string }> = [
           }
        });
  
+       // Menú fijo (no viene de BD todavía): Inventarios → Precios, solo Super Admin.
+       if (isSuperAdmin) {
+         const preciosChild = {
+           title: 'Precios',
+           href: '/admin/inventario/precios/tabla',
+           icon: DollarSign,
+           submenuId: -9001,
+         };
+         const inventarios = items.find(i => /^inventarios?$/i.test(i.title));
+         if (inventarios?.children) {
+           if (!inventarios.children.some(c => c.href.startsWith('/admin/inventario/precios'))) {
+             inventarios.children.push(preciosChild);
+           }
+         } else {
+           items.push({ title: 'Inventarios', icon: DollarSign, menuId: -9001, children: [preciosChild] });
+         }
+       }
+
        setMenuItems(items);
        hasLoadedOnce.current = true;
      } catch (err) {
