@@ -109,48 +109,28 @@ export async function obtenerProyectosSozu(): Promise<Proyecto[]> {
     .order("nombre");
   if (error || !data) return [];
 
-  const proyectos = data.filter(
-    (p) => !TIPOS_USO_EXCLUIDOS.includes(p.id_tipo_uso as number),
-  );
-  if (!proyectos.length) return [];
-
-  // El conteo de departamentos se muestra en el encabezado del módulo; se
-  // resuelve por proyecto para no traer las ~1000 unidades solo por el número.
-  const conteos = await contarUnidadesPorProyecto(proyectos.map((p) => p.id as number));
-
-  return proyectos.map((p) => ({
-    id_proyecto: String(p.id),
-    nombre: p.nombre as string,
-    // El desarrollador no vive en `proyectos`; se muestra la dirección, que es
-    // el dato de ubicación que sí está capturado.
-    desarrollador: "",
-    ciudad: (p.direccion as string | null) ?? "",
-    num_departamentos: conteos[String(p.id)] ?? 0,
-    activo: true,
-  }));
-}
-
-async function contarUnidadesPorProyecto(
-  idsProyecto: number[],
-): Promise<Record<string, number>> {
-  const salida: Record<string, number> = {};
-  for (const id of idsProyecto) {
-    const { modelosVinculados } = await estructuraDeProyecto(id);
-    if (!modelosVinculados.length) {
-      salida[String(id)] = 0;
-      continue;
-    }
-    const { count } = await supabase
-      .from("propiedades")
-      .select("id", { count: "exact", head: true })
-      .in(
-        "id_edificio_modelo",
-        modelosVinculados.map((v) => v.id),
-      )
-      .eq("activo", true);
-    salida[String(id)] = count ?? 0;
-  }
-  return salida;
+  /*
+   * La lista se devuelve con estas DOS consultas y nada más.
+   *
+   * Antes se resolvía además el número de unidades de cada proyecto, lo que
+   * añadía tres peticiones secuenciales por desarrollo: quince viajes extra
+   * antes de poder pintar el selector, que se quedaba vacío varios segundos
+   * por una etiqueta cosmética. El conteo se deriva ahora del inventario del
+   * proyecto que se abre, que es cuando de verdad se necesita.
+   */
+  return data
+    .filter((p) => !TIPOS_USO_EXCLUIDOS.includes(p.id_tipo_uso as number))
+    .map((p) => ({
+      id_proyecto: String(p.id),
+      nombre: p.nombre as string,
+      // El desarrollador no vive en `proyectos`; se muestra la dirección, que es
+      // el dato de ubicación que sí está capturado.
+      desarrollador: "",
+      ciudad: (p.direccion as string | null) ?? "",
+      // Se conoce al cargar el inventario del proyecto; ver `inventarioStore`.
+      num_departamentos: 0,
+      activo: true,
+    }));
 }
 
 interface VinculoEdificioModelo {

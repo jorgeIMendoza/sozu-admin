@@ -43,6 +43,7 @@ function PreciosLayout() {
   // catálogo propio del módulo. Un desarrollo que SOZU no comercializa no se
   // precia aquí.
   const proyectos = useInventarioStore((s) => s.proyectos);
+  const proyectosCargados = useInventarioStore((s) => s.proyectosCargados);
   const cargarProyectos = useInventarioStore((s) => s.cargarProyectos);
   const cargarInventario = useInventarioStore((s) => s.cargarInventario);
   const porProyecto = useInventarioStore((s) => s.porProyecto);
@@ -130,9 +131,35 @@ function PreciosLayout() {
     crearBorrador,
   ]);
 
-  // Cuatro estados: cargando, borrador (nunca publicada), publicada al
-  // corriente, o con cambios sin publicar.
+  /*
+   * Estados del encabezado. Se distinguen uno por uno a propósito: mientras
+   * todos caían en "Cargando inventario…", un módulo sin proyectos de SOZU o
+   * con un proyecto sin unidades se veía igual que uno cargando, y no había
+   * forma de saber cuál era desde la pantalla.
+   */
   const estadoChip = (() => {
+    if (!proyectosCargados) {
+      return {
+        texto: "Cargando proyectos…",
+        tono: "ambar" as const,
+        detalle: "Se está resolviendo qué proyectos comercializa SOZU.",
+      };
+    }
+    if (proyectos.length === 0) {
+      return {
+        texto: "Sin proyectos de SOZU",
+        tono: "ambar" as const,
+        detalle:
+          "Ningún proyecto activo tiene una entidad relacionada de SOZU, así que no hay nada que preciar.",
+      };
+    }
+    if (!idProyectoActivo) {
+      return {
+        texto: "Selecciona un proyecto",
+        tono: "ambar" as const,
+        detalle: "Elige el desarrollo cuyo inventario quieres preciar.",
+      };
+    }
     if (cargando || !cargado) {
       return {
         texto: "Cargando inventario…",
@@ -189,15 +216,27 @@ function PreciosLayout() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* El valor solo se pasa si existe entre las opciones: Radix pinta
+                el disparador VACÍO —sin placeholder— cuando el value no
+                corresponde a ningún item, y eso se leía como que el módulo no
+                cargó. */}
             <Select
-              value={idProyectoActivo || undefined}
+              value={
+                proyectos.some((p) => p.id_proyecto === idProyectoActivo)
+                  ? idProyectoActivo
+                  : undefined
+              }
               onValueChange={setProyectoActivo}
               disabled={proyectos.length === 0}
             >
               <SelectTrigger className="w-52">
                 <SelectValue
                   placeholder={
-                    proyectos.length === 0 ? "Cargando proyectos…" : "Proyecto"
+                    !proyectosCargados
+                      ? "Cargando proyectos…"
+                      : proyectos.length === 0
+                        ? "Sin proyectos de SOZU"
+                        : "Selecciona un proyecto"
                   }
                 />
               </SelectTrigger>

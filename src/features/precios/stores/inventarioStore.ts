@@ -114,6 +114,14 @@ export const useInventarioStore = create<EstadoInventario & AccionesInventario>(
           porProyecto: { ...st.porProyecto, [idProyecto]: inv },
           indices: { ...st.indices, [idProyecto]: indexar(inv) },
           cargando: { ...st.cargando, [idProyecto]: false },
+          // El número de unidades se conoce hasta aquí: la lista de proyectos
+          // se resuelve con dos consultas y no lo trae, para poder pintarse de
+          // inmediato.
+          proyectos: st.proyectos.map((p) =>
+            p.id_proyecto === idProyecto
+              ? { ...p, num_departamentos: inv.propiedades.length }
+              : p,
+          ),
         }));
         return inv;
       } catch (e) {
