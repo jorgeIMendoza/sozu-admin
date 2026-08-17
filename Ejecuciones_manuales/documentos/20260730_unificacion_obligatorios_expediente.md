@@ -221,8 +221,17 @@ cambia ningún resultado. Se hizo ahora porque el día que el cliente registre a
 representante desde el portal, el admin lo vería como "sin representante ligado": 1,087 de
 las 1,156 personas morales de producción no tienen la columna legacy.
 
-### Pendiente de este mismo frente
+### Las dos pantallas rezagadas — cerradas el 2026-08-17
 
-`useUnidadesListasEscriturar` y `AppJuridicoDashboard` siguen sin importar la fuente única
-(ver el inventario de arriba). Mientras no lo hagan, pueden discrepar con los otros cinco
-portales sobre si un expediente está completo.
+`useUnidadesListasEscriturar` y `AppJuridicoDashboard` ya importan la fuente única:
+
+- El hook tenía su propia copia de los grupos: 5 fijos, sin distinguir PF de PM, sin mirar al
+  representante legal ni al cónyuge, y con el tipo 59 en identificación (0 documentos validados
+  en prod) mientras dejaba fuera el pasaporte. Una persona moral nunca llegaba a 5/5. Ahora el
+  total sale de `evaluarCuenta` y la fila expone `docsTotal` y `docsFaltantes`.
+- `AppJuridicoDashboard` pedía la identificación con `[2, 59, 5, 6, 8]`: **29 personas** con INE
+  completo (63) o pasaporte (4) validado aparecían sin identificación. Ahora usa
+  `ID_DOC_TIPO_IDS`.
+
+Queda fuera de este frente el expediente de agentes, embajadores e inmobiliarias, que no son
+compradores y tienen su propia lista.
