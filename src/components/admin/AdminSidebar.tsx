@@ -268,6 +268,20 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
                          <div className="space-y-1 animate-in slide-in-from-top-2 duration-200">
                            {item.children?.map((child, childIndex) => {
                              const isBlocked = isRouteBlocked(child.href);
+                             // Resaltado: match exacto o subruta del submenú, pero solo si
+                             // ningún hermano más específico también hace match (evita que
+                             // '/admin/x' se marque activo estando en '/admin/x/y' cuando
+                             // '/admin/x/y' es otro submenú). Necesario para módulos cuyo
+                             // submenú es un prefijo (ej. Inventarios → Precios).
+                             const isChildActive =
+                               currentPath === child.href ||
+                               (currentPath.startsWith(child.href + '/') &&
+                                 !(item.children ?? []).some(
+                                   (other) =>
+                                     other.href.length > child.href.length &&
+                                     (currentPath === other.href ||
+                                       currentPath.startsWith(other.href + '/'))
+                                 ));
                              if (isBlocked) {
                                return (
                                  <TooltipProvider key={childIndex} delayDuration={100}>
@@ -297,7 +311,7 @@ export const AdminSidebar = ({ isOpen, onClose, currentPath }: AdminSidebarProps
                                  to={child.href}
                                  className={cn(
                                    "flex items-center space-x-3 pl-8 pr-3 py-2 rounded-lg transition-colors text-sm",
-                                   currentPath === child.href
+                                   isChildActive
                                      ? "bg-primary text-primary-foreground"
                                      : "hover:bg-accent"
                                  )}
