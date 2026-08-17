@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { estatusBloqueaReprecio } from "../engine/pricing";
+import { MOTOR_VACIO } from "../engine/semilla";
 import {
   calcularVPN,
   calcularVPNPorTorre,
@@ -8,12 +10,11 @@ import {
   horizonteMeses,
   tasaMensual,
 } from "../engine/npv";
-import { PROPIEDADES, TORRES } from "../mocks/inventario";
+import { useInventarioStore } from "../stores/inventarioStore";
 import { useMotorStore } from "../stores/motorStore";
 import { useEsquemasStore } from "../stores/esquemasStore";
 import type { EsquemaFinanciamiento, ResultadoVPN, Torre } from "../types/dominio";
 
-const ESTATUS_BLOQUEADOS = ["Apartada", "Vendida"];
 
 export interface VpnPorTorre {
   porTorre: Record<string, ResultadoVPN>;
@@ -28,8 +29,10 @@ export interface VpnPorTorre {
  */
 export function useEsquemasVPN() {
   const idProyecto = useMotorStore((s) => s.idProyectoActivo);
-  const motor = useMotorStore((s) => s.motoresPorProyecto[s.idProyectoActivo])!;
+  const motor = useMotorStore((s) => s.motoresPorProyecto[s.idProyectoActivo]) ?? MOTOR_VACIO;
   const esquemasPorProyecto = useEsquemasStore((s) => s.esquemasPorProyecto);
+  const porProyecto = useInventarioStore((s) => s.porProyecto);
+  const inventario = porProyecto[idProyecto];
 
   const esquemas = useMemo(
     () => esquemasPorProyecto[idProyecto] ?? [],
@@ -37,8 +40,8 @@ export function useEsquemasVPN() {
   );
 
   const torres = useMemo(
-    () => TORRES.filter((t) => t.id_proyecto === idProyecto && t.activo),
-    [idProyecto],
+    () => (inventario?.torres ?? []).filter((t) => t.activo),
+    [inventario],
   );
 
   const holgura = motor.meses_holgura_entrega ?? 0;
@@ -55,13 +58,13 @@ export function useEsquemasVPN() {
   const unidadesPorTorre = useMemo(() => {
     const mapa: Record<string, number> = {};
     for (const t of torres) mapa[t.id_torre] = 0;
-    for (const p of PROPIEDADES) {
-      if (p.id_proyecto !== idProyecto || !p.activo) continue;
-      if (ESTATUS_BLOQUEADOS.includes(p.estatus)) continue;
+    for (const p of inventario?.propiedades ?? []) {
+      if (!p.activo) continue;
+      if (estatusBloqueaReprecio(p.estatus)) continue;
       mapa[p.id_torre] = (mapa[p.id_torre] ?? 0) + 1;
     }
     return mapa;
-  }, [torres, idProyecto]);
+  }, [torres, inventario]);
 
   const minimo = horizontes.reduce(
     (a, h) => (h.meses < a.meses ? h : a),

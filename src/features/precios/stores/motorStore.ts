@@ -1,11 +1,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AnclaProyecto, FactorPrecio, MotorPrecio, TipoFactor } from "../types/dominio";
-import { MODELOS, MOTORES_SEMILLA, PROPIEDADES, TORRES } from "../mocks/inventario";
-import { esMotorAnclado, migrarMotorAAnclaje, reanclarMotor } from "../engine/anclaje";
+import { esMotorAnclado, reanclarMotor } from "../engine/anclaje";
+import { construirMotorSemilla } from "../engine/semilla";
+import { useInventarioStore } from "./inventarioStore";
 
 interface EstadoMotor {
   motoresPorProyecto: Record<string, MotorPrecio>;
+  /**
+   * `""` hasta que se resuelve la lista de proyectos de SOZU. Antes había un id
+   * de mock cableado aquí; con inventario real no se puede saber de antemano
+   * qué proyecto existe, así que el layout elige el primero al cargarlos.
+   */
   idProyectoActivo: string;
   /** Mensaje de error si la migración al anclaje por modelo no pudo aplicarse. */
   errorMigracion: string | null;
@@ -14,11 +20,16 @@ interface EstadoMotor {
 }
 
 const estadoInicial: EstadoMotor = {
-  motoresPorProyecto: structuredClone(MOTORES_SEMILLA),
-  idProyectoActivo: "pry-daiku",
+  motoresPorProyecto: {},
+  idProyectoActivo: "",
   errorMigracion: null,
   migracionPendiente: null,
 };
+
+/** Torres del proyecto activo, para reanclar contra el inventario real. */
+function torresDe(idProyecto: string) {
+  return useInventarioStore.getState().inventarioDe(idProyecto).torres;
+}
 
 type CampoNumerico =
   | "k_ext"
@@ -31,7 +42,13 @@ type CampoNumerico =
 
 interface AccionesMotor {
   setProyectoActivo: (idProyecto: string) => void;
-  getMotorActivo: () => MotorPrecio;
+  /**
+   * Crea el motor semilla del proyecto a partir de su inventario real si aún no
+   * existe. Idempotente: un motor ya trabajado nunca se pisa.
+   */
+  asegurarMotor: (idProyecto: string, nombreProyecto: string) => void;
+  /** `null` mientras no haya proyecto activo o su motor no se haya sembrado. */
+  getMotorActivo: () => MotorPrecio | null;
   actualizarParametro: (campo: CampoNumerico, valor: number) => void;
   actualizarConfigNivel: (coef_a: number, coef_b: number) => void;
   actualizarConfigTamano: (theta: number) => void;
@@ -63,17 +80,24 @@ interface AccionesMotor {
   reset: () => void;
 }
 
-/** Normaliza motores persistidos anteriores y los migra al anclaje por modelo. */
+/**
+ * Normaliza lo persistido.
+ *
+ * Los motores del mock vivían bajo ids de texto (`pry-daiku`) y, en versiones
+ * viejas, sin anclaje. Al pasar al inventario real los ids son el id del
+ * proyecto, así que aquellos motores ya no corresponden a ningún desarrollo y
+ * se descartan; los que no estén anclados también, porque migrarlos exige el
+ * inventario y aquí todavía no está cargado. Perder un motor de mock no cuesta
+ * nada: se vuelve a sembrar del inventario real en cuanto se abre el proyecto.
+ */
 function normalizar(estado: unknown): EstadoMotor {
-  const base = structuredClone(estadoInicial);
   const s = (estado ?? {}) as Partial<EstadoMotor>;
-  const motores: Record<string, MotorPrecio> = { ...base.motoresPorProyecto };
-  let error: string | null = null;
-  const pendiente: Record<string, { antes: unknown; despues: unknown }> = {};
+  const motores: Record<string, MotorPrecio> = {};
 
   for (const [id, m] of Object.entries(s.motoresPorProyecto ?? {})) {
-    let motor: MotorPrecio = {
-      ...(base.motoresPorProyecto[id] ?? m),
+    // El id de proyecto real es numérico; lo demás es residuo del mock.
+    if (!/^\d+$/.test(id) || !esMotorAnclado(m)) continue;
+    motores[id] = {
       ...m,
       estado_calibracion: m.estado_calibracion ?? "sin_calibrar",
       fecha_calibracion: m.fecha_calibracion ?? null,
@@ -81,25 +105,14 @@ function normalizar(estado: unknown): EstadoMotor {
       vpn_objetivo_factor: m.vpn_objetivo_factor ?? null,
       vigencia_oferta_dias: m.vigencia_oferta_dias ?? 15,
     };
-
-    if (!esMotorAnclado(m)) {
-      const r = migrarMotorAAnclaje(motor, PROPIEDADES, MODELOS, TORRES);
-      if (r.ok) {
-        motor = r.motor;
-        pendiente[id] = { antes: r.antes, despues: r.despues };
-      } else {
-        error = r.error;
-        motor = base.motoresPorProyecto[id] ?? motor;
-      }
-    }
-    motores[id] = motor;
   }
 
+  const activo = s.idProyectoActivo ?? "";
   return {
     motoresPorProyecto: motores,
-    idProyectoActivo: s.idProyectoActivo ?? base.idProyectoActivo,
-    errorMigracion: error,
-    migracionPendiente: Object.keys(pendiente).length ? pendiente : null,
+    idProyectoActivo: /^\d+$/.test(activo) ? activo : "",
+    errorMigracion: null,
+    migracionPendiente: null,
   };
 }
 
@@ -138,12 +151,28 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
 
         setProyectoActivo: (idProyecto) => set({ idProyectoActivo: idProyecto }),
 
+        asegurarMotor: (idProyecto, nombreProyecto) => {
+          if (!idProyecto || get().motoresPorProyecto[idProyecto]) return;
+          const inv = useInventarioStore.getState().inventarioDe(idProyecto);
+          // Sin inventario cargado no hay de qué derivar la semilla; se
+          // reintenta cuando el proyecto termine de cargar.
+          if (inv.propiedades.length === 0 && inv.modelos.length === 0) return;
+
+          const { motor } = construirMotorSemilla(
+            idProyecto,
+            nombreProyecto,
+            inv.torres,
+            inv.modelos,
+            inv.propiedades,
+          );
+          set((s) => ({
+            motoresPorProyecto: { ...s.motoresPorProyecto, [idProyecto]: motor },
+          }));
+        },
+
         getMotorActivo: () => {
           const s = get();
-          return (
-            s.motoresPorProyecto[s.idProyectoActivo] ??
-            structuredClone(MOTORES_SEMILLA[s.idProyectoActivo]!)
-          );
+          return s.motoresPorProyecto[s.idProyectoActivo] ?? null;
         },
 
         actualizarParametro: (campo, valor) =>
@@ -164,7 +193,7 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
           })),
 
         setAncla: (ancla) =>
-          mutarMotor((m) => reanclarMotor(m, ancla, TORRES), false),
+          mutarMotor((m) => reanclarMotor(m, ancla, torresDe(m.id_proyecto)), false),
 
         actualizarFactor: (idFactor, valor) =>
           mutarFactores((fs) =>
@@ -265,7 +294,9 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
     },
     {
       name: "sozu-precios-motor",
-      version: 5,
+      // v6: los motores pasan a llevar el id real del proyecto. Los del mock
+      // (`pry-daiku`, `pry-monocolo`) se descartan en `normalizar`.
+      version: 6,
       migrate: (persistido) => normalizar(persistido) as never,
       merge: (persistido, actual) => ({ ...actual, ...normalizar(persistido) }),
     },

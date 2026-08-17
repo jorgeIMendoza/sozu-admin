@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { agregarAlertas, calcularLote } from "../engine/pricing";
-import {
-  MODELOS_POR_ID,
-  PROPIEDADES,
-  PROPIEDADES_POR_ID,
-  TORRES,
-  TORRES_POR_ID,
-} from "../mocks/inventario";
+import { MOTOR_VACIO } from "../engine/semilla";
+import { useInventarioStore } from "../stores/inventarioStore";
 import { useMotorStore } from "../stores/motorStore";
 import { useListaStore } from "../stores/listaStore";
 import {
@@ -17,8 +12,13 @@ import {
 import { registrarEvento } from "../services/auditoria";
 
 /**
- * Calcula el desglose de precios del proyecto activo con el motor vigente.
- * SWAP POINT: aquí se leerá el inventario real desde Lovable Cloud.
+ * Calcula el desglose de precios del proyecto activo con el motor vigente,
+ * sobre el **inventario real** del proyecto (`inventarioStore`).
+ *
+ * Mientras el proyecto no esté elegido o su inventario no haya cargado devuelve
+ * el motor neutro (`MOTOR_VACIO`) y `motorListo: false`. Con datos por red ya no
+ * hay motor disponible en el primer render, y devolver un motor que calcula 0 es
+ * más seguro que un `null` que cada pantalla tendría que recordar contemplar.
  */
 export function usePreciosProyecto() {
   const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
@@ -27,14 +27,27 @@ export function usePreciosProyecto() {
   const ofertas = useOfertasStore((s) => s.ofertas);
   const recalcularVencimientos = useOfertasStore((s) => s.recalcularVencimientos);
 
-  const motor = motoresPorProyecto[idProyectoActivo]!;
+  const porProyecto = useInventarioStore((s) => s.porProyecto);
+  const indicesPorProyecto = useInventarioStore((s) => s.indices);
+  const cargandoPorProyecto = useInventarioStore((s) => s.cargando);
+
+  const motorGuardado = motoresPorProyecto[idProyectoActivo] ?? null;
+  // Motor neutro mientras no hay uno sembrado: evita que cada pantalla tenga
+  // que defenderse de un null en el primer render.
+  const motor = motorGuardado ?? MOTOR_VACIO;
+  const motorListo = motorGuardado !== null;
+  const inventario = porProyecto[idProyectoActivo];
+  const indices = indicesPorProyecto[idProyectoActivo];
+  const cargando = !!cargandoPorProyecto[idProyectoActivo];
+  const cargado = inventario !== undefined;
 
   // SWAP POINT: en producción esto corre como tarea programada del lado del servidor, no al montar el cliente.
   const yaRecalculado = useRef(false);
   useEffect(() => {
-    if (yaRecalculado.current) return;
+    if (yaRecalculado.current || !cargado) return;
     yaRecalculado.current = true;
     const vencidas = recalcularVencimientos();
+    const propiedadesPorId = indices?.propiedadesPorId ?? {};
     for (const o of vencidas) {
       registrarEvento({
         id_proyecto: o.id_proyecto,
@@ -42,14 +55,14 @@ export function usePreciosProyecto() {
         entidad: {
           tipo: "oferta",
           id: o.id_oferta,
-          etiqueta: `Unidad ${PROPIEDADES_POR_ID[o.id_propiedad]?.numero ?? o.id_propiedad}`,
+          etiqueta: `Unidad ${propiedadesPorId[o.id_propiedad]?.numero ?? o.id_propiedad}`,
         },
         antes: { estado: "vigente", vence_en: o.vence_en },
         despues: { estado: "vencida" },
         ocurrido_en: o.vence_en,
       });
     }
-  }, [recalcularVencimientos]);
+  }, [recalcularVencimientos, cargado, indices]);
 
   const conOfertaVigente = useMemo(
     () => idsConOfertaVigente(ofertas, idProyectoActivo),
@@ -61,28 +74,27 @@ export function usePreciosProyecto() {
       idsConConversionPendiente(
         ofertas,
         idProyectoActivo,
-        (id) => PROPIEDADES_POR_ID[id]?.estatus,
+        (id) => indices?.propiedadesPorId[id]?.estatus,
       ),
-    [ofertas, idProyectoActivo],
+    [ofertas, idProyectoActivo, indices],
   );
 
   const propiedades = useMemo(
-    () => PROPIEDADES.filter((p) => p.activo && p.id_proyecto === idProyectoActivo),
-    [idProyectoActivo],
+    () => (inventario?.propiedades ?? []).filter((p) => p.activo),
+    [inventario],
   );
 
-  const torresProyecto = useMemo(
-    () => TORRES.filter((t) => t.id_proyecto === idProyectoActivo),
-    [idProyectoActivo],
-  );
+  const torresProyecto = useMemo(() => inventario?.torres ?? [], [inventario]);
 
   const desgloses = useMemo(
     () =>
-      calcularLote(
+      !motorListo
+        ? []
+        : calcularLote(
         propiedades,
         {
-          modelos: MODELOS_POR_ID,
-          torres: TORRES_POR_ID,
+          modelos: indices?.modelosPorId ?? {},
+          torres: indices?.torresPorId ?? {},
           overrides: Object.fromEntries(
             Object.entries(overrides).map(([k, v]) => [
               k,
@@ -99,7 +111,7 @@ export function usePreciosProyecto() {
         },
         motor,
       ),
-    [propiedades, motor, overrides, conOfertaVigente, conConversionPendiente],
+    [propiedades, motor, motorListo, indices, overrides, conOfertaVigente, conConversionPendiente],
   );
 
   const { agregadas, porUnidad } = useMemo(() => agregarAlertas(desgloses), [desgloses]);
@@ -128,13 +140,21 @@ export function usePreciosProyecto() {
 
   return {
     motor,
+    /** `false` mientras el motor del proyecto no se ha sembrado. */
+    motorListo,
     conOfertaVigente,
     conConversionPendiente,
     propiedades,
     torresProyecto,
+    modelosProyecto: inventario?.modelos ?? [],
+    indices,
     desgloses,
     totales,
     alertasAgregadas: agregadas,
     alertasPorUnidad: porUnidad,
+    /** El inventario del proyecto está en vuelo. */
+    cargando,
+    /** Ya se resolvió la carga, aunque haya venido vacía. */
+    cargado,
   };
 }

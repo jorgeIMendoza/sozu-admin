@@ -37,10 +37,10 @@ import {
 import { cn } from "@/lib/utils";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
 import {
-  MODELOS_POR_ID,
-  PROYECTOS,
-  TORRES_POR_ID,
-} from "@/features/precios/mocks/inventario";
+  useIndicesActivos,
+  useProyectoActivo,
+  useProyectosPrecios,
+} from "@/features/precios/hooks/useInventarioActivo";
 import { useMotorStore } from "@/features/precios/stores/motorStore";
 import {
   CLASIFICACIONES_ATIPICO,
@@ -108,6 +108,9 @@ function formatoValor(valor: number, formato: FilaCoeficiente["formato"]): strin
 
 function CalibracionPagina() {
   const { motor, propiedades, desgloses } = usePreciosProyecto();
+  const { modelosPorId, torresPorId } = useIndicesActivos();
+  const proyectoActivo = useProyectoActivo();
+  const proyectos = useProyectosPrecios();
   const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
   const motoresPorProyecto = useMotorStore((s) => s.motoresPorProyecto);
   const aplicarMotorCalibrado = useMotorStore((s) => s.aplicarMotorCalibrado);
@@ -122,7 +125,7 @@ function CalibracionPagina() {
   const congelarBaseline = useCalibracionStore((s) => s.congelarBaseline);
 
   const nombreProyecto =
-    PROYECTOS.find((p) => p.id_proyecto === idProyectoActivo)?.nombre ?? "";
+    proyectoActivo?.nombre ?? "";
 
   const [config, setConfig] = useState<ConfigCalibracion>(CONFIG_CALIBRACION_INICIAL);
   const [corriendo, setCorriendo] = useState(false);
@@ -151,20 +154,20 @@ function CalibracionPagina() {
           nivel: p.nivel,
           vista: p.vista,
           orientacion: p.orientacion,
-          torre: TORRES_POR_ID[p.id_torre]?.nombre ?? p.id_torre,
-          modelo: MODELOS_POR_ID[p.id_modelo]?.nombre ?? p.id_modelo,
+          torre: torresPorId[p.id_torre]?.nombre ?? p.id_torre,
+          modelo: modelosPorId[p.id_modelo]?.nombre ?? p.id_modelo,
           area_ponderada: d?.area_ponderada ?? 0,
           precio_actual: p.precio_lista_actual,
           componente_gravado: d?.componente_gravado ?? 0,
         };
       }),
-    [propiedades, desglosePorId],
+    [propiedades, desglosePorId, modelosPorId, torresPorId],
   );
 
   const conPrecio = observaciones.filter((o) => o.precio_actual > 0);
   const catalogos = useMemo(
-    () => ({ modelos: MODELOS_POR_ID, torres: TORRES_POR_ID }),
-    [],
+    () => ({ modelos: modelosPorId, torres: torresPorId }),
+    [modelosPorId, torresPorId],
   );
 
   const totalActualMotor = useMemo(
@@ -276,8 +279,8 @@ function CalibracionPagina() {
     setDetalle({
       propiedad: p,
       desglose: d,
-      modelo: MODELOS_POR_ID[p.id_modelo],
-      torre: TORRES_POR_ID[p.id_torre],
+      modelo: modelosPorId[p.id_modelo],
+      torre: torresPorId[p.id_torre],
       alertas: d.alertas,
       productoFactores:
         d.f_torre * d.f_nivel * d.f_vista * d.f_orientacion * d.f_extras * d.f_tamano,
@@ -342,7 +345,7 @@ function CalibracionPagina() {
               <SelectContent>
                 {candidatos.map((m) => (
                   <SelectItem key={m.id_proyecto} value={m.id_proyecto}>
-                    {PROYECTOS.find((p) => p.id_proyecto === m.id_proyecto)?.nombre ??
+                    {proyectos.find((p) => p.id_proyecto === m.id_proyecto)?.nombre ??
                       m.nombre}
                   </SelectItem>
                 ))}

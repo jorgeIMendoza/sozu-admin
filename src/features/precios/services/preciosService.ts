@@ -15,51 +15,59 @@
 
 import type { Modelo, MotorPrecio, Propiedad, Proyecto, Torre } from "../types/dominio";
 import {
-  MODELOS,
-  MOTORES_SEMILLA,
-  PROPIEDADES,
-  PROYECTOS,
-  TORRES,
-} from "../mocks/inventario";
+  obtenerInventarioProyecto,
+  obtenerProyectosSozu,
+} from "./inventarioReal";
+import { construirMotorSemilla } from "../engine/semilla";
+import { useMotorStore } from "../stores/motorStore";
 
 /** Simula la latencia de red para que la UI se pruebe con estados reales. */
 function resolver<T>(valor: T): Promise<T> {
   return new Promise((res) => setTimeout(() => res(valor), 0));
 }
 
-// SWAP POINT: reemplazar por
-//   supabase.from('proyectos').select('*').eq('activo', true)
+/** Proyectos comercializados por SOZU: el universo del módulo de Precios. */
 export async function obtenerProyectos(): Promise<Proyecto[]> {
-  return resolver(PROYECTOS.filter((p) => p.activo));
+  return obtenerProyectosSozu();
 }
 
-// SWAP POINT: reemplazar por
-//   supabase.from('torres').select('*').eq('id_proyecto', idProyecto).eq('activo', true)
 export async function obtenerTorres(idProyecto: string): Promise<Torre[]> {
-  return resolver(TORRES.filter((t) => t.activo && t.id_proyecto === idProyecto));
+  return (await obtenerInventarioProyecto(idProyecto)).torres;
 }
 
-// SWAP POINT: reemplazar por
-//   supabase.from('modelos').select('*').eq('id_proyecto', idProyecto).eq('activo', true)
 export async function obtenerModelos(idProyecto: string): Promise<Modelo[]> {
-  return resolver(MODELOS.filter((m) => m.activo && m.id_proyecto === idProyecto));
+  return (await obtenerInventarioProyecto(idProyecto)).modelos;
 }
 
-// SWAP POINT: reemplazar por
-//   supabase.from('propiedades')
-//     .select('*, modelos!propiedades_id_modelo_fkey(*), torres!propiedades_id_torre_fkey(*)')
-//     .eq('id_proyecto', idProyecto).eq('activo', true)
 export async function obtenerPropiedades(idProyecto: string): Promise<Propiedad[]> {
-  return resolver(PROPIEDADES.filter((p) => p.activo && p.id_proyecto === idProyecto));
+  return (await obtenerInventarioProyecto(idProyecto)).propiedades;
 }
 
-// SWAP POINT: reemplazar por
-//   supabase.from('motores_precio').select('*, factores_precio(*)')
-//     .eq('id_proyecto', idProyecto).eq('activo', true).single()
+/**
+ * Motor del proyecto.
+ *
+ * SWAP POINT pendiente: el motor todavía no tiene tablas (`motores_precio`,
+ * `bases_modelo`, `factores_precio`), así que vive en el store local y, si el
+ * proyecto no tiene uno, se deriva del inventario real. Lo que sí quedó
+ * conectado a la base es el inventario sobre el que calcula.
+ */
 export async function obtenerMotor(idProyecto: string): Promise<MotorPrecio> {
-  const motor = MOTORES_SEMILLA[idProyecto];
-  if (!motor) throw new Error(`No hay motor configurado para ${idProyecto}`);
-  return resolver(structuredClone(motor));
+  const guardado = useMotorStore.getState().motoresPorProyecto[idProyecto];
+  if (guardado) return resolver(structuredClone(guardado));
+
+  const proyectos = await obtenerProyectosSozu();
+  const proyecto = proyectos.find((p) => p.id_proyecto === idProyecto);
+  if (!proyecto) throw new Error(`El proyecto ${idProyecto} no lo comercializa SOZU`);
+
+  const inv = await obtenerInventarioProyecto(idProyecto);
+  const { motor } = construirMotorSemilla(
+    idProyecto,
+    proyecto.nombre,
+    inv.torres,
+    inv.modelos,
+    inv.propiedades,
+  );
+  return motor;
 }
 
 // SWAP POINT: reemplazar por upsert sobre 'motores_precio' y 'factores_precio'

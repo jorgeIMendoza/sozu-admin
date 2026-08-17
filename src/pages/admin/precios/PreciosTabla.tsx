@@ -51,11 +51,9 @@ import { useVersionesStore } from "@/features/precios/stores/versionesStore";
 import { useOfertasStore } from "@/features/precios/stores/ofertasStore";
 import type { VersionLista } from "@/features/precios/types/dominio";
 import {
-  MODELOS_POR_ID,
-  PROPIEDADES,
-  PROYECTOS,
-  TORRES_POR_ID,
-} from "@/features/precios/mocks/inventario";
+  useIndicesActivos,
+  useProyectoActivo,
+} from "@/features/precios/hooks/useInventarioActivo";
 import { useMotorStore } from "@/features/precios/stores/motorStore";
 import {
   COLUMNAS_DISPONIBLES,
@@ -126,8 +124,8 @@ function TablaPrecios() {
     alertasPorUnidad,
   } = usePreciosProyecto();
   const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
-  const nombreProyecto =
-    PROYECTOS.find((p) => p.id_proyecto === idProyectoActivo)?.nombre ?? "";
+  const nombreProyecto = useProyectoActivo()?.nombre ?? "";
+  const { modelosPorId, torresPorId } = useIndicesActivos();
 
   const filtros = useListaStore((s) => s.filtros);
   const setFiltro = useListaStore((s) => s.setFiltro);
@@ -204,30 +202,32 @@ function TablaPrecios() {
       return {
         propiedad: p,
         desglose: d,
-        modelo: MODELOS_POR_ID[p.id_modelo],
-        torre: TORRES_POR_ID[p.id_torre],
+        modelo: modelosPorId[p.id_modelo],
+        torre: torresPorId[p.id_torre],
         alertas,
         productoFactores:
           d.f_torre * d.f_nivel * d.f_vista * d.f_orientacion * d.f_extras * d.f_tamano,
       };
     });
-  }, [propiedades, desgloses, criticasForzadas, semillaDemo, alertasPorUnidad]);
+  }, [propiedades, desgloses, criticasForzadas, semillaDemo, alertasPorUnidad, modelosPorId, torresPorId]);
 
-  const conteos = useMemo(() => {
-    const delProyecto = PROPIEDADES.filter((p) => p.id_proyecto === idProyectoActivo);
-    return {
-      activos: delProyecto.filter((p) => p.activo && p.estatus !== "Borrador").length,
-      draft: delProyecto.filter((p) => p.activo && p.estatus === "Borrador").length,
-      eliminados: delProyecto.filter((p) => !p.activo).length,
-    };
-  }, [idProyectoActivo]);
+  // El inventario real solo entrega unidades activas: las dadas de baja no
+  // viajan en la consulta, así que el conteo de eliminadas es 0 por definición.
+  const conteos = useMemo(
+    () => ({
+      activos: propiedades.filter((p) => p.estatus !== "Borrador").length,
+      draft: propiedades.filter((p) => p.estatus === "Borrador").length,
+      eliminados: 0,
+    }),
+    [propiedades],
+  );
 
   const modelosProyecto = useMemo(
     () =>
-      Array.from(new Set(propiedades.map((p) => MODELOS_POR_ID[p.id_modelo]?.nombre ?? ""))).filter(
+      Array.from(new Set(propiedades.map((p) => modelosPorId[p.id_modelo]?.nombre ?? ""))).filter(
         Boolean,
       ),
-    [propiedades],
+    [propiedades, modelosPorId],
   );
   const vistasProyecto = useMemo(
     () => Array.from(new Set(propiedades.map((p) => p.vista))),

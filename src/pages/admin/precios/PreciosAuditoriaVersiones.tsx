@@ -53,7 +53,7 @@ import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto"
 import { DialogoPublicacion } from "@/features/precios/components/DialogoPublicacion";
 import { registrarEvento, exportarCSVAuditado } from "@/features/precios/services/auditoria";
 import { formatoFechaHora, formatoFechaCorta, formatoMoneda } from "@/features/precios/lib/formato";
-import { PROPIEDADES_POR_ID } from "@/features/precios/mocks/inventario";
+import { useIndicesActivos } from "@/features/precios/hooks/useInventarioActivo";
 import type { VersionLista } from "@/features/precios/types/dominio";
 
 function Versiones() {
@@ -64,6 +64,7 @@ function Versiones() {
   const aplicarOverride = useListaStore((s) => s.aplicarOverride);
   const aplicarMotorCalibrado = useMotorStore((s) => s.aplicarMotorCalibrado);
   const { motor, propiedades, desgloses } = usePreciosProyecto();
+  const { propiedadesPorId } = useIndicesActivos();
 
   const [publicando, setPublicando] = useState(false);
   const [detalle, setDetalle] = useState<VersionLista | null>(null);
@@ -148,7 +149,7 @@ function Versiones() {
       `comparacion-v${a.numero}-v${b.numero}.csv`,
       ["Unidad", `v${a.numero}`, `v${b.numero}`, "Delta", "Delta %"],
       unidadesComparacion.map((u) => [
-        PROPIEDADES_POR_ID[u.id_propiedad]?.numero ?? u.id_propiedad,
+        propiedadesPorId[u.id_propiedad]?.numero ?? u.id_propiedad,
         u.precioA ?? "",
         u.precioB ?? "",
         u.delta.toFixed(2),
@@ -235,7 +236,7 @@ function Versiones() {
                 {Object.entries(detalle.precios).map(([id, p]) => (
                   <tr key={id} className="border-b border-border last:border-0">
                     <td className="px-3 py-1.5 text-sm text-foreground tabular-nums">
-                      {PROPIEDADES_POR_ID[id]?.numero ?? id}
+                      {propiedadesPorId[id]?.numero ?? id}
                     </td>
                     <td className="px-3 py-1.5 text-sm text-foreground tabular-nums">
                       {formatoMoneda(p.precio_lista)}
@@ -251,7 +252,7 @@ function Versiones() {
               <ul className="text-sm text-muted-foreground">
                 {detalle.unidades_excluidas.map((e) => (
                   <li key={e.id_propiedad}>
-                    {PROPIEDADES_POR_ID[e.id_propiedad]?.numero ?? e.id_propiedad} — {e.motivo}
+                    {propiedadesPorId[e.id_propiedad]?.numero ?? e.id_propiedad} — {e.motivo}
                   </li>
                 ))}
               </ul>
@@ -513,7 +514,7 @@ function Versiones() {
                     {unidadesComparacion.map((u) => (
                       <tr key={u.id_propiedad} className="border-b border-border last:border-0">
                         <td className="px-3 py-1.5 text-sm text-foreground tabular-nums">
-                          {PROPIEDADES_POR_ID[u.id_propiedad]?.numero ?? u.id_propiedad}
+                          {propiedadesPorId[u.id_propiedad]?.numero ?? u.id_propiedad}
                         </td>
                         <td className="px-3 py-1.5 text-sm text-muted-foreground tabular-nums">
                           {u.precioA === null ? "—" : formatoMoneda(u.precioA)}
