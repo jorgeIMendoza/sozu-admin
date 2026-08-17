@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { N8N_WEBHOOK_BASE_URL, ENVIRONMENT } from '@/lib/config';
-import { esTipoPersonal, expirarPreviosPersonales, esVersionVigente } from '@/lib/documentos/expediente-personal';
+import { esTipoPersonal, esTipoMultiple, expirarPreviosPersonales, esVersionVigente } from '@/lib/documentos/expediente-personal';
 import {
   TIPO_DOC_FACTURA_COMISION_EXTERNA,
   sincronizarFacturaComisionEnCuenta,
@@ -77,6 +77,8 @@ interface Documento {
   es_draft?: boolean;
   comprador_nombre?: string;
   id_categoria_documento?: number;
+  /** Lo que distingue un anexo de otro dentro de un tipo múltiple. */
+  descripcion?: string | null;
 }
 
 export function DocumentsTab({ 
@@ -295,8 +297,16 @@ export function DocumentsTab({
       // "Constancia de situación fiscal" —una expirada y una válida— y no quedaba claro
       // cuál cuenta. Regla única del proyecto: manda el más reciente
       // (src/utils/expediente-obligatorios.ts).
+      // Los tipos MÚLTIPLES (anexos de persona moral) quedan fuera del colapso: ahí
+      // conviven varios vigentes a propósito y quedarse con el más reciente los
+      // escondía, que es lo que se reportó como "borra el anterior".
       const vigentePorCategoria = new Map<string, typeof docs[number]>();
+      const multiples: typeof docs = [];
       for (const d of docs) {
+        if (esTipoMultiple(d.id_tipo_documento)) {
+          multiples.push(d);
+          continue;
+        }
         const clave = `${d.id_persona ?? 'sin_persona'}__${d.id_tipo_documento}`;
         const previo = vigentePorCategoria.get(clave);
         const fecha = (x: typeof d) => new Date(x.fecha_creacion ?? 0).getTime();
@@ -304,9 +314,12 @@ export function DocumentsTab({
           vigentePorCategoria.set(clave, d);
         }
       }
-      setDocumentos([...vigentePorCategoria.values()].sort((a, b) =>
-        (a.tipo_documento_nombre || '').localeCompare(b.tipo_documento_nombre || '', 'es', { sensitivity: 'base' })
-      ));
+      setDocumentos([...vigentePorCategoria.values(), ...multiples].sort((a, b) => {
+        const porTipo = (a.tipo_documento_nombre || '').localeCompare(b.tipo_documento_nombre || '', 'es', { sensitivity: 'base' });
+        if (porTipo !== 0) return porTipo;
+        // Entre anexos del mismo tipo, el más reciente arriba.
+        return new Date(b.fecha_creacion ?? 0).getTime() - new Date(a.fecha_creacion ?? 0).getTime();
+      }));
     } catch (error) {
       console.error('Error loading documents:', error);
     } finally {
@@ -1435,10 +1448,16 @@ export function DocumentsTab({
                   ? { label: 'Expirado', cls: 'bg-orange-50 text-orange-700 border-orange-200' }
                   : { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
                 return (
-                  <tr key={`${documento.numero}-${index}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <tr key={documento.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-[12px]">{documento.tipo_documento_nombre}</span>
+                        <span className="text-[12px]">
+                          {documento.tipo_documento_nombre}
+                          {/* La descripción distingue un anexo de otro dentro del mismo tipo. */}
+                          {documento.descripcion && (
+                            <span className="text-muted-foreground"> · {documento.descripcion}</span>
+                          )}
+                        </span>
                         {documento.id_categoria_documento === 6 && (
                           <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-700">Escrituración</span>
                         )}

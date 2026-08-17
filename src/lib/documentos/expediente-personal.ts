@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { ID_DOC_TIPO_IDS } from '@/utils/expediente-obligatorios';
+import { ID_DOC_TIPO_IDS, OTROS_DOCUMENTOS_TIPO_ID, REFORMAS_TIPO_ID } from '@/utils/expediente-obligatorios';
 
 /**
  * Regla del expediente personal del cliente: una sola versión vigente.
@@ -35,6 +35,21 @@ export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
  * declarar el grupo: ese archivo es la fuente única de los obligatorios.
  */
 export const TIPOS_IDENTIDAD: readonly number[] = ID_DOC_TIPO_IDS;
+
+/**
+ * Tipos MÚLTIPLES: varios documentos del mismo tipo conviven y ninguno reemplaza
+ * al anterior. Hoy son los anexos de persona moral — "Otros documentos" (69) y su
+ * antecesor "Reformas…" (57), que se usó mientras el 69 no existía.
+ *
+ * No basta con dejarlos fuera de la regla de vigencia única: cualquier pantalla
+ * que colapse "un documento por tipo" los esconde y parece que se borraron.
+ */
+export const TIPOS_MULTIPLES: readonly number[] = [OTROS_DOCUMENTOS_TIPO_ID, REFORMAS_TIPO_ID];
+
+/** ¿De este tipo pueden convivir varios documentos vigentes? */
+export function esTipoMultiple(tipoId: number): boolean {
+  return TIPOS_MULTIPLES.includes(tipoId);
+}
 
 export const TIPOS_PERSONALES = [
   ...TIPOS_PERSONALES_SIMPLES,
