@@ -64,8 +64,6 @@ export function ValidarPlaceholdersDialog({
   onGenerarContrato,
   isGenerating = false
 }: ValidarPlaceholdersDialogProps) {
-  if (!validacion) return null;
-
   const { toast } = useToast();
   const [seccionActiva, setSeccionActiva] = React.useState<'todas' | 'disponibles' | 'vacios' | 'faltantes' | 'variables' | 'noUsadas'>('disponibles');
   const [copiedVariable, setCopiedVariable] = React.useState<string | null>(null);
@@ -86,24 +84,24 @@ export function ValidarPlaceholdersDialog({
 
   // Crear Sets para clasificar los placeholders del template
   const placeholdersDisponiblesSet = React.useMemo(() => {
-    return new Set(validacion.placeholders_disponibles.filter(p => p.estado === 'ok').map(p => p.placeholder));
-  }, [validacion.placeholders_disponibles]);
+    return new Set((validacion?.placeholders_disponibles ?? []).filter(p => p.estado === 'ok').map(p => p.placeholder));
+  }, [validacion?.placeholders_disponibles]);
 
   const placeholdersVaciosSet = React.useMemo(() => {
-    return new Set(validacion.placeholders_vacios || []);
-  }, [validacion.placeholders_vacios]);
+    return new Set(validacion?.placeholders_vacios || []);
+  }, [validacion?.placeholders_vacios]);
 
   const placeholdersFaltantesSet = React.useMemo(() => {
-    return new Set(validacion.placeholders_faltantes || []);
-  }, [validacion.placeholders_faltantes]);
+    return new Set(validacion?.placeholders_faltantes || []);
+  }, [validacion?.placeholders_faltantes]);
 
   // Todos los placeholders del template - soporta ambos nombres de campo
   const todosPlaceholdersTemplate = React.useMemo(() => {
-    return validacion.todosPlaceholdersTemplate || validacion.placeholders_en_template || validacion.variables_usadas_en_template || [];
-  }, [validacion.todosPlaceholdersTemplate, validacion.placeholders_en_template, validacion.variables_usadas_en_template]);
+    return validacion?.todosPlaceholdersTemplate || validacion?.placeholders_en_template || validacion?.variables_usadas_en_template || [];
+  }, [validacion?.todosPlaceholdersTemplate, validacion?.placeholders_en_template, validacion?.variables_usadas_en_template]);
   
   // Total de placeholders del template - soporta ambos nombres
-  const totalTemplate = validacion.total_placeholders_template || validacion.total_template || todosPlaceholdersTemplate.length;
+  const totalTemplate = validacion?.total_placeholders_template || validacion?.total_template || todosPlaceholdersTemplate.length;
 
   // Filtrar por término de búsqueda
   const filterBySearch = (placeholder: string) => {
@@ -112,24 +110,27 @@ export function ValidarPlaceholdersDialog({
   };
 
   const filteredPlaceholdersDisponibles = React.useMemo(() => {
-    return validacion.placeholders_disponibles.filter(p => p.estado === 'ok' && filterBySearch(p.placeholder));
-  }, [validacion.placeholders_disponibles, searchTerm]);
+    return (validacion?.placeholders_disponibles ?? []).filter(p => p.estado === 'ok' && filterBySearch(p.placeholder));
+  }, [validacion?.placeholders_disponibles, searchTerm]);
 
   const filteredPlaceholdersVacios = React.useMemo(() => {
-    return (validacion.placeholders_vacios || []).filter(filterBySearch);
-  }, [validacion.placeholders_vacios, searchTerm]);
+    return (validacion?.placeholders_vacios || []).filter(filterBySearch);
+  }, [validacion?.placeholders_vacios, searchTerm]);
 
   const filteredPlaceholdersFaltantes = React.useMemo(() => {
-    return (validacion.placeholders_faltantes || []).filter(filterBySearch);
-  }, [validacion.placeholders_faltantes, searchTerm]);
+    return (validacion?.placeholders_faltantes || []).filter(filterBySearch);
+  }, [validacion?.placeholders_faltantes, searchTerm]);
 
   const filteredTodosPlaceholdersTemplate = React.useMemo(() => {
     return todosPlaceholdersTemplate.filter(filterBySearch);
   }, [todosPlaceholdersTemplate, searchTerm]);
 
   const filteredVariablesNoUsadas = React.useMemo(() => {
-    return (validacion.variables_no_usadas || []).filter(filterBySearch);
-  }, [validacion.variables_no_usadas, searchTerm]);
+    return (validacion?.variables_no_usadas || []).filter(filterBySearch);
+  }, [validacion?.variables_no_usadas, searchTerm]);
+
+  // Después de los hooks: `validacion` llega async desde el diálogo padre.
+  if (!validacion) return null;
 
   const estadoBadge = (estado: string) => {
     switch (estado) {
