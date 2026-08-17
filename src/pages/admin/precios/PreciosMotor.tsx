@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GraficoCurva } from "@/features/precios/components/GraficoCurva";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CampoPrecioM2 } from "@/features/precios/components/CampoPrecioM2";
 import { Slider } from "@/components/ui/slider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -201,16 +202,11 @@ function PantallaMotor() {
               <Label htmlFor="precio-base-proyecto" className="text-sm">
                 Precio por m² base
               </Label>
-              <Input
+              <CampoPrecioM2
                 id="precio-base-proyecto"
-                type="number"
-                min={0}
-                step={100}
-                value={motor.precio_base_m2_proyecto}
-                onChange={(e) =>
-                  actualizarPrecioBaseProyecto(Number(e.target.value) || 0)
-                }
-                className="w-52 text-lg tabular-nums"
+                valor={motor.precio_base_m2_proyecto}
+                onChange={actualizarPrecioBaseProyecto}
+                className="w-60 text-lg"
               />
             </div>
             <p className="pb-2 text-sm text-muted-foreground">
@@ -282,18 +278,13 @@ function PantallaMotor() {
                     {/* Precio y factor son la misma cifra vista de dos formas:
                         capturar cualquiera de los dos actualiza el otro. */}
                     <td className="px-3 py-1.5">
-                      <Input
-                        type="number"
-                        step={100}
-                        value={b.precio_base_m2}
-                        onChange={(e) =>
-                          actualizarBaseModelo(
-                            b.id_modelo,
-                            "precio_base_m2",
-                            Number(e.target.value),
-                          )
+                      <CampoPrecioM2
+                        aria-label={`Precio por m² resultante de ${b.nombre_modelo}`}
+                        valor={b.precio_base_m2}
+                        onChange={(v) =>
+                          actualizarBaseModelo(b.id_modelo, "precio_base_m2", v)
                         }
-                        className="w-44 tabular-nums"
+                        className="w-52"
                       />
                     </td>
                     <td className="px-3 py-1.5">
