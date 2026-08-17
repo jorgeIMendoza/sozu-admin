@@ -59,7 +59,7 @@ export default function CategoriasProductos() {
     
     // Get product and service counts
     const categoriaIds = (data || []).map(cat => cat.id);
-    let counts: { [key: number]: { productos: number; servicios: number } } = {};
+    const counts: { [key: number]: { productos: number; servicios: number } } = {};
     
     if (categoriaIds.length > 0) {
       const { data: productosData, error: productosError } = await supabase

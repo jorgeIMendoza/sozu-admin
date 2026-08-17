@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { ID_DOC_TIPO_IDS } from '@/utils/expediente-obligatorios';
+import { ID_DOC_TIPO_IDS, OTROS_DOCUMENTOS_TIPO_ID, REFORMAS_TIPO_ID } from '@/utils/expediente-obligatorios';
 
 /**
  * Regla del expediente personal del cliente: una sola versión vigente.
@@ -16,8 +16,14 @@ import { ID_DOC_TIPO_IDS } from '@/utils/expediente-obligatorios';
  * Ver Ejecuciones_manuales/documentos/06_normalizar_documentos_duplicados_activos.md
  */
 
-/** Documentos con una vigente por tipo. */
-export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
+/**
+ * Documentos con una vigente por tipo: acta de nacimiento (1), CURP (5), CSF (6),
+ * domicilio (8), acta de matrimonio (11) y reformas al acta constitutiva (57).
+ *
+ * "Otros documentos" (69) queda FUERA a propósito: es el ÚNICO slot múltiple del
+ * portal del cliente. Meterlo aquí borraría el anexo anterior en cada carga.
+ */
+export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11, REFORMAS_TIPO_ID] as const;
 
 /**
  * Grupo identidad: una vigente por GRUPO, no por tipo. Son formatos alternativos
@@ -28,6 +34,25 @@ export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
  * declarar el grupo: ese archivo es la fuente única de los obligatorios.
  */
 export const TIPOS_IDENTIDAD: readonly number[] = ID_DOC_TIPO_IDS;
+
+/**
+ * Tipos MÚLTIPLES: varios documentos conviven y ninguno reemplaza al anterior.
+ *
+ * Es exactamente UNO: "Otros documentos" (69). Para eso se creó — cada anexo lleva
+ * su `descripcion`, que es lo que los distingue; reemplazar uno concreto es una
+ * acción aparte, no un efecto de subir el siguiente. Todo lo demás sigue la regla
+ * de una sola versión vigente, incluidas las reformas al acta constitutiva (57),
+ * que solo hicieron de anexo mientras el tipo 69 no existía.
+ *
+ * No basta con dejarlo fuera de la regla de vigencia única: cualquier pantalla que
+ * colapse "un documento por tipo" lo esconde y parece que se borró.
+ */
+export const TIPOS_MULTIPLES: readonly number[] = [OTROS_DOCUMENTOS_TIPO_ID];
+
+/** ¿De este tipo pueden convivir varios documentos vigentes? */
+export function esTipoMultiple(tipoId: number): boolean {
+  return TIPOS_MULTIPLES.includes(tipoId);
+}
 
 export const TIPOS_PERSONALES = [
   ...TIPOS_PERSONALES_SIMPLES,

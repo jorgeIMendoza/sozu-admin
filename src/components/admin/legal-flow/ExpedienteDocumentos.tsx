@@ -206,7 +206,11 @@ export function ExpedienteDocumentos({ cuentaId, propiedadId }: { cuentaId: numb
   return (
     <div className="mt-4 space-y-5">
       {/* ── Obligatorios del expediente — fuente única (PF/PM, rep legal, cónyuge) ── */}
-      <DocumentosObligatorios cuentaId={cuentaId} portal="juridico" />
+      <DocumentosObligatorios
+        cuentaId={cuentaId}
+        portal="juridico"
+        rutaPermisos="/admin/legal-flow/escrituracion/expedientes"
+      />
 
       {/* ── Botones de subida (solo 2 tipos permitidos) ── */}
       <div className="flex flex-wrap gap-2">

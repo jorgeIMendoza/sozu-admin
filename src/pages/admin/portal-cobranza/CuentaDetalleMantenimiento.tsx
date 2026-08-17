@@ -271,7 +271,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
                               <div className="flex items-center justify-center gap-2 min-w-0">
                                 <span className="inline-flex items-center justify-center size-[18px] rounded-full bg-muted text-[9px] font-bold text-muted-foreground shrink-0">{a.orden}</span>
                                 <span className="text-[12px] text-foreground leading-tight">
-                                  {a.concepto.toLowerCase().includes('contra entrega') ? 'Entrega' : a.concepto}
+                                  {a.concepto.toLowerCase().includes('contra entrega') ? 'A escrituración' : a.concepto}
                                 </span>
                               </div>
                             </td>

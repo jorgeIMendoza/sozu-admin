@@ -18,7 +18,6 @@ import {
   useUnidadesListasEscriturar,
   type UnidadEscriturable,
   type ConclusionEscrituracion,
-  OBLIGATORIO_GRUPOS,
 } from '@/hooks/useUnidadesListasEscriturar';
 
 // ─── Constants / Meta ─────────────────────────────────────────────────────────
@@ -77,9 +76,9 @@ function EstatusPropiedad({ estatusId }: { estatusId: number }) {
 
 // ─── Expediente Progress ──────────────────────────────────────────────────────
 
-function ExpedienteChip({ docsCompletos }: { docsCompletos: number }) {
-  const total = OBLIGATORIO_GRUPOS.length;
-  const ok = docsCompletos >= total;
+function ExpedienteChip({ docsCompletos, docsTotal }: { docsCompletos: number; docsTotal: number }) {
+  const total = docsTotal;
+  const ok = total > 0 && docsCompletos >= total;
   return (
     <div className="flex items-center gap-2 min-w-[80px]">
       <Progress value={(docsCompletos / total) * 100} className={`h-1.5 flex-1 ${ok ? '[&>div]:bg-emerald-500' : '[&>div]:bg-amber-500'}`} />
@@ -206,21 +205,25 @@ function DetalleUnidadModal({ row, onClose }: { row: UnidadEscriturable; onClose
           <Section title="Expediente">
             <div className="rounded-lg bg-muted/40 p-3 space-y-3">
               <div className="space-y-1">
-                {OBLIGATORIO_GRUPOS.map(g => (
-                  <div key={g.key} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">{g.label}</span>
-                    <span className="text-muted-foreground text-[11px]">grupo {g.key}</span>
-                  </div>
-                ))}
+                {row.docsFaltantes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin documentos pendientes.</p>
+                ) : (
+                  row.docsFaltantes.map(label => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="text-amber-600 text-[11px]">falta</span>
+                    </div>
+                  ))
+                )}
               </div>
               <div>
                 <Progress
-                  value={(row.docsCompletos / OBLIGATORIO_GRUPOS.length) * 100}
+                  value={row.docsTotal ? (row.docsCompletos / row.docsTotal) * 100 : 0}
                   className={`h-1.5 ${row.expedienteOk ? '[&>div]:bg-emerald-500' : '[&>div]:bg-amber-500'}`}
                 />
                 <p className={`text-[11px] mt-1 font-medium ${row.expedienteOk ? 'text-emerald-600' : 'text-amber-600'}`}>
-                  {row.docsCompletos}/{OBLIGATORIO_GRUPOS.length} grupos obligatorios verificados
-                  {!row.expedienteOk && ` · Faltan ${OBLIGATORIO_GRUPOS.length - row.docsCompletos}`}
+                  {row.docsCompletos}/{row.docsTotal} grupos obligatorios verificados
+                  {!row.expedienteOk && ` · Faltan ${row.docsTotal - row.docsCompletos}`}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   Conservador: mínimo entre todos los compradores
@@ -369,7 +372,7 @@ function TablaUnidades({
                 </div>
               </TableCell>
               <TableCell>
-                <ExpedienteChip docsCompletos={u.docsCompletos} />
+                <ExpedienteChip docsCompletos={u.docsCompletos} docsTotal={u.docsTotal} />
               </TableCell>
               <TableCell className="text-center">
                 {u.diasSinPagar > 30 ? (

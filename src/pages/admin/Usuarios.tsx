@@ -71,6 +71,7 @@ type InmobiliariaOption = {
 };
 
 // Role IDs
+const ROLE_SUPER_ADMINISTRADOR = 1;
 const ROLE_ADMINISTRADOR_PROYECTO = 2;
 const ROLE_AGENTE_INTERNO = 9;
 const ROLE_AGENTE_INMOBILIARIO = 3;
@@ -145,7 +146,16 @@ function UsersTable({
         <TableBody>
           {users.map((usuario) => {
             const isCurrentUser = usuario.email === currentUserEmail;
-            
+            // Sobre la cuenta de un Super Administrador, quien no lo es puede REPONERLE el
+            // acceso (resetear manda el enlace a su correo) pero no APODERARSE de ella ni
+            // quitárselo: editar permite cambiar el correo, "Rol" degradarlo y "Desactivar"
+            // dejar sin dueño al sistema. La edge function `reset-user-password` aplica la
+            // misma frontera y es la autoridad; aquí solo se evita ofrecer botones que van a
+            // devolver 403.
+            const puedeAdministrarCuenta =
+              currentUserRoleId === ROLE_SUPER_ADMINISTRADOR ||
+              usuario.rol_id !== ROLE_SUPER_ADMINISTRADOR;
+
             return (
               <TableRow 
                 key={usuario.email} 
@@ -259,10 +269,10 @@ function UsersTable({
                     )}
                     {!isCurrentUser && (
                       <>
-                        {!isInactiveTab && (
+                        {!isInactiveTab && puedeAdministrarCuenta && (
                           <>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="sm"
                             onClick={() => onEditUser(usuario.email, usuario.nombre || '', usuario.rol_id, usuario.id_persona)}
                             title="Editar usuario"
@@ -303,15 +313,17 @@ function UsersTable({
                           </Button>
                         )}
                         {isInactiveTab ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onActivate(usuario.email)}
-                            className="hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
-                          >
-                            <UserCheck className="h-3 w-3 mr-1" />
-                            Activar
-                          </Button>
+                          puedeAdministrarCuenta && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onActivate(usuario.email)}
+                              className="hover:bg-green-500/10 hover:border-green-500 hover:text-green-600"
+                            >
+                              <UserCheck className="h-3 w-3 mr-1" />
+                              Activar
+                            </Button>
+                          )
                         ) : (
                           <>
                             {/* Only show reset button when password is NOT temporary (personalizada) */}
@@ -327,14 +339,16 @@ function UsersTable({
                                 Resetear
                               </Button>
                             )}
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => onDeactivate(usuario.email)}
-                              className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
-                            >
-                              Desactivar
-                            </Button>
+                            {puedeAdministrarCuenta && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onDeactivate(usuario.email)}
+                                className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
+                              >
+                                Desactivar
+                              </Button>
+                            )}
                           </>
                         )}
                       </>
@@ -447,7 +461,7 @@ export default function Usuarios() {
         .filter(u => (u.rol_id === ROLE_AGENTE_INMOBILIARIO || u.rol_id === ROLE_AGENTE_INTERNO || u.rol_id === ROLE_INMOBILIARIA) && u.id_persona)
         .map(u => u.id_persona as number);
       
-      let inmobByPersona = new Map<number, string>();
+      const inmobByPersona = new Map<number, string>();
       const inmobiliariaPersonaIds = new Set<number>();
       
       if (personaIdsForLookup.length > 0) {

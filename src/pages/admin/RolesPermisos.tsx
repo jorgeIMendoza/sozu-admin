@@ -187,13 +187,15 @@ const ReportesSelector = ({ rolId, isSuperAdmin }: { rolId: number; isSuperAdmin
     },
   });
 
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Después de los hooks: el rol se elige en la misma pantalla, así que salir
+  // antes cambiaría el orden de hooks entre renders.
   if (isSuperAdmin) return null;
 
   const hasReporte = (reporteId: number) => rolReportes.includes(reporteId);
   const isLoading = toggleReporteMutation.isPending || selectAllMutation.isPending || deselectAllMutation.isPending;
-
-  const [open, setOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
 
   const selectedLabels = reportes
     .filter(r => rolReportes.includes(r.id))
@@ -418,12 +420,13 @@ const EstatusDisponibilidadSelector = ({ rolId, isSuperAdmin }: { rolId: number;
     },
   });
 
+  const [open, setOpen] = useState(false);
+
+  // Después de los hooks: ver la nota del selector de reportes.
   if (isSuperAdmin) return null;
 
   const hasEstatus = (estatusId: number) => rolEstatus.includes(estatusId);
   const isLoading = toggleEstatusMutation.isPending || selectAllMutation.isPending || deselectAllMutation.isPending;
-
-  const [open, setOpen] = useState(false);
 
   const selectedLabels = estatusDisponibilidad
     .filter(e => rolEstatus.includes(e.id))

@@ -7,6 +7,7 @@ import { mapEstatusCatalog, progressFromEstatus, milestonesFromEstatus } from "@
 import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { isValidRFC, isValidCURP } from "@/utils/fiscalDataValidation";
 import { getBodegasIncluidasCosto } from "./included-bodegas";
+import { resolverMensualidadesFijas } from "./mensualidades-fijas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,12 +84,14 @@ function calcPaymentPlans(
   listPrice: number,
   fechaGeneracion?: string,
   fechaEntrega?: string | null,
+  mensualidadesFijas?: number | null,
 ): PaymentPlan[] {
-  // Meses de mensualidades RESTANTES: de hoy a la entrega MENOS 1 mes (el mes de
+  // Con `mensualidadesFijas` (proyecto o unidad) manda ese número, sin mirar la entrega.
+  // Sin él: meses de mensualidades RESTANTES, de hoy a la entrega MENOS 1 mes (el mes de
   // entrega es el Pago a escrituración, no mensualidad). Si ya estamos en/después
   // del mes de entrega → 0 mensualidades → todo el saldo va a escrituración.
   // (fechaGeneracion se ignora: el conteo baja conforme pasan los días).
-  const mesesEfectivos = mesesMensualidadesRestantes(fechaEntrega);
+  const mesesEfectivos = mesesMensualidadesRestantes(fechaEntrega, new Date(), mensualidadesFijas);
 
   return esquemas.map((e) => {
     const pctDesc     = Number(e.porcentaje_descuento_aumento ?? 0);
@@ -552,7 +555,17 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     ?? (proyecto as any).fecha_entrega
     ?? null;
 
-  const paymentPlans = calcPaymentPlans(filteredEsqs, calcBasePrice, oferta.fecha_generacion, entregaFecha);
+  // Modo fijo de mensualidades (unidad → proyecto → dinámico). Solo pesa en este
+  // cálculo de respaldo: los montos autoritativos llegan del RPC en el paso 9c.
+  const mensualidadesFijas = await resolverMensualidadesFijas(propiedadId, proyectoId);
+
+  const paymentPlans = calcPaymentPlans(
+    filteredEsqs,
+    calcBasePrice,
+    oferta.fecha_generacion,
+    entregaFecha,
+    mensualidadesFijas,
+  );
 
   // 9b. If manual scheme selected, override with actual acuerdos when plan was modified
   if (selectedIsManual && selectedId && paymentPlans.length > 0) {

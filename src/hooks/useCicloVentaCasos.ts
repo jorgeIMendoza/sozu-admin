@@ -46,13 +46,13 @@ const nombreDePersona = (p: { nombre_legal?: string | null; nombre_comercial?: s
  * lotes y los corre en paralelo. `run` recibe cada lote y devuelve la respuesta
  * de Supabase. Deduplica ids y omite la consulta si no hay ninguno.
  */
-async function selectIn<T>(
-  ids: Array<number | string>,
-  run: (chunk: any[]) => PromiseLike<{ data: T[] | null; error: unknown }>,
+async function selectIn<T, I extends number | string = number>(
+  ids: I[],
+  run: (chunk: I[]) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
   const unique = Array.from(new Set(ids));
   if (unique.length === 0) return [];
-  const chunks: Array<Array<number | string>> = [];
+  const chunks: I[][] = [];
   for (let i = 0; i < unique.length; i += IN_CHUNK) chunks.push(unique.slice(i, i + IN_CHUNK));
   const results = await Promise.all(
     chunks.map(async (chunk) => {
@@ -176,7 +176,7 @@ export function useCicloVentaCasos() {
             .select("id, personas!fk_entrel_persona(nombre_legal, nombre_comercial)")
             .in("id", ch),
         ),
-        selectIn<{ email: string; id_persona: number | null; nombre: string | null }>(emails, (ch) =>
+        selectIn<{ email: string; id_persona: number | null; nombre: string | null }, string>(emails, (ch) =>
           (supabase as any).from("usuarios").select("email, id_persona, nombre").in("email", ch),
         ),
       ]);

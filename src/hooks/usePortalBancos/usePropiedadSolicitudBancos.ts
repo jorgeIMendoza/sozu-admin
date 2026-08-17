@@ -180,8 +180,8 @@ async function fetchPropiedadSolicitud(
   }
 
   const ofertaIds = [...ofertaById.keys()];
-  let bodegaCuentas: any[] = [];
-  let estacCuentas: any[] = [];
+  const bodegaCuentas: any[] = [];
+  const estacCuentas: any[] = [];
   if (ofertaIds.length) {
     const { data: cuentasProducto } = await sb
       .from("cuentas_cobranza")

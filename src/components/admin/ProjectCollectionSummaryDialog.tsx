@@ -447,7 +447,7 @@ export function ProjectCollectionSummaryDialog({
                 {/* A la Entrega Section */}
                 <div className="space-y-3 mt-6">
                   <h3 className="font-semibold text-sm border-b pb-2">Desglose por Etapa - A la Entrega</h3>
-                  <p className="text-xs text-muted-foreground">(Pago a Contra Entrega)</p>
+                  <p className="text-xs text-muted-foreground">(Pago a escrituración)</p>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">

@@ -77,7 +77,7 @@ export function registrarEvento(datos: DatosEvento): Promise<EventoAuditoria | n
  * Envuelve una acción existente para que emita su evento después de ejecutarse.
  * Ninguna acción de store se reescribe: la auditoría vive en el punto de llamada.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function conAuditoria<T extends (...a: any[]) => any>(
   accion: T,
   describir: (...a: Parameters<T>) => DatosEvento | null,

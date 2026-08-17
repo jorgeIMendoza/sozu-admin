@@ -3,7 +3,7 @@
 
 // Formatos válidos según los CHECK de la tabla personas (chk_personas_email/telefono_formato).
 export const PERSONA_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-export const PERSONA_PHONE_RE = /^[0-9 ()+\-]{5,20}$/;
+export const PERSONA_PHONE_RE = /^[0-9 ()+-]{5,20}$/;
 export const MSG_TELEFONO_INVALIDO = "El teléfono no es válido. Usa solo números (opcional + espacios o guiones), de 5 a 20 caracteres. Ej: 3312345678";
 export const MSG_EMAIL_INVALIDO = "El correo no es válido. Debe tener el formato nombre@dominio.com";
 

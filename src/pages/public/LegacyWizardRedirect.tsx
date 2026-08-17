@@ -15,7 +15,7 @@ const LegacyWizardRedirect = () => {
 
   useEffect(() => {
     if (formalReservation) {
-      // eslint-disable-next-line no-console
+       
       console.log("[Legacy Redirect] FR encontrado:", {
         id: formalReservation.id,
         status: formalReservation.status,
@@ -24,7 +24,7 @@ const LegacyWizardRedirect = () => {
         hasExpediente: !!formalReservation.expediente,
       });
     } else {
-      // eslint-disable-next-line no-console
+       
       console.log("[Legacy Redirect] FR no encontrado:", formalReservationId);
     }
   }, [formalReservation, formalReservationId]);

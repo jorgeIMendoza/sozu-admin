@@ -37,7 +37,7 @@ import { CuentaDetalleProducto } from './CuentaDetalleProducto';
 // devuelve la RPC ya trae el shape exacto que consumen las sub-vistas (mismas
 // llaves camelCase), por eso se retorna tal cual. Ver Ejecuciones_manuales/P30.
 async function fetchCuentaDetalle(cuentaId: number) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (supabase as any).rpc('get_pcobranza_cuenta_detalle', { p_cuenta_id: cuentaId });
   if (error) throw error;
   if (!data) throw new Error('Cuenta no encontrada');
@@ -987,7 +987,7 @@ export default function CobranzaCuentaDetalle() {
               <>
                 <DialogHeader>
                   <DialogTitle className="text-[15px]">
-                    Multas - {gestionAcuerdo?.concepto?.toLowerCase().includes('contra entrega') ? 'Entrega' : gestionAcuerdo?.concepto}
+                    Multas - {gestionAcuerdo?.concepto?.toLowerCase().includes('contra entrega') ? 'A escrituración' : gestionAcuerdo?.concepto}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-2 py-1 max-h-[55vh] overflow-y-auto pr-0.5">

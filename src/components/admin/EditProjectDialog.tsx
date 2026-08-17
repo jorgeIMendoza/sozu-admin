@@ -30,6 +30,8 @@ import { ProjectLegalNoticesSection } from "./ProjectLegalNoticesSection";
 import { ProjectBrochuresSection } from "./ProjectBrochuresSection";
 import { ProjectFichaTecnicaSection } from "./ProjectFichaTecnicaSection";
 import { ProjectPuntosInteresSection } from "./ProjectPuntosInteresSection";
+import { mesesMensualidadesRestantes } from "@/utils/escalonadoUtils";
+import { invalidarMensualidadesFijas } from "@/lib/offers/mensualidades-fijas";
 import { FormSection } from "@/components/admin/project-form/FormSection";
 import { FieldGrid } from "@/components/admin/project-form/FieldGrid";
 import { MapLink } from "@/components/admin/project-form/MapLink";
@@ -68,6 +70,14 @@ const formSchema = z.object({
     .optional()
     .refine((val) => !val || parseFloat(val) >= 0, {
       message: "El monto no puede ser negativo",
+    }),
+  // Mensualidades de la oferta digital (proyectos.mensualidades_fijas).
+  // La bandera es solo de UI: al guardar, apagada → NULL (dinámico).
+  usa_mensualidades_fijas: z.boolean().default(false),
+  mensualidades_fijas: z.string()
+    .optional()
+    .refine((val) => !val || (Number.isInteger(Number(val)) && Number(val) >= 0 && Number(val) <= 600), {
+      message: "Debe ser un entero entre 0 y 600",
     }),
   mostrar_precio_m2_en_oferta: z.boolean().default(true),
   mostrar_piso_en_oferta: z.boolean().default(true),
@@ -122,6 +132,9 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
   // `proyectos.monto_apartado` es columna nueva: hasta que el DDL esté aplicado en el
   // ambiente, el campo no se pinta ni se manda en el update (patrón de DDL probe).
   const [hasMontoApartado, setHasMontoApartado] = useState(false);
+  // `proyectos.mensualidades_fijas` es columna nueva (doc 04 de ofertas-digitales):
+  // mismo patrón de probe. Sin ella, la oferta sigue en modo dinámico.
+  const [hasMensualidadesFijas, setHasMensualidadesFijas] = useState(false);
   // Monto de apartado REAL del proyecto: vive en `propiedades.monto_apartado` (columna
   // que ya existía y ya se edita en Editar propiedad). Aquí solo se resume, para que
   // desde el proyecto se vea qué está cobrando sin abrir unidad por unidad.
@@ -166,6 +179,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
       instagram_handle: "",
       facebook_handle: "",
       youtube_handle: "",
+      usa_mensualidades_fijas: false,
+      mensualidades_fijas: "",
     },
   });
 
@@ -478,6 +493,33 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
     };
   }, [open, projectId, form]);
 
+  // `mensualidades_fijas` va por su propio SELECT por la misma razón que `monto_apartado`:
+  // si la columna no existe en el ambiente, meterla en el SELECT grande tumbaría toda la
+  // carga del proyecto. NULL en BD = modo dinámico → la bandera arranca apagada.
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from("proyectos")
+        .select("mensualidades_fijas")
+        .eq("id", projectId)
+        .maybeSingle();
+      if (cancelado) return;
+      if (error) {
+        setHasMensualidadesFijas(false);
+        return;
+      }
+      setHasMensualidadesFijas(true);
+      const valor = (data as any)?.mensualidades_fijas;
+      form.setValue("usa_mensualidades_fijas", valor != null);
+      form.setValue("mensualidades_fijas", valor != null ? String(valor) : "");
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [open, projectId, form]);
+
   // Resumen del apartado de las unidades del proyecto. Waterfall explícito:
   // el triple join de PostgREST falla en silencio (ver CLAUDE.md).
   useEffect(() => {
@@ -553,6 +595,8 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         // No viene en `project` (se lee en su propio efecto): conservar lo ya cargado
         // para que este reset no lo borre.
         monto_apartado: form.getValues("monto_apartado") || "",
+        usa_mensualidades_fijas: form.getValues("usa_mensualidades_fijas") ?? false,
+        mensualidades_fijas: form.getValues("mensualidades_fijas") || "",
         mostrar_precio_m2_en_oferta: project.mostrar_precio_m2_en_oferta ?? true,
         mostrar_piso_en_oferta: project.mostrar_piso_en_oferta ?? true,
         mostrar_seccion_efectivo_en_oferta: project.mostrar_seccion_efectivo_en_oferta ?? true,
@@ -606,6 +650,17 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
         ...(hasMontoApartado
           ? { monto_apartado: values.monto_apartado ? parseFloat(values.monto_apartado) : 0 }
           : {}),
+        // Bandera apagada → NULL = la oferta vuelve a calcular los meses contra la fecha
+        // de entrega. Encendida → ese número de mensualidades, fijo. El "0" es válido:
+        // significa que el proyecto no da mensualidades.
+        ...(hasMensualidadesFijas
+          ? {
+              mensualidades_fijas:
+                values.usa_mensualidades_fijas && values.mensualidades_fijas !== ""
+                  ? parseInt(values.mensualidades_fijas as string, 10)
+                  : null,
+            }
+          : {}),
         mostrar_precio_m2_en_oferta: values.mostrar_precio_m2_en_oferta,
         mostrar_piso_en_oferta: values.mostrar_piso_en_oferta,
         mostrar_seccion_efectivo_en_oferta: values.mostrar_seccion_efectivo_en_oferta,
@@ -627,6 +682,10 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
       console.log('🔍 [DEBUG] Resultado del update - Error:', updateError);
 
       if (updateError) throw updateError;
+
+      // El cálculo de meses de la oferta cachea por proyecto: tras guardar hay que
+      // tirarlo o el inventario del agente seguiría pintando el número anterior.
+      invalidarMensualidadesFijas(projectId);
 
       // Update amenities relationships
       // First, delete existing relationships
@@ -1672,6 +1731,95 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                           />
                         </FieldGrid>
                       )}
+                    </div>
+                  </FormSection>
+
+                  <FormSection
+                    title="Mensualidades"
+                    description="Cuántas mensualidades ofrece la oferta digital de este proyecto."
+                    icon={CalendarClock}
+                  >
+                    <div className="space-y-3">
+                      <p className="text-sm text-foreground">
+                        Fecha de entrega:{" "}
+                        <span className="font-semibold tabular-nums">
+                          {form.watch("fecha_entrega")
+                            ? new Date(`${form.watch("fecha_entrega")}T00:00:00`).toLocaleDateString(
+                                "es-MX",
+                                { day: "numeric", month: "long", year: "numeric" },
+                              )
+                            : "sin capturar"}
+                        </span>
+                        {" · "}
+                        <span className="text-muted-foreground">
+                          cálculo dinámico hoy:{" "}
+                          <span className="font-semibold text-foreground tabular-nums">
+                            {mesesMensualidadesRestantes(form.watch("fecha_entrega") || null)}
+                          </span>{" "}
+                          mensualidades
+                        </span>
+                      </p>
+
+                      {!hasMensualidadesFijas ? (
+                        <p className="text-[12px] leading-snug text-muted-foreground">
+                          El modo fijo todavía no está disponible en este ambiente: falta aplicar
+                          el DDL de <strong>mensualidades_fijas</strong>. La oferta usa el cálculo
+                          dinámico contra la fecha de entrega.
+                        </p>
+                      ) : (
+                        <>
+                          <FormField
+                            control={form.control}
+                            name="usa_mensualidades_fijas"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel>Usar un número fijo de mensualidades</FormLabel>
+                                  <FormDescription>
+                                    Apagado: se calculan contra la fecha de entrega y bajan cada
+                                    mes. Encendido: siempre el mismo número, sin importar la
+                                    entrega.
+                                  </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+
+                          {form.watch("usa_mensualidades_fijas") && (
+                            <FieldGrid cols={3}>
+                              <FormField
+                                control={form.control}
+                                name="mensualidades_fijas"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Número de mensualidades</FormLabel>
+                                    <FormControl>
+                                      <Input type="number" step="1" min="0" max="600" placeholder="35" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                      Solo las mensualidades. El pago a escrituración va aparte:
+                                      35 aquí = 36 meses de plan.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </FieldGrid>
+                          )}
+                        </>
+                      )}
+
+                      <p className="text-[12px] leading-snug text-muted-foreground">
+                        Una unidad puede sobrescribir este valor desde{" "}
+                        <strong>Propiedades → Editar</strong>. La unidad siempre manda sobre el
+                        proyecto.
+                      </p>
                     </div>
                   </FormSection>
 

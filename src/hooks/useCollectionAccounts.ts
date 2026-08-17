@@ -130,7 +130,7 @@ export function useCollectionAccounts(params: CollectionAccountsParams) {
   const totalsQuery = useQuery({
     queryKey: ['pcobranza-cuentas-cobranza-totales', ...filtroKeySinProyecto],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (supabase as any).rpc('get_pcobranza_cuentas_cobranza', {
         ...rpcArgs, p_limit: 0, p_offset: 0, p_incluir_totales: true,
       });
@@ -158,7 +158,7 @@ export function useCollectionAccounts(params: CollectionAccountsParams) {
     ],
     queryFn: async (): Promise<CollectionAccount[]> => {
       // Cast to any: the RPC name is not yet in Supabase's generated types.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (supabase as any).rpc('get_pcobranza_cuentas_cobranza', {
         ...rpcArgs,
         p_sort_key: params.sortKey || null,

@@ -153,7 +153,7 @@ export default function MisPropiedades() {
 
       // Step 3.3: Get entidades_relacionadas and personas for owners
       const entidadIds = [...new Set((data || []).map((p: any) => p.id_entidad_relacionada_dueno).filter(Boolean))];
-      let personasMap = new Map();
+      const personasMap = new Map();
       if (entidadIds.length > 0) {
         const { data: entidadesData } = await supabase
           .from('entidades_relacionadas')
@@ -187,7 +187,7 @@ export default function MisPropiedades() {
 
       const ofertaIds = (ofertasData || []).map((o: any) => o.id);
       
-      let cuentasMap = new Map();
+      const cuentasMap = new Map();
       if (ofertaIds.length > 0) {
         const { data: cuentasData } = await supabase
           .from('cuentas_cobranza')
@@ -197,7 +197,7 @@ export default function MisPropiedades() {
 
         // Get pagos for cuentas
         const cuentaIds = (cuentasData || []).map((c: any) => c.id);
-        let pagosMap = new Map();
+        const pagosMap = new Map();
         if (cuentaIds.length > 0) {
           const { data: pagosData } = await supabase
             .from('pagos')
@@ -296,8 +296,8 @@ export default function MisPropiedades() {
          ...(allOfertasProdData || []).map((o: any) => o.id)
        ];
 
-       let cuentasCancelledByProperty: Record<number, string> = {};
-       let ofertaCuentaCancelledMap: Record<number, boolean> = {};
+       const cuentasCancelledByProperty: Record<number, string> = {};
+       const ofertaCuentaCancelledMap: Record<number, boolean> = {};
 
        if (allOfertaIdsForCounts.length > 0) {
          // Get cancelled cuentas
@@ -402,7 +402,7 @@ export default function MisPropiedades() {
         .filter((p: any) => p.id_tipo_transaccion === ID_TIPO_REVENTA)
         .map((p: any) => p.id);
       
-      let reventaPropietariosMap: Record<number, string> = {};
+      const reventaPropietariosMap: Record<number, string> = {};
       
       if (reventaPropertyIds.length > 0) {
         // Get the most recent offer for each Reventa property (regardless of active status)
@@ -798,7 +798,7 @@ export default function MisPropiedades() {
 
     // Step 4: Enrich offers with additional data
     const enrichedOffers = await Promise.all(filteredOffers.map(async (offer: any) => {
-      let enrichedOffer = { ...offer };
+      const enrichedOffer = { ...offer };
       
       // Get offer display options
       try {
@@ -879,7 +879,7 @@ export default function MisPropiedades() {
 
     // Enrich offers with additional data
     const enrichedOffers = await Promise.all((offersData || []).map(async (offer: any) => {
-      let enrichedOffer = {
+      const enrichedOffer = {
         ...offer,
         product_name: offer.productos_servicios?.nombre || 'N/A',
         esquema_nombre: offer.esquemas_pago?.nombre || null,

@@ -162,8 +162,8 @@ const Bodegas = () => {
           .eq('activo', true)
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
-        let cuentaByOferta: Record<number, number> = {};
-        let precioByOferta: Record<number, number> = {};
+        const cuentaByOferta: Record<number, number> = {};
+        const precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')
@@ -294,8 +294,8 @@ const Bodegas = () => {
           .eq('activo', true)
           .range(0, 5000);
         const ofertaIds = (ofertasData || []).map((o: any) => o.id);
-        let cuentaByOferta: Record<number, number> = {};
-        let precioByOferta: Record<number, number> = {};
+        const cuentaByOferta: Record<number, number> = {};
+        const precioByOferta: Record<number, number> = {};
         if (ofertaIds.length > 0) {
           const { data: cuentasData } = await supabase
             .from('cuentas_cobranza')

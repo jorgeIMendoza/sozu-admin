@@ -55,7 +55,7 @@ export type ReservacionPublica = {
  * y la página muestra `LINK_NO_VIGENTE`.
  */
 export async function cargarReservacionPublica(
-  supabaseClient: { rpc: Function },
+  supabaseClient: { rpc: (fn: string, args?: Record<string, unknown>) => unknown },
   token?: string | null
 ): Promise<ReservacionPublica | null> {
   if (!token) return null;

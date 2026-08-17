@@ -539,7 +539,7 @@ export default function Agentes() {
       
       // Get user roles for agents (by id_persona)
       const personaIds = (data || []).map((item: any) => item.id);
-      let userRolesMap: Record<number, { rol_id: number | null; rol_nombre: string | null; activo: boolean | null }> = {};
+      const userRolesMap: Record<number, { rol_id: number | null; rol_nombre: string | null; activo: boolean | null }> = {};
       
       if (personaIds.length > 0) {
         const { data: usuariosData } = await supabase
@@ -643,7 +643,7 @@ export default function Agentes() {
       
       // Get user roles for agents (by id_persona)
       const personaIds = (data || []).map((item: any) => item.id);
-      let userRolesMap: Record<number, { rol_id: number | null; rol_nombre: string | null; activo: boolean | null }> = {};
+      const userRolesMap: Record<number, { rol_id: number | null; rol_nombre: string | null; activo: boolean | null }> = {};
       
       if (personaIds.length > 0) {
         const { data: usuariosData } = await supabase

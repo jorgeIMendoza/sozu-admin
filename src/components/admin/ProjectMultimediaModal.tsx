@@ -40,7 +40,7 @@ export const ProjectMultimediaModal = ({
 
   const getYouTubeEmbedUrl = (link: string) => {
     // Handle different YouTube URL formats
-    const videoIdMatch = link.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    const videoIdMatch = link.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/);
     if (videoIdMatch) {
       return `https://www.youtube.com/embed/${videoIdMatch[1]}`;
     }

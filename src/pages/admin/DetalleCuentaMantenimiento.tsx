@@ -481,7 +481,7 @@ export default function DetalleCuentaMantenimiento() {
 
       // Get tipos de multa names
       const tipoIds = [...new Set(multasCompletas.map((m: any) => m.id_tipo_multa).filter(id => id))];
-      let tiposMap = new Map<number, string>();
+      const tiposMap = new Map<number, string>();
 
       if (tipoIds.length > 0) {
         const { data: tipos } = await supabase

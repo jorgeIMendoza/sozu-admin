@@ -210,7 +210,7 @@ export function PortalTrackingProvider({
       if (cancelled) return;
       if (error) {
         // Modo silencioso — no debe romper la UX si tracking falla.
-        // eslint-disable-next-line no-console
+         
         console.warn("[tracking] register_portal_session falló:", error);
         return;
       }

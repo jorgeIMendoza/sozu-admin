@@ -25,6 +25,7 @@ import {
   buildLatestPorPersonaTipo,
   fetchPersonasExpediente,
   gruposObligatorios,
+  grupoAplica,
   resolverGrupo,
   ESTATUS_VALIDADO,
   type PersonaExpedienteResuelta,
@@ -163,7 +164,11 @@ export function useNotariaExpediente({
 
       // Grupos según tipo de persona (PF/PM); los de owner 'rep' se evalúan
       // contra la persona del representante legal.
-      for (const grupo of gruposObligatorios(persona.tipoPersona, 'notaria')) {
+      // Se omiten los condicionales que no aplican (acta de matrimonio de un
+      // soltero) y los informativos, que no forman parte del paquete de notaría.
+      const gruposDeLaPersona = gruposObligatorios(persona.tipoPersona, 'notaria')
+        .filter(g => !g.informativo && grupoAplica(g, persona));
+      for (const grupo of gruposDeLaPersona) {
         const ownerId = grupo.owner === 'rep' ? persona.repPersonaId : persona.personaId;
         const { doc, cumplido } = resolverGrupo(ownerId, grupo, data.latestByKey);
         const estatusId = cumplido ? ESTATUS_VALIDADO : doc?.estatusId ?? null;

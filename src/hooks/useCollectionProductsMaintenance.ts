@@ -76,7 +76,7 @@ export function useCollectionProductsMaintenance(
     queryKey: ['pcobranza-complementos', projectId, entityIds, tipo, startDate, endDate],
     queryFn: async (): Promise<CollectionProductsMaintenanceData> => {
       // Cast to any: the RPC name is not yet in Supabase's generated types.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (supabase as any).rpc('get_pcobranza_complementos', {
         p_proyecto_id: projectId ?? null,
         p_entidad_ids: entityIds && entityIds.length > 0 ? entityIds : null,

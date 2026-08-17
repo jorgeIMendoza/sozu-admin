@@ -62,7 +62,7 @@ export function useCollectionDashboard(
     queryKey: ['pcobranza-inmuebles', projectId, startDate, endDate, entityIds],
     queryFn: async (): Promise<CollectionDashboardData> => {
       // Cast to any: the RPC name is not yet in Supabase's generated types.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (supabase as any).rpc('get_pcobranza_inmuebles', {
         p_proyecto_id: projectId ?? null,
         p_fecha_inicio: startDate ?? null,

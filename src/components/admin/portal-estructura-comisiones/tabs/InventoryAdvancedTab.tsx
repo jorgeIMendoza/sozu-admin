@@ -63,7 +63,7 @@ function normKey(s: string): string {
 // Parse a numeric/currency cell ("$22,115,622.40" → 22115622.4)
 function parseNum(raw: string): number {
   if (!raw) return 0;
-  const cleaned = raw.replace(/[^\d.\-]/g, '');
+  const cleaned = raw.replace(/[^\d.-]/g, '');
   const n = Number(cleaned);
   return isFinite(n) ? n : 0;
 }

@@ -47,7 +47,7 @@ function useScrollControls(ref: React.RefObject<HTMLElement>, key?: unknown) {
     if (el.firstElementChild) ro.observe(el.firstElementChild);
     return () => { cancelAnimationFrame(raf); el.removeEventListener("scroll", update); ro.disconnect(); };
     // `key` fuerza re-suscripción cuando el contenido (y el ref) ya está montado.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [ref, key]);
   return nav;
 }

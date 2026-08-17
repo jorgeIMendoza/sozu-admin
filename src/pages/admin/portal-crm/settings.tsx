@@ -454,7 +454,6 @@ const MOCK_CONNECTORS: Connector[] = [
   { id: "c4", organization_id: "org1", connector_key: "postmark", display_name: "Postmark", category: "conversions", status: "connected_live", mode: "live", required_credentials: ["server_token"], checklist: ["Token configurado","Dominio verificado"], non_secret_config: { from_email: "crm@sozu.com" }, last_test_at: new Date(Date.now() - 1800_000).toISOString(), last_error: null, encryption_status: "encrypted" },
   { id: "c5", organization_id: "org1", connector_key: "evolution_api", display_name: "Evolution API (WA)", category: "webhooks", status: "error", mode: "live", required_credentials: ["api_key","base_url"], checklist: ["URL accesible","API key válida"], non_secret_config: { instance_name: "sozu-prod" }, last_test_at: new Date(Date.now() - 3600_000 * 5).toISOString(), last_error: "Connection timeout after 5s", encryption_status: "encrypted" },
   { id: "c6", organization_id: "org1", connector_key: "openai", display_name: "OpenAI", category: "ai", status: "connected_test", mode: "test", required_credentials: ["api_key"], checklist: ["API key configurada"], non_secret_config: { model: "gpt-4o-mini" }, last_test_at: new Date(Date.now() - 86400_000).toISOString(), last_error: null, encryption_status: "encrypted" },
-  { id: "c7", organization_id: "org1", connector_key: "stripe", display_name: "Stripe", category: "other", status: "disconnected", mode: "mock", required_credentials: ["secret_key","publishable_key"], checklist: ["Keys configuradas","Webhook endpoint registrado"], non_secret_config: {}, last_test_at: null, last_error: null, encryption_status: "not_applicable" },
 ];
 
 export function CrmSettingsConnections() {
@@ -1268,6 +1267,7 @@ function useLeadStatesList() {
 
 // Genera una clave estable (slug) a partir del nombre para guardar en estatus_lead.
 const slugifyLeadState = (s: string) =>
+  // eslint-disable-next-line no-control-regex -- el rango ASCII completo es intencional
   s.toLowerCase().normalize("NFD").replace(/[^\x00-\x7f]/g, "")
     .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "estado";
 

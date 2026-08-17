@@ -109,7 +109,7 @@ export function PaymentDetailDialog({
 
   if (!payment) return null;
   const url = payment.url_cep || payment.url_recibo || null;
-  const conceptoLabel = detail?.concepto?.toLowerCase().includes('contra entrega') ? 'Pago Final' : (detail?.concepto ?? 'Sin registro');
+  const conceptoLabel = detail?.concepto?.toLowerCase().includes('contra entrega') ? 'A escrituración' : (detail?.concepto ?? 'Sin registro');
   const descuadrado = detail?.montoPago != null && detail?.totalAplicado != null
     && Math.abs(Number(detail.montoPago) - Number(detail.totalAplicado)) > 0.01;
 

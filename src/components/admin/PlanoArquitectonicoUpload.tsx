@@ -95,10 +95,6 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
   const [pendingUpload, setPendingUpload] = useState<{ emId: number; nivel: number } | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  if (!modeloId) {
-    return <SimplePlanoUpload currentUrl={currentUrl} onUrlChange={onUrlChange} />;
-  }
-
   const { data: edificiosModelos } = useQuery({
     queryKey: ["edificios-modelos-for-modelo", modeloId],
     queryFn: async () => {
@@ -150,7 +146,14 @@ export function PlanoArquitectonicoUpload({ currentUrl, onUrlChange, modeloId, p
     enabled: emIds.length > 0,
   });
 
-  const getNivelesData = (em: EdificioModeloInfo): NivelPlanoData[] => {
+  // Después de los hooks: `modeloId` cambia al elegir modelo y salir antes
+  // alteraría el orden de hooks entre renders. Las tres consultas ya vienen
+  // apagadas por `enabled` cuando no hay modelo.
+  if (!modeloId) {
+    return <SimplePlanoUpload currentUrl={currentUrl} onUrlChange={onUrlChange} />;
+  }
+
+  const getNivelesData =(em: EdificioModeloInfo): NivelPlanoData[] => {
     const niveles: NivelPlanoData[] = [];
     for (let n = 1; n <= em.niveles; n++) {
       const planoUbicacion = (planosUbicacion || []).find(

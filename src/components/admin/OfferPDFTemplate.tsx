@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import { mesesEntreFechas, calcDynamicScheme, mesesMensualidadesRestantes } from '@/utils/escalonadoUtils';
+import { useMensualidadesFijas } from '@/lib/offers/mensualidades-fijas';
 
 interface OfferData {
   id: number;
@@ -105,6 +106,13 @@ interface OfferPDFTemplateProps {
 
 export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps>(
   ({ offerData, propertyDetails, paymentSchemes, amenities, creatorInfo, leadInfo, legalNotices, estacionamientos, bodegas }, ref) => {
+    // Mensualidades fijas (unidad → proyecto). `null` = se calculan contra la entrega,
+    // igual que siempre. Mismo criterio que la oferta digital.
+    const mensualidadesFijas = useMensualidadesFijas(
+      (propertyDetails as any)?.id,
+      propertyDetails.projectData?.id,
+    );
+
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat('es-MX', {
         style: 'currency',
@@ -314,8 +322,8 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
             {filteredPaymentSchemes.map((scheme) => {
               const isSchemeEscalonado = Array.isArray(scheme.tramos_mensualidad) && scheme.tramos_mensualidad.length > 0;
               const fechaEntregaProyecto = propertyDetails.projectData?.fecha_entrega;
-              const mesesEfectivos = (!isSchemeEscalonado && fechaEntregaProyecto && scheme.porcentaje_mensualidades > 0)
-                ? mesesMensualidadesRestantes(fechaEntregaProyecto)
+              const mesesEfectivos = (!isSchemeEscalonado && scheme.porcentaje_mensualidades > 0)
+                ? mesesMensualidadesRestantes(fechaEntregaProyecto ?? null, new Date(), mensualidadesFijas)
                 : 0;
               const calculation = calculatePaymentAmounts(scheme, mesesEfectivos);
               return (
@@ -410,7 +418,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
                                 {scheme.porcentaje_entrega > 0 && (
                                   <div className="text-center">
-                                    <p className="text-xs text-muted-foreground">Contra Entrega</p>
+                                    <p className="text-xs text-muted-foreground">A escrituración</p>
                                     <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
                                     <p className="text-xs text-muted-foreground">({calculation.porcentajeEntrega.toFixed(1)}%)</p>
                                   </div>

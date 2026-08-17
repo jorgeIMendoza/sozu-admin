@@ -60,7 +60,7 @@ export function PropertyProgressBadge({
   const { data: fetchedNumeroEscritura } = useQuery({
     queryKey: ['progress-badge-escritura', cuentaId],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const supabaseAny = supabase as any;
       const { data } = await supabaseAny
         .from('cuentas_cobranza')
@@ -114,7 +114,7 @@ export function PropertyProgressBadge({
       id_persona: number | null;
       tipos_documento: TipoDocumentoRow | null;
     }>> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const supabaseAny = supabase as any;
       
       const { data: rawDocs, error } = await supabaseAny

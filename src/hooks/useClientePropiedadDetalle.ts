@@ -282,7 +282,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
       // 6. Maintenance child cuentas
       const childIds = (childCuentas || []).map(c => c.id);
       let cuotaMensual = 0;
-      let mantenimientoHistorial: MantenimientoHistorial[] = [];
+      const mantenimientoHistorial: MantenimientoHistorial[] = [];
       let proximoMantenimiento: string | null = null;
       let mantenimientosAtrasados = 0;
       let mantenimientoTotalPagado = 0;
@@ -419,7 +419,7 @@ export function useClientePropiedadDetalle(cuentaId: number | null | undefined) 
 
       // 9. Parcialidades - fetch aplicaciones_pago to know partial payments
       const acuerdoPropIds = (acuerdosProp || []).map((a: any) => a.id);
-      let aplicacionesByAcuerdo = new Map<number, number>();
+      const aplicacionesByAcuerdo = new Map<number, number>();
       if (acuerdoPropIds.length > 0) {
         const { data: aplicaciones } = await supabase
           .from("aplicaciones_pago")

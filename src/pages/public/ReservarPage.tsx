@@ -36,7 +36,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// Apartado por transferencia SPEI (sin Stripe). El monto es por proyecto
+// Apartado por transferencia SPEI (sin pasarela de tarjeta). El monto es por proyecto
 // (`proyectos.monto_apartado`) y viaja en la oferta: ver lib/offers/apartado.ts.
 // Beneficiario STP fijo (mismo que PagoApartadoFinalPage / plantillas PDF).
 const BENEFICIARIO = "SOZU COMERCIALIZADORA SA DE CV";
