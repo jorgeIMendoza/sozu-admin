@@ -153,6 +153,7 @@ interface Multa {
 
 import JSZip from 'jszip';
 import { formatEscalonadoLabel } from "@/utils/escalonadoUtils";
+import { etiquetaConcepto } from "@/utils/conceptos-pago";
 import { mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } from "@/lib/evidenciaPagoBucket";
 import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
@@ -4504,7 +4505,7 @@ export default function DetalleCuentaCobranza() {
                 
                 const conceptoDisplay = acuerdo.concepto?.toLowerCase().includes('parcialidad') 
                   ? `Parcialidad #${parcialidadNumber}`
-                  : acuerdo.concepto;
+                  : etiquetaConcepto(acuerdo.concepto);
 
                 // Calculate percentage based on total price
                 const porcentaje = cuentaDetalle?.precio_final 
@@ -5345,7 +5346,7 @@ export default function DetalleCuentaCobranza() {
                                             ? 'Multa' 
                                             : (concepto.toLowerCase() === 'parcialidad' && parcialidadNumber 
                                               ? `Parcialidad ${parcialidadNumber}` 
-                                              : concepto);
+                                              : etiquetaConcepto(concepto));
                                           
                                           return (
                                             <TableRow key={aplicacion.id} className={esMulta ? 'bg-warning/10' : ''}>

@@ -987,7 +987,7 @@ export default function CobranzaCuentaDetalle() {
               <>
                 <DialogHeader>
                   <DialogTitle className="text-[15px]">
-                    Multas - {gestionAcuerdo?.concepto?.toLowerCase().includes('contra entrega') ? 'Entrega' : gestionAcuerdo?.concepto}
+                    Multas - {gestionAcuerdo?.concepto?.toLowerCase().includes('contra entrega') ? 'A escrituración' : gestionAcuerdo?.concepto}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-2 py-1 max-h-[55vh] overflow-y-auto pr-0.5">

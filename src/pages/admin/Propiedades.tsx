@@ -51,6 +51,7 @@ import { RefreshCw } from "lucide-react";
 import { CambiarEstatusAprobacionDialog } from "@/components/admin/CambiarEstatusAprobacionDialog";
 import { PlanosPropertyModal } from "@/components/admin/PlanosPropertyModal";
 import { formatEscalonadoLabel, mesesMensualidadesRestantes, calcDynamicScheme } from "@/utils/escalonadoUtils";
+import { resolverMensualidadesFijas } from "@/lib/offers/mensualidades-fijas";
 import { getBodegasIncluidasCosto } from "@/lib/offers/included-bodegas";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
 
@@ -513,6 +514,9 @@ const Propiedades = () => {
   const [cambiarEstatusOfferId, setCambiarEstatusOfferId] = useState<number | null>(null);
   const [selectedPropertyForOffers, setSelectedPropertyForOffers] = useState<Property | null>(null);
   const [selectedPropertyForProductOffers, setSelectedPropertyForProductOffers] = useState<Property | null>(null);
+  // Mensualidades fijas de la unidad seleccionada (unidad → proyecto). `null`/undefined
+  // = modo dinámico contra la fecha de entrega, que es la regla histórica.
+  const [mensualidadesFijasOferta, setMensualidadesFijasOferta] = useState<number | null>(null);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [productOffersDialogOpen, setProductOffersDialogOpen] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState<number[]>([]);
@@ -531,7 +535,25 @@ const Propiedades = () => {
   const [selectedPropertyEstacionamientos, setSelectedPropertyEstacionamientos] = useState<any[]>([]);
   const [selectedPropertyBodegas, setSelectedPropertyBodegas] = useState<any[]>([]);
   const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState<Property | null>(null);
-  
+
+  // Resuelve las mensualidades fijas de la unidad cuya oferta se está armando. Se lee
+  // aparte del listado porque la columna puede no existir todavía en el ambiente.
+  useEffect(() => {
+    const prop = selectedPropertyForOffers;
+    if (!prop) {
+      setMensualidadesFijasOferta(null);
+      return;
+    }
+    let cancelado = false;
+    resolverMensualidadesFijas(prop.id, (prop as any).proyecto_id).then((valor) => {
+      if (!cancelado) setMensualidadesFijasOferta(valor);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [selectedPropertyForOffers]);
+
+
   // Filtros de selección múltiple para proyecto y modelo
   const [selectedProyectos, setSelectedProyectos] = useState<number[]>(savedFilters.selectedProyectos ?? []);
   const [selectedModelos, setSelectedModelos] = useState<number[]>(savedFilters.selectedModelos ?? []);
@@ -6883,7 +6905,9 @@ const Propiedades = () => {
                                                ? formatEscalonadoLabel(scheme, tramos, selectedPropertyForOffers?.precio_lista)
                                                : (() => {
                                                    const proyFechaEntrega = (proyectos as any[])?.find((p: any) => p.id === selectedPropertyForOffers?.proyecto_id)?.fecha_entrega as string | null | undefined;
-                                                   const dynMeses = (proyFechaEntrega && scheme.porcentaje_mensualidades > 0) ? mesesMensualidadesRestantes(proyFechaEntrega) : 0;
+                                                   const dynMeses = scheme.porcentaje_mensualidades > 0
+                                                     ? mesesMensualidadesRestantes(proyFechaEntrega ?? null, new Date(), mensualidadesFijasOferta)
+                                                     : 0;
                                                    const precioLista = selectedPropertyForOffers?.precio_lista || 0;
                                                    const dyn = precioLista > 0 ? calcDynamicScheme(scheme, precioLista, dynMeses) : null;
                                                    const pctMens = dyn ? dyn.porcentajeMensualidades.toFixed(1) : (scheme.porcentaje_mensualidades || 0);

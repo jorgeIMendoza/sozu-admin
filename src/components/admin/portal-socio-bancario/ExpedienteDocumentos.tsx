@@ -262,7 +262,12 @@ export function ExpedienteDocumentos({
   return (
     <div className="mt-4 space-y-5">
       {/* ── Obligatorios del expediente — fuente única (PF/PM, rep legal, cónyuge) ── */}
-      <DocumentosObligatorios cuentaId={cuentaId} portal="socio_bancario" />
+      <DocumentosObligatorios
+        cuentaId={cuentaId}
+        portal="socio_bancario"
+        /* El socio bancario consulta el expediente; ligar personas es de SOZU. */
+        gestionarPersonasLigadas={false}
+      />
 
       {/* ── Botones de subida (solo 2 tipos permitidos) — ocultos para el banco ── */}
       {!readOnly && (

@@ -93,6 +93,7 @@ export function DocumentosObligatorios({
   portal = 'escrituracion',
   titulo = 'Documentos obligatorios del expediente',
   gestionarPersonasLigadas = true,
+  rutaPermisos,
   className,
 }: {
   /** Cuenta de cobranza: el componente resuelve sus compradores activos. */
@@ -109,11 +110,18 @@ export function DocumentosObligatorios({
    * el gate real es este. Se apaga donde el expediente es de solo consulta.
    */
   gestionarPersonasLigadas?: boolean;
+  /**
+   * Ruta con la que se consultan los permisos. Hace falta cuando la pantalla vive
+   * en una ruta con parámetros (`.../cuentas-cobranza/:id/detalle`), porque
+   * `usePagePermissions` compara EXACTO contra `submenus.vista_front_end` y ahí no
+   * hay submenú que coincida. Por defecto, la ruta actual.
+   */
+  rutaPermisos?: string;
   className?: string;
 }) {
   const [historicoAbierto, setHistoricoAbierto] = useState<Record<string, boolean>>({});
   const { pathname } = useLocation();
-  const { canCreate, canUpdate } = usePagePermissions(pathname);
+  const { canCreate, canUpdate } = usePagePermissions(rutaPermisos ?? pathname);
   const puedeLigarPersonas = gestionarPersonasLigadas && (canCreate || canUpdate);
 
   const idsKey = [...(personaIds ?? [])].sort((a, b) => a - b).join(',');

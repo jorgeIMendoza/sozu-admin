@@ -499,7 +499,7 @@ export class EstadoCuentaService {
     
     if (porcentajeEntrega > 0) {
       const montoEntrega = precioBase * (porcentajeEntrega / 100);
-      detailsRight.push({ label: "Contraentrega:", value: `${porcentajeEntrega}%  ${formatMoney(montoEntrega)}` });
+      detailsRight.push({ label: "A escrituración:", value: `${porcentajeEntrega}%  ${formatMoney(montoEntrega)}` });
     }
 
     detailsRight.forEach((item) => {
