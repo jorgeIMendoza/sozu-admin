@@ -202,14 +202,15 @@ export function MotorComisionesReadOnly({
                 Sin comisionistas con comisión asignada
               </p>
             ) : (
-              <table className="data-table">
+              <div className="-mx-1 overflow-x-auto px-1">
+              <table className="data-table w-full min-w-[640px]">
                 <thead>
                   <tr>
                     <th>Comisionista</th>
                     <th>Rol</th>
                     <th>% sobre precio de venta final</th>
                     <th>Valor comisión estimado</th>
-                    <th>Pool</th>
+                    <th>Perfil</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,10 +223,12 @@ export function MotorComisionesReadOnly({
                       <tr key={`${rule.channelId}-${rule.roleId}-${i}`}>
                         {/* Los snapshots previos al modelo por persona no traen
                             `comisionista`: ahí solo se conoce el rol. */}
-                        <td className="text-sm font-medium">{rule.comisionista ?? "—"}</td>
+                        <td className="whitespace-nowrap text-sm font-medium">{rule.comisionista ?? "—"}</td>
                         <td>
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-sm">{role?.name ?? "—"}</span>
+                            {/* `rolNombre` (rol vigente del Directorio) manda sobre el
+                                nombre resuelto por `roleId`, que puede haber quedado obsoleto. */}
+                            <span className="whitespace-nowrap text-sm">{rule.rolNombre ?? role?.name ?? "—"}</span>
                             {assignment && role && (
                               <span className="text-[11px] text-muted-foreground">
                                 {fmtCurrency(assignment.baseSalary)} / mes · {role.belongsTo === "sozu_central" ? "SOZU" : "Proyecto"}
@@ -237,12 +240,32 @@ export function MotorComisionesReadOnly({
                         <td className="font-mono text-sm">
                           {valorEstimado != null ? fmtCurrency(valorEstimado) : "—"}
                         </td>
-                        <td className="text-sm">{rule.pool === "sozu" ? "SOZU" : "Proyecto"}</td>
+                        {/* Perfil de la persona en la organización. Cae al pool
+                            (SOZU/Proyecto) solo en snapshots viejos sin `perfil`. */}
+                        <td>
+                          {rule.perfil ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                rule.perfil === "empleado_sozu"
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+                              )}
+                            >
+                              {rule.perfil === "empleado_sozu" ? "Empleado SOZU" : "Colaborador Investimento"}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              {rule.pool === "sozu" ? "SOZU" : "Proyecto"}
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+              </div>
             )}
 
             {displayRules.length > 0 && precioRef <= 0 && (
