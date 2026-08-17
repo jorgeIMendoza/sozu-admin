@@ -199,6 +199,25 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
+  // Módulo de Precios (Inventarios → Precios): el submenu registrado en BD es el
+  // prefijo '/admin/inventario/precios', pero las pestañas reales viven en
+  // subrutas (tabla, motor, calibracion, escenarios/*, auditoria/*) que no tienen
+  // submenu propio. Patrón coarse: basta tener permiso de lectura sobre el módulo
+  // para habilitar todas sus pestañas. Va DESPUÉS del shortcut de Super Admin
+  // porque para él allowedPaths es {'*'} y no haría match por prefijo.
+  if (location.pathname.startsWith('/admin/inventario/precios')) {
+    let tieneAccesoPrecios = false;
+    for (const p of allowedPaths) {
+      if (p.startsWith('/admin/inventario/precios')) {
+        tieneAccesoPrecios = true;
+        break;
+      }
+    }
+    return tieneAccesoPrecios
+      ? <>{children}</>
+      : <Navigate to="/admin/access-denied" replace />;
+  }
+
   // Portal de Administración: varias rutas de ejecución (bandeja, ciclo-venta, etc.)
   // pueden no tener un submenu propio y nunca aparecer en allowedPaths, por lo que el
   // landing del portal mandaba a 403 a roles no-superadmin con acceso al portal.
