@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
+import { LimiteDeError } from "@/features/precios/components/LimiteDeError";
 
 const PESTANAS = [
   { titulo: "Tabla de Precios", ruta: "/admin/inventario/precios/tabla" },
@@ -33,7 +34,7 @@ const PESTANAS = [
 /** Referencia estable: un arreglo nuevo por render rompe useSyncExternalStore. */
 const SIN_VERSIONES: VersionLista[] = [];
 
-function PreciosLayout() {
+function PreciosContenido() {
   const pathname = useLocation().pathname;
   const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
   const setProyectoActivo = useMotorStore((s) => s.setProyectoActivo);
@@ -107,19 +108,26 @@ function PreciosLayout() {
       .filter((e) => e.desglose);
     if (entradas.length === 0) return;
 
-    crearBorrador({
-      ...construirDatosVersion({
-        idProyecto: idProyectoActivo,
-        nombre: "",
-        motor,
-        entradas,
-        notas:
-          "Borrador inicial derivado del inventario real del proyecto. " +
-          "El precio base por m² de cada modelo es su precio por m² ponderado " +
-          "actual; las curvas de nivel y tamaño están planas hasta calibrar.",
-      }),
-      nombre: "Borrador inicial · inventario real",
-    });
+    // Construir y persistir el borrador toca varios cientos de unidades y
+    // escribe en localStorage: si algo falla ahí, no debe impedir que la
+    // pantalla se use. La lista de trabajo funciona igual sin la versión.
+    try {
+      crearBorrador({
+        ...construirDatosVersion({
+          idProyecto: idProyectoActivo,
+          nombre: "",
+          motor,
+          entradas,
+          notas:
+            "Borrador inicial derivado del inventario real del proyecto. " +
+            "El precio base por m² de cada modelo es su precio por m² ponderado " +
+            "actual; las curvas de nivel y tamaño están planas hasta calibrar.",
+        }),
+        nombre: "Borrador inicial · inventario real",
+      });
+    } catch (e) {
+      console.error("[Precios] no se pudo crear el borrador inicial:", e);
+    }
   }, [
     motorListo,
     cargado,
@@ -243,13 +251,7 @@ function PreciosLayout() {
               <SelectContent>
                 {proyectos.map((p) => (
                   <SelectItem key={p.id_proyecto} value={p.id_proyecto}>
-                    {p.nombre}
-                    {p.num_departamentos > 0 && (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        · {p.num_departamentos} u.
-                      </span>
-                    )}
+                    {p.num_departamentos > 0 ? `${p.nombre} · ${p.num_departamentos} u.` : p.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -312,6 +314,14 @@ function PreciosLayout() {
         <Outlet />
       </div>
     </>
+  );
+}
+
+function PreciosLayout() {
+  return (
+    <LimiteDeError>
+      <PreciosContenido />
+    </LimiteDeError>
   );
 }
 
