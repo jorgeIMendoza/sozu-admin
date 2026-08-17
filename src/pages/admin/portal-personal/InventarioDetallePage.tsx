@@ -1,4 +1,4 @@
-import {Link, useNavigate} from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
@@ -274,7 +274,7 @@ export default function InventarioDetallePage() {
           <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
             <div>
               <Label className="font-bold">Desarrollo</Label>
-              <Select value={desarrollo.slug} onValueChange={(v) => navigate({ to: "/inventario/$slug", params: { slug: v } })}>
+              <Select value={desarrollo.slug} onValueChange={(v) => navigate(`/admin/portal-personal/inventario/${v}`)}>
                 <SelectTrigger className="mt-2 w-full">
                   <SelectValue />
                 </SelectTrigger>

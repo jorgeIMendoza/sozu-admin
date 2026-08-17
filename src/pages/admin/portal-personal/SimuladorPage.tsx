@@ -1,4 +1,4 @@
-import {Link} from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { EyeOff, Info, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +36,9 @@ type Busqueda = { unidad?: string; desarrollo?: string };
 const CLAVE_COMPARATIVO = "sozu-comparativo-personal";
 
 export default function SimuladorPage() {
-  const { unidad: unidadParam, desarrollo: devParam } = Route.useSearch();
+  const [searchParams] = useSearchParams();
+  const unidadParam = searchParams.get("unidad") ?? undefined;
+  const devParam = searchParams.get("desarrollo") ?? undefined;
   const modo = usePortal((s) => s.modo_presentacion);
   const escenarios = usePortal((s) => s.escenarios);
   const guardarEscenario = usePortal((s) => s.guardarEscenario);
