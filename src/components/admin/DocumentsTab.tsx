@@ -100,6 +100,8 @@ export function DocumentsTab({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTipoDocumento, setSelectedTipoDocumento] = useState<string>("");
   const [numeroDocumento, setNumeroDocumento] = useState<string>("");
+  // Solo para tipos múltiples: es lo que distingue un anexo de otro.
+  const [descripcionDocumento, setDescripcionDocumento] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
@@ -376,6 +378,7 @@ export function DocumentsTab({
       setSelectedFile(null);
       setSelectedTipoDocumento("");
       setNumeroDocumento("");
+      setDescripcionDocumento("");
       setSelectedComprador("");
       onDocumentAdded?.();
       
@@ -475,12 +478,18 @@ export function DocumentsTab({
       const idEstatusVerificacion = esFactura ? 2 : 1;
 
       // Create new documento record (permitir múltiples documentos del mismo tipo)
+      const tipoSeleccionado = parseInt(selectedTipoDocumento);
       const documentoData: any = {
         numero: numeroValue,
         url: urlData.publicUrl,
-        id_tipo_documento: parseInt(selectedTipoDocumento),
+        id_tipo_documento: tipoSeleccionado,
         activo: true,
         id_estatus_verificacion: idEstatusVerificacion,
+        // Los anexos conviven: sin descripción no hay cómo distinguirlos. En los
+        // demás tipos el nombre del documento ya lo dice todo.
+        descripcion: esTipoMultiple(tipoSeleccionado) && descripcionDocumento.trim()
+          ? descripcionDocumento.trim()
+          : null,
       };
 
       // Add foreign keys based on entity type
@@ -544,6 +553,7 @@ export function DocumentsTab({
       setSelectedFile(null);
       setSelectedTipoDocumento("");
       setNumeroDocumento("");
+      setDescripcionDocumento("");
       setSelectedComprador("");
       
       toast({
@@ -1320,6 +1330,21 @@ export function DocumentsTab({
                   </SelectContent>
                 </Select>
               </div>
+              {esTipoMultiple(parseInt(selectedTipoDocumento || '0')) && (
+                <div>
+                  <Label htmlFor="descripcion-documento-temp">Descripción del anexo</Label>
+                  <Input
+                    id="descripcion-documento-temp"
+                    type="text"
+                    placeholder="Ej: Poder especial 2024"
+                    value={descripcionDocumento}
+                    onChange={(e) => setDescripcionDocumento(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Se pueden subir varios de este tipo; la descripción es lo que los distingue.
+                  </p>
+                </div>
+              )}
               <div>
                 <Label htmlFor="numero-documento-temp">Número de Documento (Opcional)</Label>
                 <Input
@@ -1349,6 +1374,7 @@ export function DocumentsTab({
                   setSelectedFile(null);
                   setSelectedTipoDocumento("");
                   setNumeroDocumento("");
+                  setDescripcionDocumento("");
                 }}
               >
                 Cancelar
@@ -1578,6 +1604,21 @@ export function DocumentsTab({
                 </SelectContent>
               </Select>
             </div>
+            {esTipoMultiple(parseInt(selectedTipoDocumento || '0')) && (
+              <div>
+                <Label htmlFor="descripcion-documento">Descripción del anexo</Label>
+                <Input
+                  id="descripcion-documento"
+                  type="text"
+                  placeholder="Ej: Poder especial 2024"
+                  value={descripcionDocumento}
+                  onChange={(e) => setDescripcionDocumento(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Se pueden subir varios de este tipo; la descripción es lo que los distingue.
+                </p>
+              </div>
+            )}
             <div>
               <Label htmlFor="numero-documento">Número de Documento (Opcional)</Label>
               <Input
@@ -1629,6 +1670,7 @@ export function DocumentsTab({
                 setSelectedFile(null);
                 setSelectedTipoDocumento("");
                 setNumeroDocumento("");
+                setDescripcionDocumento("");
                 setSelectedComprador("");
               }}
             >
