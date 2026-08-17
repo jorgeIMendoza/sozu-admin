@@ -82,6 +82,13 @@ interface SimulatorContextType extends AppState {
   /** Persiste en el servidor todos los cambios locales acumulados (reglas agregadas/editadas/eliminadas + Comisión Total) para el proyecto seleccionado. */
   saveMotorComisiones: () => Promise<boolean>;
   /**
+   * Relee del servidor los datos imperativos del Motor (catálogo de canales +
+   * matriz de comisiones y config del proyecto seleccionado). Alimenta el botón
+   * "Actualizar" de la consulta de solo lectura: como estos datos no son de
+   * react-query, invalidar la caché no basta para refrescarlos.
+   */
+  reloadMotor: () => Promise<void>;
+  /**
    * Diagnóstico de la derivación de `roleAssignments` desde el Directorio real
    * ("Roles y Sueldos"). `null` cuando todavía no hay personal capturado y la
    * estructura sigue siendo la local del simulador.
@@ -166,6 +173,44 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     else localStorage.setItem(MOTOR_PROJECT_KEY, String(id));
   }, []);
 
+  // Lectura del catálogo global de canales desde el servidor (sin sembrar: el
+  // seed solo aplica en el primer montaje). La BD manda sobre lo local.
+  const loadCanales = useCallback(async () => {
+    const remoteChannels = await fetchCanalesReales();
+    setState(prev => ({
+      ...prev,
+      channels: remoteChannels && remoteChannels.length > 0 ? remoteChannels : prev.channels,
+    }));
+  }, []);
+
+  // Lectura de la matriz de comisiones + config del proyecto indicado.
+  const loadMotorProyecto = useCallback(async (projId: number) => {
+    setMotorLoading(true);
+    try {
+      const [remoteRules, remoteMotorConfig] = await Promise.all([
+        fetchReglasComisionReales(projId), fetchMotorConfigReal(projId),
+      ]);
+      setState(prev => ({
+        ...prev,
+        commissionRules: remoteRules ?? [],
+        motorConfig: remoteMotorConfig ?? DEFAULT_MOTOR_CONFIG,
+      }));
+    } finally {
+      setMotorLoading(false);
+    }
+  }, []);
+
+  // Botón "Actualizar": relee canales + matriz/config del proyecto en curso y
+  // descarta cualquier borrador local (no aplica en la vista de solo lectura).
+  const reloadMotor = useCallback(async () => {
+    setMotorDirty(false);
+    setPendingDeletes([]);
+    await Promise.all([
+      loadCanales(),
+      motorProjectId != null ? loadMotorProyecto(motorProjectId) : Promise.resolve(),
+    ]);
+  }, [loadCanales, loadMotorProyecto, motorProjectId]);
+
   // Canales (catálogo global) son compartidos vía Supabase — al montar, la
   // BD manda sobre el localStorage local. Si la tabla aún no existe (DDL
   // pendiente) o hay un error de red, sigue funcionando 100% local.
@@ -201,19 +246,8 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
       setMotorLoading(false);
       return;
     }
-    setMotorLoading(true);
-    (async () => {
-      const [remoteRules, remoteMotorConfig] = await Promise.all([
-        fetchReglasComisionReales(motorProjectId), fetchMotorConfigReal(motorProjectId),
-      ]);
-      setState(prev => ({
-        ...prev,
-        commissionRules: remoteRules ?? [],
-        motorConfig: remoteMotorConfig ?? DEFAULT_MOTOR_CONFIG,
-      }));
-      setMotorLoading(false);
-    })();
-  }, [motorProjectId]);
+    void loadMotorProyecto(motorProjectId);
+  }, [motorProjectId, loadMotorProyecto]);
 
   // La estructura organizacional dejó de teclearse aparte: se deriva del
   // Directorio real de personal ("Roles y Sueldos"). Mientras no haya personal
@@ -338,6 +372,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
     motorLoading,
     motorDirty,
     motorSaving,
+    reloadMotor,
     // Las siguientes 4 acciones (addCommissionRule, updateCommissionRule,
     // deleteCommissionRule, updateMotorConfig) son 100% locales — ya no
     // llaman al servidor en cada cambio (antes cada tecleo de un % disparaba
