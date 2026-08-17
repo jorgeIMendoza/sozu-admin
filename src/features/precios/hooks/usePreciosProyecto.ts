@@ -79,9 +79,17 @@ export function usePreciosProyecto() {
     [ofertas, idProyectoActivo, indices],
   );
 
+  /*
+   * `propiedades` y `desgloses` son un par: cada unidad que se devuelve tiene
+   * su desglose calculado. Se gatean juntas contra `motorListo` porque romper
+   * esa correspondencia rompe a quien las cruza — la Tabla de Precios hace
+   * `porId.get(p.id_propiedad)!` y con unidades sin desglose reventaba el
+   * módulo entero. Sin motor no hay precios que mostrar, y el encabezado ya
+   * explica que está cargando.
+   */
   const propiedades = useMemo(
-    () => (inventario?.propiedades ?? []).filter((p) => p.activo),
-    [inventario],
+    () => (motorListo ? (inventario?.propiedades ?? []).filter((p) => p.activo) : []),
+    [inventario, motorListo],
   );
 
   const torresProyecto = useMemo(() => inventario?.torres ?? [], [inventario]);

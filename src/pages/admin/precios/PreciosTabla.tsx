@@ -185,8 +185,12 @@ function TablaPrecios() {
   const filas: FilaPrecio[] = useMemo(() => {
     void semillaDemo;
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
-    return propiedades.map((p) => {
-      const d = porId.get(p.id_propiedad)!;
+    // Una unidad sin desglose se omite en vez de romper el render: el `!` de
+    // antes daba por hecho que siempre había uno y bastó un instante con el
+    // motor a medio sembrar para dejar todo el módulo en blanco.
+    return propiedades.flatMap((p) => {
+      const d = porId.get(p.id_propiedad);
+      if (!d) return [];
       const base = alertasPorUnidad[p.id_propiedad] ?? d.alertas;
       const alertas: AlertaCalidad[] = criticasForzadas.includes(p.id_propiedad)
         ? [
