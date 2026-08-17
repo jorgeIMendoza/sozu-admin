@@ -23,7 +23,8 @@ import { SIN_ORIENTACION } from "../services/inventarioReal";
  *
  *   - Curva de nivel plana (`coef_a = coef_b = 0`) y tamaño plano (`theta = 0`).
  *   - Todas las familias de factores en 1.0000 y los extras en 0.
- *   - Un `precio_base_m2` por modelo = precio por m² ponderado real del modelo.
+ *   - Un `precio_base_m2_proyecto` = precio por m² ponderado real del desarrollo,
+ *     y un `factor_modelo` por modelo que dice cuánto se separa de ese base.
  *
  * Así el motor arranca reproduciendo el promedio real de cada modelo y sin
  * afirmar ninguna estructura de precios que nadie ha decidido todavía. Poner
@@ -91,6 +92,7 @@ export const MOTOR_VACIO: MotorPrecio = {
     clave_orientacion: SIN_ORIENTACION,
     descripcion: "Sin ancla definida",
   },
+  precio_base_m2_proyecto: 0,
   bases_modelo: [],
   k_ext: K_EXT,
   k_loft: K_LOFT,
@@ -121,11 +123,12 @@ export interface ResultadoSemilla {
 /**
  * Construye el motor semilla de un proyecto a partir de su inventario real.
  *
- * `precio_base_m2` de cada modelo es el precio por m² ponderado del propio
- * modelo: `Σ precio_lista / Σ área ponderada` sobre sus unidades con precio.
- * Se usa la suma de razones y no el promedio de los precios por m² unidad a
- * unidad porque este último sobrepondera a las unidades chicas, que son las que
- * más se desvían.
+ * El precio por m² base del proyecto es `Σ precio_lista / Σ área ponderada`
+ * sobre todo el inventario con precio, y el factor de cada modelo es esa misma
+ * razón calculada solo con sus unidades, dividida entre la del proyecto. Se usa
+ * la suma de razones y no el promedio de los precios por m² unidad a unidad
+ * porque este último sobrepondera a las unidades chicas, que son las que más se
+ * desvían.
  *
  * Los conceptos gravados (cajón y bodega) arrancan en 0: el inventario registra
  * cuántos cajones y cuántos m² de bodega tiene cada unidad, pero no cuánto vale
@@ -172,6 +175,22 @@ export function construirMotorSemilla(
   const modelosSinPrecio: string[] = [];
   let unidadesSinPrecio = 0;
 
+  /**
+   * Precio por m² base del DESARROLLO: `Σ precio_lista / Σ área ponderada` sobre
+   * todo el inventario con precio. Es el dato primario del motor, del que
+   * después varía cada modelo.
+   */
+  let precioTotal = 0;
+  let areaTotal = 0;
+  for (const p of activas) {
+    const area = calcularAreaPonderada(p, motorBase);
+    if (p.precio_lista_actual > 0 && area > 0) {
+      precioTotal += p.precio_lista_actual;
+      areaTotal += area;
+    }
+  }
+  const precio_base_m2_proyecto = areaTotal > 0 ? r2(precioTotal / areaTotal) : 0;
+
   const bases_modelo: BaseModelo[] = modelos.map((mod) => {
     const unidades = activas.filter((p) => p.id_modelo === mod.id_modelo);
     const areas = unidades.map((p) => calcularAreaPonderada(p, motorBase));
@@ -193,10 +212,19 @@ export function construirMotorSemilla(
 
     if (sumaArea === 0) modelosSinPrecio.push(mod.nombre);
 
+    const propio = sumaArea > 0 ? sumaPrecio / sumaArea : 0;
+    // Cuánto se separa el modelo del base del desarrollo. Sin precio propio o
+    // sin base del proyecto queda neutro: el modelo vale lo que el proyecto.
+    const factor_modelo =
+      propio > 0 && precio_base_m2_proyecto > 0
+        ? +(propio / precio_base_m2_proyecto).toFixed(6)
+        : 1;
+
     return {
       id_modelo: mod.id_modelo,
       nombre_modelo: mod.nombre,
-      precio_base_m2: sumaArea > 0 ? r2(sumaPrecio / sumaArea) : 0,
+      factor_modelo,
+      precio_base_m2: r2(precio_base_m2_proyecto * factor_modelo),
       m2_referencia,
       activo: mod.activo,
     };
@@ -223,6 +251,7 @@ export function construirMotorSemilla(
     id_proyecto: idProyecto,
     nombre: `Motor ${nombreProyecto}`,
     ancla,
+    precio_base_m2_proyecto,
     bases_modelo,
     k_ext: K_EXT,
     k_loft: K_LOFT,
