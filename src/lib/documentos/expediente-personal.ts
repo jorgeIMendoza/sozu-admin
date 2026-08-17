@@ -16,7 +16,14 @@ import { ID_DOC_TIPO_IDS } from '@/utils/expediente-obligatorios';
  * Ver Ejecuciones_manuales/documentos/06_normalizar_documentos_duplicados_activos.md
  */
 
-/** Documentos con una vigente por tipo. */
+/**
+ * Documentos con una vigente por tipo: acta de nacimiento (1), CURP (5), CSF (6),
+ * domicilio (8) y acta de matrimonio (11).
+ *
+ * "Otros documentos" (69) queda FUERA a propósito: es el único slot múltiple del
+ * portal del cliente — varios anexos conviven y subir uno nuevo no expira a los
+ * demás. Meterlo aquí borraría el anexo anterior en cada carga.
+ */
 export const TIPOS_PERSONALES_SIMPLES = [1, 5, 6, 8, 11] as const;
 
 /**

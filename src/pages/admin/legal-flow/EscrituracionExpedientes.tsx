@@ -19,6 +19,8 @@ import {
   ALL_TIPO_IDS_OBLIGATORIOS,
   buildLatestPorPersonaTipo,
   evaluarCuenta,
+  fetchRepLegalRegistrado,
+  fetchEstadoCivil,
   normalizarTipoPersona,
   personasDelExpediente,
 } from '@/utils/expediente-obligatorios';
@@ -1536,7 +1538,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   // Detalle fiscal/dirección de los compradores (para completitud) + documentos
   // obligatorios por persona (para el semáforo de docs).
   const buyerDetailRows = await fetchInBatches<any>(buyerPersonIds, (b) => (supabase as any).from('personas').select(
-    'id, nombre_legal, rfc, curp, email, telefono, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg, ' +
+    'id, nombre_legal, rfc, curp, email, telefono, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg, id_estado_civil, ' +
     'direccion_calle, direccion_num_ext, direccion_codigo_postal, direccion_colonia, direccion_id_estado, direccion_id_municipio, ' +
     'direccion_fiscal_calle, direccion_fiscal_num_ext, direccion_fiscal_codigo_postal, direccion_fiscal_colonia, direccion_fiscal_id_pais, direccion_fiscal_id_estado, direccion_fiscal_id_municipio, ' +
     'regimen, uso_cfdi, fecha_nacimiento, id_pais_nacimiento',
@@ -1551,20 +1553,37 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
   const repPersonaPorEntidad = new Map<number, number>(repRows.filter((r: any) => r.id_persona).map((r: any) => [r.id, r.id_persona]));
   const conyugeIds = [...new Set(buyerDetailRows.map((r: any) => r.id_conyuge).filter(Boolean))] as number[];
 
+  // El representante puede venir por `personas_relacionadas` (lo registra el cliente
+  // desde el portal) o por la columna legacy. Mismo orden que la edge function.
+  const repRegistrado = await fetchRepLegalRegistrado(buyerPersonIds, supabase as never);
+  const repDe = (r: any): number | null =>
+    repRegistrado[r.id]
+    ?? (r.id_entidad_relacionada_rep_leg ? repPersonaPorEntidad.get(r.id_entidad_relacionada_rep_leg) ?? null : null);
+  const estadoCivilRep = await fetchEstadoCivil(
+    buyerDetailRows.map(repDe).filter((v: number | null): v is number => v != null),
+    supabase as never,
+  );
+
   // Miembros del expediente por comprador (comprador + rep + cónyuge).
-  const expedienteInfoById = new Map<number, { personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null }>(
-    buyerDetailRows.map((r: any) => [r.id, {
-      personaId: r.id,
-      tipoPersona: normalizarTipoPersona(r.tipo_persona),
-      repPersonaId: r.id_entidad_relacionada_rep_leg ? repPersonaPorEntidad.get(r.id_entidad_relacionada_rep_leg) ?? null : null,
-      conyugePersonaId: r.id_conyuge ?? null,
-    }]),
+  const expedienteInfoById = new Map<number, { personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null; idEstadoCivil: number | null; repIdEstadoCivil: number | null }>(
+    buyerDetailRows.map((r: any) => {
+      const repPersonaId = repDe(r);
+      return [r.id, {
+        personaId: r.id,
+        tipoPersona: normalizarTipoPersona(r.tipo_persona),
+        repPersonaId,
+        conyugePersonaId: r.id_conyuge ?? null,
+        idEstadoCivil: r.id_estado_civil ?? null,
+        repIdEstadoCivil: repPersonaId == null ? null : estadoCivilRep[repPersonaId] ?? null,
+      }];
+    }),
   );
 
   const docPersonIds = [...new Set([
     ...buyerPersonIds,
     ...conyugeIds,
     ...repRows.map((r: any) => r.id_persona).filter(Boolean),
+    ...Object.values(repRegistrado),
   ])] as number[];
   const docsObligatoriosRows = await fetchInBatchesPaged<any>(docPersonIds, (b, from, to) => (supabase as any).from('documentos')
     .select('id, id_persona, id_tipo_documento, id_estatus_verificacion, fecha_creacion')
@@ -1716,7 +1735,7 @@ async function fetchExpedientes(): Promise<ExpedienteRow[]> {
       // Documentos obligatorios + completitud de datos de los compradores.
       const buyerPids = (buyersByAccount.get(account.id) || []).map((bp) => bp.id);
       const miembrosExpediente = personasDelExpediente(
-        buyerPids.map((pid) => expedienteInfoById.get(pid)).filter(Boolean) as Array<{ personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null }>,
+        buyerPids.map((pid) => expedienteInfoById.get(pid)).filter(Boolean) as Array<{ personaId: number; tipoPersona: 'pf' | 'pm'; repPersonaId: number | null; conyugePersonaId: number | null; idEstadoCivil: number | null; repIdEstadoCivil: number | null }>,
       );
       const docsObligatorios = evaluarCuenta(miembrosExpediente, latestObligatorioByKey, 'juridico');
       const seccionesFaltantes = [...new Set(buyerPids.flatMap((pid) => {

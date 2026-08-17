@@ -23,9 +23,25 @@ export const INE_COMPLETO_TIPO_ID = 63;
 export const ID_DOC_TIPO_IDS = [2, 3, 4, INE_COMPLETO_TIPO_ID];
 /** Reformas / protocolizaciones posteriores al acta constitutiva (PM). */
 export const REFORMAS_TIPO_ID = 57;
+/** Anexos de persona moral: el slot `otros` del portal del cliente, nunca obligatorio. */
+export const OTROS_DOCUMENTOS_TIPO_ID = 69;
+/** Acta de matrimonio: obligatoria solo para quien está casado. */
+export const ACTA_MATRIMONIO_TIPO_ID = 11;
+/** Beneficiario controlador (PM): lo sube el área legal, no el cliente. */
+export const BENEFICIARIO_CONTROLADOR_TIPO_ID = 64;
 
 /** Estatus de verificación que cuenta como validado. */
 export const ESTATUS_VALIDADO = 2;
+
+/**
+ * `personas.id_estado_civil` que cuentan como casado: bienes mancomunados (2) o
+ * separados (3). Mismo criterio que `ESTADOS_CIVIL_CASADO` de la edge function
+ * `cliente-expediente`, que es quien se lo pide al cliente.
+ */
+export const ESTADOS_CIVIL_CASADO = [2, 3];
+
+/** `tipos_relacion.clave` del representante legal en `personas_relacionadas`. */
+export const REL_CLAVE_REP_LEGAL = 'REPRESENTANTE_LEGAL';
 
 export type TipoPersona = 'pf' | 'pm';
 /** De quién es el documento: de la persona del expediente o de su representante legal. */
@@ -41,6 +57,32 @@ export interface GrupoObligatorio {
   owner: DocOwner;
   /** Portales para los que este grupo es obligatorio. */
   portales: readonly PortalExpediente[];
+  /**
+   * El grupo solo se exige si se cumple la condición. `casado` mira
+   * `personas.id_estado_civil` contra {@link ESTADOS_CIVIL_CASADO}; sin dato de
+   * estado civil no se exige, igual que hace el portal del cliente.
+   */
+  condicion?: 'casado';
+  /**
+   * Se muestra en las listas pero NO cuenta para el avance del expediente. Para
+   * documentos que el expediente registra sin bloquear a nadie.
+   */
+  informativo?: boolean;
+}
+
+/** Datos de la persona que deciden si un grupo condicional aplica. */
+export interface ContextoPersona {
+  /** `personas.id_estado_civil` del titular del expediente. */
+  idEstadoCivil?: number | null;
+  /** Idem del representante legal, para los grupos con `owner: 'rep'`. */
+  repIdEstadoCivil?: number | null;
+}
+
+/** ¿Este grupo se le exige a esta persona? Solo los condicionales pueden decir que no. */
+export function grupoAplica(grupo: GrupoObligatorio, ctx: ContextoPersona = {}): boolean {
+  if (grupo.condicion !== 'casado') return true;
+  const estadoCivil = grupo.owner === 'rep' ? ctx.repIdEstadoCivil : ctx.idEstadoCivil;
+  return estadoCivil != null && ESTADOS_CIVIL_CASADO.includes(estadoCivil);
 }
 
 const TODOS_LOS_PORTALES: readonly PortalExpediente[] =
@@ -57,6 +99,8 @@ export const GRUPOS_PF: readonly GrupoObligatorio[] = [
   { key: 'domicilio', label: 'Comprobante de domicilio',       ids: [8],             owner: 'self', portales: TODOS_LOS_PORTALES },
   // Cobranza muestra la lista canónica completa del perfil de cliente, acta incluida.
   { key: 'acta',      label: 'Acta de nacimiento',             ids: [1],             owner: 'self', portales: ['escrituracion', 'juridico', 'notaria', 'cobranza'] },
+  // Solo para casados: la pide el portal del cliente con esta misma condición.
+  { key: 'matrimonio', label: 'Acta de matrimonio',            ids: [ACTA_MATRIMONIO_TIPO_ID], owner: 'self', portales: TODOS_LOS_PORTALES, condicion: 'casado' },
 ];
 
 /**
@@ -74,6 +118,14 @@ export const GRUPOS_PM: readonly GrupoObligatorio[] = [
   { key: 'curp_rep',          label: 'CURP del rep. legal',             ids: [5],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
   { key: 'csf_rep',           label: 'CSF del rep. legal',              ids: [6],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
   { key: 'domicilio_rep',     label: 'Domicilio del rep. legal',        ids: [8],  owner: 'rep',  portales: TODOS_LOS_PORTALES },
+  // Al representante se le piden los MISMOS seis documentos que a cualquier persona
+  // física: la edge function reusa una sola lista para titular, representante y
+  // accionista. Faltaban su acta de nacimiento y la de matrimonio.
+  { key: 'acta_rep',          label: 'Acta de nacimiento del rep. legal', ids: [1], owner: 'rep', portales: ['escrituracion', 'juridico', 'notaria', 'cobranza'] },
+  { key: 'matrimonio_rep',    label: 'Acta de matrimonio del rep. legal', ids: [ACTA_MATRIMONIO_TIPO_ID], owner: 'rep', portales: TODOS_LOS_PORTALES, condicion: 'casado' },
+  // Lo sube el área legal desde el back office, no el cliente (por eso la edge
+  // function lo deja fuera del expediente del portal). Se registra pero no bloquea.
+  { key: 'beneficiario_controlador', label: 'Beneficiario controlador', ids: [BENEFICIARIO_CONTROLADOR_TIPO_ID], owner: 'self', portales: TODOS_LOS_PORTALES, informativo: true },
 ];
 
 /** Normaliza `personas.tipo_persona` ('pf' | 'pm' | 'física' | 'moral' | …). */
@@ -83,13 +135,29 @@ export function normalizarTipoPersona(valor: string | null | undefined): TipoPer
   return 'pf';
 }
 
-/** Grupos que un portal exige para ese tipo de persona. */
+/**
+ * Grupos que un portal muestra para ese tipo de persona. Incluye los condicionales
+ * y los informativos: la UI los pinta todos. Para saber cuáles **cuentan** contra
+ * una persona concreta, ver {@link gruposQueCuentan}.
+ */
 export function gruposObligatorios(
   tipoPersona: TipoPersona,
   portal: PortalExpediente = 'escrituracion',
 ): readonly GrupoObligatorio[] {
   const base = tipoPersona === 'pm' ? GRUPOS_PM : GRUPOS_PF;
   return base.filter(g => g.portales.includes(portal));
+}
+
+/**
+ * Grupos que cuentan para el avance de una persona: los de {@link gruposObligatorios}
+ * menos los informativos y menos los condicionales que no le aplican.
+ */
+export function gruposQueCuentan(
+  tipoPersona: TipoPersona,
+  portal: PortalExpediente = 'escrituracion',
+  ctx: ContextoPersona = {},
+): readonly GrupoObligatorio[] {
+  return gruposObligatorios(tipoPersona, portal).filter(g => !g.informativo && grupoAplica(g, ctx));
 }
 
 /** Todos los tipos de documento que hay que traer de la base para evaluar cualquier caso. */
@@ -283,11 +351,11 @@ export function evaluarPersona(
     tipoPersona: TipoPersona;
     repPersonaId?: number | null;
     portal?: PortalExpediente;
-  },
+  } & ContextoPersona,
   latest: Record<string, LatestDoc>,
 ): EvaluacionExpediente {
   const { personaId, tipoPersona, repPersonaId = null, portal = 'escrituracion' } = args;
-  const grupos = gruposObligatorios(tipoPersona, portal);
+  const grupos = gruposQueCuentan(tipoPersona, portal, args);
   const faltantes: string[] = [];
   let completos = 0;
 
@@ -310,12 +378,12 @@ export function evaluarPersona(
  * comprador peor documentado (no se puede escriturar a medias).
  */
 export function evaluarCuenta(
-  compradores: Array<{ personaId: number; tipoPersona: TipoPersona; repPersonaId?: number | null }>,
+  compradores: Array<{ personaId: number; tipoPersona: TipoPersona; repPersonaId?: number | null } & ContextoPersona>,
   latest: Record<string, LatestDoc>,
   portal: PortalExpediente = 'escrituracion',
 ): EvaluacionExpediente {
   if (!compradores.length) {
-    return { completos: 0, total: gruposObligatorios('pf', portal).length, faltantes: [], faltaRepLegal: false };
+    return { completos: 0, total: gruposQueCuentan('pf', portal).length, faltantes: [], faltaRepLegal: false };
   }
   const evaluaciones = compradores.map(c => evaluarPersona({ ...c, portal }, latest));
   // El "peor" = el que le falta más para su propio total (los totales difieren PF vs PM).
@@ -362,6 +430,58 @@ export async function fetchDocsObligatorios(
   return out;
 }
 
+/**
+ * Representante legal que el cliente registró desde el portal nuevo
+ * (`personas_relacionadas` + `tipos_relacion.clave = REPRESENTANTE_LEGAL`).
+ *
+ * Devuelve solo ese camino: quien llama debe caer al legacy
+ * `personas.id_entidad_relacionada_rep_leg` cuando aquí no haya nada, que es lo
+ * que hace la edge function `cliente-expediente`. Si la tabla no existe todavía
+ * en el ambiente, devuelve vacío y el legacy sigue mandando.
+ */
+export async function fetchRepLegalRegistrado(
+  personaIds: number[],
+  cliente: { from: (t: string) => any },
+): Promise<Record<number, number>> {
+  const out: Record<number, number> = {};
+  if (!personaIds.length) return out;
+  const CHUNK = 100;
+  for (let i = 0; i < personaIds.length; i += CHUNK) {
+    const { data, error } = await cliente
+      .from('personas_relacionadas')
+      .select('id_persona, id_persona_relacion, tipos_relacion!inner(clave)')
+      .in('id_persona', personaIds.slice(i, i + CHUNK))
+      .eq('activo', true)
+      .eq('tipos_relacion.clave', REL_CLAVE_REP_LEGAL);
+    if (error) return out;
+    for (const r of (data ?? []) as Array<{ id_persona: number; id_persona_relacion: number | null }>) {
+      if (r.id_persona_relacion && !out[r.id_persona]) out[r.id_persona] = r.id_persona_relacion;
+    }
+  }
+  return out;
+}
+
+/** `personas.id_estado_civil` de las personas dadas: decide el acta de matrimonio. */
+export async function fetchEstadoCivil(
+  personaIds: number[],
+  cliente: { from: (t: string) => any },
+): Promise<Record<number, number | null>> {
+  const out: Record<number, number | null> = {};
+  const ids = [...new Set(personaIds)];
+  if (!ids.length) return out;
+  const CHUNK = 100;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data } = await cliente
+      .from('personas')
+      .select('id, id_estado_civil')
+      .in('id', ids.slice(i, i + CHUNK));
+    for (const r of (data ?? []) as Array<{ id: number; id_estado_civil: number | null }>) {
+      out[r.id] = r.id_estado_civil ?? null;
+    }
+  }
+  return out;
+}
+
 // ── Cónyuge (propiedad mancomunada) ───────────────────────────────────────────
 /**
  * Criterio autorizado por Eduardo (2026-08-03): **si `personas.id_conyuge` está presente,
@@ -376,14 +496,22 @@ export async function fetchDocsObligatorios(
  * entidades distintas, cada una con su juego completo de documentos.
  */
 export function personasDelExpediente(
-  compradores: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; conyugePersonaId?: number | null }>,
-): Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number }> {
-  const salida: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number }> = [];
+  compradores: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; conyugePersonaId?: number | null } & ContextoPersona>,
+): Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number } & ContextoPersona> {
+  const salida: Array<{ personaId: number; nombre?: string; tipoPersona: TipoPersona; repPersonaId?: number | null; esConyugeDe?: number } & ContextoPersona> = [];
   for (const c of compradores) {
-    salida.push({ personaId: c.personaId, nombre: c.nombre, tipoPersona: c.tipoPersona, repPersonaId: c.repPersonaId ?? null });
-    // Solo persona física puede tener cónyuge; una PM no.
+    salida.push({
+      personaId: c.personaId,
+      nombre: c.nombre,
+      tipoPersona: c.tipoPersona,
+      repPersonaId: c.repPersonaId ?? null,
+      idEstadoCivil: c.idEstadoCivil ?? null,
+      repIdEstadoCivil: c.repIdEstadoCivil ?? null,
+    });
+    // Solo persona física puede tener cónyuge; una PM no. Que esté ligado ya implica
+    // casado, así que su acta de matrimonio se le exige aunque su ficha no lo diga.
     if (c.tipoPersona === 'pf' && c.conyugePersonaId) {
-      salida.push({ personaId: c.conyugePersonaId, tipoPersona: 'pf', esConyugeDe: c.personaId });
+      salida.push({ personaId: c.conyugePersonaId, tipoPersona: 'pf', esConyugeDe: c.personaId, idEstadoCivil: ESTADOS_CIVIL_CASADO[0] });
     }
   }
   // Dedup por si el cónyuge también figura como comprador de la misma cuenta.
@@ -401,14 +529,24 @@ export interface PersonaExpedienteResuelta {
   esConyugeDe?: number;
   /** Nombre del comprador titular (solo cuando esConyugeDe está presente). */
   nombreTitular?: string;
+  /** `personas.id_estado_civil`: decide si se le exige el acta de matrimonio. */
+  idEstadoCivil: number | null;
+  /** Idem del representante legal. */
+  repIdEstadoCivil: number | null;
 }
 
 /**
  * Resuelve las personas que componen un expediente: compradores de la cuenta (o los
- * `personaIds` dados), su representante legal cuando son PM
- * (`id_entidad_relacionada_rep_leg` → `entidades_relacionadas.id_persona`) y su cónyuge
- * cuando `personas.id_conyuge` está presente. Es el ÚNICO lugar que arma esa lista:
+ * `personaIds` dados), su representante legal cuando son PM y su cónyuge cuando
+ * `personas.id_conyuge` está presente. Es el ÚNICO lugar que arma esa lista:
  * cualquier pantalla que la necesite parte de aquí.
+ *
+ * El representante sale de la **unión de dos caminos**, igual que la edge function
+ * `cliente-expediente`: `personas_relacionadas` con la clave `REPRESENTANTE_LEGAL`
+ * (lo que registra el cliente desde el portal nuevo) y el legacy
+ * `personas.id_entidad_relacionada_rep_leg` (lo que dejó el back office). Mirar solo
+ * el legacy deja ciego al admin en cuanto el cliente registre al suyo: hoy 1,087 de
+ * las 1,156 personas morales de producción no tienen esa columna.
  */
 export async function fetchPersonasExpediente(
   args: { cuentaId?: number | null; personaIds?: number[] },
@@ -428,16 +566,21 @@ export async function fetchPersonasExpediente(
   type PersonaRow = {
     id: number; nombre_legal: string | null; nombre_comercial: string | null;
     tipo_persona: string | null; id_conyuge: number | null;
-    id_entidad_relacionada_rep_leg: number | null;
+    id_entidad_relacionada_rep_leg: number | null; id_estado_civil: number | null;
   };
   const { data: personas } = await cliente
     .from('personas')
-    .select('id, nombre_legal, nombre_comercial, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg')
+    .select('id, nombre_legal, nombre_comercial, tipo_persona, id_conyuge, id_entidad_relacionada_rep_leg, id_estado_civil')
     .in('id', ids);
   const rows = (personas ?? []) as PersonaRow[];
 
-  // Representante legal: entidad relacionada → persona.
-  const repEntidadIds = [...new Set(rows.map(r => r.id_entidad_relacionada_rep_leg).filter((v): v is number => v != null))];
+  // Camino nuevo: el representante que registró el cliente desde el portal.
+  const repPorPersona = await fetchRepLegalRegistrado(ids, cliente);
+
+  // Camino legacy: entidad relacionada → persona. Solo para quien no salió arriba.
+  const repEntidadIds = [...new Set(
+    rows.filter(r => !repPorPersona[r.id]).map(r => r.id_entidad_relacionada_rep_leg).filter((v): v is number => v != null),
+  )];
   const repPersonaPorEntidad: Record<number, number> = {};
   if (repEntidadIds.length) {
     const { data: reps } = await cliente
@@ -452,18 +595,31 @@ export async function fetchPersonasExpediente(
   const nombreDe = (r: PersonaRow) => r.nombre_legal || r.nombre_comercial || `Persona ${r.id}`;
   const porId = new Map(rows.map(r => [r.id, r]));
 
+  const repDe = (r: PersonaRow): number | null =>
+    repPorPersona[r.id]
+    ?? (r.id_entidad_relacionada_rep_leg != null ? repPersonaPorEntidad[r.id_entidad_relacionada_rep_leg] ?? null : null);
+
+  // Estado civil de los representantes: son personas distintas de las consultadas.
+  const repIds = [...new Set(rows.map(repDe).filter((v): v is number => v != null))].filter(id => !porId.has(id));
+  const estadoCivilRep = await fetchEstadoCivil(repIds, cliente);
+
   const base = ids
     .map(id => porId.get(id))
     .filter((r): r is PersonaRow => !!r)
-    .map(r => ({
-      personaId: r.id,
-      nombre: nombreDe(r),
-      tipoPersona: normalizarTipoPersona(r.tipo_persona),
-      repPersonaId: r.id_entidad_relacionada_rep_leg != null
-        ? repPersonaPorEntidad[r.id_entidad_relacionada_rep_leg] ?? null
-        : null,
-      conyugePersonaId: r.id_conyuge ?? null,
-    }));
+    .map(r => {
+      const repPersonaId = repDe(r);
+      return {
+        personaId: r.id,
+        nombre: nombreDe(r),
+        tipoPersona: normalizarTipoPersona(r.tipo_persona),
+        repPersonaId,
+        conyugePersonaId: r.id_conyuge ?? null,
+        idEstadoCivil: r.id_estado_civil ?? null,
+        repIdEstadoCivil: repPersonaId == null
+          ? null
+          : estadoCivilRep[repPersonaId] ?? porId.get(repPersonaId)?.id_estado_civil ?? null,
+      };
+    });
 
   const expandidas = personasDelExpediente(base);
 
@@ -488,5 +644,7 @@ export async function fetchPersonasExpediente(
     repPersonaId: p.repPersonaId ?? null,
     esConyugeDe: p.esConyugeDe,
     nombreTitular: p.esConyugeDe ? nombrePorId.get(p.esConyugeDe) : undefined,
+    idEstadoCivil: p.idEstadoCivil ?? null,
+    repIdEstadoCivil: p.repIdEstadoCivil ?? null,
   }));
 }

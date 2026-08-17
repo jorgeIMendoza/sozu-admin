@@ -1,6 +1,8 @@
 import {
   normalizarTipoPersona,
-  gruposObligatorios,
+  gruposQueCuentan,
+  fetchRepLegalRegistrado,
+  fetchEstadoCivil,
   buildLatestPorPersonaTipo,
   evaluarCuenta,
   fetchDocsObligatorios,
@@ -31,6 +33,8 @@ interface CompradoresData {
   porcentaje: number;
   tipo_persona: string;
   id_pais_nacimiento: string | null;
+  /** `personas.id_estado_civil`: decide si se le exige el acta de matrimonio. */
+  id_estado_civil: number | null;
 }
 
 interface ExpedienteRow {
@@ -343,6 +347,7 @@ function DetailPanel({ row, onClose, onEditComprador }: {
     row.compradores.map(c => ({
       personaId: c.id_persona,
       tipoPersona: normalizarTipoPersona(c.tipo_persona),
+      idEstadoCivil: c.id_estado_civil,
       // El panel no resuelve el rep legal: para PM se usa el total de la fila, que sí lo
       // consideró en la carga masiva.
       repPersonaId: null,
@@ -701,12 +706,12 @@ export function ExpedientesDashboard() {
         .order('id_persona', { ascending: true });
 
       const personaIds = [...new Set((comprsList || []).map(c => c.id_persona))];
-      const personaMap: Record<number, { nombre_legal: string; rfc: string | null; tipo_persona: string; id_pais_nacimiento: string | null; id_conyuge: number | null }> = {};
+      const personaMap: Record<number, { nombre_legal: string; rfc: string | null; tipo_persona: string; id_pais_nacimiento: string | null; id_conyuge: number | null; id_estado_civil: number | null }> = {};
 
       if (personaIds.length) {
         const { data: personas } = await supabase
           .from('personas')
-          .select('id, nombre_legal, rfc, tipo_persona, id_pais_nacimiento, id_conyuge')
+          .select('id, nombre_legal, rfc, tipo_persona, id_pais_nacimiento, id_conyuge, id_estado_civil')
           .in('id', personaIds);
         (personas || []).forEach(p => {
           personaMap[p.id] = {
@@ -715,6 +720,7 @@ export function ExpedientesDashboard() {
             tipo_persona: p.tipo_persona,
             id_pais_nacimiento: p.id_pais_nacimiento,
             id_conyuge: (p as { id_conyuge?: number | null }).id_conyuge ?? null,
+            id_estado_civil: (p as { id_estado_civil?: number | null }).id_estado_civil ?? null,
           };
         });
       }
@@ -735,6 +741,7 @@ export function ExpedientesDashboard() {
           porcentaje: c.porcentaje_copropiedad,
           tipo_persona: p?.tipo_persona ?? 'fisica',
           id_pais_nacimiento: p?.id_pais_nacimiento ?? null,
+          id_estado_civil: p?.id_estado_civil ?? null,
         });
       });
 
@@ -767,9 +774,12 @@ export function ExpedientesDashboard() {
             .from('entidades_relacionadas').select('id, id_persona').in('id', erIds);
           (ers || []).forEach(e => { erPersona[e.id] = e.id_persona ?? null; });
         }
+        // `personas_relacionadas` (lo registra el cliente desde el portal) manda sobre
+        // la columna legacy, igual que en la edge function `cliente-expediente`.
+        const repRegistrado = await fetchRepLegalRegistrado(pmPersonaIds, supabase);
         (pmRows || []).forEach(r => {
           const er = r.id_entidad_relacionada_rep_leg;
-          repPersonaPorPersona[r.id] = er != null ? (erPersona[er] ?? null) : null;
+          repPersonaPorPersona[r.id] = repRegistrado[r.id] ?? (er != null ? (erPersona[er] ?? null) : null);
         });
       }
 
@@ -783,6 +793,9 @@ export function ExpedientesDashboard() {
 
       const rawDocs = await fetchDocsObligatorios(personaIdsParaDocs, supabase);
       const latestPorPersonaTipo = buildLatestPorPersonaTipo(rawDocs);
+      // El acta de matrimonio solo se exige a los casados, y el representante es otra
+      // persona: su estado civil no está en `personaMap`.
+      const estadoCivilRep = await fetchEstadoCivil(repPersonaIds, supabase);
 
       const docsByCuenta: Record<number, EvaluacionExpediente> = {};
       cuentaIds.forEach(cuentaId => {
@@ -793,6 +806,10 @@ export function ExpedientesDashboard() {
             tipoPersona,
             repPersonaId: tipoPersona === 'pm' ? (repPersonaPorPersona[c.id_persona] ?? null) : null,
             conyugePersonaId: personaMap[c.id_persona]?.id_conyuge ?? null,
+            idEstadoCivil: personaMap[c.id_persona]?.id_estado_civil ?? null,
+            repIdEstadoCivil: tipoPersona === 'pm'
+              ? estadoCivilRep[repPersonaPorPersona[c.id_persona] ?? -1] ?? null
+              : null,
           };
         });
         docsByCuenta[cuentaId] = evaluarCuenta(personasDelExpediente(compradores), latestPorPersonaTipo, 'escrituracion');
@@ -806,7 +823,7 @@ export function ExpedientesDashboard() {
           const compradores = comprsByCuenta[cuenta.id] || [];
           const tipoComprador = deriveTipo(compradores);
           const docStats = docsByCuenta[cuenta.id]
-            ?? { total: gruposObligatorios('pf', 'escrituracion').length, completos: 0, faltantes: [], faltaRepLegal: false };
+            ?? { total: gruposQueCuentan('pf', 'escrituracion').length, completos: 0, faltantes: [], faltaRepLegal: false };
           const estatusExpediente = deriveEstatusExpediente(docStats.completos, docStats.total);
           const clienteNombre = compradores[0]?.nombre ?? '—';
           return {

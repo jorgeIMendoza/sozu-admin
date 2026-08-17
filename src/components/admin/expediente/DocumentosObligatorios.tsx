@@ -8,6 +8,7 @@ import { Loader2, FileText, Eye, ChevronDown, CheckCircle2, AlertTriangle, Shiel
 import { cn } from '@/lib/utils';
 import {
   gruposObligatorios,
+  grupoAplica,
   buildLatestPorPersonaTipo,
   evaluarPersona,
   fetchDocsObligatorios,
@@ -162,9 +163,20 @@ export function DocumentosObligatorios({
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{titulo}</p>
 
       {personas.map(persona => {
-        const grupos = gruposObligatorios(persona.tipoPersona, portal);
+        // Los condicionales que no le aplican no se pintan: un acta de matrimonio en
+        // el expediente de un soltero solo confunde a quien valida. Los informativos
+        // sí se pintan, marcados como que no bloquean.
+        const grupos = gruposObligatorios(persona.tipoPersona, portal)
+          .filter(g => g.informativo || grupoAplica(g, persona));
         const evaluacion = evaluarPersona(
-          { personaId: persona.personaId, tipoPersona: persona.tipoPersona, repPersonaId: persona.repPersonaId, portal },
+          {
+            personaId: persona.personaId,
+            tipoPersona: persona.tipoPersona,
+            repPersonaId: persona.repPersonaId,
+            idEstadoCivil: persona.idEstadoCivil,
+            repIdEstadoCivil: persona.repIdEstadoCivil,
+            portal,
+          },
           latest,
         );
         const completo = evaluacion.total > 0 && evaluacion.completos >= evaluacion.total;
@@ -223,7 +235,12 @@ export function DocumentosObligatorios({
                       <span className={cn('size-1.5 rounded-full shrink-0',
                         cumplido ? 'bg-emerald-500' : vigente ? 'bg-amber-400' : 'bg-muted-foreground/25')} />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-medium truncate">{grupo.label}</p>
+                        <p className="text-[12px] font-medium truncate">
+                          {grupo.label}
+                          {grupo.informativo && (
+                            <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">· no bloquea</span>
+                          )}
+                        </p>
                         <p className="text-[10px] text-muted-foreground">
                           {vigente ? `Vigente · ${fmtFecha(docVigente?.fecha_creacion ?? null)}` : 'Sin documento'}
                         </p>
