@@ -3,14 +3,14 @@
 // tarjeta arrastrable, menú de acciones). Extraído de crm.tsx. Consumido por
 // CrmContactDetail, CrmDeals y CrmDealDetail (que se quedan y orquestan dnd-kit).
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
-  Plus, Briefcase, Search, X, Loader2, MoreHorizontal, Pencil, Trash2,
+  Plus, Briefcase, Search, X, Loader2, Check, MoreHorizontal, Pencil, Trash2,
   ChevronRight, ChevronLeft, GripVertical, Calendar, Settings2, ChevronDown,
-  Filter as FilterIcon,
+  Filter as FilterIcon, UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,8 +34,15 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import {
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { DField } from "@/components/admin/portal-crm/ui";
 import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META, SEMAPHORE_META, interactionSemaphore } from "@/lib/crm-format";
+import {
+  TIPO_ASISTENTE, RANGO_EDAD, TOMA_DECISION, INTENCION_USO, EXPERIENCIA_PREVENTA,
+  ETAPA_EXPLORACION, PROYECCION_CIERRE, PUNTOS_POSITIVOS, PUNTOS_NEGATIVOS,
+  perfilBadge, type PerfilOpt,
+} from "@/lib/crm-perfil-comprador";
 import { fmtMXN, fmtDate, relTime } from "@/lib/crm-lib";
 import { fetchCrmOwners } from "@/hooks/useCrmCatalogos";
 import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
@@ -712,6 +719,7 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
   const hasValor = deal.valor != null && deal.valor !== "";
   const showContact = deal.contacto_nombre && !sameEntity(deal.contacto_nombre, deal.nombre);
   const hasFooter = hasValor || !!prio || !!deal.fecha_cierre_estimada;
+  const pb = perfilBadge(deal.perfil);  // perfil del comprador (condensado)
   return (
     <Card ref={setNodeRef} style={style} {...listeners} {...attributes}
       className={`cursor-grab active:cursor-grabbing border-border hover:border-primary/40 hover:shadow-md transition-all ${(isDragging || dragging) ? "opacity-60 shadow-lg" : ""}`}>
@@ -747,6 +755,15 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
           </div>
         )}
 
+        {/* Perfil del comprador (condensado): tipo+edad · intención · ventana */}
+        {pb && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary max-w-full"
+            title="Perfil del comprador">
+            <UserRound className="h-3 w-3 shrink-0" />
+            <span className="truncate">{[pb.tipoEdad, pb.intencion, pb.ventana].filter(Boolean).join(" · ")}</span>
+          </span>
+        )}
+
         {/* Footer adaptable: monto (o propietario) + prioridad + fecha de cierre. Se omite si no hay nada. */}
         {hasFooter && (
           <div className="flex items-center justify-between gap-2 border-t border-border pt-2 mt-0.5">
@@ -771,6 +788,161 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Pestaña "Perfil del comprador" de la ficha del negocio. Autoguardado a
+// crm_negocios_perfil_comprador (1:1 con el negocio). Catálogos fijos en crm-perfil-comprador.
+export function DealPerfilComprador({ dealId }: { dealId: string }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState<any | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const loadedRef = useRef<string | undefined>(undefined);
+  const skipSave = useRef(true);
+
+  const { data: perfil, isLoading } = useQuery({
+    queryKey: ["deal-perfil", dealId],
+    enabled: !!dealId,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_negocios_perfil_comprador")
+        .select("*").eq("id_negocio", Number(dealId)).eq("activo", true).maybeSingle();
+      if (res.error) return null; // fail-soft si la tabla aún no existe
+      return res.data ?? null;
+    },
+  });
+
+  // Hidrata una sola vez por negocio (tras resolver la query), sin pisar ediciones.
+  useEffect(() => {
+    if (!isLoading && loadedRef.current !== dealId) {
+      loadedRef.current = dealId;
+      skipSave.current = true;
+      setForm({
+        tipo_asistente: perfil?.tipo_asistente ?? "",
+        rango_edad: perfil?.rango_edad ?? "",
+        toma_decision: perfil?.toma_decision ?? "",
+        intencion_uso: perfil?.intencion_uso ?? "",
+        experiencia_preventa: perfil?.experiencia_preventa ?? "",
+        etapa_exploracion: perfil?.etapa_exploracion ?? "",
+        competencia_visitada: perfil?.competencia_visitada ?? "",
+        puntos_positivos: perfil?.puntos_positivos ?? [],
+        puntos_negativos: perfil?.puntos_negativos ?? [],
+        proyeccion_cierre: perfil?.proyeccion_cierre ?? "",
+      });
+    }
+  }, [isLoading, perfil, dealId]);
+
+  // Autoguardado con debounce (upsert 1:1 por id_negocio).
+  useEffect(() => {
+    if (!form) return;
+    if (skipSave.current) { skipSave.current = false; return; }
+    setSaveState("saving");
+    const t = setTimeout(async () => {
+      const payload = {
+        id_negocio: Number(dealId),
+        tipo_asistente: form.tipo_asistente || null,
+        rango_edad: form.rango_edad || null,
+        toma_decision: form.toma_decision || null,
+        intencion_uso: form.intencion_uso || null,
+        experiencia_preventa: form.experiencia_preventa || null,
+        etapa_exploracion: form.etapa_exploracion || null,
+        competencia_visitada: form.competencia_visitada?.trim() || null,
+        puntos_positivos: form.puntos_positivos ?? [],
+        puntos_negativos: form.puntos_negativos ?? [],
+        proyeccion_cierre: form.proyeccion_cierre || null,
+        ...(perfil ? {} : { creado_por: user?.id ?? null }),
+      };
+      const { error } = await (supabase as any).from("crm_negocios_perfil_comprador")
+        .upsert(payload, { onConflict: "id_negocio" });
+      if (error) { toast.error(error.message); setSaveState("idle"); return; }
+      setSaveState("saved");
+      qc.invalidateQueries({ queryKey: ["deals-list"] }); // refresca el badge del tablero
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
+
+  const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+  const toggleTag = (field: "puntos_positivos" | "puntos_negativos", val: string) =>
+    setForm((f: any) => {
+      const arr: string[] = f[field] ?? [];
+      return { ...f, [field]: arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val] };
+    });
+
+  if (!form) return <div className="p-6 flex justify-center"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
+
+  const sel = (label: string, k: string, opts: PerfilOpt[]) => (
+    <DField label={label}>
+      <Select value={form[k]} onValueChange={(v) => set(k, v)}>
+        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+        <SelectContent>{opts.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+      </Select>
+    </DField>
+  );
+  const tagGroup = (field: "puntos_positivos" | "puntos_negativos", opts: PerfilOpt[], accent: string) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5">
+      {opts.map((o) => (
+        <label key={o.value} className="flex items-start gap-2 text-xs cursor-pointer rounded px-1 py-1 hover:bg-muted/50">
+          <Checkbox checked={(form[field] ?? []).includes(o.value)} onCheckedChange={() => toggleTag(field, o.value)} className={`mt-0.5 ${accent}`} />
+          <span className="leading-snug">{o.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">Tipifica al cliente de la cita — se guarda automáticamente.</p>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+          {saveState === "saving" ? <><Loader2 className="h-3 w-3 animate-spin" />Guardando…</>
+            : saveState === "saved" ? <><Check className="h-3 w-3 text-emerald-600" />Guardado</> : null}
+        </span>
+      </div>
+
+      <section className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <h3 className="text-sm font-semibold">Datos demográficos y composición</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {sel("Tipo de asistente a cita", "tipo_asistente", TIPO_ASISTENTE)}
+          {sel("Rango de edad principal", "rango_edad", RANGO_EDAD)}
+        </div>
+        {sel("Toma de decisión", "toma_decision", TOMA_DECISION)}
+      </section>
+
+      <section className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <h3 className="text-sm font-semibold">Intención y madurez de compra</h3>
+        {sel("Intención de uso", "intencion_uso", INTENCION_USO)}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {sel("Experiencia previa en preventas", "experiencia_preventa", EXPERIENCIA_PREVENTA)}
+          {sel("Etapa de exploración de mercado", "etapa_exploracion", ETAPA_EXPLORACION)}
+        </div>
+        <DField label="Competencia visitada">
+          <Textarea value={form.competencia_visitada} onChange={(e) => set("competencia_visitada", e.target.value)}
+            placeholder="Ej.: Visitó VEQ, Simona y desarrollos en Chapalita." rows={2} />
+        </DField>
+      </section>
+
+      <section className="bg-card border border-border rounded-lg p-4 space-y-4">
+        <h3 className="text-sm font-semibold">Factores clave de la cita</h3>
+        <div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />Puntos positivos
+          </div>
+          {tagGroup("puntos_positivos", PUNTOS_POSITIVOS, "data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500")}
+        </div>
+        <div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-400 mb-1.5">
+            <span className="h-2 w-2 rounded-full bg-red-500" />Puntos negativos / fricciones
+          </div>
+          {tagGroup("puntos_negativos", PUNTOS_NEGATIVOS, "data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500")}
+        </div>
+      </section>
+
+      <section className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <h3 className="text-sm font-semibold">Ventana temporal de decisión</h3>
+        {sel("Proyección de cierre", "proyeccion_cierre", PROYECCION_CIERRE)}
+      </section>
+    </div>
   );
 }
 
