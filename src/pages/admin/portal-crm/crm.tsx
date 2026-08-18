@@ -23,6 +23,7 @@ import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useCrmImpersonation } from "@/contexts/CrmImpersonationContext";
 import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
 import { useCrmOrgId } from "@/hooks/useCrmOrgId";
+import { useCrmContactosPortal, useCrmNegociosPortal, useMisContactosIds, enLotes } from "@/hooks/useCrmContactosPortal";
 import { PageHeader, EmptyState, ComingSoon, ARow, DField } from "@/components/admin/portal-crm/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -320,6 +321,7 @@ function saveContactsPage(uid: string, p: number) {
 // con contexto (proyecto, propietario, si ya tiene negocio) para entender cuál usar.
 function ContactExpansion({ personaId, principalId, colSpan }: { personaId: number; principalId: number; colSpan: number }) {
   const navigate = useNavigate();
+  const { basePath } = useCrmContactosPortal();
   const { data: others = [], isLoading } = useQuery({
     queryKey: ["contact-others", personaId, principalId],
     enabled: !!personaId,
@@ -398,7 +400,7 @@ function ContactExpansion({ personaId, principalId, colSpan }: { personaId: numb
                     </span>
                   )}
                   <Button size="sm" variant="outline" className="h-7 shrink-0 ml-1"
-                    onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${o.id}`)}>
+                    onClick={() => navigate(`${basePath}/${o.id}`)}>
                     Abrir contacto
                   </Button>
                 </div>
@@ -417,8 +419,16 @@ export function CrmContacts() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
-  const { canDelete: realCanDelete } = usePagePermissions("/admin/portal-crm/ventas/contactos");
-  const uid = user?.id ?? "";
+  // Esta misma vista sirve "Contactos" (Portal CRM) y "Mis referidos" (Portal del
+  // Personal). El portal decide rutas, permisos y si la lista está acotada al
+  // propietario. Ver `useCrmContactosPortal`.
+  const {
+    basePath, permisosPath, esPortalPersonal, ownerObligatorio, ownerNoResuelto, titulo,
+  } = useCrmContactosPortal();
+  const { canDelete: realCanDelete } = usePagePermissions(permisosPath);
+  // Filtros y paginación se recuerdan por usuario Y por portal: son dos vistas
+  // distintas y compartir la llave hacía que una pisara los filtros de la otra.
+  const uid = user?.id ? `${user.id}${esPortalPersonal ? ":personal" : ""}` : "";
 
   // ¿El rol impersonado es Super Admin? Para que "Ver como" a un super admin muestre todo.
   const { data: impIsSuper } = useQuery({
@@ -447,7 +457,7 @@ export function CrmContacts() {
     enabled: isImpersonating && impersonatedCrmUserRolId != null,
     queryFn: async () => {
       const { data: sub } = await (supabase as any).from("submenus")
-        .select("id").eq("vista_front_end", "/admin/portal-crm/ventas/contactos").eq("activo", true).maybeSingle();
+        .select("id").eq("vista_front_end", permisosPath).eq("activo", true).maybeSingle();
       if (!sub) return false;
       const { data: sp } = await (supabase as any).from("submenus_permisos")
         .select("id").eq("submenu_id", sub.id).eq("rol_id", impersonatedCrmUserRolId).eq("permiso_id", 4).eq("activo", true).maybeSingle();
@@ -547,7 +557,10 @@ export function CrmContacts() {
   );
 
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, filterStatus, page, isSuperAdmin, effUserId, forceAgenteExterno],
+    queryKey: ["contacts-sozu", stageTab, search, filterDev, filterLifecycle, filterSource, filterCategoria, filterStatus, page, isSuperAdmin, effUserId, forceAgenteExterno, esPortalPersonal, ownerObligatorio],
+    // Sin propietario resuelto NO se consulta: un `p_owner` nulo devolvería el
+    // pool completo del CRM dentro del Portal del Personal.
+    enabled: !ownerNoResuelto,
     queryFn: async () => {
       // Contactos = entidades_relacionadas (prospecto=7 / comprador=2) + personas.
       // La atribución de Meta se agrega vía LEFT JOIN a crm_leads_atribucion.
@@ -555,8 +568,10 @@ export function CrmContacts() {
         ? filterLifecycle === "customer" ? [2] : [7]
         : [2, 7];
       const proyectoId = filterDev !== "all" ? Number(filterDev) : null;
-      const p_owner = stageTab === "mine" ? effUserId : null;
-      const p_unassigned = stageTab === "unassigned";
+      // En el Portal del Personal la vista SIEMPRE está acotada a lo que la
+      // persona posee; en el CRM sigue mandando la pestaña elegida.
+      const p_owner = esPortalPersonal ? ownerObligatorio : (stageTab === "mine" ? effUserId : null);
+      const p_unassigned = esPortalPersonal ? false : stageTab === "unassigned";
 
       // Hidrata una lista de entidades (ers) a filas de contacto (personas + atribución + propietario + categorías).
       const hydrateRows = async (list: any[]): Promise<ContactRow[]> => {
@@ -723,6 +738,9 @@ export function CrmContacts() {
   // solo filtramos client-side en el fallback por-entidad.
   const rows = (contacts as any)?.grouped ? allRows : allRows.filter((c) => {
     if (filterStatus !== "all" && c.lead_status !== filterStatus) return false;
+    // El acotamiento por propietario del Portal del Personal también aplica en el
+    // camino de respaldo (cuando el RPC agrupado no está disponible).
+    if (esPortalPersonal) return c.contact_owner === ownerObligatorio;
     if (effectiveTab === "mine" && c.contact_owner !== effUserId) return false;
     if (effectiveTab === "unassigned" && c.contact_owner !== null) return false;
     return true;
@@ -758,9 +776,12 @@ export function CrmContacts() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold">
-            Contactos{" "}
+            {titulo}{" "}
             <span className="text-base text-muted-foreground font-normal">({totalCount.toLocaleString()})</span>
           </h1>
+          {esPortalPersonal && (
+            <p className="text-sm text-muted-foreground">Los contactos de los que eres propietario.</p>
+          )}
         </div>
         <div className="flex gap-2">
           {canDelete && selectedIds.size > 0 && (
@@ -769,12 +790,21 @@ export function CrmContacts() {
             </Button>
           )}
           <CargaMasivaDialog onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
-          <CreateContactDialog orgId={orgId ?? undefined} developments={developments ?? []} onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })} />
+          <CreateContactDialog
+            orgId={orgId ?? undefined}
+            developments={developments ?? []}
+            basePath={basePath}
+            /* En el Portal del Personal el alta queda a nombre de la persona: si
+               pudiera asignarla a otro, el contacto desaparecería de su lista. */
+            ownerFijo={esPortalPersonal ? ownerObligatorio : null}
+            onCreated={() => qc.invalidateQueries({ queryKey: ["contacts-sozu"] })}
+          />
         </div>
       </div>
 
-      {/* Border-bottom tabs */}
-      <div className="border-b border-border flex gap-1">
+      {/* Border-bottom tabs — en el Portal del Personal no aplican: la vista ya
+          está acotada a los contactos de la persona. */}
+      <div className={`border-b border-border flex gap-1 ${esPortalPersonal ? "hidden" : ""}`}>
         {CONTACT_TABS.map((t) => (
           <button
             key={t.id}
@@ -820,7 +850,21 @@ export function CrmContacts() {
           {isLoading ? (
             <div className="p-6 space-y-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
           ) : !rows.length ? (
-            <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
+            ownerNoResuelto ? (
+              /* Suplantando a alguien sin cuenta de acceso: no hay propietario
+                 con el que filtrar, y mostrar el pool completo sería una fuga. */
+              <EmptyState
+                title="No podemos resolver sus contactos"
+                description="El usuario que estás viendo no tiene cuenta de acceso ligada, así que no hay propietario con el que filtrar."
+              />
+            ) : esPortalPersonal ? (
+              <EmptyState
+                title="Aún no tienes contactos"
+                description="Aquí aparecen los contactos de los que eres propietario. Crea uno con “Nuevo contacto”."
+              />
+            ) : (
+              <EmptyState title="No hay contactos" description="Ajusta los filtros o crea un contacto nuevo." />
+            )
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
@@ -843,8 +887,8 @@ export function CrmContacts() {
                 {rows.map((c) => (
                   <Fragment key={c.id}>
                   <tr role="button" tabIndex={0}
-                    onClick={() => navigate(`/admin/portal-crm/ventas/contactos/${c.id}`)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); } }}
+                    onClick={() => navigate(`${basePath}/${c.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`${basePath}/${c.id}`); } }}
                     className="border-t border-border hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/40 transition-colors duration-150 group"
                   >
                     <td className="p-3" onClick={(e) => e.stopPropagation()}>
@@ -860,7 +904,7 @@ export function CrmContacts() {
                         case "name":
                           return (
                             <td key={col.id} className="p-3 font-medium"
-                              onClick={(e) => { e.stopPropagation(); navigate(`/admin/portal-crm/ventas/contactos/${c.id}`); }}>
+                              onClick={(e) => { e.stopPropagation(); navigate(`${basePath}/${c.id}`); }}>
                               <span className="flex items-center gap-2 max-w-[340px]">
                                 {/* Slot chevron de ancho fijo (mismo footprint con o sin chevron) → filas alineadas. */}
                                 {c.otros_count ? (
@@ -1051,7 +1095,7 @@ export function CrmContacts() {
                         </Button>
                       )}
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100 transition-all duration-150" asChild>
-                        <Link to={`/admin/portal-crm/ventas/contactos/${c.id}`} aria-label="Ver detalle">
+                        <Link to={`${basePath}/${c.id}`} aria-label="Ver detalle">
                           <ChevronRight className="h-4 w-4" />
                         </Link>
                       </Button>
@@ -1139,7 +1183,7 @@ function CFilter({ value, onChange, options, placeholder }: { value: string; onC
   );
 }
 
-function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: string; developments: { id: string; name: string }[]; onCreated: () => void }) {
+function CreateContactDialog({ orgId, developments, onCreated, basePath = "/admin/portal-crm/ventas/contactos", ownerFijo = null }: { orgId?: string; developments: { id: string; name: string }[]; onCreated: () => void; basePath?: string; ownerFijo?: string | null }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -1151,10 +1195,15 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
   const { data: owners = [] } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
   const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
   // Auto-asignar el propietario al usuario actual (editable antes de crear).
+  // Con `ownerFijo` (Portal del Personal) no es editable: manda ese.
   useEffect(() => {
+    if (ownerFijo) {
+      setForm((f) => (f.contact_owner === ownerFijo ? f : { ...f, contact_owner: ownerFijo }));
+      return;
+    }
     const uid = user?.id;
     if (uid) setForm((f) => (f.contact_owner ? f : { ...f, contact_owner: uid }));
-  }, [user?.id]);
+  }, [user?.id, ownerFijo]);
 
   // Duplicados: misma búsqueda y mismo veredicto que el alta del Portal Agente
   // (`@/lib/prospectos/duplicados`). Antes cada portal buscaba distinto y la tarjeta no
@@ -1192,7 +1241,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
         p_id_proyecto: form.development_id ? Number(form.development_id) : null,
         p_estatus_lead: form.lead_status,
         p_etapa_ciclo_vida: form.lifecycle_stage,
-        p_id_propietario: form.contact_owner || user?.id || null,
+        p_id_propietario: ownerFijo || form.contact_owner || user?.id || null,
         p_id_categoria: form.categoria ? Number(form.categoria) : null,
       });
       if (error) throw error;
@@ -1250,12 +1299,14 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
               </Select>
             </CField>
           </div>
-          <CField label="Propietario del contacto">
-            <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}>
-              <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-              <SelectContent>{(owners as CrmOwner[]).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
-            </Select>
-          </CField>
+          {!ownerFijo && (
+            <CField label="Propietario del contacto">
+              <Select value={form.contact_owner} onValueChange={(v) => setForm({ ...form, contact_owner: v })}>
+                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectContent>{(owners as CrmOwner[]).map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name ?? o.email}</SelectItem>)}</SelectContent>
+              </Select>
+            </CField>
+          )}
         </div>
         {duplicates.length > 0 && (
           <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm space-y-2">
@@ -1271,7 +1322,7 @@ function CreateContactDialog({ orgId, developments, onCreated }: { orgId?: strin
                   </div>
                   {d.leads[0] && (
                     <Button size="sm" variant="outline" className="shrink-0"
-                      onClick={() => { setOpen(false); setDuplicates([]); navigate(`/admin/portal-crm/ventas/contactos/${d.leads[0].idEntidadRelacionada}`); }}>
+                      onClick={() => { setOpen(false); setDuplicates([]); navigate(`${basePath}/${d.leads[0].idEntidadRelacionada}`); }}>
                       Abrir
                     </Button>
                   )}
@@ -1386,6 +1437,9 @@ function EditableContactName({ personaId, name, onSaved, canEdit = true }: { per
 export function CrmContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
   const [sp] = useSearchParams(); // pestaña inicial vía ?tab= (ej. desde el módulo de Tareas)
+  // La ficha es la misma en el Portal CRM y en "Mis referidos": solo cambia a
+  // dónde regresa el botón Volver.
+  const { basePath, titulo: tituloListado } = useCrmContactosPortal();
   const orgId = useCrmOrgId();
   const { user, profile } = useAuth();
   const { impersonatedCrmUserRolId, impersonatedCrmUserId, isImpersonating } = useCrmImpersonation();
@@ -1649,7 +1703,7 @@ export function CrmContactDetail() {
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>{isPerm ? "Tu usuario no tiene acceso a esta ficha." : "Ocurrió un problema al cargar la ficha."}</p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
+            <Button variant="outline" size="sm" asChild><Link to={basePath}><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
             <Button size="sm" onClick={invalidateAll}>Reintentar</Button>
           </div>
         </CardContent>
@@ -1663,7 +1717,7 @@ export function CrmContactDetail() {
         <CardHeader><CardTitle className="text-base">Contacto no encontrado</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>Este contacto no existe o no pertenece a tu organización.</p>
-          <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
+          <Button variant="outline" size="sm" asChild><Link to={basePath}><ArrowLeft className="h-4 w-4 mr-1" />Volver</Link></Button>
         </CardContent>
       </Card>
     );
@@ -1686,7 +1740,7 @@ export function CrmContactDetail() {
       <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm shrink-0">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary hover:bg-primary/5 -ml-2 transition-colors" asChild>
-            <Link to="/admin/portal-crm/ventas/contactos"><ArrowLeft className="h-4 w-4 mr-1.5" />Contactos</Link>
+            <Link to={basePath}><ArrowLeft className="h-4 w-4 mr-1.5" />{tituloListado}</Link>
           </Button>
           <span className="text-muted-foreground/40 text-sm">/</span>
           <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{contact.full_name}</span>
@@ -2152,7 +2206,12 @@ export function CrmDeals() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const uid = user?.id ?? "";
+  // Esta misma vista sirve "Negocios" del Portal CRM y del Portal del Personal.
+  // En el Portal del Personal se acota a los negocios de SUS contactos.
+  const { basePath, esPortalPersonal, ownerNoResuelto } = useCrmNegociosPortal();
+  const { erIds: misContactos, isLoading: cargandoMisContactos } = useMisContactosIds();
+  // Filtros y vista se recuerdan por usuario Y por portal.
+  const uid = user?.id ? `${user.id}${esPortalPersonal ? ":personal" : ""}` : "";
   const [view, setView] = useState<"list" | "board">("board");
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -2201,18 +2260,41 @@ export function CrmDeals() {
 
   // Se traen TODOS los negocios (filtrando por propietario/búsqueda en servidor); el
   // filtro de pipeline se aplica en cliente para que la Lista y el Tablero compartan datos.
-  const dealsKey = ["deals-list", ownerFilter, search.trim()];
+  const dealsKey = ["deals-list", ownerFilter, search.trim(), esPortalPersonal, misContactos?.length ?? null];
   const { data, isLoading } = useQuery({
     queryKey: dealsKey,
+    // En el Portal del Personal no se consulta hasta saber CUÁLES son sus
+    // contactos: sin acotar se traería el pipeline completo del CRM.
+    enabled: !esPortalPersonal || (!ownerNoResuelto && misContactos != null),
     queryFn: async () => {
-      let q = (supabase as any).from("crm_negocios")
-        .select("id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, tipo_negocio, prioridad, fecha_creacion")
-        .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
-      if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
-      if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
-      const { data: negocios, error } = await q;
-      if (error) throw error;
-      const list = negocios ?? [];
+      const SELECT_NEGOCIO = "id, nombre, valor, moneda, id_pipeline, id_etapa, id_usuario_propietario, fecha_cierre_estimada, id_entidad_relacionada, tipo_negocio, prioridad, fecha_creacion";
+      const baseQuery = () => {
+        let q = (supabase as any).from("crm_negocios")
+          .select(SELECT_NEGOCIO)
+          .eq("activo", true).order("fecha_creacion", { ascending: false }).limit(1000);
+        if (ownerFilter !== "all") q = q.eq("id_usuario_propietario", ownerFilter);
+        if (search.trim()) q = q.ilike("nombre", `%${search.trim()}%`);
+        return q;
+      };
+
+      let list: any[];
+      if (esPortalPersonal) {
+        const contactos = misContactos ?? [];
+        if (!contactos.length) return { rows: [], truncated: false };
+        // Por lotes: con más de mil contactos, un solo `.in()` no cabe en la URL.
+        const filas = await enLotes(contactos, 300, async (lote) => {
+          const { data, error } = await baseQuery().in("id_entidad_relacionada", lote);
+          if (error) throw error;
+          return (data ?? []) as any[];
+        });
+        list = filas
+          .sort((a, b) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime())
+          .slice(0, 1000);
+      } else {
+        const { data: negocios, error } = await baseQuery();
+        if (error) throw error;
+        list = negocios ?? [];
+      }
       if (!list.length) return { rows: [], truncated: false };
 
       const etapaIds = Array.from(new Set(list.map((n: any) => n.id_etapa).filter(Boolean)));
@@ -2355,6 +2437,12 @@ export function CrmDeals() {
     return { total, ponderada, abierto, ganado };
   }, [activeRows]);
 
+  /** Negocios en marcha: siguen abiertos (ni ganados ni perdidos). */
+  const enMarcha = useMemo(
+    () => activeRows.filter((r) => !r.es_ganado && !r.es_perdido).length,
+    [activeRows],
+  );
+
   const activeDeal = rows.find((r) => r.id === activeId) ?? null;
 
   const handleDragEnd = async (e: DragEndEvent) => {
@@ -2386,7 +2474,7 @@ export function CrmDeals() {
     firePurchaseIfWon({ id_entidad_relacionada: deal.id_entidad_relacionada, valor: deal.valor, moneda: deal.moneda, esGanado: !!targetEt?.es_ganado });
   };
 
-  const openDeal = (id: number) => navigate(`/admin/portal-crm/ventas/negocios/${id}`);
+  const openDeal = (id: number) => navigate(`${basePath}/${id}`);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -2416,7 +2504,14 @@ export function CrmDeals() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Negocios" description={`${activeRows.length} negocio(s)`} actions={
+      <PageHeader
+        title="Negocios"
+        description={
+          esPortalPersonal
+            ? `${activeRows.length} negocio(s) de tus referidos · ${enMarcha} en marcha`
+            : `${activeRows.length} negocio(s)`
+        }
+        actions={
         <div className="flex items-center gap-2">
           {viewToggle}
           <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -2465,7 +2560,7 @@ export function CrmDeals() {
       </div>
 
       {/* Contenido */}
-      {isLoading ? (
+      {isLoading || cargandoMisContactos ? (
         <Skeleton className="h-64 w-full" />
       ) : view === "board" ? (
         !effectiveBoardPipeline ? (
@@ -2509,7 +2604,7 @@ export function CrmDeals() {
               {listRows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">
-                    <Link to={`/admin/portal-crm/ventas/negocios/${r.id}`} className="hover:underline hover:text-primary">{r.nombre}</Link>
+                    <Link to={`${basePath}/${r.id}`} className="hover:underline hover:text-primary">{r.nombre}</Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{r.pipeline_nombre}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[11px]">{r.etapa_nombre}</Badge></TableCell>
@@ -2535,7 +2630,15 @@ export function CrmDeals() {
       {view === "list" && data?.truncated && <p className="text-xs text-muted-foreground">Mostrando los primeros 1000 negocios. Usa los filtros o el buscador para acotar.</p>}
 
       {/* Crear negocio (desde el módulo, contacto opcional) */}
-      <NewDealDialog open={createOpen} onOpenChange={setCreateOpen} onSaved={() => qc.invalidateQueries({ queryKey: ["deals-list"] })} />
+      <NewDealDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        /* En el Portal del Personal el negocio DEBE colgar de uno de sus
+           contactos; si no, se crearía un negocio que ella no puede ver. */
+        soloContactos={esPortalPersonal ? (misContactos ?? []) : null}
+        contactoObligatorio={esPortalPersonal}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["deals-list"] })}
+      />
 
       {/* Editar negocio */}
       <EditDealDialog deal={editTarget} pipelines={pipelines ?? []} owners={owners ?? []}
@@ -2571,6 +2674,9 @@ export function CrmDeals() {
 // ─── CrmDealDetail — vista de un negocio ──────────────────────────────────────
 
 export function CrmDealDetail() {
+  // La ficha del negocio es la misma en los dos portales: solo cambia a dónde
+  // regresa Volver y desde qué submenú se leen los permisos.
+  const { basePath: negociosBase, contactosBasePath, permisosPath: negociosPermisos } = useCrmNegociosPortal();
   const { dealId } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -2578,7 +2684,7 @@ export function CrmDealDetail() {
   const [form, setForm] = useState<any | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const canDelete = useCrmCanDelete("/admin/portal-crm/ventas/negocios");
+  const canDelete = useCrmCanDelete(negociosPermisos);
   const [deleting, setDeleting] = useState(false);
   const [centerTab, setCenterTab] = useState("descripcion");
   const [actSearch, setActSearch] = useState("");
@@ -2722,7 +2828,7 @@ export function CrmDealDetail() {
     toast.success("Negocio eliminado");
     qc.invalidateQueries({ queryKey: ["deals-list"] });
     if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
-    navigate("/admin/portal-crm/ventas/negocios");
+    navigate(negociosBase);
   };
 
   // Actividad del negocio = notas/tareas de su contacto asociado (reutiliza el Timeline).
@@ -2786,7 +2892,7 @@ export function CrmDealDetail() {
   if (!deal) {
     return (
       <div className="space-y-3">
-        <Button variant="outline" size="sm" asChild><Link to="/admin/portal-crm/ventas/negocios"><ArrowLeft className="h-4 w-4 mr-1" />Negocios</Link></Button>
+        <Button variant="outline" size="sm" asChild><Link to={negociosBase}><ArrowLeft className="h-4 w-4 mr-1" />Negocios</Link></Button>
         <p className="text-sm text-muted-foreground">Este negocio no existe o fue eliminado.</p>
       </div>
     );
@@ -2817,7 +2923,7 @@ export function CrmDealDetail() {
       <div className="flex items-center justify-between px-4 lg:px-8 py-3 border-b border-border bg-card shadow-sm shrink-0">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary hover:bg-primary/5 -ml-2 transition-colors" asChild>
-            <Link to="/admin/portal-crm/ventas/negocios"><ArrowLeft className="h-4 w-4 mr-1.5" />Negocios</Link>
+            <Link to={negociosBase}><ArrowLeft className="h-4 w-4 mr-1.5" />Negocios</Link>
           </Button>
           <span className="text-muted-foreground/40 text-sm">/</span>
           <span className="text-sm font-medium text-foreground truncate max-w-[220px]">{deal.nombre}</span>
@@ -3035,11 +3141,11 @@ export function CrmDealDetail() {
                   <div className="rounded-md border border-border p-3 bg-card space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">{dealInitials(deal.contacto.nombre)}</span>
-                      <Link to={`/admin/portal-crm/ventas/contactos/${deal.contacto.id}`} className="text-sm font-medium hover:underline hover:text-primary truncate">{deal.contacto.nombre}</Link>
+                      <Link to={`${contactosBasePath}/${deal.contacto.id}`} className="text-sm font-medium hover:underline hover:text-primary truncate">{deal.contacto.nombre}</Link>
                     </div>
                     {deal.contacto.email && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{deal.contacto.email}</span></div>}
                     {deal.contacto.telefono && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{deal.contacto.telefono}</span></div>}
-                    <Button variant="outline" size="sm" className="w-full h-7 text-xs" asChild><Link to={`/admin/portal-crm/ventas/contactos/${deal.contacto.id}`}>Ver ficha</Link></Button>
+                    <Button variant="outline" size="sm" className="w-full h-7 text-xs" asChild><Link to={`${contactosBasePath}/${deal.contacto.id}`}>Ver ficha</Link></Button>
                   </div>
                 )}
               </AccordionContent>
