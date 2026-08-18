@@ -257,8 +257,6 @@ const PTEquipoConfig = lazyRetry(() =>
 // Portal del Personal
 const PPersInicio = lazyRetry(() => import("./pages/admin/portal-personal/InicioPage"));
 const PPersSimulador = lazyRetry(() => import("./pages/admin/portal-personal/SimuladorPage"));
-const PPersReferidos = lazyRetry(() => import("./pages/admin/portal-personal/ReferidosPage"));
-const PPersNegocios = lazyRetry(() => import("./pages/admin/portal-personal/NegociosPage"));
 const PPersGanancias = lazyRetry(() => import("./pages/admin/portal-personal/GananciasPage"));
 const PPersKit = lazyRetry(() => import("./pages/admin/portal-personal/KitPage"));
 const PPersPerfil = lazyRetry(() => import("./pages/admin/portal-personal/PerfilPage"));
@@ -1106,8 +1104,14 @@ const App = () => (
                   <Route path="portal-personal/inventario/unidades" element={<AgentUnidadesProyecto />} />
                   <Route path="portal-personal/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
                   <Route path="portal-personal/simulador" element={<PPersSimulador />} />
-                  <Route path="portal-personal/referidos" element={<PPersReferidos />} />
-                  <Route path="portal-personal/negocios" element={<PPersNegocios />} />
+                  {/* Mis referidos = los Contactos del Portal CRM, acotados a los
+                      que la persona posee. Ver useCrmContactosPortal. */}
+                  <Route path="portal-personal/referidos" element={<CrmContacts />} />
+                  <Route path="portal-personal/referidos/:contactId" element={<CrmContactDetail />} />
+                  {/* Negocios = los del Portal CRM, acotados a los negocios de
+                      los contactos que la persona posee. Ver useCrmNegociosPortal. */}
+                  <Route path="portal-personal/negocios" element={<CrmDeals />} />
+                  <Route path="portal-personal/negocios/:dealId" element={<CrmDealDetail />} />
                   <Route path="portal-personal/ganancias" element={<PPersGanancias />} />
                   <Route path="portal-personal/kit" element={<PPersKit />} />
                   <Route path="portal-personal/perfil" element={<PPersPerfil />} />

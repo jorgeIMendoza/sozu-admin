@@ -2,6 +2,14 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAllowedMenus } from "@/hooks/useAllowedMenus";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePortalPersonalImpersonation } from "@/contexts/PortalPersonalImpersonationContext";
+import { useImpersonationViewMode } from "@/contexts/ImpersonationViewModeContext";
+import {
+  resolveEffectiveRolId,
+  resolveIsSuperAdminView,
+  usesTargetRole,
+} from "@/lib/impersonation/effective-identity";
 import {
   Home,
   Building2,
@@ -40,11 +48,41 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
 
 /**
  * Nav del Portal del Personal leído 100% desde BD (menus/submenus) y filtrado
- * por los permisos del rol (`useAllowedMenus`). Nada hardcodeado: si el submenú
- * no existe, está apagado o el rol no tiene lectura, no aparece.
+ * por permisos de rol. Nada hardcodeado: si el submenú no existe, está apagado o
+ * el rol no tiene lectura, no aparece.
+ *
+ * Con "Vista del usuario" activa (ver `ImpersonationViewModeContext`) el menú se
+ * resuelve con el rol del usuario SUPLANTADO, que es justo para lo que sirve:
+ * comprobar qué vería él. La AUTORIZACIÓN de rutas (`PermissionRoute` vía
+ * `useAllowedMenus`) sigue usando el rol real de la sesión a propósito — si no,
+ * el admin perdería el acceso a la ruta y quedaría atrapado fuera del portal.
  */
 export function usePortalPersonalNav() {
-  const { isPathAllowed, isLoading } = useAllowedMenus();
+  const { isPathAllowed, isPathDisabled, isLoading: cargandoMenus } = useAllowedMenus();
+  const { profile } = useAuth();
+  const { impersonatedUser } = usePortalPersonalImpersonation();
+  const { viewMode } = useImpersonationViewMode();
+
+  const identity = {
+    profileRolId: profile?.rol_id,
+    profileRolNombre: profile?.rol_nombre,
+    profilePersonaId: profile?.id_persona,
+    puedeImpersonar: profile?.puede_impersonar,
+    target: impersonatedUser
+      ? {
+          email: impersonatedUser.email,
+          personaId: impersonatedUser.id_persona ?? null,
+          nombre: impersonatedUser.nombre,
+          rolId: impersonatedUser.rol_id,
+          rolNombre: impersonatedUser.rol_nombre,
+        }
+      : null,
+    viewMode,
+  };
+
+  const simulaOtroRol = usesTargetRole(identity.target, viewMode);
+  const rolSimulado = resolveEffectiveRolId(identity);
+  const simulaSuperAdmin = simulaOtroRol && resolveIsSuperAdminView(identity);
 
   const { data } = useQuery<PersonalNavItem[]>({
     queryKey: ["portal-personal-nav"],
@@ -69,10 +107,43 @@ export function usePortalPersonalNav() {
     staleTime: 5 * 60_000,
   });
 
-  const items = useMemo(
-    () => (data ?? []).filter((i) => isPathAllowed(i.path)),
-    [data, isPathAllowed],
-  );
+  // Submenús que el rol suplantado puede LEER. Sólo se consulta en vista fiel:
+  // sin suplantación el filtro sigue siendo el de `useAllowedMenus`.
+  const necesitaPermisosDelOtro = simulaOtroRol && !simulaSuperAdmin && rolSimulado != null;
+  const { data: leiblesPorRol, isLoading: cargandoPermisosDelOtro } = useQuery<number[]>({
+    queryKey: ["portal-personal-nav-permisos", rolSimulado],
+    enabled: necesitaPermisosDelOtro,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data: permiso } = await (supabase as any)
+        .from("permisos")
+        .select("id")
+        .eq("nombre", "leer")
+        .single();
+      if (!permiso) return [];
+      const { data } = await (supabase as any)
+        .from("submenus_permisos")
+        .select("submenu_id")
+        .eq("rol_id", rolSimulado)
+        .eq("permiso_id", permiso.id)
+        .eq("activo", true);
+      return ((data as any[]) ?? []).map((r) => r.submenu_id as number);
+    },
+  });
+
+  const isLoading = cargandoMenus || (necesitaPermisosDelOtro && cargandoPermisosDelOtro);
+
+  const items = useMemo(() => {
+    const todos = data ?? [];
+    const leibles = new Set(leiblesPorRol ?? []);
+    return todos.filter((i) => {
+      // Una vista apagada en BD no se pinta para nadie, ni simulando.
+      if (isPathDisabled(i.path)) return false;
+      if (!simulaOtroRol) return isPathAllowed(i.path);
+      if (simulaSuperAdmin) return true;
+      return leibles.has(i.id);
+    });
+  }, [data, leiblesPorRol, simulaOtroRol, simulaSuperAdmin, isPathAllowed, isPathDisabled]);
 
   return { items, isLoading };
 }
