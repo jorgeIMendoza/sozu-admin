@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Save } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { CampoMoneda } from "@/components/admin/CampoMoneda";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -121,6 +124,36 @@ function CatalogSelect({
  * Waterfall explícito (patrón #1 de CLAUDE.md): el join anidado de PostgREST
  * sobre tres niveles devuelve null sin error.
  */
+/**
+ * Agrupa campos bajo un título con su explicación.
+ *
+ * El paso General tenía quince campos seguidos en una rejilla de tres: la
+ * ubicación en el inventario, la identificación, las medidas, el precio y los
+ * datos del inmueble, todos con el mismo peso visual. Separarlos permite
+ * localizar un dato sin leerlos todos.
+ */
+function Seccion({
+  titulo,
+  descripcion,
+  children,
+}: {
+  titulo: string;
+  descripcion?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{titulo}</h3>
+        {descripcion && (
+          <p className="text-xs text-muted-foreground">{descripcion}</p>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">{children}</div>
+    </section>
+  );
+}
+
 function UbicacionInventario({
   idEdificioModelo,
   onChange,
@@ -366,24 +399,47 @@ export default function ActivosComercialesNuevo() {
   const setR = (k: string, v: any) => setRenta((p) => ({ ...p, [k]: v }));
 
   /**
-   * Qué falta para poder guardar, en los mismos términos que exige la base.
+   * Qué falta para poder guardar, en los mismos términos que exige la base y
+   * sabiendo en qué paso vive cada dato.
    *
-   * Se lista en la pantalla en vez de dejar que el INSERT falle: los NOT NULL de
-   * `propiedades` producían errores crudos de Postgres ("null value in column
-   * ... violates not-null constraint") después de llenar las cuatro pestañas.
+   * El paso no es decorativo: es lo que permite llevar al usuario al campo que
+   * falta. Una lista de nombres sueltos, en un formulario de cinco pasos y casi
+   * noventa campos, obliga a buscarlos a mano.
    */
   const faltantes = useMemo(() => {
-    const f: string[] = [];
-    if (!isEdit && !prop.id_edificio_modelo) f.push("Proyecto, Edificio y Modelo");
-    if (!prop.id_tipo_propiedad) f.push("Tipo de activo");
-    if (!prop.id_tipo_transaccion) f.push("Transacción");
-    if (!String(prop.numero_propiedad ?? "").trim()) f.push("Número / Clave interna");
-    if (showVenta && !(Number(prop.precio_lista) > 0)) f.push("Precio de lista (venta)");
-    if (showRenta && !(Number(renta.renta_mensual) > 0)) f.push("Renta mensual");
+    const f: { campo: string; paso: string }[] = [];
+    const falta = (campo: string, paso: string) => f.push({ campo, paso });
+
+    if (!isEdit && !prop.id_edificio_modelo) falta("Proyecto, Edificio y Modelo", "general");
+    if (!prop.id_tipo_propiedad) falta("Tipo de activo", "general");
+    if (!prop.id_tipo_transaccion) falta("Transacción", "general");
+    if (!String(prop.numero_propiedad ?? "").trim()) falta("Número / Clave interna", "general");
+    if (showVenta && !(Number(prop.precio_lista) > 0)) falta("Precio de lista", "general");
+    if (showRenta && !(Number(renta.renta_mensual) > 0)) falta("Renta mensual", "renta");
     return f;
   }, [prop, renta, showVenta, showRenta, isEdit]);
 
   const canSave = faltantes.length === 0;
+
+  /** Faltantes de un paso, para marcarlo en la barra de progreso. */
+  const faltantesDe = (paso: string) => faltantes.filter((x) => x.paso === paso).length;
+
+  /**
+   * Los pasos del alta, en orden. Se derivan del tipo de transacción: un activo
+   * solo en venta no debe mostrar el paso de renta ni exigirlo.
+   */
+  const pasos = useMemo(() => {
+    const p = [
+      { id: "general",   titulo: "General",    obligatorio: true },
+      { id: "ubicacion", titulo: "Ubicación",  obligatorio: false },
+      { id: "atributos", titulo: `Atributos · ${TIPOS.find((t) => t.id === tipo)?.label ?? "-"}`, obligatorio: false },
+    ];
+    if (showVenta) p.push({ id: "venta", titulo: "Venta", obligatorio: false });
+    if (showRenta) p.push({ id: "renta", titulo: "Renta", obligatorio: true });
+    return p;
+  }, [tipo, showVenta, showRenta]);
+
+  const pasoActual = Math.max(0, pasos.findIndex((p) => p.id === tab));
 
   async function handleSave() {
     setSaving(true);
@@ -506,44 +562,55 @@ export default function ActivosComercialesNuevo() {
         </Button>
       </div>
 
-      {/* Qué se necesita para dar de alta, antes de capturar nada. Los cuatro
-          primeros son NOT NULL en `propiedades`; el precio depende de si el
-          activo se vende, se renta o ambas. */}
-      {!isEdit && (
-        <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
-          <p className="text-sm font-medium text-foreground">Datos obligatorios</p>
-          <ul className="mt-1.5 grid grid-cols-1 gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
-            <li>• <strong className="text-foreground">Proyecto, Edificio y Modelo</strong> — ubican el activo en el inventario.</li>
-            <li>• <strong className="text-foreground">Tipo de activo</strong> — local, oficina, bodega o terreno.</li>
-            <li>• <strong className="text-foreground">Transacción</strong> — venta, renta o ambas.</li>
-            <li>• <strong className="text-foreground">Número / Clave interna</strong> — identifica la unidad.</li>
-            <li>• <strong className="text-foreground">Precio de lista</strong> — si el activo se vende.</li>
-            <li>• <strong className="text-foreground">Renta mensual</strong> — si el activo se renta.</li>
-          </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Lo demás es opcional y se puede completar después.
-          </p>
-        </div>
-      )}
+      {/*
+        Un solo panel de contexto en lugar de tres avisos apilados.
 
+        Antes se pintaban seguidos "Datos obligatorios", "Se guardará como
+        Borrador" y "Falta por capturar": tres bloques del mismo peso visual
+        que empujaban el formulario fuera de la pantalla y que, juntos, se
+        dejan de leer. Aquí queda uno, y lo que cambia —lo que falta— es lo
+        único que destaca.
+      */}
       {!isEdit && (
-        <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-3">
-          <p className="text-sm font-medium text-sky-800 dark:text-sky-300">
-            El activo se guardará como Borrador
-          </p>
-          <p className="mt-0.5 text-sm text-foreground/80">
-            Cualquier usuario con acceso a este menú puede darlo de alta. Queda capturado
-            pero sin publicar hasta que un Super Administrador lo apruebe desde el listado
-            de Activos Comerciales.
-          </p>
-        </div>
-      )}
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 space-y-2.5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                Se guardará como Borrador
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Cualquier usuario con acceso a este menú puede darlo de alta. Queda
+                capturado pero sin publicar hasta que un Super Administrador lo apruebe
+                desde el listado.
+              </p>
+            </div>
+            <Badge variant={canSave ? "default" : "outline"} className="shrink-0">
+              {canSave ? "Listo para guardar" : `Faltan ${faltantes.length}`}
+            </Badge>
+          </div>
 
-      {faltantes.length > 0 && !isEdit && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5">
-          <p className="text-sm text-amber-700 dark:text-amber-400">
-            Falta por capturar: <strong>{faltantes.join(", ")}</strong>.
-          </p>
+          {faltantes.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+              <span className="text-sm text-muted-foreground">Falta capturar:</span>
+              {/* Cada faltante lleva a su paso: en un formulario de cinco pasos
+                  y casi noventa campos, decir el nombre no basta. */}
+              {faltantes.map((x) => (
+                <button
+                  key={x.campo}
+                  type="button"
+                  onClick={() => setTab(x.paso)}
+                  className="rounded-full border border-amber-500/50 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                >
+                  {x.campo}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="flex items-center gap-1.5 border-t border-border/60 pt-2.5 text-sm text-emerald-700 dark:text-emerald-400">
+              <Check className="h-4 w-4 shrink-0" />
+              Todos los datos obligatorios están capturados.
+            </p>
+          )}
         </div>
       )}
 
@@ -564,12 +631,40 @@ export default function ActivosComercialesNuevo() {
       )}
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="ubicacion">Ubicación & Legal</TabsTrigger>
-          <TabsTrigger value="atributos">Atributos ({TIPOS.find(t => t.id === tipo)?.label ?? "-"})</TabsTrigger>
-          {showVenta && <TabsTrigger value="venta">Venta</TabsTrigger>}
-          {showRenta && <TabsTrigger value="renta">Renta</TabsTrigger>}
+        {/*
+          Pasos numerados en vez de pestañas planas.
+
+          Con cinco secciones y casi noventa campos, unas pestañas sin estado no
+          dicen cuánto falta ni dónde. Cada paso muestra su número, y los que
+          tienen datos obligatorios pendientes lo marcan: así el formulario se
+          recorre sabiendo qué queda, no a ciegas.
+        */}
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
+          {pasos.map((p, i) => {
+            const pendientes = faltantesDe(p.id);
+            return (
+              <TabsTrigger
+                key={p.id}
+                value={p.id}
+                className="gap-2 data-[state=active]:bg-background"
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                    pendientes > 0
+                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-400"
+                      : "bg-muted-foreground/15 text-muted-foreground",
+                  )}
+                >
+                  {pendientes > 0 ? "!" : i + 1}
+                </span>
+                {p.titulo}
+                {!isEdit && p.obligatorio && pendientes === 0 && (
+                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                )}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         {/* GENERAL */}
@@ -578,75 +673,98 @@ export default function ActivosComercialesNuevo() {
             <CardHeader>
               <CardTitle>Datos generales</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <UbicacionInventario
-                idEdificioModelo={prop.id_edificio_modelo}
-                onChange={(v) => setP("id_edificio_modelo", v)}
-                disabled={isEdit}
-              />
-              <Field label="Tipo de activo *">
-                <Select
-                  value={String(prop.id_tipo_propiedad)}
-                  onValueChange={(v) => setP("id_tipo_propiedad", v)}
+            <CardContent className="space-y-6">
+              <Seccion
+                titulo="Ubicación en el inventario"
+                descripcion="A qué desarrollo pertenece el activo. Sin esto no se puede guardar."
+              >
+                <UbicacionInventario
+                  idEdificioModelo={prop.id_edificio_modelo}
+                  onChange={(v) => setP("id_edificio_modelo", v)}
                   disabled={isEdit}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPOS.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Transacción *">
-                <Select
-                  value={String(prop.id_tipo_transaccion)}
-                  onValueChange={(v) => setP("id_tipo_transaccion", v)}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TRANSACCIONES.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Número / Clave interna *">
-                <Input value={prop.numero_propiedad} onChange={(e) => setP("numero_propiedad", e.target.value)} />
-              </Field>
-              <Field label="Piso">
-                <Input value={prop.numero_piso} onChange={(e) => setP("numero_piso", e.target.value)} />
-              </Field>
-              <Field label="m² interiores">
-                <Input type="number" value={prop.m2_interiores} onChange={(e) => setP("m2_interiores", e.target.value)} />
-              </Field>
-              <Field label="m² exteriores">
-                <Input type="number" value={prop.m2_exteriores} onChange={(e) => setP("m2_exteriores", e.target.value)} />
-              </Field>
-              <Field label={showVenta ? "Precio de lista (venta) *" : "Precio de lista"}>
-                <Input type="number" value={prop.precio_lista} onChange={(e) => setP("precio_lista", e.target.value)} />
-              </Field>
-              <Field label="Código interno">
-                <Input value={pac.codigo_interno ?? ""} onChange={(e) => setC("codigo_interno", e.target.value)} />
-              </Field>
-              <Field label="Año de construcción">
-                <Input type="number" value={pac.anio_construccion ?? ""} onChange={(e) => setC("anio_construccion", e.target.value)} />
-              </Field>
-              <Field label="Estado de conservación">
-                <CatalogSelect table="estados_conservacion" value={pac.id_estado_conservacion} onChange={(v) => setC("id_estado_conservacion", v)} />
-              </Field>
-              <Field label="Cuota condominio mensual">
-                <Input type="number" value={pac.cuota_condominio_mensual ?? ""} onChange={(e) => setC("cuota_condominio_mensual", e.target.value)} />
-              </Field>
-              <Field label="URL recorrido virtual">
-                <Input value={pac.url_recorrido_virtual ?? ""} onChange={(e) => setC("url_recorrido_virtual", e.target.value)} />
-              </Field>
-              <Field label="URL imagen portada" className="md:col-span-3">
-                <Input value={prop.url_imagen_portada} onChange={(e) => setP("url_imagen_portada", e.target.value)} />
-              </Field>
-              <Field label="Descripción" className="md:col-span-3">
-                <Textarea rows={3} value={prop.descripcion} onChange={(e) => setP("descripcion", e.target.value)} />
-              </Field>
+                />
+              </Seccion>
+
+              <Seccion
+                titulo="Identificación"
+                descripcion="Qué tipo de activo es, cómo se comercializa y cómo se le identifica."
+              >
+                <Field label="Tipo de activo *">
+                  <Select
+                    value={String(prop.id_tipo_propiedad)}
+                    onValueChange={(v) => setP("id_tipo_propiedad", v)}
+                    disabled={isEdit}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIPOS.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Transacción *">
+                  <Select
+                    value={String(prop.id_tipo_transaccion)}
+                    onValueChange={(v) => setP("id_tipo_transaccion", v)}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TRANSACCIONES.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Número / Clave interna *">
+                  <Input value={prop.numero_propiedad} onChange={(e) => setP("numero_propiedad", e.target.value)} />
+                </Field>
+                <Field label="Código interno">
+                  <Input value={pac.codigo_interno ?? ""} onChange={(e) => setC("codigo_interno", e.target.value)} />
+                </Field>
+                <Field label="Piso">
+                  <Input value={prop.numero_piso} onChange={(e) => setP("numero_piso", e.target.value)} />
+                </Field>
+              </Seccion>
+
+              <Seccion
+                titulo="Medidas y precio"
+                descripcion="Superficie del activo y su precio de lista."
+              >
+                <Field label="m² interiores">
+                  <Input type="number" value={prop.m2_interiores} onChange={(e) => setP("m2_interiores", e.target.value)} />
+                </Field>
+                <Field label="m² exteriores">
+                  <Input type="number" value={prop.m2_exteriores} onChange={(e) => setP("m2_exteriores", e.target.value)} />
+                </Field>
+                <Field label={showVenta ? "Precio de lista (venta) *" : "Precio de lista"}>
+                  <CampoMoneda valor={prop.precio_lista} onChange={(v) => setP("precio_lista", v)} />
+                </Field>
+              </Seccion>
+
+              <Seccion
+                titulo="Detalles del inmueble"
+                descripcion="Opcional. Se puede completar después de dar de alta el activo."
+              >
+                <Field label="Año de construcción">
+                  <Input type="number" value={pac.anio_construccion ?? ""} onChange={(e) => setC("anio_construccion", e.target.value)} />
+                </Field>
+                <Field label="Estado de conservación">
+                  <CatalogSelect table="estados_conservacion" value={pac.id_estado_conservacion} onChange={(v) => setC("id_estado_conservacion", v)} />
+                </Field>
+                <Field label="Cuota condominio mensual">
+                  <Input type="number" value={pac.cuota_condominio_mensual ?? ""} onChange={(e) => setC("cuota_condominio_mensual", e.target.value)} />
+                </Field>
+                <Field label="URL recorrido virtual" className="md:col-span-2">
+                  <Input value={pac.url_recorrido_virtual ?? ""} onChange={(e) => setC("url_recorrido_virtual", e.target.value)} />
+                </Field>
+                <Field label="URL imagen portada">
+                  <Input value={prop.url_imagen_portada} onChange={(e) => setP("url_imagen_portada", e.target.value)} />
+                </Field>
+                <Field label="Descripción" className="md:col-span-3">
+                  <Textarea rows={3} value={prop.descripcion} onChange={(e) => setP("descripcion", e.target.value)} />
+                </Field>
+              </Seccion>
             </CardContent>
           </Card>
         </TabsContent>
@@ -864,7 +982,7 @@ export default function ActivosComercialesNuevo() {
               <CardHeader><CardTitle>Condiciones de renta</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Field label="Renta mensual *">
-                  <Input type="number" value={renta.renta_mensual ?? ""} onChange={(e) => setR("renta_mensual", e.target.value)} />
+                  <CampoMoneda valor={renta.renta_mensual} onChange={(v) => setR("renta_mensual", v)} />
                 </Field>
                 <Field label="Precio m²/mes">
                   <Input type="number" value={renta.precio_m2_mes ?? ""} onChange={(e) => setR("precio_m2_mes", e.target.value)} />
@@ -937,15 +1055,59 @@ export default function ActivosComercialesNuevo() {
         )}
       </Tabs>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!canSave || saving || permiso.estado !== "ok"} size="lg">
-          {saving ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4 mr-2" />
+      {/*
+        Pie de navegación: avanzar entre pasos y guardar en el mismo sitio.
+
+        Antes solo había un botón "Guardar" al final del último paso, así que
+        para recorrer el formulario había que volver arriba a cambiar de
+        pestaña. Guardar sigue disponible en cualquier paso —no es un asistente
+        rígido— pero deja de ser la única acción visible al pie.
+      */}
+      <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-1 py-3 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setTab(pasos[pasoActual - 1].id)}
+            disabled={pasoActual === 0}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Anterior
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setTab(pasos[pasoActual + 1].id)}
+            disabled={pasoActual >= pasos.length - 1}
+          >
+            Siguiente
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+          <span className="ml-1 text-sm text-muted-foreground">
+            Paso {pasoActual + 1} de {pasos.length}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* El motivo por el que no se puede guardar, junto al botón que no
+              responde: un botón deshabilitado sin explicación se lee como falla. */}
+          {!canSave && (
+            <span className="text-sm text-muted-foreground">
+              Faltan {faltantes.length} dato{faltantes.length === 1 ? "" : "s"} obligatorio
+              {faltantes.length === 1 ? "" : "s"}
+            </span>
           )}
-          Guardar activo
-        </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!canSave || saving || permiso.estado !== "ok"}
+            size="lg"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            {isEdit ? "Guardar cambios" : "Guardar como borrador"}
+          </Button>
+        </div>
       </div>
     </div>
   );
