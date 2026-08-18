@@ -31,6 +31,14 @@ export interface ComisionPorEmailRow extends ComisionRow {
   detailed_status: ComisionDetailedStatus;
   /** Comisionista dueño de la fila (útil al consultar varios correos a la vez). */
   email_usuario?: string | null;
+  /**
+   * Naturaleza de la cuenta: se deriva de si la oferta trae producto. Opcional
+   * porque hay comisiones sin cuenta de cobranza detrás (p. ej. los referidos de
+   * embajadores), donde no aplica.
+   */
+  tipo?: 'Propiedad' | 'Producto' | 'Servicio';
+  /** Modelo de la unidad (vacío en cuentas de producto/servicio). */
+  modelo?: string;
 }
 
 export async function fetchComisionesPorEmail(email: string | string[]): Promise<ComisionPorEmailRow[]> {
@@ -87,8 +95,19 @@ export async function fetchComisionesPorEmail(email: string | string[]): Promise
           const emIds = [...new Set((props || []).map((p: any) => p.id_edificio_modelo).filter(Boolean))];
           const propToProject = new Map<number, string>();
 
+          const propToModelo = new Map<number, string>();
           if (emIds.length > 0) {
-            const { data: ems } = await (supabase as any).from('edificios_modelos').select('id, id_edificio').in('id', emIds);
+            const { data: ems } = await (supabase as any).from('edificios_modelos').select('id, id_edificio, id_modelo').in('id', emIds);
+            const mdIds = [...new Set((ems || []).map((em: any) => em.id_modelo).filter(Boolean))] as number[];
+            if (mdIds.length > 0) {
+              const { data: mds } = await (supabase as any).from('modelos').select('id, nombre').in('id', mdIds);
+              const mdMap = new Map((mds || []).map((m: any) => [m.id, m.nombre]));
+              const emToM = new Map((ems || []).map((em: any) => [em.id, em.id_modelo]));
+              (props || []).forEach((p: any) => {
+                const mId = emToM.get(p.id_edificio_modelo);
+                if (mId) propToModelo.set(p.id, (mdMap.get(mId) as string) || '');
+              });
+            }
             const edIds = [...new Set((ems || []).map((em: any) => em.id_edificio).filter(Boolean))];
             if (edIds.length > 0) {
               const { data: eds } = await (supabase as any).from('edificios').select('id, id_proyecto').in('id', edIds);
@@ -107,7 +126,13 @@ export async function fetchComisionesPorEmail(email: string | string[]): Promise
             }
           }
 
-          (props || []).forEach((p: any) => propMap.set(p.id, { ...p, proyecto: propToProject.get(p.id) || '' }));
+          (props || []).forEach((p: any) =>
+            propMap.set(p.id, {
+              ...p,
+              proyecto: propToProject.get(p.id) || '',
+              modelo: propToModelo.get(p.id) || '',
+            }),
+          );
         }
 
         (ofertas || []).forEach((o: any) => {
@@ -124,6 +149,7 @@ export async function fetchComisionesPorEmail(email: string | string[]): Promise
           ...c,
           propiedad: info?.numero_propiedad,
           proyecto: info?.proyecto,
+          modelo: info?.modelo || '',
           precio_final: c.precio_final,
           tipo: info?.tipoDerivado || 'Propiedad',
           productoNombre: info?.productoNombre || '',
@@ -193,6 +219,8 @@ export async function fetchComisionesPorEmail(email: string | string[]): Promise
       pagada: !!c.pagada,
       proyecto: cuenta?.proyecto || '',
       propiedad: cuenta?.propiedad || '',
+      modelo: cuenta?.modelo || '',
+      tipo: (cuenta?.tipo || 'Propiedad') as 'Propiedad' | 'Producto' | 'Servicio',
       productoNombre: cuenta?.productoNombre || '',
       precio_final: precioFinal,
       monto_comision: montoComision,

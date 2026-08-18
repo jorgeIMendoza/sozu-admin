@@ -1,25 +1,21 @@
-
-import { useState } from "react";
-import {
-  ArrowDownToLine,
-  Banknote,
-  CheckCircle2,
-  Clock,
-  FileCheck2,
-  Info,
-  Search,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Banknote, Info, Loader2, Search, Wallet } from "lucide-react";
 import { usePortal } from "@/lib/portal-personal/portal-store";
-import { mxn, selectores } from "@/lib/portal-personal/selectores";
-import type { EstatusGanancia, Ganancia } from "@/lib/portal-personal/tipos";
+import { mxn } from "@/lib/portal-personal/selectores";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePortalPersonalImpersonation } from "@/contexts/PortalPersonalImpersonationContext";
+import {
+  useComisionesPorEmail,
+  type ComisionPorEmailRow,
+} from "@/hooks/useComisionesPorEmail";
+import {
+  comisionEstatus,
+  COMISION_ESTATUS_LABEL,
+  type ComisionEstatus,
+} from "@/components/admin/comisiones/ComisionesTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -30,229 +26,309 @@ import {
 import { EstadoVacio } from "@/components/admin/portal-personal/comunes/Estados";
 import { cn } from "@/lib/utils";
 
+/**
+ * Mis ganancias — historial REAL de comisiones de la persona.
+ *
+ * Fuente: `comisionistas` filtrada por `email_usuario` (server-side), con el mismo
+ * waterfall cuenta → oferta → propiedad → modelo/proyecto que usa el Portal Agente
+ * (`useComisionesPorEmail`). Es el renglón de esta persona dentro de las Comisiones
+ * Internas de Alta Dirección: mismos porcentajes, mismos montos, mismo estatus.
+ *
+ * El monto es `precio_final × porcentaje_comision / 100`, la misma fórmula que
+ * `useComisionesInternas`.
+ *
+ * INVARIANTE de privacidad: solo el renglón de la persona. Nunca la comisión total
+ * de la cuenta ni el renglón de otro comisionista.
+ */
 
-const PASOS: { key: EstatusGanancia; label: string; icono: typeof Clock }[] = [
-  { key: "devengado", label: "Generado", icono: FileCheck2 },
-  { key: "en_revision", label: "En revisión", icono: Search },
-  { key: "aprobado", label: "Aprobado", icono: CheckCircle2 },
-  { key: "programado", label: "Programado", icono: Clock },
-  { key: "depositado", label: "Depositado", icono: Banknote },
-];
-
-const ETIQUETA: Record<EstatusGanancia, { l: string; c: string }> = {
-  devengado: { l: "Generado", c: "bg-secondary text-gris" },
-  en_revision: { l: "En revisión", c: "bg-ambar-claro text-negro" },
-  aprobado: { l: "Aprobado", c: "bg-verde-claro text-verde-oscuro" },
-  programado: { l: "Programado", c: "bg-verde-claro text-verde-oscuro" },
-  depositado: { l: "Depositado", c: "bg-verde text-background" },
+/** Paleta del portal para el estatus de pago (mismas etiquetas que el resto del sistema). */
+const ESTATUS_CLS: Record<ComisionEstatus, string> = {
+  pagada: "bg-verde text-background",
+  aprobado: "bg-verde-claro text-verde-oscuro",
+  en_revision: "bg-ambar-claro text-negro",
+  pendiente: "bg-secondary text-gris",
 };
+
+const ORDEN_ESTATUS: ComisionEstatus[] = ["pagada", "aprobado", "en_revision", "pendiente"];
+
+const pct = (v: number) =>
+  `${v.toLocaleString("es-MX", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}%`;
+
+const fecha = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 export default function GananciasPage() {
   const modo = usePortal((s) => s.modo_presentacion);
-  const usuario = usePortal((s) => s.usuario);
-  const referidos = usePortal((s) => s.referidos);
-  const [q, setQ] = useState("");
-  const [estatus, setEstatus] = useState("todos");
-  const [detalle, setDetalle] = useState<Ganancia | null>(null);
+  const { profile } = useAuth();
+  const { impersonatedUser, isImpersonating } = usePortalPersonalImpersonation();
+  const email = ((isImpersonating ? impersonatedUser?.email : profile?.email) ?? "").trim();
 
-  // SWAP POINT: supabase.ganancias
-  const ganancias = selectores.gananciasDelColaborador();
-  const lista = ganancias.filter((g) => {
-    const ref = referidos.find((r) => r.id === g.referido_id);
-    const dev = selectores.desarrolloPorId(g.desarrollo_id);
-    const texto = `${g.folio} ${ref?.nombre ?? ""} ${dev?.nombre ?? ""} ${g.unidad_label}`.toLowerCase();
-    return texto.includes(q.toLowerCase()) && (estatus === "todos" || g.estatus === estatus);
-  });
+  const { comisiones, isLoading } = useComisionesPorEmail(email || null);
+
+  const [q, setQ] = useState("");
+  const [estatus, setEstatus] = useState<"todos" | ComisionEstatus>("todos");
+  const [detalle, setDetalle] = useState<ComisionPorEmailRow | null>(null);
 
   const oculto = (v: string) => (modo ? "••••••" : v);
 
+  const filas = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return comisiones
+      .filter((c) => {
+        if (estatus !== "todos" && comisionEstatus(c.detailed_status) !== estatus) return false;
+        if (!t) return true;
+        const texto = `${c.cuenta_cobranza_label} ${c.tipo ?? ""} ${c.proyecto ?? ""} ${c.modelo ?? ""} ${c.propiedad ?? ""} ${c.productoNombre ?? ""}`;
+        return texto.toLowerCase().includes(t);
+      })
+      // Lo cobrado primero por antigüedad de pago; el resto por monto.
+      .sort((a, b) => b.monto_comision - a.monto_comision);
+  }, [comisiones, q, estatus]);
+
+  const totales = useMemo(() => {
+    let cobrado = 0;
+    let porCobrar = 0;
+    for (const c of comisiones) {
+      if (c.pagada) cobrado += c.monto_comision;
+      else porCobrar += c.monto_comision;
+    }
+    return { cobrado, porCobrar, total: cobrado + porCobrar };
+  }, [comisiones]);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="card-sozu p-5">
-          <p className="eyebrow text-gris">Ya cobrado</p>
-          <p className="num mt-2 text-3xl font-bold text-verde">
-            {oculto(mxn(selectores.yaCobrado()))}
-          </p>
-          <p className="mt-1 text-xs text-gris">Depositado en tu cuenta</p>
-        </div>
-        <div className="card-sozu p-5">
-          <p className="eyebrow text-gris">Por cobrar</p>
-          <p className="num mt-2 text-3xl font-bold text-negro">
-            {oculto(mxn(selectores.porCobrar()))}
-          </p>
-          <p className="mt-1 text-xs text-gris">Aprobado o en revisión</p>
-        </div>
-        <div className="card-sozu p-5">
-          <p className="eyebrow text-gris">Cuenta de depósito</p>
-          <p className="num mt-2 text-sm font-bold text-negro">
-            {modo ? "•••• ••••" : `${usuario.banco} ····${usuario.clabe.slice(-4)}`}
-          </p>
-          <p className="mt-1 text-xs text-gris">
-            {usuario.cuenta_bancaria_confirmada ? "Confirmada" : "Pendiente de confirmar"}
-          </p>
-        </div>
+        <Kpi
+          icono={Banknote}
+          etiqueta="Ya cobrado"
+          valor={oculto(mxn(totales.cobrado, 2))}
+          nota={`${comisiones.filter((c) => c.pagada).length} comisiones dispersadas`}
+          tono="verde"
+        />
+        <Kpi
+          icono={Wallet}
+          etiqueta="Por cobrar"
+          valor={oculto(mxn(totales.porCobrar, 2))}
+          nota={`${comisiones.filter((c) => !c.pagada).length} en proceso`}
+          tono="negro"
+        />
+        <Kpi
+          icono={Info}
+          etiqueta="Total histórico"
+          valor={oculto(mxn(totales.total, 2))}
+          nota={`${comisiones.length} comisiones en total`}
+          tono="negro"
+        />
       </div>
 
       <div className="flex items-start gap-3 rounded-xl border border-border bg-secondary p-4">
         <Info className="mt-0.5 size-4 shrink-0 text-gris" />
         <p className="text-sm text-negro">
-          Te mostramos <strong>lo que recibes en tu cuenta</strong>. El detalle de cálculo y
-          comprobantes fiscales llega por los canales oficiales de Nómina y Contabilidad.
+          Este es <strong>tu renglón</strong> de cada comisión: el porcentaje que se dispersó a tu
+          nombre y su monto. No incluye la comisión total de la venta ni la de otros
+          comisionistas. Los comprobantes fiscales llegan por los canales oficiales de Nómina y
+          Contabilidad.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gris" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por folio, referido o unidad..."
+            placeholder="Buscar por cuenta, proyecto, modelo o departamento..."
             className="h-11 bg-background pl-9"
           />
         </div>
-        <Select value={estatus} onValueChange={setEstatus}>
+        <Select value={estatus} onValueChange={(v) => setEstatus(v as typeof estatus)}>
           <SelectTrigger className="h-11 w-[200px] bg-background">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos los estatus</SelectItem>
-            {PASOS.map((p) => (
-              <SelectItem key={p.key} value={p.key}>
-                {ETIQUETA[p.key].l}
+            {ORDEN_ESTATUS.map((e) => (
+              <SelectItem key={e} value={e}>
+                {COMISION_ESTATUS_LABEL[e]}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button variant="outline" className="h-11">
-          <ArrowDownToLine className="size-4" />
-          Descargar estado de cuenta
-        </Button>
       </div>
 
-      {lista.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center gap-2 p-10 text-sm text-gris">
+          <Loader2 className="size-4 animate-spin" />
+          Cargando tus comisiones...
+        </div>
+      ) : comisiones.length === 0 ? (
         <EstadoVacio
-          titulo="Todavía no hay ganancias registradas"
-          descripcion="Cuando un negocio con tu referido llegue a la etapa de pago, aparecerá aquí."
+          icono={Banknote}
+          titulo="Aún no tienes comisiones registradas"
+          descripcion="Aquí aparecerá cada venta en la que participaste como comisionista interno, con el porcentaje y el monto que se dispersó a tu nombre."
+        />
+      ) : filas.length === 0 ? (
+        <EstadoVacio
+          icono={Search}
+          titulo="Sin resultados"
+          descripcion="Ninguna comisión coincide con la búsqueda o el estatus seleccionado."
         />
       ) : (
-        <div className="card-sozu overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                {["Folio", "Desarrollo · Unidad", "Referido", "Estatus", "Fecha", "Recibes", ""].map(
-                  (h) => (
-                    <th key={h} className="eyebrow whitespace-nowrap px-4 py-3 text-gris">
-                      {h}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {lista.map((g) => {
-                const dev = selectores.desarrolloPorId(g.desarrollo_id);
-                const ref = referidos.find((r) => r.id === g.referido_id);
-                return (
-                  <tr key={g.id} className="border-b border-border">
-                    <td className="num px-4 py-4 font-semibold text-negro">{g.folio}</td>
-                    <td className="px-4 py-4">
-                      <p className="font-bold text-negro">{dev?.nombre}</p>
-                      <p className="num text-gris">{g.unidad_label}</p>
-                    </td>
-                    <td className="px-4 py-4 text-negro">{oculto(ref?.nombre ?? "—")}</td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                          ETIQUETA[g.estatus].c,
-                        )}
-                      >
-                        {ETIQUETA[g.estatus].l}
-                      </span>
-                    </td>
-                    <td className="num px-4 py-4 text-gris">{g.fecha_pago}</td>
-                    <td className="num px-4 py-4 text-base font-bold text-verde">
-                      {oculto(mxn(g.neto))}
-                    </td>
-                    <td className="px-4 py-4">
-                      <Button variant="ghost" size="sm" onClick={() => setDetalle(g)}>
-                        Ver
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="card-sozu overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-secondary/60">
+                <tr>
+                  <Th>ID Cuenta</Th>
+                  <Th>Tipo</Th>
+                  <Th>Proyecto</Th>
+                  <Th>Modelo</Th>
+                  <Th>No. Departamento</Th>
+                  <Th alineado="derecha">Precio final de venta</Th>
+                  <Th alineado="derecha">% comisión</Th>
+                  <Th alineado="derecha">Monto comisión</Th>
+                  <Th>Estatus Pago</Th>
+                  <Th alineado="centro">Acción</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((c, i) => {
+                  const e = comisionEstatus(c.detailed_status);
+                  return (
+                    <tr
+                      key={`${c.id_cuenta_cobranza}-${i}`}
+                      className="border-b border-border last:border-0 hover:bg-secondary/40"
+                    >
+                      <Td>
+                        <span className="num font-semibold text-negro">{c.cuenta_cobranza_label}</span>
+                      </Td>
+                      <Td>{c.tipo ?? "—"}</Td>
+                      <Td>{c.proyecto || "—"}</Td>
+                      <Td>{c.modelo || "—"}</Td>
+                      <Td>
+                        <span className="num">
+                          {c.propiedad || c.productoNombre || "—"}
+                        </span>
+                      </Td>
+                      <Td alineado="derecha">
+                        <span className="num">{oculto(mxn(c.precio_final, 2))}</span>
+                      </Td>
+                      <Td alineado="derecha">
+                        <span className="num">{pct(c.porcentaje_comision)}</span>
+                      </Td>
+                      <Td alineado="derecha">
+                        <span className="num font-bold text-verde">
+                          {oculto(mxn(c.monto_comision, 2))}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span
+                          className={cn(
+                            "inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold",
+                            ESTATUS_CLS[e],
+                          )}
+                        >
+                          {COMISION_ESTATUS_LABEL[e]}
+                        </span>
+                      </Td>
+                      <Td alineado="centro">
+                        <Button variant="outline" size="sm" onClick={() => setDetalle(c)}>
+                          Ver detalle
+                        </Button>
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-4">
+            <p className="text-xs text-gris">
+              {filas.length} de {comisiones.length} comisiones
+            </p>
+            <p className="num text-sm font-bold text-negro">
+              Suma mostrada:{" "}
+              <span className="text-verde">
+                {oculto(mxn(filas.reduce((a, c) => a + c.monto_comision, 0), 2))}
+              </span>
+            </p>
+          </div>
         </div>
       )}
 
-      <Dialog open={detalle !== null} onOpenChange={(v) => !v && setDetalle(null)}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={!!detalle} onOpenChange={(v) => !v && setDetalle(null)}>
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Comisión · {detalle?.cuenta_cobranza_label}
+            </DialogTitle>
+          </DialogHeader>
           {detalle && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Pago {detalle.folio}</DialogTitle>
-              </DialogHeader>
-
-              <div className="rounded-xl bg-verde-claro p-5 text-center">
-                <p className="eyebrow text-verde-oscuro">Recibes en tu cuenta</p>
-                <p className="num mt-1 text-4xl font-bold text-verde-oscuro">
-                  {oculto(mxn(detalle.neto))}
+            <div className="space-y-4">
+              <div className="rounded-xl bg-verde-claro p-4">
+                <p className="eyebrow text-gris">Monto dispersado a tu nombre</p>
+                <p className="num mt-1 text-3xl font-bold text-verde">
+                  {oculto(mxn(detalle.monto_comision, 2))}
                 </p>
-                <p className="num mt-1 text-xs text-verde-oscuro">{detalle.fecha_pago}</p>
+                <p className="num mt-1 text-xs text-gris">
+                  {pct(detalle.porcentaje_comision)} sobre {oculto(mxn(detalle.precio_final, 2))}
+                </p>
               </div>
 
-              <ol className="mt-4 space-y-3">
-                {PASOS.map((p, i) => {
-                  const idx = PASOS.findIndex((x) => x.key === detalle.estatus);
-                  const alcanzado = i <= idx;
-                  const Icon = p.icono;
-                  return (
-                    <li key={p.key} className="flex items-center gap-3">
-                      <span
-                        className={cn(
-                          "flex size-8 items-center justify-center rounded-full border",
-                          alcanzado
-                            ? "border-verde bg-verde-claro text-verde-oscuro"
-                            : "border-border bg-secondary text-gris",
-                        )}
-                      >
-                        <Icon className="size-4" />
-                      </span>
-                      <span
-                        className={cn(
-                          "text-sm font-semibold",
-                          alcanzado ? "text-negro" : "text-gris",
-                        )}
-                      >
-                        {p.label}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-
-              <div className="mt-4 space-y-2 rounded-xl bg-secondary p-4 text-sm">
-                <Dato label="Desarrollo" valor={selectores.desarrolloPorId(detalle.desarrollo_id)?.nombre ?? "—"} />
-                <Dato label="Unidad" valor={detalle.unidad_label} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Dato label="Tipo de cuenta" valor={detalle.tipo ?? "—"} />
+                <Dato label="Proyecto" valor={detalle.proyecto || "—"} />
+                <Dato label="Modelo" valor={detalle.modelo || "—"} />
                 <Dato
-                  label="Referido"
-                  valor={oculto(
-                    referidos.find((r) => r.id === detalle.referido_id)?.nombre ?? "—",
-                  )}
+                  label="No. Departamento"
+                  valor={String(detalle.propiedad || detalle.productoNombre || "—")}
                 />
-                <Dato label="Compradores en la operación" valor={String(detalle.compradores)} />
-                <Dato label="Cuenta de depósito" valor={modo ? "••••" : `····${usuario.clabe.slice(-4)}`} />
+                <Dato
+                  label="Precio final de venta"
+                  valor={oculto(mxn(detalle.precio_final, 2))}
+                />
+                <Dato
+                  label="Estatus de pago"
+                  valor={COMISION_ESTATUS_LABEL[comisionEstatus(detalle.detailed_status)]}
+                />
+                <Dato label="Fecha de pago" valor={detalle.pagada ? fecha(detalle.fecha_pago) : "—"} />
+                <Dato label="Aprobada" valor={detalle.aprobada ? "Sí" : "No"} />
               </div>
 
-              <p className="mt-3 text-xs text-gris">
-                El depósito se concilia contra el comprobante bancario. Si la fecha cambia, te
-                avisamos en esta misma pantalla.
-              </p>
-            </>
+              {detalle.clientes.length > 0 && (
+                <div>
+                  <p className="eyebrow text-gris">Cliente(s) de la cuenta</p>
+                  <ul className="mt-2 space-y-1">
+                    {detalle.clientes.map((cl, i) => (
+                      <li key={`${cl.email}-${i}`} className="text-sm text-negro">
+                        {oculto(cl.nombre || cl.email || "Sin nombre")}
+                        {cl.porcentaje ? (
+                          <span className="num text-gris"> · {cl.porcentaje}% copropiedad</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {(detalle.url_evidencia_pago || detalle.factura_url) && (
+                <div className="flex flex-wrap gap-2">
+                  {detalle.url_evidencia_pago && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={detalle.url_evidencia_pago} target="_blank" rel="noreferrer">
+                        Ver comprobante de pago
+                      </a>
+                    </Button>
+                  )}
+                  {detalle.factura_url && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={detalle.factura_url} target="_blank" rel="noreferrer">
+                        Ver factura
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -260,11 +336,79 @@ export default function GananciasPage() {
   );
 }
 
+function Kpi({
+  icono: Icono,
+  etiqueta,
+  valor,
+  nota,
+  tono,
+}: {
+  icono: typeof Banknote;
+  etiqueta: string;
+  valor: string;
+  nota: string;
+  tono: "verde" | "negro";
+}) {
+  return (
+    <div className="card-sozu p-5">
+      <div className="flex items-center gap-2">
+        <Icono className="size-4 text-gris" />
+        <p className="eyebrow text-gris">{etiqueta}</p>
+      </div>
+      <p className={cn("num mt-2 text-3xl font-bold", tono === "verde" ? "text-verde" : "text-negro")}>
+        {valor}
+      </p>
+      <p className="mt-1 text-xs text-gris">{nota}</p>
+    </div>
+  );
+}
+
+function Th({
+  children,
+  alineado = "izquierda",
+}: {
+  children: React.ReactNode;
+  alineado?: "izquierda" | "derecha" | "centro";
+}) {
+  return (
+    <th
+      className={cn(
+        "whitespace-nowrap px-4 py-3 text-xs font-bold uppercase tracking-wide text-gris",
+        alineado === "derecha" && "text-right",
+        alineado === "centro" && "text-center",
+        alineado === "izquierda" && "text-left",
+      )}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+  alineado = "izquierda",
+}: {
+  children: React.ReactNode;
+  alineado?: "izquierda" | "derecha" | "centro";
+}) {
+  return (
+    <td
+      className={cn(
+        "whitespace-nowrap px-4 py-3 text-negro",
+        alineado === "derecha" && "text-right",
+        alineado === "centro" && "text-center",
+      )}
+    >
+      {children}
+    </td>
+  );
+}
+
 function Dato({ label, valor }: { label: string; valor: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-gris">{label}</span>
-      <span className="num font-semibold text-negro">{valor}</span>
+    <div>
+      <p className="eyebrow text-gris">{label}</p>
+      <p className="num mt-1 font-semibold text-negro">{valor}</p>
     </div>
   );
 }
