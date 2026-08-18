@@ -29,6 +29,7 @@ import type { PagoRecord } from '@/hooks/useRelacionPagos';
 import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
 import { CuentaDetallePropiedad } from './CuentaDetallePropiedad';
 import { CuentaDetalleProducto } from './CuentaDetalleProducto';
+import { difiereEnDinero, sumarDinero } from '@/utils/dinero';
 
 // ── fetch ───────────────────────────────────────────────────────────────────────
 
@@ -657,12 +658,15 @@ export default function CobranzaCuentaDetalle() {
   // El precio de contrato es la fuente de verdad y la suma de acuerdos debe seguirlo.
   // Las cuentas hijas de mantenimiento llevan precio_final = 0 por diseño (su plan es
   // recurrente, no se compara contra un precio): ahí el banner sería un falso positivo.
-  const hayDiscrepancia = precio_final > 0 && Math.abs(precio_final - sumaAcuerdos) > 0.01;
+  const hayDiscrepancia = precio_final > 0 && difiereEnDinero(precio_final, sumaAcuerdos);
   // Discrepancia dinero-recibido vs dinero-dispersado: si hay pagos crudos cuyo
   // monto no está aplicado en aplicaciones_pago (ej. pago manual sin dispersar),
   // se ofrece "Recalcular dispersión" (edge function recalcular-aplicaciones).
-  const sumaPagosReales = pagos.reduce((s: number, p: any) => s + (p.monto ?? 0), 0);
-  const hayDiscrepanciaAplicaciones = pagos.length > 0 && Math.abs(sumaPagosReales - totalAplicacionesAll) > 0.01;
+  // Comparación en centavos enteros: el residuo de un centavo es dinero real que
+  // falta dispersar, no ruido de flotante. Con `> 0.01` sobre floats este banner se
+  // quedaba encendido para siempre (CC-000847) — ver utils/dinero.ts.
+  const sumaPagosReales = sumarDinero(pagos, (p: any) => p.monto);
+  const hayDiscrepanciaAplicaciones = pagos.length > 0 && difiereEnDinero(sumaPagosReales, totalAplicacionesAll);
   const ultimoPagoSTP = pagos.find((p: any) => p.clave_rastreo) ?? null;
   const selectedPago = pagos.find((p: any) => p.id === selectedPagoId) ?? null;
 

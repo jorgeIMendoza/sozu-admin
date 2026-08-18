@@ -158,6 +158,7 @@ import { mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } fr
 import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
+import { aCentavos, diferenciaDinero, difiereEnDinero, sumarDinero } from "@/utils/dinero";
 
 // Documents view component (lectura + subida de documentos de la cuenta)
 function ReadOnlyDocumentsView({
@@ -2189,23 +2190,24 @@ export default function DetalleCuentaCobranza() {
   // El precio de contrato es la fuente de verdad y la suma de acuerdos debe seguirlo. Las
   // cuentas hijas de mantenimiento llevan precio_final = 0 por diseño (plan recurrente, sin
   // precio contra el que comparar): ahí el banner sería un falso positivo.
-  const discrepanciaAcuerdos = (cuentaDetalle?.precio_final || 0) - totalAcuerdos;
+  const discrepanciaAcuerdos = diferenciaDinero(cuentaDetalle?.precio_final || 0, totalAcuerdos);
   const hayDiscrepancia = !!acuerdosPago && acuerdosPago.length > 0
     && (cuentaDetalle?.precio_final || 0) > 0
-    && Math.abs(discrepanciaAcuerdos) > 0.01;
+    && difiereEnDinero(cuentaDetalle?.precio_final || 0, totalAcuerdos);
 
   // Calcular diferencia real y detectar sobrepagos - AHORA USANDO PAGOS REALES
-  const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagadoReal;
-  const haySobrepago = diferenciaReal < -0.01; // Tolerancia para errores de punto flotante
+  const diferenciaReal = diferenciaDinero(cuentaDetalle?.precio_final || 0, totalPagadoReal);
+  const haySobrepago = aCentavos(diferenciaReal) < 0; // en centavos: sin ruido de punto flotante
   const montoSobrepago = haySobrepago ? Math.abs(diferenciaReal) : 0;
   const totalPendiente = Math.max(0, diferenciaReal);
 
   // Detectar discrepancia entre pagos reales y aplicaciones (para mostrar botón recalcular)
   // Solo calcular cuando TODAS las queries relacionadas estén completamente cargadas para evitar falsos positivos
   const isLoadingPaymentData = !pagos || aplicacionesPorPagoLoading || acuerdosLoading || !acuerdosPago;
-  const totalAplicaciones = aplicacionesPorPago?.reduce((sum, app) => sum + (app.monto || 0), 0) || 0;
-  const discrepanciaPagosVsAplicaciones = totalPagadoReal - totalAplicaciones;
-  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0 && Math.abs(discrepanciaPagosVsAplicaciones) > 0.01;
+  const totalAplicaciones = sumarDinero(aplicacionesPorPago, (app) => app.monto);
+  const discrepanciaPagosVsAplicaciones = diferenciaDinero(totalPagadoReal, totalAplicaciones);
+  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0
+    && difiereEnDinero(totalPagadoReal, totalAplicaciones);
 
   // Calculate pending balance breakdown (only for properties)
   const pendingBalanceBreakdown = cuentaDetalle?.tipo_cuenta === 'Propiedad' && acuerdosPago ? (() => {
@@ -2722,9 +2724,9 @@ export default function DetalleCuentaCobranza() {
       return null;
     }
 
-    const totalPagos = pagosData.reduce((sum, p) => sum + Number(p.monto), 0);
-    const totalAplicado = aplicacionesData.reduce((sum, a) => sum + Number(a.monto), 0);
-    return Math.abs(totalPagos - totalAplicado) > 0.01;
+    const totalPagos = sumarDinero(pagosData, (p) => p.monto);
+    const totalAplicado = sumarDinero(aplicacionesData, (a) => a.monto);
+    return difiereEnDinero(totalPagos, totalAplicado);
   };
 
   // Webhook n8n que redistribuye las aplicaciones tras un ajuste. fetch solo lanza en
