@@ -30,6 +30,7 @@ import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
 import { CuentaDetallePropiedad } from './CuentaDetallePropiedad';
 import { CuentaDetalleProducto } from './CuentaDetalleProducto';
 import { difiereEnDinero, sumarDinero } from '@/utils/dinero';
+import { calcularDesgloseDescuento } from '@/utils/descuentoEsquema';
 
 // ── fetch ───────────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,32 @@ export default function CobranzaCuentaDetalle() {
       const { data: per } = await (supabase as any)
         .from('personas').select('nombre_legal').eq('id', personaId).maybeSingle();
       return per?.nombre_legal ?? null;
+    },
+  });
+
+  // El descuento del esquema tampoco viene en la RPC: se lee directo de la oferta.
+  // `porcentaje_descuento_aumento` es negativo cuando hay descuento y ya está
+  // aplicado dentro de precio_final.
+  const { data: pctDescuentoEsquema = null } = useQuery({
+    queryKey: ['cobranza-cuenta-descuento-esquema', data?.ofertaId],
+    enabled: !!data?.ofertaId,
+    staleTime: 60_000,
+    queryFn: async (): Promise<number | null> => {
+      const { data: of } = await (supabase as any)
+        .from('ofertas')
+        .select('id_esquema_pago_seleccionado')
+        .eq('id', data?.ofertaId)
+        .maybeSingle();
+      const esqId = of?.id_esquema_pago_seleccionado;
+      if (!esqId) return null;
+      const { data: esq } = await (supabase as any)
+        .from('esquemas_pago')
+        .select('porcentaje_descuento_aumento')
+        .eq('id', esqId)
+        .maybeSingle();
+      return esq?.porcentaje_descuento_aumento != null
+        ? Number(esq.porcentaje_descuento_aumento)
+        : null;
     },
   });
 
@@ -651,6 +678,9 @@ export default function CobranzaCuentaDetalle() {
   );
   const esquemaNombreDisplay = esquemaNombre ? (planIsModified ? `${esquemaNombre} modificado` : esquemaNombre) : null;
 
+  // Desglose del descuento (lista → descuento → final). Null si no hay descuento.
+  const desgloseDescuento = calcularDesgloseDescuento(precio_final, pctDescuentoEsquema);
+
   const isEnDemanda = estatusPropiedad?.toLowerCase().includes('demanda');
   const porcentajePagado = precio_final > 0 ? Math.min(100, (totalPagado / precio_final) * 100) : 0;
 
@@ -757,7 +787,7 @@ export default function CobranzaCuentaDetalle() {
     cuentaId, clabe_stp, precio_final, fecha_compra, valor_uma, activo,
     esMantenimiento, clienteNombre, compradores, agente,
     ofertaId, ofertaProductoId, propiedadId,
-    esquemaNombre, esquemaPct,
+    esquemaNombre, esquemaPct, desgloseDescuento,
     proyectoNombre, edificioNombre, modeloNombre, numero_propiedad, productoNombre, tipo,
     m2Interiores, m2Exteriores, precioM2, estatusPropiedad,
     totalPagado, saldoPendiente, montoVencido, parcialidadesVencidas, pagadoEfectivo,

@@ -106,6 +106,8 @@ interface CuentaDetalle {
   collection_id?: number | null;
   metraje?: number;
   precio_por_m2?: number;
+  /** `esquemas_pago.porcentaje_descuento_aumento` del esquema de la oferta (negativo = descuento). */
+  porcentaje_descuento_aumento?: number | null;
   detalles_producto?: {
     nombre?: string;
     ubicacion?: string;
@@ -159,6 +161,7 @@ import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
 import { aCentavos, diferenciaDinero, difiereEnDinero, sumarDinero } from "@/utils/dinero";
+import { calcularDesgloseDescuento, formatPorcentajeDescuento } from "@/utils/descuentoEsquema";
 
 // Documents view component (lectura + subida de documentos de la cuenta)
 function ReadOnlyDocumentsView({
@@ -693,6 +696,9 @@ export default function DetalleCuentaCobranza() {
           id,
           id_esquema_pago_seleccionado,
           id_producto,
+          esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
+            porcentaje_descuento_aumento
+          ),
           propiedades!ofertas_id_propiedad_fkey(
             id,
             numero_propiedad,
@@ -861,6 +867,8 @@ export default function DetalleCuentaCobranza() {
         id_propiedad: oferta?.propiedades?.id || undefined,
         metraje,
         precio_por_m2,
+        porcentaje_descuento_aumento:
+          (oferta as any)?.esquemas_pago?.porcentaje_descuento_aumento ?? null,
         detalles_producto: detallesProducto,
         monto_cobro_cancelacion: cuenta.monto_cobro_cancelacion || undefined,
         id_tipo_cancelacion: cuenta.id_tipo_cancelacion || undefined,
@@ -3081,6 +3089,13 @@ export default function DetalleCuentaCobranza() {
   }
 
   const esCuentaCancelada = !cuentaDetalle?.activo;
+
+  // Descuento del esquema de la oferta (si existe): el precio_final ya lo trae
+  // aplicado, así que la base se deriva de él para que el desglose cuadre.
+  const desgloseDescuento = calcularDesgloseDescuento(
+    cuentaDetalle?.precio_final,
+    cuentaDetalle?.porcentaje_descuento_aumento,
+  );
   
   // Check if property status is "Entregado" (id=8) - makes everything read-only
   const isReadOnly = cuentaDetalle?.id_estatus_disponibilidad === 8;
@@ -3581,6 +3596,16 @@ export default function DetalleCuentaCobranza() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(cuentaDetalle.precio_final)}</div>
+            {desgloseDescuento && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground line-through">
+                  {formatCurrency(desgloseDescuento.precioLista)}
+                </span>
+                <span className="rounded-full bg-success/10 px-1.5 py-0.5 text-[11px] font-semibold text-success">
+                  −{formatPorcentajeDescuento(desgloseDescuento.porcentaje)}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -4066,6 +4091,27 @@ export default function DetalleCuentaCobranza() {
                     </button>
                   </div>
                 )}
+              </>
+            )}
+
+            {/* Descuento del esquema — aplica igual a propiedades y a productos */}
+            {desgloseDescuento && (
+              <>
+                <div>
+                  <label className="text-sm font-medium">Precio de lista</label>
+                  <p className="text-sm text-muted-foreground line-through">
+                    {formatCurrency(desgloseDescuento.precioLista)}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Descuento</label>
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+                    <span className="rounded-full bg-success/10 px-1.5 py-0.5 text-[11px] font-semibold">
+                      −{formatPorcentajeDescuento(desgloseDescuento.porcentaje)}
+                    </span>
+                    −{formatCurrency(desgloseDescuento.montoDescuento)}
+                  </p>
+                </div>
               </>
             )}
           </div>
