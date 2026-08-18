@@ -80,6 +80,9 @@ type SelectedItem =
    ────────────────────────────────────────────────────────── */
 
 const PAGE_SIZE = 50;
+/** Factor de IVA (16%) para mostrar los montos de comisión de externos con
+ *  impuestos incluidos (la comisión del externo siempre se factura + IVA). */
+const IVA_MULT = 1.16;
 type SortDir = "asc" | "desc";
 
 function Antiguedad({ dias, umbral }: { dias: number; umbral: number }) {
@@ -520,7 +523,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const externosVisibleCount = externosVisible.length;
   const externosTotalPages = Math.max(1, Math.ceil(externosVisibleCount / PAGE_SIZE));
   const externosMonto = useMemo(
-    () => externosFiltrados.reduce((s, r) => s + r.monto_comision, 0),
+    () => externosFiltrados.reduce((s, r) => s + r.monto_comision * IVA_MULT, 0),
     [externosFiltrados],
   );
 
@@ -548,7 +551,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
   const aprobarExternosVisibleCount = aprobarExternosVisible.length;
   const aprobarExternosTotalPages = Math.max(1, Math.ceil(aprobarExternosVisibleCount / PAGE_SIZE));
   const aprobarExternosMonto = useMemo(
-    () => aprobarExternosAll.reduce((s, r) => s + r.monto_comision, 0),
+    () => aprobarExternosAll.reduce((s, r) => s + r.monto_comision * IVA_MULT, 0),
     [aprobarExternosAll],
   );
 
@@ -968,9 +971,9 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                           {p.porcentaje_comision.toFixed(2)}%
                         </TableCell>
                         <TableCell className="text-sm text-right font-semibold tabular-nums">
-                          {fmtMxn(p.monto_comision)}
+                          {fmtMxn(p.monto_comision * IVA_MULT)}
                           <span className="block text-[9px] text-muted-foreground font-normal">
-                            + IVA
+                            IVA incluido
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1224,7 +1227,10 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                             {p.porcentaje_comision.toFixed(2)}%
                           </TableCell>
                           <TableCell className="text-sm text-right font-semibold tabular-nums">
-                            {fmtMxn(p.monto_comision)}
+                            {fmtMxn(p.monto_comision * IVA_MULT)}
+                            <span className="block text-[9px] text-muted-foreground font-normal">
+                              IVA incluido
+                            </span>
                           </TableCell>
                           <TableCell>
                             <Antiguedad dias={p.dias_desde_devengo} umbral={5} />
@@ -1540,7 +1546,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
                     ? "Aliado comercial"
                     : "Agente externo",
             venta_ref: formatCuentaFolio(p),
-            monto: p.monto_comision,
+            monto: p.monto_comision * IVA_MULT,
             clabe_destino: "—",
             dias_desde_autorizacion: p.dias_desde_devengo,
             id_cuenta_cobranza: p.id_cuenta_cobranza,
@@ -1555,7 +1561,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
             propiedad: propiedadLabel,
             cliente: p.beneficiario_nombre,
             precio_venta: p.precio_final,
-            comision_total_sozu: p.monto_comision,
+            comision_total_sozu: p.monto_comision * IVA_MULT,
             porcentaje_comision: p.porcentaje_comision,
             estado_venta: "Vendida" as const,
             dias_desde_apartado: p.dias_desde_devengo,
@@ -1584,7 +1590,7 @@ export default function PortalAdministracionBandejaEjecucionPage() {
             propiedad: propiedadLabel,
             cliente: p.beneficiario_nombre,
             precio_venta: p.precio_final,
-            comision_total_sozu: p.monto_comision,
+            comision_total_sozu: p.monto_comision * IVA_MULT,
             porcentaje_comision: p.porcentaje_comision,
             estado_venta: "Vendida" as const,
             dias_desde_apartado: p.dias_desde_devengo,

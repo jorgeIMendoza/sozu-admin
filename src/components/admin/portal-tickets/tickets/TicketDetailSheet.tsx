@@ -27,6 +27,7 @@ import { ProyectoSelect } from "./ProyectoSelect";
 import { PropietariosPicker } from "./PropietariosPicker";
 import { EvidenciaSection } from "./TicketEvidencia";
 import { VoiceRecorderButton } from "./VoiceRecorder";
+import { TicketChatInterno } from "./TicketChatInterno";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -251,6 +252,12 @@ export function TicketDetailSheet({
           <Separator />
 
           <EvidenciaSection ticketId={ticket.id} canDelete={isSuperAdmin} readOnly={readOnly} />
+
+          <Separator />
+
+          <Section titulo="Chat interno">
+            <TicketChatInterno ticket={ticket} />
+          </Section>
 
           <Separator />
 
