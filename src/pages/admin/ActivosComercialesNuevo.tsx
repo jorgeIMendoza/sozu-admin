@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Save } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { CampoMoneda } from "@/components/admin/CampoMoneda";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -109,6 +112,156 @@ function CatalogSelect({
   );
 }
 
+/**
+ * Ubicación del activo dentro del inventario: Proyecto → Edificio → Modelo.
+ *
+ * `propiedades.id_edificio_modelo` es NOT NULL y no tiene default, así que sin
+ * esta terna el alta se rechaza en la base. Además es la única vía para saber a
+ * qué proyecto pertenece una propiedad — el resto del sistema deriva el proyecto
+ * recorriendo `edificios_modelos → edificios → proyectos`—, y los 95 activos
+ * comerciales que ya existen están vinculados así.
+ *
+ * Waterfall explícito (patrón #1 de CLAUDE.md): el join anidado de PostgREST
+ * sobre tres niveles devuelve null sin error.
+ */
+/**
+ * Agrupa campos bajo un título con su explicación.
+ *
+ * El paso General tenía quince campos seguidos en una rejilla de tres: la
+ * ubicación en el inventario, la identificación, las medidas, el precio y los
+ * datos del inmueble, todos con el mismo peso visual. Separarlos permite
+ * localizar un dato sin leerlos todos.
+ */
+function Seccion({
+  titulo,
+  descripcion,
+  children,
+}: {
+  titulo: string;
+  descripcion?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{titulo}</h3>
+        {descripcion && (
+          <p className="text-xs text-muted-foreground">{descripcion}</p>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">{children}</div>
+    </section>
+  );
+}
+
+function UbicacionInventario({
+  idEdificioModelo,
+  onChange,
+  disabled,
+}: {
+  idEdificioModelo: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [idProyecto, setIdProyecto] = useState<string>("");
+  const [idEdificio, setIdEdificio] = useState<string>("");
+
+  const { data: proyectos = [], isLoading: cargandoProyectos } = useQuery({
+    queryKey: ["ac-proyectos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("proyectos").select("id, nombre").eq("activo", true).order("nombre");
+      if (error) throw error;
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const { data: edificios = [] } = useQuery({
+    queryKey: ["ac-edificios", idProyecto],
+    enabled: !!idProyecto,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("edificios").select("id, nombre")
+        .eq("id_proyecto", Number(idProyecto)).eq("activo", true).order("nombre");
+      if (error) throw error;
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const { data: modelos = [] } = useQuery({
+    queryKey: ["ac-modelos", idEdificio],
+    enabled: !!idEdificio,
+    queryFn: async () => {
+      const { data: vinculos, error } = await (supabase as any)
+        .from("edificios_modelos").select("id, id_modelo")
+        .eq("id_edificio", Number(idEdificio)).eq("activo", true);
+      if (error) throw error;
+      const ids = (vinculos ?? []).map((v: any) => v.id_modelo);
+      if (!ids.length) return [] as { id: number; nombre: string }[];
+      const { data: mods } = await (supabase as any)
+        .from("modelos").select("id, nombre").in("id", ids).order("nombre");
+      const nombre = new Map((mods ?? []).map((m: any) => [m.id, m.nombre]));
+      // El valor guardado es el id del VÍNCULO edificio×modelo, no el del modelo.
+      return (vinculos ?? [])
+        .map((v: any) => ({ id: v.id as number, nombre: (nombre.get(v.id_modelo) as string) ?? `Modelo ${v.id_modelo}` }))
+        .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
+    },
+  });
+
+  return (
+    <>
+      <Field label="Proyecto *">
+        <Select
+          value={idProyecto || undefined}
+          onValueChange={(v) => { setIdProyecto(v); setIdEdificio(""); onChange(""); }}
+          disabled={disabled}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={cargandoProyectos ? "Cargando…" : "Selecciona el proyecto"} />
+          </SelectTrigger>
+          <SelectContent>
+            {proyectos.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Edificio *">
+        <Select
+          value={idEdificio || undefined}
+          onValueChange={(v) => { setIdEdificio(v); onChange(""); }}
+          disabled={disabled || !idProyecto}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={idProyecto ? "Selecciona el edificio" : "Elige un proyecto primero"} />
+          </SelectTrigger>
+          <SelectContent>
+            {edificios.map((e) => (
+              <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Modelo *">
+        <Select
+          value={idEdificioModelo || undefined}
+          onValueChange={onChange}
+          disabled={disabled || !idEdificio}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={idEdificio ? "Selecciona el modelo" : "Elige un edificio primero"} />
+          </SelectTrigger>
+          <SelectContent>
+            {modelos.map((m: any) => (
+              <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    </>
+  );
+}
+
 export default function ActivosComercialesNuevo() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -119,9 +272,32 @@ export default function ActivosComercialesNuevo() {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(!isEdit);
 
+  /**
+   * Lo único que se exige para capturar es una sesión activa.
+   *
+   * Dar de alta ya no está reservado a Super Administrador: cualquiera con
+   * acceso al menú puede capturar, el activo nace en BORRADOR y solo un Super
+   * Administrador lo aprueba para publicarlo. El control se movió de la
+   * captura a la publicación.
+   */
+  const [permiso, setPermiso] = useState<
+    { estado: "verificando" } | { estado: "ok" } | { estado: "sin_sesion" }
+  >({ estado: "verificando" });
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (cancel) return;
+      setPermiso(auth?.user ? { estado: "ok" } : { estado: "sin_sesion" });
+    })();
+    return () => { cancel = true; };
+  }, []);
+
   const [prop, setProp] = useState<Dict>({
     id_tipo_propiedad: "11",
     id_tipo_transaccion: "1",
+    id_edificio_modelo: "",
     numero_propiedad: "",
     numero_piso: "",
     m2_interiores: "",
@@ -222,14 +398,48 @@ export default function ActivosComercialesNuevo() {
   const setV = (k: string, v: any) => setVenta((p) => ({ ...p, [k]: v }));
   const setR = (k: string, v: any) => setRenta((p) => ({ ...p, [k]: v }));
 
-  const canSave = useMemo(
-    () =>
-      !!prop.id_tipo_propiedad &&
-      !!prop.id_tipo_transaccion &&
-      (!showVenta || Number(prop.precio_lista) > 0) &&
-      (!showRenta || Number(renta.renta_mensual) > 0),
-    [prop, renta, showVenta, showRenta],
-  );
+  /**
+   * Qué falta para poder guardar, en los mismos términos que exige la base y
+   * sabiendo en qué paso vive cada dato.
+   *
+   * El paso no es decorativo: es lo que permite llevar al usuario al campo que
+   * falta. Una lista de nombres sueltos, en un formulario de cinco pasos y casi
+   * noventa campos, obliga a buscarlos a mano.
+   */
+  const faltantes = useMemo(() => {
+    const f: { campo: string; paso: string }[] = [];
+    const falta = (campo: string, paso: string) => f.push({ campo, paso });
+
+    if (!isEdit && !prop.id_edificio_modelo) falta("Proyecto, Edificio y Modelo", "general");
+    if (!prop.id_tipo_propiedad) falta("Tipo de activo", "general");
+    if (!prop.id_tipo_transaccion) falta("Transacción", "general");
+    if (!String(prop.numero_propiedad ?? "").trim()) falta("Número / Clave interna", "general");
+    if (showVenta && !(Number(prop.precio_lista) > 0)) falta("Precio de lista", "general");
+    if (showRenta && !(Number(renta.renta_mensual) > 0)) falta("Renta mensual", "renta");
+    return f;
+  }, [prop, renta, showVenta, showRenta, isEdit]);
+
+  const canSave = faltantes.length === 0;
+
+  /** Faltantes de un paso, para marcarlo en la barra de progreso. */
+  const faltantesDe = (paso: string) => faltantes.filter((x) => x.paso === paso).length;
+
+  /**
+   * Los pasos del alta, en orden. Se derivan del tipo de transacción: un activo
+   * solo en venta no debe mostrar el paso de renta ni exigirlo.
+   */
+  const pasos = useMemo(() => {
+    const p = [
+      { id: "general",   titulo: "General",    obligatorio: true },
+      { id: "ubicacion", titulo: "Ubicación",  obligatorio: false },
+      { id: "atributos", titulo: `Atributos · ${TIPOS.find((t) => t.id === tipo)?.label ?? "-"}`, obligatorio: false },
+    ];
+    if (showVenta) p.push({ id: "venta", titulo: "Venta", obligatorio: false });
+    if (showRenta) p.push({ id: "renta", titulo: "Renta", obligatorio: true });
+    return p;
+  }, [tipo, showVenta, showRenta]);
+
+  const pasoActual = Math.max(0, pasos.findIndex((p) => p.id === tab));
 
   async function handleSave() {
     setSaving(true);
@@ -256,9 +466,19 @@ export default function ActivosComercialesNuevo() {
       navigate(`/admin/activos-comerciales/${data}/editar`);
     } catch (e: any) {
       console.error(e);
+      // `not authorized` es el RAISE de la función cuando quien llama no es
+      // Super Administrador. Traducirlo evita que el usuario lea un mensaje en
+      // inglés que no dice qué hacer.
+      const crudo = e?.message ?? "Error desconocido";
+      const descripcion =
+        crudo === "not authorized"
+          ? "La base de datos todavía tiene la regla anterior, que solo permite crear a un Super Administrador. Falta aplicar Ejecuciones_manuales/20260818_activos_comerciales_alta_draft.md en este ambiente."
+          : crudo === "permission denied for function crear_activo_comercial"
+            ? "Tu sesión caducó. Cierra sesión y vuelve a entrar para guardar el activo."
+            : crudo;
       toast({
         title: isEdit ? "No se pudo actualizar" : "No se pudo crear",
-        description: e.message ?? "Error desconocido",
+        description: descripcion,
         variant: "destructive",
       });
     } finally {
@@ -332,7 +552,7 @@ export default function ActivosComercialesNuevo() {
             </p>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={!canSave || saving || !loaded}>
+        <Button onClick={handleSave} disabled={!canSave || saving || !loaded || permiso.estado !== "ok"}>
           {saving ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -342,6 +562,68 @@ export default function ActivosComercialesNuevo() {
         </Button>
       </div>
 
+      {/*
+        Un solo panel de contexto en lugar de tres avisos apilados.
+
+        Antes se pintaban seguidos "Datos obligatorios", "Se guardará como
+        Borrador" y "Falta por capturar": tres bloques del mismo peso visual
+        que empujaban el formulario fuera de la pantalla y que, juntos, se
+        dejan de leer. Aquí queda uno, y lo que cambia —lo que falta— es lo
+        único que destaca.
+      */}
+      {!isEdit && (
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 space-y-2.5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                Se guardará como Borrador
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Cualquier usuario con acceso a este menú puede darlo de alta. Queda
+                capturado pero sin publicar hasta que un Super Administrador lo apruebe
+                desde el listado.
+              </p>
+            </div>
+            <Badge variant={canSave ? "default" : "outline"} className="shrink-0">
+              {canSave ? "Listo para guardar" : `Faltan ${faltantes.length}`}
+            </Badge>
+          </div>
+
+          {faltantes.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+              <span className="text-sm text-muted-foreground">Falta capturar:</span>
+              {/* Cada faltante lleva a su paso: en un formulario de cinco pasos
+                  y casi noventa campos, decir el nombre no basta. */}
+              {faltantes.map((x) => (
+                <button
+                  key={x.campo}
+                  type="button"
+                  onClick={() => setTab(x.paso)}
+                  className="rounded-full border border-amber-500/50 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                >
+                  {x.campo}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="flex items-center gap-1.5 border-t border-border/60 pt-2.5 text-sm text-emerald-700 dark:text-emerald-400">
+              <Check className="h-4 w-4 shrink-0" />
+              Todos los datos obligatorios están capturados.
+            </p>
+          )}
+        </div>
+      )}
+
+      {permiso.estado === "sin_sesion" && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <p className="text-sm font-medium text-destructive">Tu sesión caducó</p>
+          <p className="mt-0.5 text-sm text-foreground/80">
+            Cierra sesión y vuelve a entrar. Si guardas ahora, el servidor rechazará el
+            activo y perderás lo capturado.
+          </p>
+        </div>
+      )}
+
       {isEdit && !loaded && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando activo…
@@ -349,12 +631,40 @@ export default function ActivosComercialesNuevo() {
       )}
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="ubicacion">Ubicación & Legal</TabsTrigger>
-          <TabsTrigger value="atributos">Atributos ({TIPOS.find(t => t.id === tipo)?.label ?? "-"})</TabsTrigger>
-          {showVenta && <TabsTrigger value="venta">Venta</TabsTrigger>}
-          {showRenta && <TabsTrigger value="renta">Renta</TabsTrigger>}
+        {/*
+          Pasos numerados en vez de pestañas planas.
+
+          Con cinco secciones y casi noventa campos, unas pestañas sin estado no
+          dicen cuánto falta ni dónde. Cada paso muestra su número, y los que
+          tienen datos obligatorios pendientes lo marcan: así el formulario se
+          recorre sabiendo qué queda, no a ciegas.
+        */}
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
+          {pasos.map((p, i) => {
+            const pendientes = faltantesDe(p.id);
+            return (
+              <TabsTrigger
+                key={p.id}
+                value={p.id}
+                className="gap-2 data-[state=active]:bg-background"
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                    pendientes > 0
+                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-400"
+                      : "bg-muted-foreground/15 text-muted-foreground",
+                  )}
+                >
+                  {pendientes > 0 ? "!" : i + 1}
+                </span>
+                {p.titulo}
+                {!isEdit && p.obligatorio && pendientes === 0 && (
+                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                )}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         {/* GENERAL */}
@@ -363,70 +673,98 @@ export default function ActivosComercialesNuevo() {
             <CardHeader>
               <CardTitle>Datos generales</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Field label="Tipo de activo *">
-                <Select
-                  value={String(prop.id_tipo_propiedad)}
-                  onValueChange={(v) => setP("id_tipo_propiedad", v)}
+            <CardContent className="space-y-6">
+              <Seccion
+                titulo="Ubicación en el inventario"
+                descripcion="A qué desarrollo pertenece el activo. Sin esto no se puede guardar."
+              >
+                <UbicacionInventario
+                  idEdificioModelo={prop.id_edificio_modelo}
+                  onChange={(v) => setP("id_edificio_modelo", v)}
                   disabled={isEdit}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPOS.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Transacción *">
-                <Select
-                  value={String(prop.id_tipo_transaccion)}
-                  onValueChange={(v) => setP("id_tipo_transaccion", v)}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TRANSACCIONES.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Número / Clave interna">
-                <Input value={prop.numero_propiedad} onChange={(e) => setP("numero_propiedad", e.target.value)} />
-              </Field>
-              <Field label="Piso">
-                <Input value={prop.numero_piso} onChange={(e) => setP("numero_piso", e.target.value)} />
-              </Field>
-              <Field label="m² interiores">
-                <Input type="number" value={prop.m2_interiores} onChange={(e) => setP("m2_interiores", e.target.value)} />
-              </Field>
-              <Field label="m² exteriores">
-                <Input type="number" value={prop.m2_exteriores} onChange={(e) => setP("m2_exteriores", e.target.value)} />
-              </Field>
-              <Field label={showVenta ? "Precio de lista (venta) *" : "Precio de lista"}>
-                <Input type="number" value={prop.precio_lista} onChange={(e) => setP("precio_lista", e.target.value)} />
-              </Field>
-              <Field label="Código interno">
-                <Input value={pac.codigo_interno ?? ""} onChange={(e) => setC("codigo_interno", e.target.value)} />
-              </Field>
-              <Field label="Año de construcción">
-                <Input type="number" value={pac.anio_construccion ?? ""} onChange={(e) => setC("anio_construccion", e.target.value)} />
-              </Field>
-              <Field label="Estado de conservación">
-                <CatalogSelect table="estados_conservacion" value={pac.id_estado_conservacion} onChange={(v) => setC("id_estado_conservacion", v)} />
-              </Field>
-              <Field label="Cuota condominio mensual">
-                <Input type="number" value={pac.cuota_condominio_mensual ?? ""} onChange={(e) => setC("cuota_condominio_mensual", e.target.value)} />
-              </Field>
-              <Field label="URL recorrido virtual">
-                <Input value={pac.url_recorrido_virtual ?? ""} onChange={(e) => setC("url_recorrido_virtual", e.target.value)} />
-              </Field>
-              <Field label="URL imagen portada" className="md:col-span-3">
-                <Input value={prop.url_imagen_portada} onChange={(e) => setP("url_imagen_portada", e.target.value)} />
-              </Field>
-              <Field label="Descripción" className="md:col-span-3">
-                <Textarea rows={3} value={prop.descripcion} onChange={(e) => setP("descripcion", e.target.value)} />
-              </Field>
+                />
+              </Seccion>
+
+              <Seccion
+                titulo="Identificación"
+                descripcion="Qué tipo de activo es, cómo se comercializa y cómo se le identifica."
+              >
+                <Field label="Tipo de activo *">
+                  <Select
+                    value={String(prop.id_tipo_propiedad)}
+                    onValueChange={(v) => setP("id_tipo_propiedad", v)}
+                    disabled={isEdit}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIPOS.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Transacción *">
+                  <Select
+                    value={String(prop.id_tipo_transaccion)}
+                    onValueChange={(v) => setP("id_tipo_transaccion", v)}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TRANSACCIONES.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Número / Clave interna *">
+                  <Input value={prop.numero_propiedad} onChange={(e) => setP("numero_propiedad", e.target.value)} />
+                </Field>
+                <Field label="Código interno">
+                  <Input value={pac.codigo_interno ?? ""} onChange={(e) => setC("codigo_interno", e.target.value)} />
+                </Field>
+                <Field label="Piso">
+                  <Input value={prop.numero_piso} onChange={(e) => setP("numero_piso", e.target.value)} />
+                </Field>
+              </Seccion>
+
+              <Seccion
+                titulo="Medidas y precio"
+                descripcion="Superficie del activo y su precio de lista."
+              >
+                <Field label="m² interiores">
+                  <Input type="number" value={prop.m2_interiores} onChange={(e) => setP("m2_interiores", e.target.value)} />
+                </Field>
+                <Field label="m² exteriores">
+                  <Input type="number" value={prop.m2_exteriores} onChange={(e) => setP("m2_exteriores", e.target.value)} />
+                </Field>
+                <Field label={showVenta ? "Precio de lista (venta) *" : "Precio de lista"}>
+                  <CampoMoneda valor={prop.precio_lista} onChange={(v) => setP("precio_lista", v)} />
+                </Field>
+              </Seccion>
+
+              <Seccion
+                titulo="Detalles del inmueble"
+                descripcion="Opcional. Se puede completar después de dar de alta el activo."
+              >
+                <Field label="Año de construcción">
+                  <Input type="number" value={pac.anio_construccion ?? ""} onChange={(e) => setC("anio_construccion", e.target.value)} />
+                </Field>
+                <Field label="Estado de conservación">
+                  <CatalogSelect table="estados_conservacion" value={pac.id_estado_conservacion} onChange={(v) => setC("id_estado_conservacion", v)} />
+                </Field>
+                <Field label="Cuota condominio mensual">
+                  <Input type="number" value={pac.cuota_condominio_mensual ?? ""} onChange={(e) => setC("cuota_condominio_mensual", e.target.value)} />
+                </Field>
+                <Field label="URL recorrido virtual" className="md:col-span-2">
+                  <Input value={pac.url_recorrido_virtual ?? ""} onChange={(e) => setC("url_recorrido_virtual", e.target.value)} />
+                </Field>
+                <Field label="URL imagen portada">
+                  <Input value={prop.url_imagen_portada} onChange={(e) => setP("url_imagen_portada", e.target.value)} />
+                </Field>
+                <Field label="Descripción" className="md:col-span-3">
+                  <Textarea rows={3} value={prop.descripcion} onChange={(e) => setP("descripcion", e.target.value)} />
+                </Field>
+              </Seccion>
             </CardContent>
           </Card>
         </TabsContent>
@@ -644,7 +982,7 @@ export default function ActivosComercialesNuevo() {
               <CardHeader><CardTitle>Condiciones de renta</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Field label="Renta mensual *">
-                  <Input type="number" value={renta.renta_mensual ?? ""} onChange={(e) => setR("renta_mensual", e.target.value)} />
+                  <CampoMoneda valor={renta.renta_mensual} onChange={(v) => setR("renta_mensual", v)} />
                 </Field>
                 <Field label="Precio m²/mes">
                   <Input type="number" value={renta.precio_m2_mes ?? ""} onChange={(e) => setR("precio_m2_mes", e.target.value)} />
@@ -717,15 +1055,59 @@ export default function ActivosComercialesNuevo() {
         )}
       </Tabs>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!canSave || saving} size="lg">
-          {saving ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4 mr-2" />
+      {/*
+        Pie de navegación: avanzar entre pasos y guardar en el mismo sitio.
+
+        Antes solo había un botón "Guardar" al final del último paso, así que
+        para recorrer el formulario había que volver arriba a cambiar de
+        pestaña. Guardar sigue disponible en cualquier paso —no es un asistente
+        rígido— pero deja de ser la única acción visible al pie.
+      */}
+      <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-1 py-3 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setTab(pasos[pasoActual - 1].id)}
+            disabled={pasoActual === 0}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Anterior
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setTab(pasos[pasoActual + 1].id)}
+            disabled={pasoActual >= pasos.length - 1}
+          >
+            Siguiente
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+          <span className="ml-1 text-sm text-muted-foreground">
+            Paso {pasoActual + 1} de {pasos.length}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* El motivo por el que no se puede guardar, junto al botón que no
+              responde: un botón deshabilitado sin explicación se lee como falla. */}
+          {!canSave && (
+            <span className="text-sm text-muted-foreground">
+              Faltan {faltantes.length} dato{faltantes.length === 1 ? "" : "s"} obligatorio
+              {faltantes.length === 1 ? "" : "s"}
+            </span>
           )}
-          Guardar activo
-        </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!canSave || saving || permiso.estado !== "ok"}
+            size="lg"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            {isEdit ? "Guardar cambios" : "Guardar como borrador"}
+          </Button>
+        </div>
       </div>
     </div>
   );
