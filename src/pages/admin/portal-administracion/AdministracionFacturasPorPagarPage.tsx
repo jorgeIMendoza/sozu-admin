@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   Loader2,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -24,6 +25,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import { PaginationBar, ADMIN_PAGE_SIZE } from "@/components/admin/PaginationBar";
 import {
   Select,
@@ -44,6 +56,7 @@ import {
 } from "@/components/admin/portal-administracion/drawers/ventaContexts";
 import {
   useFacturasPorPagar,
+  useEliminarFacturaExterna,
   type FacturaPorPagar,
   type TipoBeneficiario,
   type EstatusComision,
@@ -110,9 +123,12 @@ export default function AdministracionFacturasPorPagarPage() {
   const [estatusComisionFilter, setEstatusComisionFilter] = useState<string>("all");
   const [flagCobroFilter, setFlagCobroFilter] = useState<string>("all");
   const [selected, setSelected] = useState<FacturaPorPagar | null>(null);
+  const [toDelete, setToDelete] = useState<FacturaPorPagar | null>(null);
   const [page, setPage] = useState(0);
 
   const { data: facturas = [], isLoading, error, refetch, isFetching } = useFacturasPorPagar();
+  const eliminarFactura = useEliminarFacturaExterna();
+  const { toast } = useToast();
 
   const proyectoOptions = useMemo(
     () =>
@@ -476,15 +492,27 @@ export default function AdministracionFacturasPorPagarPage() {
                       </TableCell>
                       <TableCell>
                         {f.url_factura ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[10px]"
-                            onClick={() => window.open(f.url_factura!, "_blank")}
-                          >
-                            <FileText className="h-3 w-3 mr-1" />
-                            Ver factura
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[10px]"
+                              onClick={() => window.open(f.url_factura!, "_blank")}
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              Ver factura
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40"
+                              title="Eliminar factura — el agente deberá volver a subirla"
+                              aria-label="Eliminar factura"
+                              onClick={() => setToDelete(f)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
@@ -583,6 +611,56 @@ export default function AdministracionFacturasPorPagarPage() {
           />
         </ExpedienteDrawer>
       )}
+
+      {/* ─── Confirmación de eliminación de factura del comisionista ─── */}
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => { if (!o) setToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar factura del comisionista</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará la factura cargada por{" "}
+              <strong className="text-foreground">{toDelete?.beneficiario_nombre}</strong>{" "}
+              en la cuenta{" "}
+              <strong className="text-foreground">
+                {toDelete ? formatCuentaCobranzaId(toDelete.id_cuenta_cobranza, toDelete.tipo) : ""}
+              </strong>
+              . El agente deberá volver a subir su factura y esta tendrá que validarse
+              nuevamente para su pago. No se elimina la aprobación de la comisión.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminarFactura.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={eliminarFactura.isPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!toDelete) return;
+                try {
+                  await eliminarFactura.mutateAsync({
+                    idCuenta: toDelete.id_cuenta_cobranza,
+                    email: toDelete.email_usuario,
+                  });
+                  toast({
+                    title: "Factura eliminada",
+                    description:
+                      "El comisionista deberá volver a subir su factura para validación.",
+                  });
+                  setToDelete(null);
+                } catch (err: any) {
+                  toast({
+                    title: "No se pudo eliminar la factura",
+                    description: err?.message ?? "Error al eliminar la factura.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              {eliminarFactura.isPending ? "Eliminando…" : "Eliminar factura"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
