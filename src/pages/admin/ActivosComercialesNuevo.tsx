@@ -109,6 +109,126 @@ function CatalogSelect({
   );
 }
 
+/**
+ * Ubicación del activo dentro del inventario: Proyecto → Edificio → Modelo.
+ *
+ * `propiedades.id_edificio_modelo` es NOT NULL y no tiene default, así que sin
+ * esta terna el alta se rechaza en la base. Además es la única vía para saber a
+ * qué proyecto pertenece una propiedad — el resto del sistema deriva el proyecto
+ * recorriendo `edificios_modelos → edificios → proyectos`—, y los 95 activos
+ * comerciales que ya existen están vinculados así.
+ *
+ * Waterfall explícito (patrón #1 de CLAUDE.md): el join anidado de PostgREST
+ * sobre tres niveles devuelve null sin error.
+ */
+function UbicacionInventario({
+  idEdificioModelo,
+  onChange,
+  disabled,
+}: {
+  idEdificioModelo: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [idProyecto, setIdProyecto] = useState<string>("");
+  const [idEdificio, setIdEdificio] = useState<string>("");
+
+  const { data: proyectos = [], isLoading: cargandoProyectos } = useQuery({
+    queryKey: ["ac-proyectos"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("proyectos").select("id, nombre").eq("activo", true).order("nombre");
+      if (error) throw error;
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const { data: edificios = [] } = useQuery({
+    queryKey: ["ac-edificios", idProyecto],
+    enabled: !!idProyecto,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("edificios").select("id, nombre")
+        .eq("id_proyecto", Number(idProyecto)).eq("activo", true).order("nombre");
+      if (error) throw error;
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const { data: modelos = [] } = useQuery({
+    queryKey: ["ac-modelos", idEdificio],
+    enabled: !!idEdificio,
+    queryFn: async () => {
+      const { data: vinculos, error } = await (supabase as any)
+        .from("edificios_modelos").select("id, id_modelo")
+        .eq("id_edificio", Number(idEdificio)).eq("activo", true);
+      if (error) throw error;
+      const ids = (vinculos ?? []).map((v: any) => v.id_modelo);
+      if (!ids.length) return [] as { id: number; nombre: string }[];
+      const { data: mods } = await (supabase as any)
+        .from("modelos").select("id, nombre").in("id", ids).order("nombre");
+      const nombre = new Map((mods ?? []).map((m: any) => [m.id, m.nombre]));
+      // El valor guardado es el id del VÍNCULO edificio×modelo, no el del modelo.
+      return (vinculos ?? [])
+        .map((v: any) => ({ id: v.id as number, nombre: (nombre.get(v.id_modelo) as string) ?? `Modelo ${v.id_modelo}` }))
+        .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
+    },
+  });
+
+  return (
+    <>
+      <Field label="Proyecto *">
+        <Select
+          value={idProyecto || undefined}
+          onValueChange={(v) => { setIdProyecto(v); setIdEdificio(""); onChange(""); }}
+          disabled={disabled}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={cargandoProyectos ? "Cargando…" : "Selecciona el proyecto"} />
+          </SelectTrigger>
+          <SelectContent>
+            {proyectos.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Edificio *">
+        <Select
+          value={idEdificio || undefined}
+          onValueChange={(v) => { setIdEdificio(v); onChange(""); }}
+          disabled={disabled || !idProyecto}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={idProyecto ? "Selecciona el edificio" : "Elige un proyecto primero"} />
+          </SelectTrigger>
+          <SelectContent>
+            {edificios.map((e) => (
+              <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Modelo *">
+        <Select
+          value={idEdificioModelo || undefined}
+          onValueChange={onChange}
+          disabled={disabled || !idEdificio}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={idEdificio ? "Selecciona el modelo" : "Elige un edificio primero"} />
+          </SelectTrigger>
+          <SelectContent>
+            {modelos.map((m: any) => (
+              <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    </>
+  );
+}
+
 export default function ActivosComercialesNuevo() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -161,6 +281,7 @@ export default function ActivosComercialesNuevo() {
   const [prop, setProp] = useState<Dict>({
     id_tipo_propiedad: "11",
     id_tipo_transaccion: "1",
+    id_edificio_modelo: "",
     numero_propiedad: "",
     numero_piso: "",
     m2_interiores: "",
@@ -261,14 +382,25 @@ export default function ActivosComercialesNuevo() {
   const setV = (k: string, v: any) => setVenta((p) => ({ ...p, [k]: v }));
   const setR = (k: string, v: any) => setRenta((p) => ({ ...p, [k]: v }));
 
-  const canSave = useMemo(
-    () =>
-      !!prop.id_tipo_propiedad &&
-      !!prop.id_tipo_transaccion &&
-      (!showVenta || Number(prop.precio_lista) > 0) &&
-      (!showRenta || Number(renta.renta_mensual) > 0),
-    [prop, renta, showVenta, showRenta],
-  );
+  /**
+   * Qué falta para poder guardar, en los mismos términos que exige la base.
+   *
+   * Se lista en la pantalla en vez de dejar que el INSERT falle: los NOT NULL de
+   * `propiedades` producían errores crudos de Postgres ("null value in column
+   * ... violates not-null constraint") después de llenar las cuatro pestañas.
+   */
+  const faltantes = useMemo(() => {
+    const f: string[] = [];
+    if (!isEdit && !prop.id_edificio_modelo) f.push("Proyecto, Edificio y Modelo");
+    if (!prop.id_tipo_propiedad) f.push("Tipo de activo");
+    if (!prop.id_tipo_transaccion) f.push("Transacción");
+    if (!String(prop.numero_propiedad ?? "").trim()) f.push("Número / Clave interna");
+    if (showVenta && !(Number(prop.precio_lista) > 0)) f.push("Precio de lista (venta)");
+    if (showRenta && !(Number(renta.renta_mensual) > 0)) f.push("Renta mensual");
+    return f;
+  }, [prop, renta, showVenta, showRenta, isEdit]);
+
+  const canSave = faltantes.length === 0;
 
   async function handleSave() {
     setSaving(true);
@@ -391,6 +523,35 @@ export default function ActivosComercialesNuevo() {
         </Button>
       </div>
 
+      {/* Qué se necesita para dar de alta, antes de capturar nada. Los cuatro
+          primeros son NOT NULL en `propiedades`; el precio depende de si el
+          activo se vende, se renta o ambas. */}
+      {!isEdit && (
+        <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">Datos obligatorios</p>
+          <ul className="mt-1.5 grid grid-cols-1 gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
+            <li>• <strong className="text-foreground">Proyecto, Edificio y Modelo</strong> — ubican el activo en el inventario.</li>
+            <li>• <strong className="text-foreground">Tipo de activo</strong> — local, oficina, bodega o terreno.</li>
+            <li>• <strong className="text-foreground">Transacción</strong> — venta, renta o ambas.</li>
+            <li>• <strong className="text-foreground">Número / Clave interna</strong> — identifica la unidad.</li>
+            <li>• <strong className="text-foreground">Precio de lista</strong> — si el activo se vende.</li>
+            <li>• <strong className="text-foreground">Renta mensual</strong> — si el activo se renta.</li>
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Lo demás es opcional y se puede completar después. Solo un Super
+            Administrador puede dar de alta activos comerciales.
+          </p>
+        </div>
+      )}
+
+      {faltantes.length > 0 && !isEdit && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5">
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            Falta por capturar: <strong>{faltantes.join(", ")}</strong>.
+          </p>
+        </div>
+      )}
+
       {permiso.estado === "sin_sesion" && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
           <p className="text-sm font-medium text-destructive">Tu sesión caducó</p>
@@ -436,6 +597,11 @@ export default function ActivosComercialesNuevo() {
               <CardTitle>Datos generales</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <UbicacionInventario
+                idEdificioModelo={prop.id_edificio_modelo}
+                onChange={(v) => setP("id_edificio_modelo", v)}
+                disabled={isEdit}
+              />
               <Field label="Tipo de activo *">
                 <Select
                   value={String(prop.id_tipo_propiedad)}
@@ -463,7 +629,7 @@ export default function ActivosComercialesNuevo() {
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Número / Clave interna">
+              <Field label="Número / Clave interna *">
                 <Input value={prop.numero_propiedad} onChange={(e) => setP("numero_propiedad", e.target.value)} />
               </Field>
               <Field label="Piso">
