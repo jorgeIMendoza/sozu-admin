@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
+import { getCitaAsistencia, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 
 export interface OnboardingStep {
   id: 'basic' | 'address' | 'fiscal' | 'documents' | 'bank-accounts' | 'training';
@@ -115,10 +115,11 @@ export function useAgentOnboardingStatus(personaId: number | null | undefined): 
 
   const isLoading = loadingInmo || loadingPersona || loadingDocs || loadingCuentas || loadingCitas || loadingCarta;
 
-  // Training is complete if at least one cita is confirmed (asistio / id_estatus_cita=3)
+  // La capacitación se da por cumplida solo con asistencia registrada: una cita
+  // "Confirmada" (id_estatus_cita = 3) todavía no acredita el paso.
   const activeCitas = citasCapacitacion.filter((c: any) => c.activo);
-  const trainingComplete = activeCitas.some((c: any) => c.id_estatus_cita === 3 || c.estatus === 'asistio');
-  const trainingPartial = !trainingComplete && activeCitas.some((c: any) => c.id_estatus_cita === 1 || c.id_estatus_cita === 2 || c.estatus === 'programada');
+  const trainingComplete = activeCitas.some((c: any) => getCitaAsistencia(c) === 'asistio');
+  const trainingPartial = !trainingComplete && activeCitas.some((c: any) => getCitaAsistencia(c) === 'pendiente');
   const trainingCancelled = !trainingComplete && !trainingPartial && activeCitas.some((c: any) => c.estatus === 'cancelada' || c.estatus === 'no_asistio');
 
   const trainingMissing: string[] = [];

@@ -20,6 +20,7 @@ import { PhoneDisplay } from "@/components/admin/PhoneDisplay";
 import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { Badge } from "@/components/ui/badge";
+import { esCitaResuelta, getCitaAsistencia } from "@/hooks/useAgentTrainingAppointments";
 
 type Agente = {
   id: number;
@@ -92,10 +93,15 @@ function AgentTrainingCell({ personaId }: { personaId: number }) {
     return found?.nombre || '';
   };
 
-  const handleConfirmAttendance = async (citaId: number) => {
+  const handleConfirmAttendance = async (citaId: number, fechaCita?: string) => {
     const { error } = await supabase
       .from('reservas_citas')
-      .update({ estatus: 'asistio', id_estatus_cita: 3, fecha_confirmacion: new Date().toISOString() })
+      .update({
+        estatus: 'asistio',
+        id_estatus_cita: 3,
+        fecha_confirmacion: new Date().toISOString(),
+        fecha_asistencia: fechaCita ?? null,
+      })
       .eq('id', citaId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -108,7 +114,7 @@ function AgentTrainingCell({ personaId }: { personaId: number }) {
   const handleMarkNoShow = async (citaId: number) => {
     const { error } = await supabase
       .from('reservas_citas')
-      .update({ estatus: 'no_asistio', id_estatus_cita: null, fecha_confirmacion: new Date().toISOString() })
+      .update({ estatus: 'no_asistio', fecha_confirmacion: new Date().toISOString() })
       .eq('id', citaId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -121,25 +127,29 @@ function AgentTrainingCell({ personaId }: { personaId: number }) {
   if (isLoading) return <span className="text-xs text-muted-foreground">...</span>;
   if (citas.length === 0) return <span className="text-xs text-muted-foreground">Sin cita</span>;
 
-  const completedCount = citas.filter(c => (c as any).id_estatus_cita === 3 || c.estatus === 'asistio').length;
-  const pendingCount = citas.filter(c => (c as any).id_estatus_cita === 1 || (c as any).id_estatus_cita === 2 || c.estatus === 'programada').length;
+  // Los contadores miran solo el resultado de la cita: una cita "Confirmada"
+  // (id_estatus_cita = 3) sigue pendiente hasta que se registra la asistencia.
+  const completedCount = citas.filter(c => getCitaAsistencia(c) === 'asistio').length;
+  const noShowCount = citas.filter(c => getCitaAsistencia(c) === 'no_asistio').length;
+  const pendingCount = citas.filter(c => getCitaAsistencia(c) === 'pendiente').length;
 
   const renderCitaBadge = (cita: any) => {
-    const estatusCita = cita.id_estatus_cita;
-    if (estatusCita === 3 || cita.estatus === 'asistio') return <Badge className="bg-emerald-500 text-white border-0 text-[10px]">Asistió</Badge>;
-    if (estatusCita === 1) return <Badge className="bg-blue-500 text-white border-0 text-[10px]">Agendada</Badge>;
-    if (estatusCita === 2) return <Badge className="bg-amber-500 text-white border-0 text-[10px]">Pend. confirmación</Badge>;
-    if (cita.estatus === 'no_asistio') return <Badge variant="destructive" className="text-[10px]">No asistió</Badge>;
-    return <Badge variant="outline" className="text-[10px]">{cita.estatus}</Badge>;
+    const asistencia = getCitaAsistencia(cita);
+    if (asistencia === 'asistio') return <Badge className="bg-emerald-500 text-white border-0 text-[10px]">Asistió</Badge>;
+    if (asistencia === 'no_asistio') return <Badge variant="destructive" className="text-[10px]">No asistió</Badge>;
+    if (asistencia === 'cancelada') return <Badge variant="outline" className="text-[10px]">Cancelada</Badge>;
+    if (cita.id_estatus_cita === 3) return <Badge className="bg-teal-600 text-white border-0 text-[10px]">Confirmada</Badge>;
+    if (cita.id_estatus_cita === 2) return <Badge className="bg-amber-500 text-white border-0 text-[10px]">Pend. confirmación</Badge>;
+    return <Badge className="bg-blue-500 text-white border-0 text-[10px]">Agendada</Badge>;
   };
 
   const renderCitaActions = (cita: any) => {
-    const estatusCita = cita.id_estatus_cita;
-    const showActions = estatusCita === 1 || estatusCita === 2 || (!estatusCita && cita.estatus === 'programada');
-    if (!showActions) return null;
+    // Mientras no haya resultado registrado siempre debe haber salida, sin importar
+    // la etapa de confirmación en la que quedó la cita.
+    if (esCitaResuelta(cita)) return null;
     return (
       <div className="flex gap-1">
-        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] text-emerald-600 hover:bg-emerald-50" onClick={() => handleConfirmAttendance(cita.id)}>
+        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] text-emerald-600 hover:bg-emerald-50" onClick={() => handleConfirmAttendance(cita.id, cita.fecha)}>
           <CalendarCheck className="h-3 w-3 mr-0.5" /> Asistió
         </Button>
         <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10" onClick={() => handleMarkNoShow(cita.id)}>
@@ -156,6 +166,7 @@ function AgentTrainingCell({ personaId }: { personaId: number }) {
       <button onClick={() => setShowHistory(!showHistory)} className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
         {completedCount > 0 && <Badge className="bg-emerald-500 text-white border-0 text-[10px]">{completedCount} ✓</Badge>}
         {pendingCount > 0 && <Badge className="bg-blue-500 text-white border-0 text-[10px]">{pendingCount} pend.</Badge>}
+        {noShowCount > 0 && <Badge variant="destructive" className="text-[10px]">{noShowCount} no asistió</Badge>}
         <span className="text-muted-foreground text-[10px]">({citas.length} total)</span>
       </button>
 
