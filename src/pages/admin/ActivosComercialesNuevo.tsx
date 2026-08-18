@@ -240,19 +240,15 @@ export default function ActivosComercialesNuevo() {
   const [loaded, setLoaded] = useState(!isEdit);
 
   /**
-   * Autorización real de la operación.
+   * Lo único que se exige para capturar es una sesión activa.
    *
-   * `crear_activo_comercial` exige Super Administrador y, si no lo eres,
-   * responde `not authorized` — en inglés y solo DESPUÉS de llenar las cuatro
-   * pestañas. El permiso del menú deja entrar a más roles que los que la
-   * función acepta, así que se comprueba al abrir la pantalla y se dice quién
-   * eres: sin eso, un rechazo por sesión caducada y uno por rol se ven igual.
+   * Dar de alta ya no está reservado a Super Administrador: cualquiera con
+   * acceso al menú puede capturar, el activo nace en BORRADOR y solo un Super
+   * Administrador lo aprueba para publicarlo. El control se movió de la
+   * captura a la publicación.
    */
   const [permiso, setPermiso] = useState<
-    { estado: "verificando" } |
-    { estado: "ok" } |
-    { estado: "sin_sesion" } |
-    { estado: "sin_rol"; email: string }
+    { estado: "verificando" } | { estado: "ok" } | { estado: "sin_sesion" }
   >({ estado: "verificando" });
 
   useEffect(() => {
@@ -260,20 +256,7 @@ export default function ActivosComercialesNuevo() {
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
       if (cancel) return;
-      if (!auth?.user) {
-        setPermiso({ estado: "sin_sesion" });
-        return;
-      }
-      const { data, error } = await (supabase as any).rpc("is_super_admin");
-      if (cancel) return;
-      // Si la comprobación misma falla no se bloquea la pantalla: que decida
-      // el servidor al guardar, en vez de impedir trabajar por un error de red.
-      if (error) { setPermiso({ estado: "ok" }); return; }
-      setPermiso(
-        data === true
-          ? { estado: "ok" }
-          : { estado: "sin_rol", email: auth.user.email ?? "tu cuenta" },
-      );
+      setPermiso(auth?.user ? { estado: "ok" } : { estado: "sin_sesion" });
     })();
     return () => { cancel = true; };
   }, []);
@@ -433,7 +416,7 @@ export default function ActivosComercialesNuevo() {
       const crudo = e?.message ?? "Error desconocido";
       const descripcion =
         crudo === "not authorized"
-          ? "Solo un Super Administrador puede dar de alta activos comerciales. Si crees que deberías poder, cierra sesión y vuelve a entrar: la sesión pudo haber caducado."
+          ? "La base de datos todavía tiene la regla anterior, que solo permite crear a un Super Administrador. Falta aplicar Ejecuciones_manuales/20260818_activos_comerciales_alta_draft.md en este ambiente."
           : crudo === "permission denied for function crear_activo_comercial"
             ? "Tu sesión caducó. Cierra sesión y vuelve a entrar para guardar el activo."
             : crudo;
@@ -538,8 +521,20 @@ export default function ActivosComercialesNuevo() {
             <li>• <strong className="text-foreground">Renta mensual</strong> — si el activo se renta.</li>
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            Lo demás es opcional y se puede completar después. Solo un Super
-            Administrador puede dar de alta activos comerciales.
+            Lo demás es opcional y se puede completar después.
+          </p>
+        </div>
+      )}
+
+      {!isEdit && (
+        <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-3">
+          <p className="text-sm font-medium text-sky-800 dark:text-sky-300">
+            El activo se guardará como Borrador
+          </p>
+          <p className="mt-0.5 text-sm text-foreground/80">
+            Cualquier usuario con acceso a este menú puede darlo de alta. Queda capturado
+            pero sin publicar hasta que un Super Administrador lo apruebe desde el listado
+            de Activos Comerciales.
           </p>
         </div>
       )}
@@ -558,19 +553,6 @@ export default function ActivosComercialesNuevo() {
           <p className="mt-0.5 text-sm text-foreground/80">
             Cierra sesión y vuelve a entrar. Si guardas ahora, el servidor rechazará el
             activo y perderás lo capturado.
-          </p>
-        </div>
-      )}
-
-      {permiso.estado === "sin_rol" && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-            No puedes dar de alta activos comerciales
-          </p>
-          <p className="mt-0.5 text-sm text-foreground/80">
-            La operación exige el rol Super Administrador y {permiso.email} no lo tiene.
-            Puedes consultar el módulo, pero no crear ni editar. Pide el alta a un Super
-            Administrador.
           </p>
         </div>
       )}

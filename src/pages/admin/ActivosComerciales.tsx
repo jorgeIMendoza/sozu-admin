@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, Store, Building2, Warehouse, MapPin, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/admin/StatCard";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +32,54 @@ export default function ActivosComerciales() {
   const [tab, setTab] = useState<TipoTab>("todos");
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<EstadoFiltro>("activos");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  /**
+   * Solo un Super Administrador publica un activo.
+   *
+   * Capturar está abierto a cualquiera con acceso al menú —el activo nace en
+   * borrador—, así que el control vive aquí. El botón se oculta a quien no
+   * puede usarlo en vez de dejar que la función lo rechace después.
+   */
+  const { data: esSuperAdmin = false } = useQuery({
+    queryKey: ["es-super-admin"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("is_super_admin");
+      if (error) return false;
+      return data === true;
+    },
+  });
+
+  const cambiarAprobacion = useMutation({
+    mutationFn: async ({ id, aprobar }: { id: number; aprobar: boolean }) => {
+      const { error } = await (supabase as any).rpc(
+        aprobar ? "aprobar_activo_comercial" : "rechazar_activo_comercial",
+        { p_id_propiedad: id },
+      );
+      if (error) throw error;
+    },
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ["activos-comerciales"] });
+      toast({
+        title: v.aprobar ? "Activo aprobado" : "Activo regresado a borrador",
+        description: v.aprobar
+          ? `El activo #${v.id} quedó publicado.`
+          : `El activo #${v.id} volvió a borrador.`,
+      });
+    },
+    onError: (e: any) => {
+      const crudo = e?.message ?? "Error desconocido";
+      toast({
+        title: "No se pudo cambiar la aprobación",
+        description: /function .*aprobar_activo_comercial|schema cache/i.test(crudo)
+          ? "Falta aplicar Ejecuciones_manuales/20260818_activos_comerciales_alta_draft.md en este ambiente."
+          : crudo,
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["activos-comerciales", tab, estado],
@@ -167,6 +216,7 @@ export default function ActivosComerciales() {
                     <TableHead>Estatus</TableHead>
                     <TableHead>Activo</TableHead>
                     <TableHead>Aprobación</TableHead>
+                    {esSuperAdmin && <TableHead className="text-right">Acción</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -201,6 +251,21 @@ export default function ActivosComerciales() {
                           <Badge variant="outline">Borrador</Badge>
                         )}
                       </TableCell>
+                      {esSuperAdmin && (
+                        // El clic no debe abrir el detalle: son dos acciones distintas.
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant={r.es_aprobado ? "outline" : "default"}
+                            disabled={cambiarAprobacion.isPending}
+                            onClick={() =>
+                              cambiarAprobacion.mutate({ id: r.id, aprobar: !r.es_aprobado })
+                            }
+                          >
+                            {r.es_aprobado ? "Regresar a borrador" : "Aprobar"}
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
