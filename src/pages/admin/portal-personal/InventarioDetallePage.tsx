@@ -47,6 +47,7 @@ import {
   EstadoVacio,
 } from "@/components/admin/portal-personal/comunes/Estados";
 import { cn } from "@/lib/utils";
+import { opcionesEstacionamiento } from "@/utils/estacionamientoFiltro";
 
 
 export default function InventarioDetallePage() {
@@ -123,6 +124,9 @@ export default function InventarioDetallePage() {
 
   const modelos = [...new Set(unidades.map((u) => u.modelo))];
   const niveles = [...new Set(unidades.map((u) => u.nivel))].sort((a, b) => a - b);
+  // Cantidades de cajones que existen en este proyecto: el select no ofrece opciones
+  // que devolverían cero unidades, y admite 3 o 4 en cuanto haya inventario así.
+  const opcionesCajones = opcionesEstacionamiento(unidades.map((u) => Number(u.estacionamientos)));
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -330,11 +334,7 @@ export default function InventarioDetallePage() {
                 label="Estacionamiento"
                 value={filtros.estacionamiento}
                 onChange={(v) => setFiltros({ estacionamiento: v })}
-                opciones={[
-                  { v: "todos", l: "Todos" },
-                  { v: "1", l: "1 cajón" },
-                  { v: "2", l: "2 cajones" },
-                ]}
+                opciones={opcionesCajones.map((o) => ({ v: o.value, l: o.label }))}
               />
             </div>
 

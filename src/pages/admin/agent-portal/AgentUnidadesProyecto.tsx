@@ -24,6 +24,13 @@ import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
 import { OptImg } from "@/components/ui/opt-img";
+import {
+  ESTACIONAMIENTO_TODOS,
+  filtroACantidades,
+  normalizarFiltroEstacionamiento,
+  opcionesEstacionamiento,
+  type FiltroEstacionamiento,
+} from "@/utils/estacionamientoFiltro";
 
 const PAGE_SIZE = 30;
 type SortOrder = "none" | "asc" | "desc";
@@ -75,7 +82,11 @@ const AgentUnidadesProyecto = () => {
   const [filterModelNames, setFilterModelNames] = useState<string[]>(() => storedFilters.filterModelNames ?? []);
   const [filterLevels, setFilterLevels] = useState<string[]>(() => storedFilters.filterLevels ?? []);
   const [filterBodega, setFilterBodega] = useState<TriState>(() => storedFilters.filterBodega ?? "todos");
-  const [filterEstacionamiento, setFilterEstacionamiento] = useState<TriState>(() => storedFilters.filterEstacionamiento ?? "todos");
+  // Cantidad exacta de cajones ("todos" | "0" | "1" | …). Lo guardado por la versión
+  // sí/no del filtro se normaliza a "todos".
+  const [filterEstacionamiento, setFilterEstacionamiento] = useState<FiltroEstacionamiento>(
+    () => normalizarFiltroEstacionamiento(storedFilters.filterEstacionamiento),
+  );
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(openFiltersParam === 'true');
   const [sortOrder] = useState<SortOrder>(() => storedFilters.sortOrder ?? "none");
   const [priceRange, setPriceRange] = useState<[number, number] | null>(() => storedFilters.priceRange ?? null);
@@ -133,7 +144,7 @@ const AgentUnidadesProyecto = () => {
 
   // bodegaValue, estacionamientoValue, query hook, pageProperties, filter options, price bounds, helpers - lines 102 to 258
   const bodegaValue = filterBodega === "si" ? true : filterBodega === "no" ? false : null;
-  const estacionamientoValue = filterEstacionamiento === "si" ? true : filterEstacionamiento === "no" ? false : null;
+  const estacionamientosValue = filtroACantidades(filterEstacionamiento);
 
   const { data: inventarioData, isLoading: isLoadingData, isFetching } = useInventarioDisponiblePaginado({
     projectNames: filterProjectNames.length > 0 ? filterProjectNames : undefined,
@@ -141,7 +152,7 @@ const AgentUnidadesProyecto = () => {
     bedrooms: bedroomsForQuery,
     levels: filterLevels.length > 0 ? filterLevels : undefined,
     hasBodega: bodegaValue,
-    hasEstacionamiento: estacionamientoValue,
+    estacionamientos: estacionamientosValue,
     sortPrice: sortOrder === "none" ? null : sortOrder,
     minPrice: priceRange ? priceRange[0] : null,
     maxPrice: priceRange ? priceRange[1] : null,
@@ -235,7 +246,7 @@ const AgentUnidadesProyecto = () => {
     return priceBoundsRef.current || computed;
   }, [inventarioData?.propiedades, priceRange]);
 
-  const hasActiveFilters = filterProjectNames.length > 0 || filterModelNames.length > 0 || recamarasFilter.length > 0 || filterLevels.length > 0 || filterBodega !== "todos" || filterEstacionamiento !== "todos" || priceRange !== null;
+  const hasActiveFilters = filterProjectNames.length > 0 || filterModelNames.length > 0 || recamarasFilter.length > 0 || filterLevels.length > 0 || filterBodega !== "todos" || filterEstacionamiento !== ESTACIONAMIENTO_TODOS || priceRange !== null;
 
   const clearAllFilters = () => {
     setFilterProjectNames([]);
@@ -243,7 +254,7 @@ const AgentUnidadesProyecto = () => {
     setRecamarasFilter([]);
     setFilterLevels([]);
     setFilterBodega("todos");
-    setFilterEstacionamiento("todos");
+    setFilterEstacionamiento(ESTACIONAMIENTO_TODOS);
     setPriceRange(null);
     priceBoundsRef.current = null;
     setPage(0);
@@ -409,6 +420,21 @@ const AgentUnidadesProyecto = () => {
     ? [...new Set([...availableRecamaras.map(n => n <= 3 ? String(n) : '4+')])]
     : ['1', '2', '3', '4+'];
 
+  // Cantidades de cajones que existen en el inventario consultado (las calcula la RPC
+  // antes de aplicar este filtro, así que no se colapsan al elegir una).
+  const estacionamientoOptions = opcionesEstacionamiento(inventarioData?.filterOptions?.estacionamientos);
+
+  // El filtro se guarda entre sesiones y el inventario cambia: si la cantidad elegida ya
+  // no existe (otro desarrollo, unidad vendida), el select se quedaría en blanco y sin
+  // forma de limpiarlo. Se cae a "Todos".
+  useEffect(() => {
+    if (filterEstacionamiento === ESTACIONAMIENTO_TODOS) return;
+    if (estacionamientoOptions.length <= 1) return;
+    if (!estacionamientoOptions.some((o) => o.value === filterEstacionamiento)) {
+      setFilterEstacionamiento(ESTACIONAMIENTO_TODOS);
+    }
+  }, [estacionamientoOptions, filterEstacionamiento]);
+
   const triStateOptions: { value: TriState; label: string }[] = [
     { value: "todos", label: "Todos" },
     { value: "si", label: "Sí" },
@@ -416,7 +442,7 @@ const AgentUnidadesProyecto = () => {
   ];
 
 
-  const activeFilterCount = (filterProjectNames.length > 0 ? 1 : 0) + (filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter.length > 0 ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== "todos" ? 1 : 0) + (filterEstacionamiento !== "todos" ? 1 : 0) + (priceRange ? 1 : 0);
+  const activeFilterCount = (filterProjectNames.length > 0 ? 1 : 0) + (filterModelNames.length > 0 ? 1 : 0) + (recamarasFilter.length > 0 ? 1 : 0) + (filterLevels.length > 0 ? 1 : 0) + (filterBodega !== "todos" ? 1 : 0) + (filterEstacionamiento !== ESTACIONAMIENTO_TODOS ? 1 : 0) + (priceRange ? 1 : 0);
 
   const filterContent = (
     <>
@@ -461,8 +487,8 @@ const AgentUnidadesProyecto = () => {
         <FilterSelect
           label="Estacionamiento"
           value={filterEstacionamiento}
-          onChange={(v) => setFilterEstacionamiento(v as TriState)}
-          options={triStateOptions}
+          onChange={(v) => setFilterEstacionamiento(v)}
+          options={estacionamientoOptions}
         />
       </div>
 
