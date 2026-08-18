@@ -256,8 +256,6 @@ const PTEquipoConfig = lazyRetry(() =>
 
 // Portal del Personal
 const PPersInicio = lazyRetry(() => import("./pages/admin/portal-personal/InicioPage"));
-const PPersInventario = lazyRetry(() => import("./pages/admin/portal-personal/InventarioPage"));
-const PPersInventarioDetalle = lazyRetry(() => import("./pages/admin/portal-personal/InventarioDetallePage"));
 const PPersSimulador = lazyRetry(() => import("./pages/admin/portal-personal/SimuladorPage"));
 const PPersReferidos = lazyRetry(() => import("./pages/admin/portal-personal/ReferidosPage"));
 const PPersNegocios = lazyRetry(() => import("./pages/admin/portal-personal/NegociosPage"));
@@ -1102,8 +1100,11 @@ const App = () => (
 
                   {/* Portal del Personal */}
                   <Route path="portal-personal" element={<PPersInicio />} />
-                  <Route path="portal-personal/inventario" element={<PPersInventario />} />
-                  <Route path="portal-personal/inventario/:slug" element={<PPersInventarioDetalle />} />
+                  {/* Inventario del Personal = el mismo del Portal Agente (misma
+                      lógica, datos y funcionalidades). Ver useInventarioPortal. */}
+                  <Route path="portal-personal/inventario" element={<AgentInventario />} />
+                  <Route path="portal-personal/inventario/unidades" element={<AgentUnidadesProyecto />} />
+                  <Route path="portal-personal/inventario/proyecto/:id" element={<AgentProyectoDetalle />} />
                   <Route path="portal-personal/simulador" element={<PPersSimulador />} />
                   <Route path="portal-personal/referidos" element={<PPersReferidos />} />
                   <Route path="portal-personal/negocios" element={<PPersNegocios />} />

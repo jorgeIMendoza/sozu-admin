@@ -419,7 +419,7 @@ export default function SimuladorPage() {
         >
           Nuevo escenario
         </Button>
-        <Link to={`/admin/portal-personal/inventario/${desarrollo.slug}`}
+        <Link to="/admin/portal-personal/inventario/unidades"
           className="text-sm font-semibold text-verde"
         >
           Ver unidades de este desarrollo

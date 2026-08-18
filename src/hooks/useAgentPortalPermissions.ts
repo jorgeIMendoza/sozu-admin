@@ -46,9 +46,12 @@ const AGENT_PATHS = [
   '/admin/agent/pipeline',
   '/admin/agent/comisiones',
   '/admin/agent/perfil',
+  // El Portal del Personal reutiliza las vistas de Inventario del Portal Agente,
+  // pero con su propio submenú: cada portal define sus permisos por separado.
+  '/admin/portal-personal/inventario',
 ] as const;
 
-type AgentPath = typeof AGENT_PATHS[number];
+export type AgentPath = typeof AGENT_PATHS[number];
 
 export type AgentPortalPermissions = Record<AgentPath, ViewPermissions>;
 

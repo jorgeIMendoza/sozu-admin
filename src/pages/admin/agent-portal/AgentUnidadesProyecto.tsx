@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
-import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
+import { useInventarioPortal } from "@/hooks/useInventarioPortal";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
 import { PropertyFloorPlanButton } from "@/components/admin/agent-portal/PropertyFloorPlanButton";
@@ -36,34 +36,36 @@ const AgentUnidadesProyecto = () => {
   const openFiltersParam = searchParams.get("openFilters");
   const navigate = useNavigate();
 
+  // Misma vista para Portal Agente y Portal del Personal: el portal activo define
+  // rutas, permisos, analítica y los filtros persistidos.
+  const { basePath, portalPrefix, permisos: inventarioPerms } = useInventarioPortal();
+  const PAGE = `${portalPrefix}_unidades`;
+
   // Persistencia de filtros (sessionStorage). Si se llega con proyecto/modelo en la
   // URL, esos mandan y se ignora lo guardado (contexto nuevo desde inventario/detalle).
-  const FILTERS_KEY = "agent-unidades-filters";
+  const FILTERS_KEY = `${portalPrefix}-unidades-filters`;
   const hasUrlPreselect = !!proyectoIdParam || !!modeloIdParam;
   const storedFilters: any = (() => {
     if (hasUrlPreselect) return {};
     try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY) || "{}"); } catch { return {}; }
   })();
-  const { permissions: agentPerms } = useAgentPortalPermissions();
-  const canGenerateOffer = agentPerms['/admin/agent/inventario']?.canGenerateOffer;
-  const canGenerateDigitalOffer = agentPerms['/admin/agent/inventario']?.canGenerateDigitalOffer;
+  const canGenerateOffer = inventarioPerms?.canGenerateOffer;
+  const canGenerateDigitalOffer = inventarioPerms?.canGenerateDigitalOffer;
   const { profile } = useAuth();
   const { impersonatedAgentPersonaId, isImpersonating } = useAgentImpersonation();
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { percentage, isLoading: isLoadingOnboarding, hasTrainingComplete, hasBasicIdentityComplete } = useAgentOnboardingStatus(personaId);
 
-  // Permissions, logging, tracking
-  const { permissions } = useAgentPortalPermissions();
-  const unidadesPerms = permissions['/admin/agent/inventario'];
+  // Logging, tracking
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
 
   // Log page view
   useEffect(() => {
-    registrarVista('/admin/agent/inventario/unidades');
-    track({ page: 'agent_unidades', elementId: 'page_view', elementType: 'page' });
-  }, []);
+    registrarVista(`${basePath}/unidades`);
+    track({ page: PAGE, elementId: 'page_view', elementType: 'page' });
+  }, [basePath, PAGE]);
 
   // State declarations from line 41 to line 100
   const [page, setPage] = useState(0);
@@ -116,7 +118,7 @@ const AgentUnidadesProyecto = () => {
       }
       await Promise.all(promises);
       setParamsResolved(true);
-      navigate('/admin/agent/inventario/unidades', { replace: true });
+      navigate(`${basePath}/unidades`, { replace: true });
     };
     resolveParams();
   }, []);
@@ -493,16 +495,16 @@ const AgentUnidadesProyecto = () => {
 
   const handleOpenFilters = () => {
     setFiltersDrawerOpen(true);
-    track({ page: 'agent_unidades', elementId: 'btn_filtros', elementLabel: 'Filtros' });
+    track({ page: PAGE, elementId: 'btn_filtros', elementLabel: 'Filtros' });
   };
 
   const handleClickUnit = (prop: any) => {
     setSelectedProperty(prop);
-    track({ page: 'agent_unidades', elementId: 'btn_detalle_unidad', elementLabel: `Depto ${prop.numero || prop.id}`, metadata: { propiedad_id: prop.id, proyecto: prop.proyecto_nombre } });
+    track({ page: PAGE, elementId: 'btn_detalle_unidad', elementLabel: `Depto ${prop.numero || prop.id}`, metadata: { propiedad_id: prop.id, proyecto: prop.proyecto_nombre } });
   };
 
   const handleConfigureOffer = () => {
-    track({ page: 'agent_unidades', elementId: 'btn_configurar_oferta', elementLabel: 'Configurar Oferta', metadata: { propiedad_id: selectedProperty?.id, proyecto: selectedProperty?.proyecto_nombre } });
+    track({ page: PAGE, elementId: 'btn_configurar_oferta', elementLabel: 'Configurar Oferta', metadata: { propiedad_id: selectedProperty?.id, proyecto: selectedProperty?.proyecto_nombre } });
   };
 
   return (
@@ -523,7 +525,7 @@ const AgentUnidadesProyecto = () => {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background pt-4 pb-3 space-y-3">
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate("/admin/agent/inventario")} className="h-10 w-10 shrink-0 rounded-md bg-card border border-gray-200 flex items-center justify-center transition-colors hover:bg-gray-50" title="Regresar">
+          <button onClick={() => navigate(basePath)} className="h-10 w-10 shrink-0 rounded-md bg-card border border-gray-200 flex items-center justify-center transition-colors hover:bg-gray-50" title="Regresar">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="relative flex-1">
