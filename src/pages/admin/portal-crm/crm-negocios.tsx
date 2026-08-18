@@ -10,7 +10,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   Plus, Briefcase, Search, X, Loader2, Check, MoreHorizontal, Pencil, Trash2,
   ChevronRight, ChevronLeft, GripVertical, Calendar, Settings2, ChevronDown,
-  Filter as FilterIcon, UserRound,
+  Filter as FilterIcon, UserRound, Sparkles, Phone, MessageSquare, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,7 +37,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { DField } from "@/components/admin/portal-crm/ui";
-import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META, SEMAPHORE_META, interactionSemaphore } from "@/lib/crm-format";
+import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META, SEMAPHORE_META, interactionSemaphore, fmtDueDateTime } from "@/lib/crm-format";
 import {
   TIPO_ASISTENTE, RANGO_EDAD, TOMA_DECISION, INTENCION_USO, EXPERIENCIA_PREVENTA,
   ETAPA_EXPLORACION, PROYECCION_CIERRE, PUNTOS_POSITIVOS, PUNTOS_NEGATIVOS,
@@ -777,6 +777,15 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
           </span>
         )}
 
+        {/* Próximo seguimiento sugerido por IA: canal + fecha/hora */}
+        {deal.ia?.proximo_fecha && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-violet-500/10 text-violet-700 dark:text-violet-400 px-1.5 py-0.5 text-[10px] font-medium max-w-full"
+            title="Próximo seguimiento sugerido por IA">
+            {deal.ia.proximo_tipo === "llamada" ? <Phone className="h-3 w-3 shrink-0" /> : <MessageSquare className="h-3 w-3 shrink-0" />}
+            <span className="truncate">{fmtDueDateTime(deal.ia.proximo_fecha)}</span>
+          </span>
+        )}
+
         {/* Footer adaptable: monto (o propietario) + prioridad + fecha de cierre. Se omite si no hay nada. */}
         {hasFooter && (
           <div className="flex items-center justify-between gap-2 border-t border-border pt-2 mt-0.5">
@@ -801,6 +810,221 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Pestaña "Asistente IA" (Fase 1: texto). El asesor captura el contexto de la cita → Claude
+// (Edge Function analizar-negocio-ia) devuelve perfil, % de cierre, nota de bitácora, borrador
+// de WhatsApp y próximo paso. El asesor revisa y aplica con 1 clic. Persiste en crm_negocios_ia.
+export function DealAsistenteIA({ deal }: { deal: any }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const dealId = deal?.id;
+  const erId = deal?.id_entidad_relacionada ?? null;
+  const [texto, setTexto] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [result, setResult] = useState<any | null>(null);
+  const [savingNote, setSavingNote] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
+  const [savedNote, setSavedNote] = useState(false);
+  const [savedTask, setSavedTask] = useState(false);
+  const loadedRef = useRef<string | undefined>(undefined);
+
+  // Carga el último análisis guardado (para reabrir sin reprocesar).
+  const { data: prev } = useQuery({
+    queryKey: ["deal-ia", dealId],
+    enabled: !!dealId,
+    queryFn: async () => {
+      const res = await (supabase as any).from("crm_negocios_ia")
+        .select("*").eq("id_negocio", Number(dealId)).eq("activo", true).maybeSingle();
+      if (res.error) return null;
+      return res.data ?? null;
+    },
+  });
+  useEffect(() => {
+    if (prev && loadedRef.current !== String(dealId)) {
+      loadedRef.current = String(dealId);
+      setTexto(prev.contexto_input ?? "");
+      setResult({
+        perfil_cliente: prev.perfil_cliente,
+        probabilidad_cierre: prev.probabilidad_cierre,
+        justificacion: prev.justificacion,
+        nota_bitacora: prev.nota_generada,
+        whatsapp_borrador: prev.whatsapp_borrador,
+        proximo_paso: { tipo: prev.proximo_tipo, fecha_iso: prev.proximo_fecha, razonamiento: prev.proximo_razonamiento },
+        modelo: prev.modelo,
+        fecha_generacion: prev.fecha_generacion,
+      });
+    }
+  }, [prev, dealId]);
+
+  const combineISO = (fecha?: string, hora?: string): string | null => {
+    if (!fecha) return null;
+    const d = new Date(`${fecha}T${hora || "09:00"}:00`);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
+  const analyze = async () => {
+    if (!texto.trim()) { toast.error("Escribe el contexto de la cita primero."); return; }
+    setAnalyzing(true); setSavedNote(false); setSavedTask(false);
+    try {
+      const negocio = { nombre: deal?.nombre, etapa: deal?.etapa_nombre, pipeline: deal?.pipeline_nombre, valor: deal?.valor, contacto: deal?.contacto?.nombre ?? deal?.contacto_nombre };
+      const { data, error } = await (supabase as any).functions.invoke("analizar-negocio-ia", { body: { texto: texto.trim(), negocio } });
+      if (error) throw new Error(error.message || "Error al invocar la IA");
+      if (!data?.ok) throw new Error(data?.error || "La IA no pudo procesar el contexto");
+      const r = data.resultado;
+      const proximoISO = combineISO(r?.proximo_paso?.fecha_sugerida, r?.proximo_paso?.hora_sugerida);
+      const { error: upErr } = await (supabase as any).from("crm_negocios_ia").upsert({
+        id_negocio: Number(dealId),
+        perfil_cliente: r.perfil_cliente || null,
+        probabilidad_cierre: r.probabilidad_cierre ?? null,
+        justificacion: r.justificacion || null,
+        nota_generada: r.nota_bitacora || null,
+        whatsapp_borrador: r.whatsapp_borrador || null,
+        proximo_tipo: r.proximo_paso?.tipo || null,
+        proximo_fecha: proximoISO,
+        proximo_razonamiento: r.proximo_paso?.razonamiento || null,
+        contexto_input: texto.trim(),
+        modelo: r.modelo || null,
+        generado_por: user?.id ?? null,
+        fecha_generacion: new Date().toISOString(),
+      }, { onConflict: "id_negocio" });
+      if (upErr) toast.error("Análisis listo, pero no se pudo guardar: " + upErr.message);
+      setResult({ ...r, proximo_paso: { ...r.proximo_paso, fecha_iso: proximoISO } });
+      qc.invalidateQueries({ queryKey: ["deals-list"] });
+      qc.invalidateQueries({ queryKey: ["deal-ia", dealId] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al analizar");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const saveAsNote = async () => {
+    if (!erId) { toast.error("El negocio no tiene contacto asociado para guardar la nota."); return; }
+    if (!result) return;
+    setSavingNote(true);
+    const prob = result.probabilidad_cierre;
+    const html = `<p><strong>Análisis IA — probabilidad de cierre: ${prob ?? "?"}%</strong> · Perfil: ${result.perfil_cliente || "—"}</p>`
+      + `<p>${(result.nota_bitacora || "").replace(/\n/g, "<br/>")}</p>`
+      + (result.justificacion ? `<p><em>${result.justificacion.replace(/\n/g, "<br/>")}</em></p>` : "");
+    const { error } = await (supabase as any).from("crm_notas").insert({
+      id_entidad_relacionada: Number(erId), id_usuario: user?.id ?? null, contenido: html,
+      fecha_actividad: new Date().toISOString().split("T")[0],
+    });
+    setSavingNote(false);
+    if (error) { toast.error(error.message); return; }
+    setSavedNote(true); toast.success("Nota guardada en el CRM");
+    qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
+  };
+
+  const scheduleTask = async () => {
+    if (!erId) { toast.error("El negocio no tiene contacto asociado para agendar la tarea."); return; }
+    if (!result?.proximo_paso) return;
+    setSavingTask(true);
+    const pp = result.proximo_paso;
+    const { error } = await (supabase as any).from("crm_tareas").insert({
+      id_entidad_relacionada: Number(erId),
+      titulo: pp.tipo === "llamada" ? "Llamada de seguimiento (IA)" : "Mensaje de seguimiento (IA)",
+      tipo: pp.tipo === "llamada" ? "llamada" : "whatsapp",
+      prioridad: "normal",
+      descripcion: pp.razonamiento || null,
+      fecha_vencimiento: pp.fecha_iso ?? null,
+      id_usuario_asignado: user?.id ?? null,
+      estatus: "pendiente",
+    });
+    setSavingTask(false);
+    if (error) { toast.error(error.message); return; }
+    setSavedTask(true); toast.success("Tarea agendada");
+    qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
+  };
+
+  const copyWhatsapp = () => {
+    if (!result?.whatsapp_borrador) return;
+    try { navigator.clipboard.writeText(result.whatsapp_borrador); toast.success("Borrador copiado"); }
+    catch { toast.error("No se pudo copiar"); }
+  };
+
+  const prob = result?.probabilidad_cierre;
+  const probColor = prob == null ? "text-muted-foreground" : prob >= 66 ? "text-emerald-600" : prob >= 33 ? "text-amber-600" : "text-red-600";
+
+  return (
+    <div className="space-y-4">
+      {/* Módulo A: contexto */}
+      <section className="bg-card border border-border rounded-lg p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Contexto de la cita / interacción</h3>
+        </div>
+        <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={5}
+          placeholder="Describe cómo estuvo la cita: qué dijo el cliente, objeciones, presupuesto, quién decide, nivel de interés…" />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">Voz y archivos (imágenes/PDF) llegan en una fase posterior.</p>
+          <Button size="sm" onClick={analyze} disabled={analyzing || !texto.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {analyzing ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Analizando…</> : <><Sparkles className="h-4 w-4 mr-1.5" />Analizar con IA</>}
+          </Button>
+        </div>
+      </section>
+
+      {result && (
+        <>
+          <section className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Perfil del cliente</div>
+                <div className="text-sm font-medium mt-0.5">{result.perfil_cliente || "—"}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prob. de cierre</div>
+                <div className={`text-2xl font-bold tabular-nums ${probColor}`}>{prob != null ? `${prob}%` : "—"}</div>
+              </div>
+            </div>
+            {result.justificacion && <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{result.justificacion}</p>}
+          </section>
+
+          <section className="bg-card border border-border rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Nota de bitácora</h3>
+              <Button size="sm" variant="outline" onClick={saveAsNote} disabled={savingNote || savedNote || !erId} className="h-7 text-xs">
+                {savingNote ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Guardando…</> : savedNote ? <><Check className="h-3.5 w-3.5 mr-1 text-emerald-600" />Guardada</> : "Guardar como nota"}
+              </Button>
+            </div>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">{result.nota_bitacora || "—"}</p>
+          </section>
+
+          <section className="bg-card border border-border rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5"><MessageSquare className="h-4 w-4 text-emerald-600" />Sugerencia de seguimiento (WhatsApp)</h3>
+              <Button size="sm" variant="outline" onClick={copyWhatsapp} disabled={!result.whatsapp_borrador} className="h-7 text-xs"><Copy className="h-3.5 w-3.5 mr-1" />Copiar</Button>
+            </div>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed rounded-md bg-muted/40 p-2.5">{result.whatsapp_borrador || "—"}</p>
+          </section>
+
+          <section className="bg-card border border-border rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Próximo paso sugerido</h3>
+              <Button size="sm" variant="outline" onClick={scheduleTask} disabled={savingTask || savedTask || !erId} className="h-7 text-xs">
+                {savingTask ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Agendando…</> : savedTask ? <><Check className="h-3.5 w-3.5 mr-1 text-emerald-600" />Agendada</> : "Agendar tarea"}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 text-violet-700 dark:text-violet-400 px-2 py-0.5 text-xs font-medium">
+                {result.proximo_paso?.tipo === "llamada" ? <Phone className="h-3.5 w-3.5" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                {result.proximo_paso?.tipo === "llamada" ? "Llamada" : "Mensaje"}
+              </span>
+              {result.proximo_paso?.fecha_iso && (
+                <span className="inline-flex items-center gap-1 text-muted-foreground text-xs"><Calendar className="h-3.5 w-3.5" />{fmtDueDateTime(result.proximo_paso.fecha_iso)}</span>
+              )}
+            </div>
+            {result.proximo_paso?.razonamiento && <p className="text-xs text-muted-foreground leading-relaxed">{result.proximo_paso.razonamiento}</p>}
+          </section>
+
+          {result.fecha_generacion && (
+            <p className="text-[11px] text-muted-foreground text-center">Generado {relTime(result.fecha_generacion)} · modelo {result.modelo || "—"}</p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

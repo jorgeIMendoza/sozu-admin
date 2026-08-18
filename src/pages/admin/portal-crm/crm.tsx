@@ -90,7 +90,7 @@ import {
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, PRIORIDAD_PILL, firePurchaseIfWon,
+  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -2353,6 +2353,16 @@ export function CrmDeals() {
         if (!pfRes.error) for (const p of (pfRes.data ?? [])) perfilByNegocio.set(p.id_negocio, p);
       }
 
+      // Próximo seguimiento sugerido por IA (para el badge del Kanban). Fail-soft si la tabla no existe.
+      const iaByNegocio = new Map<number, any>();
+      {
+        const negIds = list.map((n: any) => n.id);
+        const iaRes = await (supabase as any).from("crm_negocios_ia")
+          .select("id_negocio, proximo_tipo, proximo_fecha, probabilidad_cierre")
+          .in("id_negocio", negIds).eq("activo", true);
+        if (!iaRes.error) for (const r of (iaRes.data ?? [])) iaByNegocio.set(r.id_negocio, r);
+      }
+
       const rows = list.map((n: any) => {
         const et: any = etapaMap.get(n.id_etapa);
         return {
@@ -2366,6 +2376,7 @@ export function CrmDeals() {
           contacto_nombre: n.id_entidad_relacionada ? (erMap.get(n.id_entidad_relacionada) ?? null) : null,
           ultima_actividad: n.id_entidad_relacionada ? (lastActByEr.get(n.id_entidad_relacionada) ?? null) : null,
           perfil: perfilByNegocio.get(n.id) ?? null,
+          ia: iaByNegocio.get(n.id) ?? null,
         };
       });
       return { rows, truncated: list.length === 1000 };
@@ -3057,6 +3068,7 @@ export function CrmDealDetail() {
                 <TabsTrigger value="descripcion" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Descripción</TabsTrigger>
                 <TabsTrigger value="actividades" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Actividades</TabsTrigger>
                 <TabsTrigger value="perfil" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Perfil del comprador</TabsTrigger>
+                <TabsTrigger value="ia" className="border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-4 py-2.5 text-sm data-[state=active]:bg-transparent data-[state=active]:shadow-none">Asistente IA</TabsTrigger>
               </TabsList>
             </div>
             <TabsContent value="descripcion" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto space-y-4">
@@ -3123,6 +3135,9 @@ export function CrmDealDetail() {
             </TabsContent>
             <TabsContent value="perfil" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
               <DealPerfilComprador dealId={String(dealId)} />
+            </TabsContent>
+            <TabsContent value="ia" className="p-4 mt-0 flex-1 min-h-0 overflow-y-auto">
+              <DealAsistenteIA deal={deal} />
             </TabsContent>
           </Tabs>
         </section>
