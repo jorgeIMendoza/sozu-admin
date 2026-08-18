@@ -19,6 +19,7 @@ import {
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
 import { CuentaDocumentosExpediente } from '@/components/admin/CuentaDocumentosExpediente';
+import { formatPorcentajeDescuento } from '@/utils/descuentoEsquema';
 
 export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
   const [infoTab, setInfoTab] = useState<InfoTab>('resumen');
@@ -30,7 +31,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
     porcentajePagado, montoValidado, montoSinValidar,
     acuerdos, aplicacionesList,
     expandedAcuerdos, setExpandedAcuerdos,
-    planIsModified, esquemaNombreDisplay, esquemaNombre, esquemaPct,
+    planIsModified, esquemaNombreDisplay, esquemaNombre, esquemaPct, desgloseDescuento,
     _planParcAcuerdos, _planEngTotal, _planParcTotal, _planEntTotal,
     _planPctE, _planPctP, _planPctEnt,
     isEnDemanda,
@@ -131,7 +132,18 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
 
       {/* KPI grid — 5 cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KpiCard label="Precio Final" value={fmtCurrency(precio_final)} />
+        <KpiCard label="Precio Final" value={fmtCurrency(precio_final)}>
+          {desgloseDescuento && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-muted-foreground line-through tabular-nums">
+                {fmtCurrency(desgloseDescuento.precioLista)}
+              </span>
+              <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                −{formatPorcentajeDescuento(desgloseDescuento.porcentaje)}
+              </span>
+            </div>
+          )}
+        </KpiCard>
         <KpiCard
           label="Total Pagado"
           value={fmtCurrency(totalPagado)}
@@ -276,6 +288,33 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
               )}
               {precioM2 != null && (
                 <InfoRow icon={CreditCard} label="Precio / m2" value={fmtCurrency(precioM2)} />
+              )}
+              {desgloseDescuento && (
+                <>
+                  <InfoRow
+                    icon={CreditCard}
+                    label="Precio de lista"
+                    value={
+                      <span className="text-muted-foreground line-through tabular-nums">
+                        {fmtCurrency(desgloseDescuento.precioLista)}
+                      </span>
+                    }
+                  />
+                  <InfoRow
+                    icon={CreditCard}
+                    label="Descuento"
+                    value={
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          −{formatPorcentajeDescuento(desgloseDescuento.porcentaje)}
+                        </span>
+                        <span className="font-semibold tabular-nums text-emerald-700">
+                          −{fmtCurrency(desgloseDescuento.montoDescuento)}
+                        </span>
+                      </span>
+                    }
+                  />
+                </>
               )}
             </div>
             <div>

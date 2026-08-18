@@ -106,6 +106,8 @@ interface CuentaDetalle {
   collection_id?: number | null;
   metraje?: number;
   precio_por_m2?: number;
+  /** `esquemas_pago.porcentaje_descuento_aumento` del esquema de la oferta (negativo = descuento). */
+  porcentaje_descuento_aumento?: number | null;
   detalles_producto?: {
     nombre?: string;
     ubicacion?: string;
@@ -158,6 +160,8 @@ import { mensajeErrorSubidaEvidencia, pathEvidencia, resolveBucketEvidencia } fr
 import { esRpcInexistente, esSinPermiso } from "@/lib/rpcErrors";
 import { interpretarReconciliacion, primeraFilaReconciliacion } from "@/lib/reconciliacionAcuerdos";
 import { buildOfferUrl } from "@/lib/offers/offer-links";
+import { aCentavos, diferenciaDinero, difiereEnDinero, sumarDinero } from "@/utils/dinero";
+import { calcularDesgloseDescuento, formatPorcentajeDescuento } from "@/utils/descuentoEsquema";
 
 // Documents view component (lectura + subida de documentos de la cuenta)
 function ReadOnlyDocumentsView({
@@ -692,6 +696,9 @@ export default function DetalleCuentaCobranza() {
           id,
           id_esquema_pago_seleccionado,
           id_producto,
+          esquemas_pago!ofertas_id_esquema_pago_seleccionado_fkey(
+            porcentaje_descuento_aumento
+          ),
           propiedades!ofertas_id_propiedad_fkey(
             id,
             numero_propiedad,
@@ -860,6 +867,8 @@ export default function DetalleCuentaCobranza() {
         id_propiedad: oferta?.propiedades?.id || undefined,
         metraje,
         precio_por_m2,
+        porcentaje_descuento_aumento:
+          (oferta as any)?.esquemas_pago?.porcentaje_descuento_aumento ?? null,
         detalles_producto: detallesProducto,
         monto_cobro_cancelacion: cuenta.monto_cobro_cancelacion || undefined,
         id_tipo_cancelacion: cuenta.id_tipo_cancelacion || undefined,
@@ -2189,23 +2198,24 @@ export default function DetalleCuentaCobranza() {
   // El precio de contrato es la fuente de verdad y la suma de acuerdos debe seguirlo. Las
   // cuentas hijas de mantenimiento llevan precio_final = 0 por diseño (plan recurrente, sin
   // precio contra el que comparar): ahí el banner sería un falso positivo.
-  const discrepanciaAcuerdos = (cuentaDetalle?.precio_final || 0) - totalAcuerdos;
+  const discrepanciaAcuerdos = diferenciaDinero(cuentaDetalle?.precio_final || 0, totalAcuerdos);
   const hayDiscrepancia = !!acuerdosPago && acuerdosPago.length > 0
     && (cuentaDetalle?.precio_final || 0) > 0
-    && Math.abs(discrepanciaAcuerdos) > 0.01;
+    && difiereEnDinero(cuentaDetalle?.precio_final || 0, totalAcuerdos);
 
   // Calcular diferencia real y detectar sobrepagos - AHORA USANDO PAGOS REALES
-  const diferenciaReal = (cuentaDetalle?.precio_final || 0) - totalPagadoReal;
-  const haySobrepago = diferenciaReal < -0.01; // Tolerancia para errores de punto flotante
+  const diferenciaReal = diferenciaDinero(cuentaDetalle?.precio_final || 0, totalPagadoReal);
+  const haySobrepago = aCentavos(diferenciaReal) < 0; // en centavos: sin ruido de punto flotante
   const montoSobrepago = haySobrepago ? Math.abs(diferenciaReal) : 0;
   const totalPendiente = Math.max(0, diferenciaReal);
 
   // Detectar discrepancia entre pagos reales y aplicaciones (para mostrar botón recalcular)
   // Solo calcular cuando TODAS las queries relacionadas estén completamente cargadas para evitar falsos positivos
   const isLoadingPaymentData = !pagos || aplicacionesPorPagoLoading || acuerdosLoading || !acuerdosPago;
-  const totalAplicaciones = aplicacionesPorPago?.reduce((sum, app) => sum + (app.monto || 0), 0) || 0;
-  const discrepanciaPagosVsAplicaciones = totalPagadoReal - totalAplicaciones;
-  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0 && Math.abs(discrepanciaPagosVsAplicaciones) > 0.01;
+  const totalAplicaciones = sumarDinero(aplicacionesPorPago, (app) => app.monto);
+  const discrepanciaPagosVsAplicaciones = diferenciaDinero(totalPagadoReal, totalAplicaciones);
+  const hayDiscrepanciaAplicaciones = !isLoadingPaymentData && pagos && pagos.length > 0
+    && difiereEnDinero(totalPagadoReal, totalAplicaciones);
 
   // Calculate pending balance breakdown (only for properties)
   const pendingBalanceBreakdown = cuentaDetalle?.tipo_cuenta === 'Propiedad' && acuerdosPago ? (() => {
@@ -2722,9 +2732,9 @@ export default function DetalleCuentaCobranza() {
       return null;
     }
 
-    const totalPagos = pagosData.reduce((sum, p) => sum + Number(p.monto), 0);
-    const totalAplicado = aplicacionesData.reduce((sum, a) => sum + Number(a.monto), 0);
-    return Math.abs(totalPagos - totalAplicado) > 0.01;
+    const totalPagos = sumarDinero(pagosData, (p) => p.monto);
+    const totalAplicado = sumarDinero(aplicacionesData, (a) => a.monto);
+    return difiereEnDinero(totalPagos, totalAplicado);
   };
 
   // Webhook n8n que redistribuye las aplicaciones tras un ajuste. fetch solo lanza en
@@ -3079,6 +3089,13 @@ export default function DetalleCuentaCobranza() {
   }
 
   const esCuentaCancelada = !cuentaDetalle?.activo;
+
+  // Descuento del esquema de la oferta (si existe): el precio_final ya lo trae
+  // aplicado, así que la base se deriva de él para que el desglose cuadre.
+  const desgloseDescuento = calcularDesgloseDescuento(
+    cuentaDetalle?.precio_final,
+    cuentaDetalle?.porcentaje_descuento_aumento,
+  );
   
   // Check if property status is "Entregado" (id=8) - makes everything read-only
   const isReadOnly = cuentaDetalle?.id_estatus_disponibilidad === 8;
@@ -3579,6 +3596,16 @@ export default function DetalleCuentaCobranza() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(cuentaDetalle.precio_final)}</div>
+            {desgloseDescuento && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground line-through">
+                  {formatCurrency(desgloseDescuento.precioLista)}
+                </span>
+                <span className="rounded-full bg-success/10 px-1.5 py-0.5 text-[11px] font-semibold text-success">
+                  −{formatPorcentajeDescuento(desgloseDescuento.porcentaje)}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -4064,6 +4091,27 @@ export default function DetalleCuentaCobranza() {
                     </button>
                   </div>
                 )}
+              </>
+            )}
+
+            {/* Descuento del esquema — aplica igual a propiedades y a productos */}
+            {desgloseDescuento && (
+              <>
+                <div>
+                  <label className="text-sm font-medium">Precio de lista</label>
+                  <p className="text-sm text-muted-foreground line-through">
+                    {formatCurrency(desgloseDescuento.precioLista)}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Descuento</label>
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+                    <span className="rounded-full bg-success/10 px-1.5 py-0.5 text-[11px] font-semibold">
+                      −{formatPorcentajeDescuento(desgloseDescuento.porcentaje)}
+                    </span>
+                    −{formatCurrency(desgloseDescuento.montoDescuento)}
+                  </p>
+                </div>
               </>
             )}
           </div>

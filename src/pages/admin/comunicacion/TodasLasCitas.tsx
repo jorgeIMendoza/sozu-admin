@@ -66,6 +66,7 @@ interface ConfigCita {
   max_invitados: number;
   descripcion_invitacion: string | null;
   fecha_fin_recurrencia: string | null;
+  activo: boolean;
 }
 
 interface Horario {
@@ -998,8 +999,9 @@ export default function TodasLasCitas() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("configuracion_citas_usuarios")
-        .select("id, nombre, id_usuario_email, calendario_email, correos_enterado, correos_enterado_fijos, duracion_minutos, max_invitados, descripcion_invitacion, fecha_fin_recurrencia")
-        .eq("activo", true);
+        // Se traen también las deshabilitadas: las citas ya agendadas deben seguir
+        // pintándose en el calendario; lo que se apaga son los horarios libres.
+        .select("id, nombre, id_usuario_email, calendario_email, correos_enterado, correos_enterado_fijos, duracion_minutos, max_invitados, descripcion_invitacion, fecha_fin_recurrencia, activo");
       if (error) { console.error("Error fetching configs:", error); return []; }
       return (data || []) as ConfigCita[];
     },
@@ -1357,7 +1359,9 @@ export default function TodasLasCitas() {
     // Filter out horarios whose config no longer exists (obsolete/test configs)
     const withActiveConfig = horarios.filter(h => {
       if (!h.id_configuracion_cita) return false;
-      return configMap.has(h.id_configuracion_cita);
+      const cfg = configMap.get(h.id_configuracion_cita);
+      // Config inexistente (obsoleta) o deshabilitada → sin horarios libres
+      return !!cfg && cfg.activo !== false;
     });
     if (ownerFilter === "all") return withActiveConfig;
     return withActiveConfig.filter(h => {

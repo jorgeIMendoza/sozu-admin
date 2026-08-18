@@ -33,6 +33,7 @@ import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useExportToExcel } from "@/hooks/useExportToExcel";
 import { FileSpreadsheet } from "lucide-react";
 import { useCuentasCobranzaPaginadas, CuentaCobranza } from "@/hooks/useCuentasCobranzaPaginadas";
+import { difiereEnDinero } from "@/utils/dinero";
 
 // Re-export interfaces from the hook for internal use
 interface CashPayment {
@@ -1547,7 +1548,7 @@ export default function Pagos() {
                                 contra el que comparar. Las cuentas hijas de mantenimiento
                                 llevan precio_final = 0 por diseño (plan recurrente). */}
                             {cuenta.tiene_acuerdos && (cuenta.precio_final || 0) > 0
-                              && Math.abs(cuenta.discrepancia || 0) > 0.01 && (
+                              && difiereEnDinero(cuenta.discrepancia || 0, 0) && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger>

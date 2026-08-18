@@ -257,10 +257,24 @@ export class OfferProductPdfNativeService {
     pdf.text("Datos del Producto:", margin + colWidth + 6, y);
     y += 6;
 
+    // Descuento del esquema seleccionado (negativo = descuento). Se muestra en la
+    // tarjeta del producto para homologarla con el desglose de los esquemas de pago.
+    const esquemaSeleccionadoDesc = data.paymentSchemes.find(
+      (sch) => sch.id === data.offerData.id_esquema_pago_seleccionado
+    );
+    const pctDescuentoSeleccionado = Number(
+      esquemaSeleccionadoDesc?.porcentaje_descuento_aumento ?? 0
+    );
+    const hayDescuentoSeleccionado = !!esquemaSeleccionadoDesc && pctDescuentoSeleccionado < 0;
+    const montoDescuentoSeleccionado = hayDescuentoSeleccionado
+      ? (Number(data.productDetails.precio_lista ?? 0) * Math.abs(pctDescuentoSeleccionado)) / 100
+      : 0;
+
     // Calculate card heights
     const lineHeight = 5.5;
     const propLines = 2 + (data.propertyDetails.model ? 1 : 0) + (data.propertyDetails.building ? 1 : 0);
-    const prodLines = 3 + (data.productDetails.precio_por_m2 ? 1 : 0);
+    const prodLines =
+      3 + (data.productDetails.precio_por_m2 ? 1 : 0) + (hayDescuentoSeleccionado ? 2 : 0);
     const cardHeight = Math.max(propLines, prodLines) * lineHeight + 10;
 
     // Property Card Background
@@ -345,6 +359,26 @@ export class OfferProductPdfNativeService {
     pdf.text(`Precio de lista: `, prodX, prodY);
     pdf.setFont("helvetica", "bold");
     pdf.text(formatCurrency(data.productDetails.precio_lista), prodX + 28, prodY);
+
+    if (hayDescuentoSeleccionado) {
+      prodY += lineHeight;
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Descuento (${Math.abs(pctDescuentoSeleccionado)}%): `, prodX, prodY);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(`-${formatCurrency(montoDescuentoSeleccionado)}`, prodX + 28, prodY);
+
+      prodY += lineHeight;
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Precio final: `, prodX, prodY);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(
+        formatCurrency(
+          Number(data.productDetails.precio_lista ?? 0) - montoDescuentoSeleccionado
+        ),
+        prodX + 28,
+        prodY
+      );
+    }
 
     y += cardHeight + 6;
 
