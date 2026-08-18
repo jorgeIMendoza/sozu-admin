@@ -31,6 +31,17 @@ const TIPOS = [
   { id: 14, label: "Terreno" },
 ];
 
+/**
+ * Un terreno nunca cuelga de un proyecto.
+ *
+ * Local, oficina y bodega pueden estar dentro de un desarrollo o ser un
+ * inmueble suelto —una oficina en un edificio ajeno, un local a pie de calle—,
+ * así que ahí la pertenencia se pregunta. Un terreno no tiene edificio ni
+ * modelo por definición, y preguntarlo solo daría una respuesta imposible.
+ */
+const TIPO_TERRENO = 14;
+const admiteProyecto = (tipo: number) => tipo !== TIPO_TERRENO;
+
 const TRANSACCIONES = [
   { id: 1, label: "Venta" },
   { id: 2, label: "Renta" },
@@ -273,6 +284,13 @@ export default function ActivosComercialesNuevo() {
   const [loaded, setLoaded] = useState(!isEdit);
 
   /**
+   * Si el activo pertenece a un desarrollo. Solo se pregunta a los tipos que lo
+   * admiten; un terreno queda siempre fuera y su respuesta no se conserva, para
+   * que cambiar de tipo no arrastre una decisión que ya no aplica.
+   */
+  const [enProyecto, setEnProyecto] = useState(true);
+
+  /**
    * Lo único que se exige para capturar es una sesión activa.
    *
    * Dar de alta ya no está reservado a Super Administrador: cualquiera con
@@ -330,6 +348,18 @@ export default function ActivosComercialesNuevo() {
   // Reset atributos al cambiar tipo
   useEffect(() => {
     if (!isEdit) setAtts({});
+  }, [tipo, isEdit]);
+
+  // Un terreno no puede quedar ligado a un proyecto: si se venía de otro tipo
+  // con proyecto elegido, se limpia el vínculo además de la respuesta.
+  useEffect(() => {
+    if (isEdit) return;
+    if (!admiteProyecto(tipo)) {
+      setEnProyecto(false);
+      setProp((p) => (p.id_edificio_modelo ? { ...p, id_edificio_modelo: "" } : p));
+    } else {
+      setEnProyecto(true);
+    }
   }, [tipo, isEdit]);
 
   // Cargar datos existentes en modo edición
@@ -410,14 +440,14 @@ export default function ActivosComercialesNuevo() {
     const f: { campo: string; paso: string }[] = [];
     const falta = (campo: string, paso: string) => f.push({ campo, paso });
 
-    if (!isEdit && !prop.id_edificio_modelo) falta("Proyecto, Edificio y Modelo", "general");
+    if (!isEdit && enProyecto && !prop.id_edificio_modelo) falta("Proyecto, Edificio y Modelo", "general");
     if (!prop.id_tipo_propiedad) falta("Tipo de activo", "general");
     if (!prop.id_tipo_transaccion) falta("Transacción", "general");
     if (!String(prop.numero_propiedad ?? "").trim()) falta("Número / Clave interna", "general");
     if (showVenta && !(Number(prop.precio_lista) > 0)) falta("Precio de lista", "general");
     if (showRenta && !(Number(renta.renta_mensual) > 0)) falta("Renta mensual", "renta");
     return f;
-  }, [prop, renta, showVenta, showRenta, isEdit]);
+  }, [prop, renta, showVenta, showRenta, isEdit, enProyecto]);
 
   const canSave = faltantes.length === 0;
 
@@ -451,7 +481,13 @@ export default function ActivosComercialesNuevo() {
         return;
       }
       const payload: Dict = {
-        propiedad: prop,
+        propiedad: {
+          ...prop,
+          // La base necesita distinguir "sin proyecto todavía" de "no lleva
+          // proyecto": sin esta bandera no puede validar la terna solo cuando
+          // corresponde.
+          en_proyecto: admiteProyecto(tipo) ? enProyecto : false,
+        },
         activo_comercial: pac,
         atributos: atts,
       };
@@ -471,7 +507,9 @@ export default function ActivosComercialesNuevo() {
       // inglés que no dice qué hacer.
       const crudo = e?.message ?? "Error desconocido";
       const descripcion =
-        crudo === "not authorized"
+        /id_edificio_modelo.*not-null|null value in column "id_edificio_modelo"/.test(crudo)
+          ? "Este activo no está ligado a un desarrollo y la base de datos todavía lo exige. Falta aplicar Ejecuciones_manuales/20260818_activos_comerciales_sin_proyecto.md, o bien elige un proyecto."
+          : crudo === "not authorized"
           ? "La base de datos todavía tiene la regla anterior, que solo permite crear a un Super Administrador. Falta aplicar Ejecuciones_manuales/20260818_activos_comerciales_alta_draft.md en este ambiente."
           : crudo === "permission denied for function crear_activo_comercial"
             ? "Tu sesión caducó. Cierra sesión y vuelve a entrar para guardar el activo."
@@ -613,6 +651,26 @@ export default function ActivosComercialesNuevo() {
           )}
         </div>
       )}
+      {/*
+        `propiedades.id_edificio_modelo` es NOT NULL en la base. Mientras no se
+        aplique el DDL que lo hace opcional, un activo sin desarrollo se rechaza
+        al guardar. Se avisa aquí y no al final, que es donde dolería.
+      */}
+      {!isEdit && !enProyecto && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+            Los activos sin desarrollo aún no se pueden guardar
+          </p>
+          <p className="mt-0.5 text-sm text-foreground/80">
+            La base de datos todavía exige que toda propiedad cuelgue de un edificio y un
+            modelo. Falta aplicar{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+              Ejecuciones_manuales/20260818_activos_comerciales_sin_proyecto.md
+            </code>
+            {" "}en este ambiente.
+          </p>
+        </div>
+      )}
 
       {permiso.estado === "sin_sesion" && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
@@ -674,20 +732,14 @@ export default function ActivosComercialesNuevo() {
               <CardTitle>Datos generales</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/*
+                El tipo de activo va primero porque decide el resto del formulario:
+                qué atributos se piden y si el activo puede colgar de un proyecto.
+                Preguntarlo después obliga a rehacer lo capturado al cambiarlo.
+              */}
               <Seccion
-                titulo="Ubicación en el inventario"
-                descripcion="A qué desarrollo pertenece el activo. Sin esto no se puede guardar."
-              >
-                <UbicacionInventario
-                  idEdificioModelo={prop.id_edificio_modelo}
-                  onChange={(v) => setP("id_edificio_modelo", v)}
-                  disabled={isEdit}
-                />
-              </Seccion>
-
-              <Seccion
-                titulo="Identificación"
-                descripcion="Qué tipo de activo es, cómo se comercializa y cómo se le identifica."
+                titulo="Qué activo es"
+                descripcion="Define el resto del formulario: los atributos que se piden y si puede pertenecer a un desarrollo."
               >
                 <Field label="Tipo de activo *">
                   <Select
@@ -716,6 +768,73 @@ export default function ActivosComercialesNuevo() {
                     </SelectContent>
                   </Select>
                 </Field>
+              </Seccion>
+
+              <Seccion
+                titulo="Ubicación en el inventario"
+                descripcion={
+                  admiteProyecto(tipo)
+                    ? "Un local, oficina o bodega puede estar dentro de un desarrollo de SOZU o ser un inmueble suelto."
+                    : "Un terreno no pertenece a ningún desarrollo, así que no se le asigna edificio ni modelo."
+                }
+              >
+                {admiteProyecto(tipo) ? (
+                  <>
+                    <Field label="¿Pertenece a un desarrollo? *" className="md:col-span-3">
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { v: true, t: "Sí, está dentro de un proyecto" },
+                          { v: false, t: "No, es un inmueble independiente" },
+                        ].map((o) => (
+                          <button
+                            key={String(o.v)}
+                            type="button"
+                            disabled={isEdit}
+                            onClick={() => {
+                              setEnProyecto(o.v);
+                              // Pasar a independiente descarta el vínculo elegido: dejarlo
+                              // ligaría el activo a un proyecto que se acaba de descartar.
+                              if (!o.v) setP("id_edificio_modelo", "");
+                            }}
+                            className={cn(
+                              "rounded-md border px-3 py-2 text-sm transition-colors",
+                              enProyecto === o.v
+                                ? "border-primary bg-primary/10 font-medium text-foreground"
+                                : "border-border text-muted-foreground hover:bg-muted",
+                              isEdit && "opacity-60",
+                            )}
+                          >
+                            {o.t}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+
+                    {enProyecto ? (
+                      <UbicacionInventario
+                        idEdificioModelo={prop.id_edificio_modelo}
+                        onChange={(v) => setP("id_edificio_modelo", v)}
+                        disabled={isEdit}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground md:col-span-3">
+                        Se dará de alta sin vincularse a ningún desarrollo. Su ubicación se
+                        captura en el paso <strong>Ubicación</strong>.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground md:col-span-3">
+                    Los terrenos se dan de alta sueltos. Su ubicación se captura en el paso{" "}
+                    <strong>Ubicación</strong>.
+                  </p>
+                )}
+              </Seccion>
+
+              <Seccion
+                titulo="Identificación"
+                descripcion="Cómo se identifica la unidad dentro del inventario."
+              >
                 <Field label="Número / Clave interna *">
                   <Input value={prop.numero_propiedad} onChange={(e) => setP("numero_propiedad", e.target.value)} />
                 </Field>
