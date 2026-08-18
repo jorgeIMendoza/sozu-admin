@@ -1,62 +1,165 @@
-import {Link} from "react-router-dom";
-import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
 import {
   BadgeCheck,
-  Camera,
   CheckCircle2,
   ChevronRight,
   Clock3,
   Eye,
   EyeOff,
   FileText,
+  Loader2,
   ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePortal } from "@/lib/portal-personal/portal-store";
-import { selectores } from "@/lib/portal-personal/selectores";
-import { EXPEDIENTE, REGLAS } from "@/lib/portal-personal/mock";
+import { REGLAS } from "@/lib/portal-personal/mock";
+import { usePerfilPersonal } from "@/hooks/usePortalPersonalPerfil";
+import { useExpedienteDocs } from "@/hooks/useExpedienteDocs";
+import { ExpedienteDocsPanel, type ExpDocDef } from "@/components/admin/expediente/ExpedienteDocsPanel";
 import { LinkReferido } from "@/components/admin/portal-personal/comunes/LinkReferido";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AvatarColaborador } from "@/components/admin/portal-personal/comunes/Avatar";
+import { normalizeAvatarUrl } from "@/lib/avatarUrl";
 import { cn } from "@/lib/utils";
 
+/**
+ * Mi perfil — conectado a la información REAL de la persona.
+ *
+ * Lo que se lee de la base (ver `usePerfilPersonal`): cuenta de acceso y rol,
+ * puesto y antigüedad del Directorio de Personal, datos personales y fiscales de
+ * `personas`, expediente de `documentos` (con el mismo panel que usa el Portal
+ * Agente) y cuenta de depósito de `cuentas_bancarias`.
+ *
+ * Sigue siendo del programa (no del expediente) y está marcado como tal: las
+ * Reglas del Programa, la declaración de conflicto de interés, la bitácora y el
+ * link de referido.
+ */
+
+/**
+ * Expediente del personal. La identidad es UN documento: INE (frente+reverso) o
+ * pasaporte — el panel resuelve el selector y la captura.
+ */
+const DOCS_PERSONAL: ExpDocDef[] = [
+  { key: "identidad", kind: "identity" },
+  {
+    key: "csf",
+    nombre: "Constancia de Situación Fiscal",
+    emisor: "SAT",
+    hint: "PDF del SAT, no mayor a 3 meses",
+    tipos: [6],
+    kind: "pdf",
+    csf: true,
+  },
+  { key: "curp", nombre: "CURP", emisor: "RENAPO", hint: "PDF descargado de gob.mx", tipos: [5], kind: "pdf" },
+  {
+    key: "domicilio",
+    nombre: "Comprobante de domicilio",
+    emisor: "Servicio",
+    hint: "Recibo no mayor a 3 meses",
+    tipos: [8],
+    kind: "pdf",
+  },
+];
+
+/** Tipos de `tipos_documento` que componen el expediente (incluye INE completo). */
+const TIPOS_EXPEDIENTE = [2, 3, 4, 63, 6, 5, 8];
+/** Grupos de tipos que cuentan como "un documento" para el avance. */
+const GRUPOS_AVANCE = [[2, 3, 4, 63], [6], [5], [8]];
 
 type ClaveSeccion =
   | "cuenta"
   | "identidad"
   | "documentos"
   | "deposito"
+  | "proyectos"
   | "reglas"
   | "conflicto"
-  | "desarrollos"
   | "bitacora"
   | "seguridad";
 
+const fecha = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) : "—";
+
 export default function PerfilPage() {
-  const usuario = usePortal((s) => s.usuario);
   const modo = usePortal((s) => s.modo_presentacion);
   const logs = usePortal((s) => s.logs);
+  const usuarioMock = usePortal((s) => s.usuario);
   const firmar = usePortal((s) => s.firmarConflictoInteres);
   const registrarLog = usePortal((s) => s.registrarLog);
+
+  const { perfil, isLoading, sinCuenta } = usePerfilPersonal();
 
   const [abierta, setAbierta] = useState<ClaveSeccion | null>(null);
   const [modalCI, setModalCI] = useState(false);
   const [clabeVisible, setClabeVisible] = useState(false);
   const [aceptoCI, setAceptoCI] = useState(false);
 
-  const oculto = (v: string) => (modo ? "••••••" : v);
-  const pendientes = selectores.pendientesDeElegibilidad(usuario);
-  const inelegible = !usuario.elegible_referidos;
+  const oculto = (v: string | null | undefined) => (modo ? "••••••" : v || "—");
 
-  const clabeEnmascarada = `···· ···· ···· ·· ${usuario.clabe.slice(-4)}`;
-  const clabeCoincide = usuario.clabe_valida && usuario.titular_clabe === usuario.nombre;
+  // Avance del expediente: documentos validados sobre los que se piden.
+  const { tipoEstado, isLoading: cargandoDocs } = useExpedienteDocs({
+    personaId: perfil?.personaId ?? null,
+    tipos: TIPOS_EXPEDIENTE,
+  });
+
+  const avance = useMemo(() => {
+    const estados = GRUPOS_AVANCE.map((grupo) =>
+      grupo.some((t) => tipoEstado(t) === "validado")
+        ? "validado"
+        : grupo.some((t) => tipoEstado(t) === "revision" || tipoEstado(t) === "rechazado")
+          ? "en_proceso"
+          : "pendiente",
+    );
+    const validadas = estados.filter((e) => e === "validado").length;
+    return {
+      validadas,
+      enProceso: estados.filter((e) => e === "en_proceso").length,
+      pendientes: estados.filter((e) => e === "pendiente").length,
+      total: estados.length,
+      pct: Math.round((validadas / estados.length) * 100),
+    };
+  }, [tipoEstado]);
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto flex max-w-5xl items-center gap-2 p-10 text-sm text-gris">
+        <Loader2 className="size-4 animate-spin" />
+        Cargando tu perfil...
+      </div>
+    );
+  }
+
+  if (sinCuenta || !perfil) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <div className="card-sozu flex flex-col items-center gap-3 p-10 text-center">
+          <ShieldAlert className="size-6 text-gris" />
+          <p className="text-lg font-bold text-negro">No encontramos tu perfil</p>
+          <p className="text-sm text-gris">
+            Tu correo no corresponde a ninguna cuenta del sistema.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const nombre = perfil.nombreLegal || perfil.nombreCuenta || perfil.email;
+  const sinPersona = perfil.personaId == null;
+  const sinDirectorio = perfil.personalId == null;
+  const pendientesExpediente = avance.total - avance.validadas;
+
+  const clabe = perfil.cuentaDeposito?.clabe ?? null;
+  const clabeEnmascarada = clabe ? `···· ···· ···· ·· ${clabe.slice(-4)}` : "—";
+
+  const badgeDoc = (validado: boolean, hayAlgo: boolean) =>
+    validado
+      ? ({ texto: "Completado", tono: "verde" } as const)
+      : hayAlgo
+        ? ({ texto: "En proceso", tono: "ambar" } as const)
+        : ({ texto: "Pendiente", tono: "ambar" } as const);
 
   const secciones: {
     clave: ClaveSeccion;
@@ -67,53 +170,63 @@ export default function PerfilPage() {
     {
       clave: "cuenta",
       titulo: "Datos de tu cuenta",
-      descripcion: "Tipo de colaborador, puesto, equipo y fecha de alta",
+      descripcion: "Puesto, tipo de colaborador, rol de acceso y antigüedad",
       badge: { texto: "Solo lectura", tono: "gris" },
     },
     {
       clave: "identidad",
       titulo: "Identidad",
       descripcion: "Datos personales, RFC y CURP",
-      badge: { texto: "Completado", tono: "verde" },
+      badge: sinPersona
+        ? { texto: "Sin persona ligada", tono: "ambar" }
+        : perfil.rfc && perfil.curp
+          ? { texto: "Completado", tono: "verde" }
+          : { texto: "Incompleto", tono: "ambar" },
     },
     {
       clave: "documentos",
       titulo: "Documentos",
-      descripcion: "Sube y consulta todos tus documentos",
-      badge: { texto: "Pendiente", tono: "ambar" },
+      descripcion: sinPersona
+        ? "Requiere una persona ligada a tu cuenta"
+        : `${avance.validadas} de ${avance.total} documentos validados`,
+      badge: badgeDoc(avance.validadas === avance.total, avance.enProceso > 0),
     },
     {
       clave: "deposito",
       titulo: "Cuenta de depósito",
       descripcion: "Banco, CLABE y titular",
-      badge: usuario.cuenta_bancaria_confirmada
-        ? { texto: "Completado", tono: "verde" }
+      badge: perfil.cuentaDeposito
+        ? perfil.cuentaDeposito.validada
+          ? { texto: "Validada", tono: "verde" }
+          : { texto: "En revisión", tono: "ambar" }
         : { texto: "Pendiente", tono: "ambar" },
+    },
+    {
+      clave: "proyectos",
+      titulo: "Proyectos asignados",
+      descripcion: perfil.proyectos.length
+        ? perfil.proyectos.map((p) => p.nombre).join(", ")
+        : "Sin proyectos asignados en el Directorio",
+      badge: { texto: "Solo lectura", tono: "gris" },
     },
     {
       clave: "reglas",
       titulo: "Reglas del Programa",
       descripcion: `Consulta y acepta las reglas vigentes (v${REGLAS.version})`,
       badge:
-        usuario.reglas_aceptadas_version === REGLAS.version
+        usuarioMock.reglas_aceptadas_version === REGLAS.version
           ? { texto: "Completado", tono: "verde" }
           : { texto: "Pendiente", tono: "ambar" },
     },
     {
       clave: "conflicto",
       titulo: "Declaración de conflicto de interés",
-      descripcion: usuario.conflicto_interes_firmado_en
-        ? `Firmada el ${new Date(usuario.conflicto_interes_firmado_en).toLocaleDateString("es-MX")}`
+      descripcion: usuarioMock.conflicto_interes_firmado_en
+        ? `Firmada el ${fecha(usuarioMock.conflicto_interes_firmado_en)}`
         : "Pendiente de firma",
-      badge: usuario.conflicto_interes_firmado_en
+      badge: usuarioMock.conflicto_interes_firmado_en
         ? { texto: "Completado", tono: "verde" }
         : { texto: "Pendiente", tono: "ambar" },
-    },
-    {
-      clave: "desarrollos",
-      titulo: "Desarrollos asignados",
-      descripcion: usuario.desarrollos_asignados.join(", "),
-      badge: { texto: "Solo lectura", tono: "gris" },
     },
     {
       clave: "bitacora",
@@ -125,7 +238,9 @@ export default function PerfilPage() {
       clave: "seguridad",
       titulo: "Seguridad",
       descripcion: "Acceso y contraseña",
-      badge: { texto: "Solo lectura", tono: "gris" },
+      badge: perfil.emailConfirmado
+        ? { texto: "Correo confirmado", tono: "verde" }
+        : { texto: "Correo sin confirmar", tono: "ambar" },
     },
   ];
 
@@ -135,61 +250,55 @@ export default function PerfilPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <section className="card-sozu p-6">
           <div className="flex flex-wrap items-start gap-5">
-            <div className="relative">
-              <AvatarColaborador
-                nombre={usuario.nombre}
-                foto={usuario.foto_url}
-                enmascarado={modo}
-                className="size-20 text-xl"
-              />
-              <button
-                type="button"
-                aria-label="Cambiar fotografía"
-                onClick={() => toast.success("Selecciona una nueva fotografía")}
-                className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full border border-border bg-background text-gris shadow-sm"
-              >
-                <Camera className="size-4" />
-              </button>
-            </div>
+            <AvatarColaborador
+              nombre={nombre}
+              foto={normalizeAvatarUrl(perfil.fotoUrl) || null}
+              enmascarado={modo}
+              className="size-20 text-xl"
+            />
             <div className="flex-1">
-              <h2 className="text-[26px] font-bold leading-tight text-negro">
-                {oculto(usuario.nombre)}
-              </h2>
+              <h2 className="text-[26px] font-bold leading-tight text-negro">{oculto(nombre)}</h2>
               <p className="text-sm text-gris">
-                {usuario.rol} · {usuario.subrol}
+                {perfil.puesto ?? "Sin puesto en el Directorio"}
+                {perfil.rolAcceso ? ` · ${perfil.rolAcceso}` : ""}
               </p>
               <p className="num mt-1 text-sm text-gris">
-                {oculto(usuario.correo)} · {oculto(usuario.telefono)}
+                {oculto(perfil.email)}
+                {perfil.telefono ? ` · ${oculto(perfil.telefono)}` : ""}
               </p>
             </div>
-            <BadgeElegibilidad inelegible={inelegible} pendientes={pendientes.length} />
+            <BadgeExpediente
+              sinPersona={sinPersona}
+              pendientes={pendientesExpediente}
+              cargando={cargandoDocs}
+            />
           </div>
 
-          {inelegible && usuario.motivo_inelegibilidad && (
-            <div className="mt-5 flex items-start gap-3 rounded-xl border border-rojo-borde bg-rojo-claro p-4">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-rojo" />
-              <p className="text-sm text-negro">{usuario.motivo_inelegibilidad}</p>
+          {sinDirectorio && (
+            <div className="mt-5 flex items-start gap-3 rounded-xl border border-ambar-borde bg-ambar-claro p-4">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-ambar" />
+              <p className="text-sm text-negro">
+                Tu cuenta no está dada de alta en el Directorio de Personal, así que no podemos
+                mostrar tu puesto ni tus proyectos asignados. Pide que te registren en{" "}
+                <b>Estructura de comisiones → Roles y sueldos</b> con este correo.
+              </p>
             </div>
           )}
 
           <div className="mt-6">
+            {/* Programa de referidos: el código sigue siendo del mock. */}
             <LinkReferido variante="barra" />
           </div>
         </section>
 
         <section className="card-sozu p-6">
           <p className="eyebrow text-gris">Activación</p>
-          <p className="num mt-1 text-[40px] font-bold leading-none text-verde">
-            {usuario.activacion_pct}%
-          </p>
+          <p className="num mt-1 text-[40px] font-bold leading-none text-verde">{avance.pct}%</p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-secondary">
-            <div
-              className="h-full rounded-full bg-verde"
-              style={{ width: `${usuario.activacion_pct}%` }}
-            />
+            <div className="h-full rounded-full bg-verde" style={{ width: `${avance.pct}%` }} />
           </div>
           <p className="mt-3 text-sm text-gris">
-            Se calcula sobre documentos validados y etapas completadas.
+            Se calcula sobre los documentos validados de tu expediente.
           </p>
         </section>
       </div>
@@ -207,26 +316,22 @@ export default function PerfilPage() {
               que ya dijeron.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Button
-                variant="outline"
-                className="bg-background"
-                onClick={() => setAbierta("documentos")}
-              >
+              <Button variant="outline" className="bg-background" onClick={() => setAbierta("documentos")}>
                 <FileText className="size-4" />
                 Gestionar documentos
               </Button>
               <span className="num text-sm text-gris">
-                {EXPEDIENTE.validadas} de {EXPEDIENTE.secciones_totales} secciones completadas
+                {avance.validadas} de {avance.total} documentos validados
               </span>
             </div>
           </div>
 
           <div className="rounded-xl bg-background p-4">
-            <p className="eyebrow text-gris">Estado de secciones</p>
+            <p className="eyebrow text-gris">Estado de tus documentos</p>
             <ul className="mt-3 space-y-3">
-              <FilaEstado n={EXPEDIENTE.validadas} texto="validadas" tono="verde" />
-              <FilaEstado n={EXPEDIENTE.en_proceso} texto="en proceso" tono="ambar" />
-              <FilaEstado n={EXPEDIENTE.pendientes} texto="pendientes" tono="gris" />
+              <FilaEstado n={avance.validadas} texto="validados" tono="verde" />
+              <FilaEstado n={avance.enProceso} texto="en proceso" tono="ambar" />
+              <FilaEstado n={avance.pendientes} texto="pendientes" tono="gris" />
             </ul>
           </div>
         </div>
@@ -262,120 +367,132 @@ export default function PerfilPage() {
                 <div className="border-t border-border p-5">
                   {s.clave === "cuenta" && (
                     <div className="grid gap-4 sm:grid-cols-2">
+                      <Campo label="Puesto" valor={perfil.puesto ?? "—"} />
                       <Campo
                         label="Tipo de colaborador"
-                        valor={usuario.tipo_colaborador.replace(/_/g, " ")}
+                        valor={
+                          perfil.tipoPersonal === "colaborador_investimento"
+                            ? "Colaborador Investimento"
+                            : perfil.tipoPersonal === "empleado_sozu"
+                              ? "Empleado SOZU"
+                              : "—"
+                        }
                       />
-                      <Campo label="Puesto" valor={usuario.subrol} />
-                      <Campo label="Equipo" valor={usuario.rol} />
-                      <Campo
-                        label="Fecha de alta"
-                        valor={new Date(usuario.auditoria.creado_en).toLocaleDateString("es-MX")}
-                      />
+                      <Campo label="Rol de acceso al sistema" valor={perfil.rolAcceso ?? "—"} />
+                      <Campo label="Fecha de ingreso" valor={fecha(perfil.fechaIngreso)} />
+                      <Campo label="Alta de la cuenta" valor={fecha(perfil.fechaAltaCuenta)} />
                     </div>
                   )}
 
-                  {s.clave === "identidad" && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Campo label="Nombre completo" valor={oculto(usuario.nombre)} />
-                      <Campo label="Correo" valor={oculto(usuario.correo)} />
-                      <Campo label="RFC" valor={oculto(usuario.rfc)} />
-                      <Campo label="CURP" valor={oculto(usuario.curp)} />
-                    </div>
-                  )}
-
-                  {s.clave === "documentos" && (
-                    <div className="space-y-3">
-                      {/* SWAP POINT: supabase.documentos_expediente */}
-                      {[
-                        ["Identificación oficial", "Validado"],
-                        ["Constancia de situación fiscal", "Validado"],
-                        ["Comprobante de domicilio", "Validado"],
-                        ["Estado de cuenta con CLABE", "Validado"],
-                        ["CURP", "En proceso"],
-                        ["Carta de conflicto de interés", "En proceso"],
-                      ].map(([nombre, estado]) => (
-                        <div
-                          key={nombre}
-                          className="flex items-center justify-between rounded-xl border border-border p-3"
-                        >
-                          <span className="text-sm text-negro">{nombre}</span>
-                          <Badge tono={estado === "Validado" ? "verde" : "ambar"}>
-                            {estado as string}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {s.clave === "deposito" && (
-                    <div>
+                  {s.clave === "identidad" &&
+                    (sinPersona ? (
                       <p className="text-sm text-gris">
-                        Tus ganancias se depositan aquí. El nombre del titular debe coincidir con
-                        tu RFC.
+                        Tu cuenta todavía no tiene una persona ligada, así que no hay datos
+                        personales ni fiscales que mostrar. Se crean al capturar tu expediente.
                       </p>
-                      <div className="mt-4 flex items-center gap-2">
-                        <p className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 font-mono text-sm tracking-wider text-negro">
-                          {clabeVisible && !modo ? usuario.clabe : clabeEnmascarada}
+                    ) : (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Campo label="Nombre legal" valor={oculto(perfil.nombreLegal)} />
+                        <Campo label="Correo" valor={oculto(perfil.email)} />
+                        <Campo label="Teléfono" valor={oculto(perfil.telefono)} />
+                        <Campo label="Fecha de nacimiento" valor={modo ? "••••••" : fecha(perfil.fechaNacimiento)} />
+                        <Campo label="RFC" valor={oculto(perfil.rfc)} />
+                        <Campo label="CURP" valor={oculto(perfil.curp)} />
+                        <Campo label="Régimen fiscal" valor={oculto(perfil.regimen)} />
+                        <Campo label="Domicilio" valor={oculto(perfil.direccion)} />
+                      </div>
+                    ))}
+
+                  {s.clave === "documentos" &&
+                    (sinPersona ? (
+                      <p className="text-sm text-gris">
+                        El expediente se guarda contra tu persona y tu cuenta aún no tiene una
+                        ligada. En cuanto exista, aquí podrás subir y consultar tus documentos.
+                      </p>
+                    ) : (
+                      <ExpedienteDocsPanel
+                        personaId={perfil.personaId}
+                        docs={DOCS_PERSONAL}
+                        queryTipos={TIPOS_EXPEDIENTE}
+                      />
+                    ))}
+
+                  {s.clave === "deposito" &&
+                    (perfil.cuentaDeposito ? (
+                      <div>
+                        <p className="text-sm text-gris">
+                          Tus ganancias se depositan aquí. El nombre del titular debe coincidir con
+                          tu RFC.
                         </p>
-                        {!modo && (
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label={clabeVisible ? "Ocultar CLABE" : "Revelar CLABE"}
-                            onClick={() => {
-                              if (!clabeVisible) {
-                                registrarLog(
-                                  "revelacion_clabe",
-                                  "El colaborador reveló su CLABE en pantalla",
-                                );
-                              }
-                              setClabeVisible(!clabeVisible);
-                            }}
-                          >
-                            {clabeVisible ? (
-                              <EyeOff className="size-4" />
-                            ) : (
-                              <Eye className="size-4" />
-                            )}
-                          </Button>
+                        <div className="mt-4 flex items-center gap-2">
+                          <p className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 font-mono text-sm tracking-wider text-negro">
+                            {clabeVisible && !modo ? (clabe ?? "—") : clabeEnmascarada}
+                          </p>
+                          {!modo && clabe && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label={clabeVisible ? "Ocultar CLABE" : "Revelar CLABE"}
+                              onClick={() => {
+                                if (!clabeVisible) {
+                                  registrarLog(
+                                    "revelacion_clabe",
+                                    "El colaborador reveló su CLABE en pantalla",
+                                  );
+                                }
+                                setClabeVisible(!clabeVisible);
+                              }}
+                            >
+                              {clabeVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </Button>
+                          )}
+                        </div>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                          <Campo label="Titular" valor={oculto(perfil.cuentaDeposito.titular)} />
+                          <Campo label="Banco" valor={perfil.cuentaDeposito.banco ?? "—"} />
+                        </div>
+                        {perfil.cuentaDeposito.validada ? (
+                          <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-verde-claro px-3 py-1.5 text-xs font-semibold text-verde-oscuro">
+                            <CheckCircle2 className="size-3.5" />
+                            Cuenta validada
+                          </p>
+                        ) : (
+                          <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-ambar-claro px-3 py-1.5 text-xs font-semibold text-ambar">
+                            <Clock3 className="size-3.5" />
+                            En revisión
+                          </p>
                         )}
                       </div>
+                    ) : (
+                      <p className="text-sm text-gris">
+                        Aún no tienes una cuenta de depósito registrada. Se da de alta con tu
+                        expediente; sin ella no se puede dispersar ningún pago.
+                      </p>
+                    ))}
 
-                      {/* SWAP POINT: validacion_clabe */}
-                      {usuario.clabe_valida ? (
-                        <p className="mt-3 flex items-center gap-1.5 text-xs text-verde-oscuro">
-                          <CheckCircle2 className="size-3.5" />
-                          18 dígitos válidos · {usuario.banco}
-                        </p>
-                      ) : (
-                        <p className="mt-3 text-xs text-rojo">La CLABE no es válida</p>
-                      )}
-
-                      <div className="mt-4">
-                        <Campo label="Titular" valor={oculto(usuario.titular_clabe)} />
+                  {s.clave === "proyectos" &&
+                    (perfil.proyectos.length ? (
+                      <div className="space-y-3">
+                        {perfil.proyectos.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-negro">{p.nombre}</p>
+                              {p.rol && <p className="text-xs text-gris">Como {p.rol}</p>}
+                            </div>
+                            <span className="num text-sm font-bold text-verde">
+                              {p.asignacionPct}% de dedicación
+                            </span>
+                          </div>
+                        ))}
                       </div>
-
-                      {clabeCoincide ? (
-                        <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-verde-claro px-3 py-1.5 text-xs font-semibold text-verde-oscuro">
-                          <CheckCircle2 className="size-3.5" />
-                          Cuenta confirmada
-                        </p>
-                      ) : (
-                        <div className="mt-4 rounded-xl border border-rojo-borde bg-rojo-claro p-4">
-                          <p className="inline-flex items-center gap-2 text-xs font-semibold text-rojo">
-                            <ShieldAlert className="size-3.5" />
-                            La CLABE no corresponde a tu RFC
-                          </p>
-                          <p className="mt-2 text-sm text-negro">
-                            El pago queda bloqueado hasta que el titular de la cuenta coincida con
-                            el RFC declarado. Sube un estado de cuenta a tu nombre en Documentos y
-                            el expediente se actualizará.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-sm text-gris">
+                        No tienes proyectos asignados en el Directorio de Personal.
+                      </p>
+                    ))}
 
                   {s.clave === "reglas" && (
                     <div>
@@ -403,32 +520,16 @@ export default function PerfilPage() {
                           poder de decisión.
                         </p>
                       </div>
-                      {usuario.conflicto_interes_firmado_en ? (
+                      {usuarioMock.conflicto_interes_firmado_en ? (
                         <p className="num mt-4 inline-flex items-center gap-2 rounded-full bg-verde-claro px-3 py-1.5 text-xs font-semibold text-verde-oscuro">
                           <CheckCircle2 className="size-3.5" />
-                          Firmada el{" "}
-                          {new Date(usuario.conflicto_interes_firmado_en).toLocaleDateString(
-                            "es-MX",
-                          )}
+                          Firmada el {fecha(usuarioMock.conflicto_interes_firmado_en)}
                         </p>
                       ) : (
                         <Button className="mt-4" onClick={() => setModalCI(true)}>
                           Firmar declaración
                         </Button>
                       )}
-                    </div>
-                  )}
-
-                  {s.clave === "desarrollos" && (
-                    <div className="flex flex-wrap gap-2">
-                      {usuario.desarrollos_asignados.map((d) => (
-                        <span
-                          key={d}
-                          className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-negro"
-                        >
-                          {d}
-                        </span>
-                      ))}
                     </div>
                   )}
 
@@ -454,7 +555,16 @@ export default function PerfilPage() {
 
                   {s.clave === "seguridad" && (
                     <div className="space-y-3">
-                      <Campo label="Último acceso" valor={usuario.ultimo_acceso} />
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Campo
+                          label="Correo de acceso"
+                          valor={`${perfil.email}${perfil.emailConfirmado ? " (confirmado)" : " (sin confirmar)"}`}
+                        />
+                        <Campo
+                          label="Último cambio de contraseña"
+                          valor={fecha(perfil.ultimoCambioPassword)}
+                        />
+                      </div>
                       <Button
                         variant="outline"
                         onClick={() => toast.success("Te enviamos un correo para cambiarla")}
@@ -477,9 +587,7 @@ export default function PerfilPage() {
           </DialogHeader>
           <div className="space-y-3 text-sm text-gris">
             <p className="num text-xs">Reglas del Programa v{REGLAS.version}</p>
-            <p>
-              Puedes referir a familiares, amigos y conocidos. Ese es el propósito del programa.
-            </p>
+            <p>Puedes referir a familiares, amigos y conocidos. Ese es el propósito del programa.</p>
             <p>
               Lo que no puedes hacer es participar en una operación sobre la que tengas poder de
               decisión. Al firmar declaras que:
@@ -493,13 +601,13 @@ export default function PerfilPage() {
               <li>· No controlas la asignación ni el bloqueo del inventario que promueves.</li>
               <li>· No validas ni firmas las ofertas o contratos de tus referidos.</li>
               <li>
-                · Informarás por escrito a Dirección si en algún momento alguna de estas
-                condiciones cambia.
+                · Informarás por escrito a Dirección si en algún momento alguna de estas condiciones
+                cambia.
               </li>
             </ul>
             <p>
-              Si tu puesto implica alguna de estas funciones, no eres elegible para el programa y
-              el sistema te lo indicará.
+              Si tu puesto implica alguna de estas funciones, no eres elegible para el programa y el
+              sistema te lo indicará.
             </p>
           </div>
           <label className="mt-4 flex items-start gap-3 rounded-xl bg-secondary p-4">
@@ -533,19 +641,29 @@ export default function PerfilPage() {
   );
 }
 
-/** Estados excluyentes: inelegible > pendientes > activo (Parte A, 3.1). */
-function BadgeElegibilidad({
-  inelegible,
+/** Estados excluyentes: sin persona > pendientes > expediente completo. */
+function BadgeExpediente({
+  sinPersona,
   pendientes,
+  cargando,
 }: {
-  inelegible: boolean;
+  sinPersona: boolean;
   pendientes: number;
+  cargando: boolean;
 }) {
-  if (inelegible) {
+  if (sinPersona) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-rojo-claro px-3 py-1.5 text-xs font-semibold text-rojo">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-ambar-claro px-3 py-1.5 text-xs font-semibold text-ambar">
         <ShieldAlert className="size-3.5" />
-        No elegible
+        Sin persona ligada
+      </span>
+    );
+  }
+  if (cargando) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold text-gris">
+        <Loader2 className="size-3.5 animate-spin" />
+        Revisando expediente
       </span>
     );
   }
@@ -553,27 +671,19 @@ function BadgeElegibilidad({
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-ambar-claro px-3 py-1.5 text-xs font-semibold text-ambar">
         <Clock3 className="size-3.5" />
-        {pendientes} {pendientes === 1 ? "paso pendiente" : "pasos pendientes"}
+        {pendientes} {pendientes === 1 ? "documento pendiente" : "documentos pendientes"}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-verde-claro px-3 py-1.5 text-xs font-semibold text-verde-oscuro">
       <BadgeCheck className="size-3.5" />
-      Elegible para referir
+      Expediente completo
     </span>
   );
 }
 
-function FilaEstado({
-  n,
-  texto,
-  tono,
-}: {
-  n: number;
-  texto: string;
-  tono: "verde" | "ambar" | "gris";
-}) {
+function FilaEstado({ n, texto, tono }: { n: number; texto: string; tono: "verde" | "ambar" | "gris" }) {
   return (
     <li className="flex items-center gap-3">
       <span
@@ -591,13 +701,7 @@ function FilaEstado({
   );
 }
 
-function Badge({
-  tono,
-  children,
-}: {
-  tono: "gris" | "verde" | "ambar";
-  children: React.ReactNode;
-}) {
+function Badge({ tono, children }: { tono: "gris" | "verde" | "ambar"; children: React.ReactNode }) {
   return (
     <span
       className={cn(

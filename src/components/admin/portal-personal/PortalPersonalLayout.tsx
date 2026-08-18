@@ -11,6 +11,10 @@ import {
   usePortalPersonalImpersonation,
 } from "@/contexts/PortalPersonalImpersonationContext";
 import { PortalPersonalImpersonationSelector } from "./PortalPersonalImpersonationSelector";
+import {
+  ImpersonationViewModeBanner,
+  ImpersonationViewModeToggle,
+} from "@/components/admin/ImpersonationViewModeToggle";
 import { usePortal } from "@/lib/portal-personal/portal-store";
 import { APP_VERSION } from "@/lib/config";
 import { SozuLogo } from "@/components/ui/sozu-logo";
@@ -22,7 +26,7 @@ const PortalPersonalLayoutInner = () => {
   const { impersonatedUser, isImpersonating } = usePortalPersonalImpersonation();
   const canImpersonate = profile?.puede_impersonar === true;
   const { canReturnToAdmin } = useCanReturnToAdmin();
-  const { items } = usePortalPersonalNav();
+  const { items, isLoading: cargandoNav } = usePortalPersonalNav();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const modoPresentacion = usePortal((s) => s.modo_presentacion);
@@ -82,9 +86,14 @@ const PortalPersonalLayoutInner = () => {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
-        {items.length === 0 && (
+        {/* El aviso sólo cuando ya se resolvieron los permisos: al cambiar de
+            usuario suplantado el menú tarda un instante y decir "no tienes
+            vistas" antes de tiempo se lee como un error. */}
+        {!cargandoNav && items.length === 0 && (
           <p className="px-2 py-4 text-xs text-muted-foreground">
-            No tienes vistas habilitadas en este portal.
+            {isImpersonating
+              ? `${impersonatedUser?.nombre ?? "Este usuario"} no tiene vistas habilitadas en este portal.`
+              : "No tienes vistas habilitadas en este portal."}
           </p>
         )}
         {items.map((item) => {
@@ -162,6 +171,7 @@ const PortalPersonalLayoutInner = () => {
       </Sheet>
 
       <div className="min-w-0 flex-1 lg:pl-64">
+        {isImpersonating && <ImpersonationViewModeBanner targetName={impersonatedUser?.nombre} />}
         <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-border bg-card px-6 lg:flex">
           <div className="flex items-center gap-2 text-sm text-foreground">
             <span className="font-medium">Portal del Personal</span>
@@ -178,6 +188,9 @@ const PortalPersonalLayoutInner = () => {
               Modo presentación
             </button>
             {canImpersonate && <PortalPersonalImpersonationSelector />}
+            {canImpersonate && isImpersonating && (
+              <ImpersonationViewModeToggle targetName={impersonatedUser?.nombre} className="h-8" />
+            )}
             <div className="flex min-w-0 items-center gap-3">
               <div className="min-w-0 text-right">
                 <p className="truncate text-sm font-medium text-foreground">{activeUserName}</p>
