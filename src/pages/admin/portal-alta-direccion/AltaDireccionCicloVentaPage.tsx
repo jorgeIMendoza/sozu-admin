@@ -26,6 +26,10 @@ import {
   useExpedienteVentaDetalle,
   type ExpedienteVentaDetalle,
 } from "@/hooks/useExpedienteVentaDetalle";
+import {
+  CompradorDetalleSheet,
+  type CompradorResumen,
+} from "@/components/admin/legal-flow/CompradorDetalleSheet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -46,6 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PageHeader, Pill, Panel } from "@/components/admin/portal-alta-direccion/ui";
 import { fmtMxn } from "@/data/altaDireccion/mockData";
 import { cn } from "@/lib/utils";
@@ -1272,6 +1277,13 @@ function ExpedienteDetalleReal({
   prevLabel,
   nextLabel,
 }: { data: ExpedienteVentaDetalle } & DetailNavProps) {
+  // Detalle (solo lectura) del comprador seleccionado.
+  const [detalleComprador, setDetalleComprador] = useState<number | null>(null);
+  const compradorResumenes: CompradorResumen[] = data.compradores.map((c) => ({
+    idPersona: c.idPersona,
+    nombre: c.nombre,
+  }));
+
   return (
     <>
       <DetailNavBar
@@ -1329,11 +1341,15 @@ function ExpedienteDetalleReal({
                 />
                 <Info label="Días" value={`${data.dias_desde_compra} días`} />
               </div>
-              {data.propietario && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <Info label="Propietario / Receptor" value={data.propietario} />
-                </div>
-              )}
+              <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-3">
+                {data.propietario && (
+                  <div className="col-span-2">
+                    <Info label="Propietario / Receptor" value={data.propietario} />
+                  </div>
+                )}
+                <Info label="Agente que vendió" value={data.agente || "—"} />
+                <Info label="Inmobiliaria" value={data.inmobiliaria || "—"} />
+              </div>
             </div>
 
             {/* Indicadores financieros */}
@@ -1358,14 +1374,18 @@ function ExpedienteDetalleReal({
                   value={fmtMxn(data.comision_externa)}
                   hint={
                     data.comision_externa > 0
-                      ? "A pagar a inmobiliaria/agente externo"
+                      ? `${data.comision_externa_pct.toFixed(3)}% sobre venta · a pagar al externo`
                       : "Sin externos en esta venta"
                   }
                 />
                 <Stat
                   label="Comisión a dispersar"
                   value={fmtMxn(data.comision_a_dispersar)}
-                  hint="Equipo interno SOZU"
+                  hint={
+                    data.comision_a_dispersar > 0
+                      ? `${data.comision_a_dispersar_pct.toFixed(3)}% dispersado · equipo interno SOZU`
+                      : "Equipo interno SOZU"
+                  }
                   tone="emerald"
                 />
               </div>
@@ -1381,31 +1401,40 @@ function ExpedienteDetalleReal({
               ) : (
                 <ul className="space-y-3">
                   {data.compradores.map((c, i) => (
-                    <li
-                      key={i}
-                      className="rounded-md border border-border bg-card p-2.5"
-                    >
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Nombre
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {c.nombre}
-                        {c.porcentaje > 0 && c.porcentaje < 100 && (
-                          <span className="text-xs text-muted-foreground ml-1">
-                            ({c.porcentaje}%)
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onClick={() => setDetalleComprador(c.idPersona)}
+                        className="w-full rounded-md border border-border bg-card p-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
+                        title="Ver detalle del comprador"
+                      >
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Nombre
+                        </p>
+                        <p className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
+                          <span className="min-w-0 truncate">
+                            {c.nombre}
+                            {c.porcentaje > 0 && c.porcentaje < 100 && (
+                              <span className="text-xs text-muted-foreground ml-1">
+                                ({c.porcentaje}%)
+                              </span>
+                            )}
                           </span>
+                          <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-normal text-primary">
+                            <Eye className="h-3 w-3" /> Ver detalle
+                          </span>
+                        </p>
+                        {i === 0 && data.rfc_comprador && (
+                          <>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">
+                              RFC
+                            </p>
+                            <p className="text-sm font-mono text-foreground">
+                              {data.rfc_comprador}
+                            </p>
+                          </>
                         )}
-                      </p>
-                      {i === 0 && data.rfc_comprador && (
-                        <>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">
-                            RFC
-                          </p>
-                          <p className="text-sm font-mono text-foreground">
-                            {data.rfc_comprador}
-                          </p>
-                        </>
-                      )}
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -1537,6 +1566,17 @@ function ExpedienteDetalleReal({
           </Card>
         </Section>
       )}
+
+      {/* Detalle del comprador — solo lectura (Básica, Dirección, Fiscal,
+          Documentos, Cuentas) con estado de validación, sin Validar/Rechazar. */}
+      <CompradorDetalleSheet
+        open={detalleComprador != null}
+        onOpenChange={(o) => { if (!o) setDetalleComprador(null); }}
+        idCuentaCobranza={data.id_cuenta_cobranza}
+        compradores={compradorResumenes}
+        initialPersonaId={detalleComprador}
+        readOnly
+      />
     </>
   );
 }
@@ -1669,6 +1709,9 @@ export default function AltaDireccionCicloVentaPage() {
 
 function EstadoPagosPanel({ data }: { data: ExpedienteVentaDetalle }) {
   const fb = data.financial_breakdown;
+  const [pagosOpen, setPagosOpen] = useState(false);
+  const pagos = data.pagos_detalle;
+  const totalListado = pagos.reduce((s, p) => s + p.monto, 0);
   return (
     <Section
       title="Estado de pagos"
@@ -1678,18 +1721,24 @@ function EstadoPagosPanel({ data }: { data: ExpedienteVentaDetalle }) {
       <Card>
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Pagado */}
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 p-4">
-              <p className="text-[11px] uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80 font-semibold">
+            {/* Total Pagado — clic para ver el desglose de pagos */}
+            <button
+              type="button"
+              onClick={() => setPagosOpen(true)}
+              className="text-left rounded-lg border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 transition-colors hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+              title="Ver desglose de pagos"
+            >
+              <p className="flex items-center justify-between gap-2 text-[11px] uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80 font-semibold">
                 Total Pagado
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />
               </p>
               <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 mt-1 tabular-nums">
                 {fmtMxn(fb.total_pagado)}
               </p>
               <p className="text-[12px] text-emerald-700/70 dark:text-emerald-300/70 tabular-nums mt-0.5">
-                {fb.total_pagado_pct.toFixed(1)}% del total
+                {fb.total_pagado_pct.toFixed(1)}% del total · {pagos.length} pago{pagos.length === 1 ? "" : "s"}
               </p>
-            </div>
+            </button>
 
             {/* Saldo Pendiente */}
             <div className="rounded-lg border border-amber-200 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-1">
@@ -1756,6 +1805,82 @@ function EstadoPagosPanel({ data }: { data: ExpedienteVentaDetalle }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Desglose de los pagos realizados que componen el Total Pagado. */}
+      <Dialog open={pagosOpen} onOpenChange={setPagosOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Desglose de pagos — Total Pagado</DialogTitle>
+            <DialogDescription>
+              {pagos.length} pago{pagos.length === 1 ? "" : "s"} aplicado{pagos.length === 1 ? "" : "s"} · {fmtMxn(totalListado)}
+            </DialogDescription>
+          </DialogHeader>
+          {pagos.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No hay pagos registrados para esta cuenta.
+            </p>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Fecha</TableHead>
+                    <TableHead className="text-xs">Concepto</TableHead>
+                    <TableHead className="text-xs">Método</TableHead>
+                    <TableHead className="text-xs text-right">Monto</TableHead>
+                    <TableHead className="text-xs text-center">Evidencia</TableHead>
+                    <TableHead className="text-xs text-center">CEP</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagos.map((p, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-sm tabular-nums whitespace-nowrap">{fmtFechaPago(p.fecha)}</TableCell>
+                      <TableCell className="text-sm">{p.concepto}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{p.metodo ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-right font-semibold tabular-nums whitespace-nowrap">{fmtMxn(p.monto)}</TableCell>
+                      <TableCell className="text-center">
+                        {p.url_recibo ? <LinkComprobante url={p.url_recibo} label="Recibo" /> : <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {p.url_cep ? <LinkComprobante url={p.url_cep} label="CEP" /> : <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="border-t-2 border-border bg-muted/30">
+                    <TableCell colSpan={3} className="text-right text-sm font-medium">Total</TableCell>
+                    <TableCell className="text-right text-sm font-bold tabular-nums">{fmtMxn(totalListado)}</TableCell>
+                    <TableCell colSpan={2} />
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Section>
+  );
+}
+
+/** Fecha "YYYY-MM-DD" → "17 ago 2026" (sin desfase por zona horaria). */
+function fmtFechaPago(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T00:00:00`);
+  return isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Enlace a un comprobante (recibo / CEP) que abre en pestaña nueva. */
+function LinkComprobante({ url, label }: { url: string; label: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+    >
+      <FileText className="h-3 w-3" /> {label}
+    </a>
   );
 }
