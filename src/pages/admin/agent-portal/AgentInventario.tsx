@@ -9,8 +9,8 @@ import { OptImg } from "@/components/ui/opt-img";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
-import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
+import { useInventarioPortal } from "@/hooks/useInventarioPortal";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -36,23 +36,26 @@ interface ProyectoCard {
 const AgentInventario = () => {
   const { profile } = useAuth();
   const { accessibleProjectIds, hasUnrestrictedAccess, isLoading: loadingAccess } = useProjectAccess();
-  const { permissions } = useAgentPortalPermissions();
-  const inventarioPerms = permissions['/admin/agent/inventario'];
+  // Misma vista para Portal Agente y Portal del Personal: el portal activo define
+  // rutas, permisos, analítica y la llave de búsqueda persistida.
+  const { basePath, portalPrefix, permisos: inventarioPerms, stickyTopCls } = useInventarioPortal();
+  const PAGE = `${portalPrefix}_inventario`;
+  const SEARCH_KEY = `${portalPrefix}-inventario-search`;
   const { registrarVista } = useActivityLogger();
   const { track } = useCtaTracker();
   const [search, setSearch] = useState(() => {
-    try { return sessionStorage.getItem("agent-inventario-search") || ""; } catch { return ""; }
+    try { return sessionStorage.getItem(SEARCH_KEY) || ""; } catch { return ""; }
   });
   const navigate = useNavigate();
 
   useEffect(() => {
-    try { sessionStorage.setItem("agent-inventario-search", search); } catch { /* ignore */ }
-  }, [search]);
+    try { sessionStorage.setItem(SEARCH_KEY, search); } catch { /* ignore */ }
+  }, [search, SEARCH_KEY]);
 
   useEffect(() => {
-    registrarVista('/admin/agent/inventario');
-    track({ page: 'agent_inventario', elementId: 'page_view', elementType: 'page' });
-  }, []);
+    registrarVista(basePath);
+    track({ page: PAGE, elementId: 'page_view', elementType: 'page' });
+  }, [basePath, PAGE]);
 
   const { data: estatusData } = useQuery({
     queryKey: ["estatus-proyecto-all"],
@@ -177,7 +180,7 @@ const AgentInventario = () => {
   return (
     <div className="mx-auto max-w-[1040px]">
       {/* Search bar (título vive en el header del portal) */}
-      <div className="sticky top-16 z-10 -mx-1 bg-background px-1 py-1">
+      <div className={cn("sticky z-10 -mx-1 bg-background px-1 py-1", stickyTopCls)}>
         <div className="relative flex items-center">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -186,7 +189,7 @@ const AgentInventario = () => {
             onChange={e => {
               setSearch(e.target.value);
               if (e.target.value.length > 0) {
-                track({ page: 'agent_inventario', elementId: 'input_buscar_desarrollo', elementLabel: 'Buscar desarrollo', elementType: 'input' });
+                track({ page: PAGE, elementId: 'input_buscar_desarrollo', elementLabel: 'Buscar desarrollo', elementType: 'input' });
               }
             }}
             className="h-11 rounded-md pl-9 text-sm shadow-none"
@@ -213,15 +216,16 @@ const AgentInventario = () => {
               formatCurrency={formatCurrency}
               canRead={inventarioPerms.canRead}
               onViewProject={() => {
-                track({ page: 'agent_inventario', elementId: 'btn_ver_desarrollo', elementLabel: 'Ver Desarrollo', metadata: { proyecto_id: proyecto.id } });
-                navigate(`/admin/agent/inventario/proyecto/${proyecto.id}`);
+                track({ page: PAGE, elementId: 'btn_ver_desarrollo', elementLabel: 'Ver Desarrollo', metadata: { proyecto_id: proyecto.id } });
+                navigate(`${basePath}/proyecto/${proyecto.id}`);
               }}
               onViewUnits={(e) => {
                 e.stopPropagation();
-                track({ page: 'agent_inventario', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: proyecto.id } });
-                navigate(`/admin/agent/inventario/unidades?proyecto=${proyecto.id}`);
+                track({ page: PAGE, elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: proyecto.id } });
+                navigate(`${basePath}/unidades?proyecto=${proyecto.id}`);
               }}
               track={track}
+              page={PAGE}
             />
           ))}
         </div>
@@ -237,6 +241,7 @@ const ProjectCard = memo(function ProjectCard({
   onViewProject,
   onViewUnits,
   track,
+  page,
 }: {
   proyecto: ProyectoCard;
   formatCurrency: (v: number) => string;
@@ -244,6 +249,7 @@ const ProjectCard = memo(function ProjectCard({
   onViewProject: () => void;
   onViewUnits: (e: React.MouseEvent) => void;
   track: (opts: any) => void;
+  page: string;
 }) {
   const isAgotado = proyecto.unidades_disponibles === 0;
   const { toast } = useToast();
@@ -252,7 +258,7 @@ const ProjectCard = memo(function ProjectCard({
   const publicUrl = desarrolloUrl(proyecto.nombre);
 
   const handleShare = (method: string) => {
-    track({ page: 'agent_inventario', elementId: 'btn_compartir_plataforma', elementLabel: `Compartir ${method}`, metadata: { plataforma: method, proyecto_id: proyecto.id } });
+    track({ page, elementId: 'btn_compartir_plataforma', elementLabel: `Compartir ${method}`, metadata: { plataforma: method, proyecto_id: proyecto.id } });
     switch (method) {
       case "web":
         window.open(publicUrl, "_blank");
@@ -353,7 +359,7 @@ const ProjectCard = memo(function ProjectCard({
                 aria-label="Compartir"
                 onClick={(e) => {
                   e.stopPropagation();
-                  track({ page: 'agent_inventario', elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
+                  track({ page, elementId: 'btn_compartir', elementLabel: 'Compartir', metadata: { proyecto_id: proyecto.id } });
                   setShareOpen(true);
                 }}
               >
