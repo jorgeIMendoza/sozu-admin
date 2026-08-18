@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { CheckCircle2, CircleDot, Download, Flame, HelpCircle, LayoutGrid, List, Plus, Search, Ticket as TicketIcon, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleDot, Download, Flame, HelpCircle, LayoutGrid, List, Plus, Search, Ticket as TicketIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,6 +8,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Select,
@@ -15,6 +17,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SELECT_TRIGGER_CLS,
 } from "@/components/ui/select";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { PRIORIDADES, type Ticket } from "@/lib/portal-tickets/tickets-data";
@@ -63,7 +66,9 @@ export function TicketsWorkspace({
   const [propietario, setPropietario] = useState<string>(persist.propietario ?? "todos");
   const [prioridad, setPrioridad] = useState<string>(persist.prioridad ?? "todas");
   const [categoria, setCategoria] = useState<string>(persist.categoria ?? "todas");
-  const [etapaFiltro, setEtapaFiltro] = useState<string>(persist.etapaFiltro ?? "todas");
+  const [etapasFiltro, setEtapasFiltro] = useState<string[]>(
+    Array.isArray(persist.etapasFiltro) ? persist.etapasFiltro : [],
+  );
   const [busqueda, setBusqueda] = useState("");
   const [orden, setOrden] = useState<{ campo: OrdenCampo; dir: "asc" | "desc" }>(
     persist.orden ?? { campo: "fechaCreacion", dir: "desc" },
@@ -81,19 +86,19 @@ export function TicketsWorkspace({
     try {
       localStorage.setItem(
         persistKey,
-        JSON.stringify({ vista, pipelineId, propietario, prioridad, categoria, etapaFiltro, porPagina, orden }),
+        JSON.stringify({ vista, pipelineId, propietario, prioridad, categoria, etapasFiltro, porPagina, orden }),
       );
     } catch {
       /* localStorage no disponible: ignorar */
     }
-  }, [persistKey, vista, pipelineId, propietario, prioridad, categoria, etapaFiltro, porPagina, orden]);
+  }, [persistKey, vista, pipelineId, propietario, prioridad, categoria, etapasFiltro, porPagina, orden]);
 
   // pipelines carga async (React Query): al llegar, fijar el pipeline activo si aún no es válido
   // ("todos" es válido = ver todos los pipelines).
   useEffect(() => {
     if (pipelines.length && pipelineId !== "todos" && !pipelines.some((p) => p.id === pipelineId)) {
       setPipelineId(pipelines[0].id);
-      setEtapaFiltro("todas");
+      setEtapasFiltro([]);
     }
   }, [pipelines, pipelineId]);
 
@@ -126,7 +131,7 @@ export function TicketsWorkspace({
       }
       if (prioridad !== "todas" && t.prioridad !== prioridad) return false;
       if (categoria !== "todas" && t.categoriaId !== categoria) return false;
-      if (etapaFiltro !== "todas" && t.etapaId !== etapaFiltro) return false;
+      if (etapasFiltro.length > 0 && !etapasFiltro.includes(t.etapaId)) return false;
       if (q) {
         // Buscar también por CADA solicitante (nombre + correo + teléfono), no solo el principal,
         // para encontrar el ticket por el cliente/prospecto aunque no se sepa el folio (#1026).
@@ -166,7 +171,7 @@ export function TicketsWorkspace({
     propietario,
     prioridad,
     categoria,
-    etapaFiltro,
+    etapasFiltro,
     busqueda,
     orden,
     etapas,
@@ -343,7 +348,7 @@ export function TicketsWorkspace({
           value={pipelineId}
           onValueChange={(v) => {
             setPipelineId(v);
-            setEtapaFiltro("todas");
+            setEtapasFiltro([]);
             setCategoria("todas");
             setPagina(1);
             if (v === "todos") setVista("tabla"); // el Kanban necesita un pipeline concreto
@@ -377,21 +382,46 @@ export function TicketsWorkspace({
           </SelectContent>
         </Select>
 
-        <Select value={etapaFiltro} onValueChange={setEtapaFiltro}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas las etapas</SelectItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={cn(SELECT_TRIGGER_CLS, "w-[170px]")}>
+              <span className="truncate">
+                {etapasFiltro.length === 0
+                  ? "Todas las etapas"
+                  : etapasFiltro.length === 1
+                    ? etapas.find((e) => e.id === etapasFiltro[0])?.nombre ?? "1 etapa"
+                    : `${etapasFiltro.length} etapas`}
+              </span>
+              <ChevronDown className="size-4 shrink-0 opacity-50" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-[320px] w-[220px] overflow-y-auto">
+            <DropdownMenuCheckboxItem
+              checked={etapasFiltro.length === 0}
+              onCheckedChange={() => setEtapasFiltro([])}
+              onSelect={(ev) => ev.preventDefault()}
+            >
+              Todas las etapas
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
             {etapas
               .filter((e) => pipelineId === "todos" || e.pipelineId === pipelineId)
               .map((e) => (
-                <SelectItem key={e.id} value={e.id}>
+                <DropdownMenuCheckboxItem
+                  key={e.id}
+                  checked={etapasFiltro.includes(e.id)}
+                  onCheckedChange={(on) =>
+                    setEtapasFiltro((prev) =>
+                      on ? [...prev, e.id] : prev.filter((id) => id !== e.id),
+                    )
+                  }
+                  onSelect={(ev) => ev.preventDefault()}
+                >
                   {e.nombre}
-                </SelectItem>
+                </DropdownMenuCheckboxItem>
               ))}
-          </SelectContent>
-        </Select>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Select value={prioridad} onValueChange={setPrioridad}>
           <SelectTrigger className="w-[160px]">
