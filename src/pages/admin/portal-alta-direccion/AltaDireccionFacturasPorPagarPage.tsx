@@ -131,6 +131,11 @@ export default function AltaDireccionFacturasPorPagarPage() {
       }
       if (q) {
         const hay = [
+          // ID Cuenta (CC-000###/CCP-000###) + número crudo — el placeholder
+          // promete búsqueda "por ID Cuenta"; sin esto, buscar "001769" no
+          // encontraba la cuenta aunque estuviera en el listado.
+          formatCuentaCobranzaId(f.id_cuenta_cobranza, f.tipo),
+          String(f.id_cuenta_cobranza),
           f.folio_cfdi,
           f.beneficiario_nombre,
           f.numero_departamento,
