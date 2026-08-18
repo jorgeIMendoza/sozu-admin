@@ -41,7 +41,7 @@ import { fmtMoneda, dealInitials, TIPO_NEGOCIO_OPTS, PRIORIDAD_META, SEMAPHORE_M
 import {
   TIPO_ASISTENTE, RANGO_EDAD, TOMA_DECISION, INTENCION_USO, EXPERIENCIA_PREVENTA,
   ETAPA_EXPLORACION, PROYECCION_CIERRE, PUNTOS_POSITIVOS, PUNTOS_NEGATIVOS,
-  perfilBadge, type PerfilOpt,
+  perfilBadge, optLabel, type PerfilOpt,
 } from "@/lib/crm-perfil-comprador";
 import { fmtMXN, fmtDate, relTime } from "@/lib/crm-lib";
 import { fetchCrmOwners } from "@/hooks/useCrmCatalogos";
@@ -813,9 +813,17 @@ export function DealBoardCard({ deal, dragging, onOpen, onEdit, onDelete }: { de
   );
 }
 
-// Pestaña "Asistente IA" (Fase 1: texto). El asesor captura el contexto de la cita → Claude
-// (Edge Function analizar-negocio-ia) devuelve perfil, % de cierre, nota de bitácora, borrador
-// de WhatsApp y próximo paso. El asesor revisa y aplica con 1 clic. Persiste en crm_negocios_ia.
+// Quita etiquetas HTML de las notas (se guardan como HTML) para mandar texto plano a la IA.
+const htmlToPlain = (h?: string | null) =>
+  (h || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#39;/g, "'").replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ").trim();
+
+// Pestaña "Asistente IA". El asesor captura el contexto de la cita y, además, la IA recibe
+// automáticamente el historial ya registrado del negocio (perfil, notas, citas, tareas) →
+// Claude (Edge Function analizar-negocio-ia) integra ambos y devuelve perfil, % de cierre,
+// nota de bitácora, borrador de WhatsApp y próximo paso. El asesor revisa y aplica con 1 clic.
+// Persiste en crm_negocios_ia.
 export function DealAsistenteIA({ deal }: { deal: any }) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -864,12 +872,58 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
     return isNaN(d.getTime()) ? null : d.toISOString();
   };
 
+  // Fase 2: junta lo que ya existe del negocio (perfil del comprador + notas + citas + tareas)
+  // para que la IA lo use junto con lo que el asesor pega. Respeta RLS (mismo cliente del asesor).
+  const { data: historial } = useQuery({
+    queryKey: ["deal-historial-ia", dealId, erId],
+    enabled: !!dealId,
+    queryFn: async () => {
+      const [perfilRes, notasRes, tareasRes, citasRes] = await Promise.all([
+        (supabase as any).from("crm_negocios_perfil_comprador").select("*").eq("id_negocio", Number(dealId)).eq("activo", true).maybeSingle(),
+        erId ? (supabase as any).from("crm_notas").select("contenido, fecha_creacion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_creacion", { ascending: false }).limit(8) : Promise.resolve({ data: [] }),
+        erId ? (supabase as any).from("crm_tareas").select("titulo, tipo, estatus, prioridad, descripcion, fecha_vencimiento").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_creacion", { ascending: false }).limit(8) : Promise.resolve({ data: [] }),
+        erId ? (supabase as any).from("crm_citas").select("titulo, tipo, estatus, fecha_inicio, resultado, descripcion").eq("id_entidad_relacionada", Number(erId)).eq("activo", true).order("fecha_inicio", { ascending: false }).limit(6) : Promise.resolve({ data: [] }),
+      ]);
+      const pr = (perfilRes as any)?.error ? null : (perfilRes as any)?.data;
+      const perfilObj = pr ? {
+        tipo_asistente: optLabel(TIPO_ASISTENTE, pr.tipo_asistente),
+        rango_edad: optLabel(RANGO_EDAD, pr.rango_edad),
+        toma_decision: optLabel(TOMA_DECISION, pr.toma_decision),
+        intencion_uso: optLabel(INTENCION_USO, pr.intencion_uso),
+        experiencia_preventa: optLabel(EXPERIENCIA_PREVENTA, pr.experiencia_preventa),
+        etapa_exploracion: optLabel(ETAPA_EXPLORACION, pr.etapa_exploracion),
+        proyeccion_cierre: optLabel(PROYECCION_CIERRE, pr.proyeccion_cierre),
+        competencia_visitada: pr.competencia_visitada || null,
+        puntos_positivos: (pr.puntos_positivos ?? []).map((v: string) => optLabel(PUNTOS_POSITIVOS, v)).filter(Boolean),
+        puntos_negativos: (pr.puntos_negativos ?? []).map((v: string) => optLabel(PUNTOS_NEGATIVOS, v)).filter(Boolean),
+      } : null;
+      const perfil = perfilObj
+        ? Object.fromEntries(Object.entries(perfilObj).filter(([, v]) => v != null && !(Array.isArray(v) && v.length === 0)))
+        : null;
+      const notas = (((notasRes as any)?.data ?? []) as any[])
+        .map((n) => ({ fecha: n.fecha_creacion, texto: htmlToPlain(n.contenido).slice(0, 800) })).filter((n) => n.texto);
+      const tareas = (((tareasRes as any)?.data ?? []) as any[])
+        .map((t) => ({ titulo: t.titulo, tipo: t.tipo, estatus: t.estatus, prioridad: t.prioridad, vence: t.fecha_vencimiento, descripcion: t.descripcion || undefined }));
+      const citas = (((citasRes as any)?.error ? [] : ((citasRes as any)?.data ?? [])) as any[])
+        .map((c) => ({ titulo: c.titulo, tipo: c.tipo, estatus: c.estatus, fecha: c.fecha_inicio, resultado: c.resultado || undefined, descripcion: c.descripcion || undefined }));
+      const payload: any = {};
+      if (perfil && Object.keys(perfil).length) payload.perfil = perfil;
+      if (notas.length) payload.notas = notas;
+      if (citas.length) payload.citas = citas;
+      if (tareas.length) payload.tareas = tareas;
+      return { payload, counts: { perfil: !!(perfil && Object.keys(perfil).length), notas: notas.length, citas: citas.length, tareas: tareas.length } };
+    },
+  });
+  const cnt = historial?.counts;
+  const hasHistory = !!cnt && (cnt.perfil || cnt.notas > 0 || cnt.citas > 0 || cnt.tareas > 0);
+
   const analyze = async () => {
-    if (!texto.trim()) { toast.error("Escribe el contexto de la cita primero."); return; }
+    if (!texto.trim() && !hasHistory) { toast.error("Escribe el contexto de la cita, o registra notas/citas/perfil del negocio para que la IA tenga con qué trabajar."); return; }
     setAnalyzing(true); setSavedNote(false); setSavedTask(false);
     try {
       const negocio = { nombre: deal?.nombre, etapa: deal?.etapa_nombre, pipeline: deal?.pipeline_nombre, valor: deal?.valor, contacto: deal?.contacto?.nombre ?? deal?.contacto_nombre };
-      const { data, error } = await (supabase as any).functions.invoke("analizar-negocio-ia", { body: { texto: texto.trim(), negocio } });
+      const histPayload = historial?.payload && Object.keys(historial.payload).length ? historial.payload : undefined;
+      const { data, error } = await (supabase as any).functions.invoke("analizar-negocio-ia", { body: { texto: texto.trim(), negocio, historial: histPayload } });
       if (error) throw new Error(error.message || "Error al invocar la IA");
       if (!data?.ok) throw new Error(data?.error || "La IA no pudo procesar el contexto");
       const r = data.resultado;
@@ -916,6 +970,7 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
     if (error) { toast.error(error.message); return; }
     setSavedNote(true); toast.success("Nota guardada en el CRM");
     qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
+    qc.invalidateQueries({ queryKey: ["deal-historial-ia", dealId, erId] });
   };
 
   const scheduleTask = async () => {
@@ -937,6 +992,7 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
     if (error) { toast.error(error.message); return; }
     setSavedTask(true); toast.success("Tarea agendada");
     qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
+    qc.invalidateQueries({ queryKey: ["deal-historial-ia", dealId, erId] });
   };
 
   const copyWhatsapp = () => {
@@ -957,10 +1013,21 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
           <h3 className="text-sm font-semibold">Contexto de la cita / interacción</h3>
         </div>
         <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={5}
-          placeholder="Describe cómo estuvo la cita: qué dijo el cliente, objeciones, presupuesto, quién decide, nivel de interés…" />
+          placeholder="Describe cómo estuvo la cita: qué dijo el cliente, objeciones, presupuesto, quién decide, nivel de interés… (opcional si el negocio ya tiene historial)" />
+        {hasHistory && (
+          <p className="text-[11px] text-muted-foreground">
+            La IA también usará lo que ya existe del negocio:{" "}
+            {[
+              cnt?.perfil ? "perfil del comprador" : null,
+              cnt?.notas ? `${cnt.notas} nota${cnt.notas > 1 ? "s" : ""}` : null,
+              cnt?.citas ? `${cnt.citas} cita${cnt.citas > 1 ? "s" : ""}` : null,
+              cnt?.tareas ? `${cnt.tareas} tarea${cnt.tareas > 1 ? "s" : ""}` : null,
+            ].filter(Boolean).join(" · ")}.
+          </p>
+        )}
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] text-muted-foreground">Voz y archivos (imágenes/PDF) llegan en una fase posterior.</p>
-          <Button size="sm" onClick={analyze} disabled={analyzing || !texto.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+          <Button size="sm" onClick={analyze} disabled={analyzing || (!texto.trim() && !hasHistory)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             {analyzing ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Analizando…</> : <><Sparkles className="h-4 w-4 mr-1.5" />Analizar con IA</>}
           </Button>
         </div>
