@@ -9,7 +9,10 @@ export interface InventarioPaginadoFilters {
   bedrooms?: number[];
   levels?: string[];
   hasBodega?: boolean | null;
+  /** @deprecated Sí/no heredado. Usar `estacionamientos` (cantidad exacta de cajones). */
   hasEstacionamiento?: boolean | null;
+  /** Cantidades exactas de cajones. Manda sobre `hasEstacionamiento` en la RPC. */
+  estacionamientos?: number[] | null;
   sortPrice?: 'asc' | 'desc' | null;
   minPrice?: number | null;
   maxPrice?: number | null;
@@ -27,6 +30,8 @@ export interface InventarioPaginadoResult {
     modelos: string[];
     recamaras: number[];
     niveles: string[];
+    /** Cantidades de cajones que existen en el inventario consultado (0 solo si aplica). */
+    estacionamientos: number[];
   };
 }
 
@@ -44,6 +49,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       filters.levels,
       filters.hasBodega,
       filters.hasEstacionamiento,
+      filters.estacionamientos,
       filters.sortPrice,
       filters.minPrice,
       filters.maxPrice,
@@ -51,7 +57,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       pageSize,
     ],
     queryFn: async (): Promise<InventarioPaginadoResult> => {
-      if (hasNoAccess) return { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } };
+      if (hasNoAccess) return { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [], estacionamientos: [] } };
 
       const params: Record<string, any> = {
         p_page: filters.page,
@@ -67,18 +73,31 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
       if (filters.levels?.length) params.p_levels = filters.levels;
       if (filters.hasBodega != null) params.p_has_bodega = filters.hasBodega;
       if (filters.hasEstacionamiento != null) params.p_has_estacionamiento = filters.hasEstacionamiento;
+      if (filters.estacionamientos?.length) params.p_estacionamientos = filters.estacionamientos;
       if (filters.sortPrice) params.p_sort_price = filters.sortPrice;
       if (filters.minPrice != null) params.p_min_price = filters.minPrice;
       if (filters.maxPrice != null) params.p_max_price = filters.maxPrice;
 
-      const { data, error } = await supabase.rpc(
+      let { data, error } = await supabase.rpc(
         'get_inventario_disponible_v2' as any,
         params as any
       );
 
+      // La RPC con `p_estacionamientos` puede no estar aplicada todavía en este entorno
+      // (PGRST202 = no existe esa firma). En vez de dejar el inventario en blanco, se
+      // reintenta con el sí/no heredado: el usuario ve unidades, aunque el filtro sea
+      // menos fino, hasta que se aplique el cambio de BD.
+      if (error?.code === 'PGRST202' && params.p_estacionamientos) {
+        const cantidades: number[] = params.p_estacionamientos;
+        const fallback = { ...params };
+        delete fallback.p_estacionamientos;
+        fallback.p_has_estacionamiento = cantidades.some((n) => n > 0);
+        ({ data, error } = await supabase.rpc('get_inventario_disponible_v2' as any, fallback as any));
+      }
+
       if (error) {
         console.error('Error fetching inventario paginado:', error);
-        return { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } };
+        return { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [], estacionamientos: [] } };
       }
 
       const result = data as any;
@@ -122,6 +141,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
           modelos: (filterOpts.modelos || []) as string[],
           recamaras: (filterOpts.recamaras || []) as number[],
           niveles: (filterOpts.niveles || []) as string[],
+          estacionamientos: (filterOpts.estacionamientos || []) as number[],
         },
       };
     },
@@ -131,7 +151,7 @@ export function useInventarioDisponiblePaginado(filters: InventarioPaginadoFilte
   });
 
   return {
-    data: data ?? { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [] } },
+    data: data ?? { propiedades: [], totalCount: 0, totalPages: 0, projectCounts: {}, filterOptions: { proyectos: [], modelos: [], recamaras: [], niveles: [], estacionamientos: [] } },
     isLoading: isLoadingAccess || isLoadingData,
     isFetching,
     hasNoAccess,

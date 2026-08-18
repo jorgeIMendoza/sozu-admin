@@ -27,9 +27,10 @@ import type { OnboardingStep } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
 import { useAgentPortalFullAccess } from "@/hooks/useAgentPortalFullAccess";
 import { useCtaTracker } from "@/hooks/useCtaTracker";
-import { getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
+import { esCitaResuelta, getCitaAsistencia, getTrainingAppointmentStatus, useAgentTrainingAppointments } from "@/hooks/useAgentTrainingAppointments";
 import { cn } from "@/lib/utils";
 import { ENVIRONMENT } from "@/lib/config";
+import { fetchProyectosConCitasHabilitadas } from "@/utils/citasProyectosHabilitados";
 import {
   FIELD_LABEL_CLS,
   SEG_TRACK_CLS,
@@ -1736,9 +1737,16 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
         .select('id_configuracion_cita, id_proyecto')
         .in('id_configuracion_cita', configIds);
 
+      // Solo desarrollos activos y publicados ofrecen citas (los dados de baja no)
+      const proyectosHabilitados = await fetchProyectosConCitasHabilitadas(
+        (configProjects || []).map((cp: any) => cp.id_proyecto as number),
+      );
+
       // Filter to configs that match agent's projects; store proyecto_ids for later use
       const filtered = allConfigs.filter((c: any) => {
-        const projIds = (configProjects || []).filter((cp: any) => cp.id_configuracion_cita === c.id).map((cp: any) => cp.id_proyecto);
+        const projIds = (configProjects || [])
+          .filter((cp: any) => cp.id_configuracion_cita === c.id && proyectosHabilitados.has(cp.id_proyecto))
+          .map((cp: any) => cp.id_proyecto);
         c.proyecto_ids = projIds;
         return projIds.some((pid: number) => agentProjectIds.includes(pid));
       });
@@ -1957,18 +1965,17 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
       return <Badge variant="destructive"><RefreshCw className="h-3 w-3 mr-1" />Cancelada externamente</Badge>;
     }
     if (!existingCita) return null;
-    // Use id_estatus_cita if available
-    const estatusCita = (existingCita as any).id_estatus_cita;
-    if (estatusCita === 3) return <Badge className="bg-emerald-500 text-white border-0"><CheckCircle2 className="h-3 w-3 mr-1" />Confirmada</Badge>;
-    if (estatusCita === 2) return <Badge className="bg-amber-500 text-white border-0"><Clock className="h-3 w-3 mr-1" />Pendiente de confirmación</Badge>;
-    if (estatusCita === 1) return <Badge className="bg-blue-500 text-white border-0"><CalendarDays className="h-3 w-3 mr-1" />Agendada</Badge>;
-    switch (existingCita.estatus) {
-      case 'asistio': return <Badge className="bg-emerald-500 text-white border-0"><CheckCircle2 className="h-3 w-3 mr-1" />Confirmada</Badge>;
-      case 'programada': return <Badge className="bg-blue-500 text-white border-0"><CalendarDays className="h-3 w-3 mr-1" />Agendada</Badge>;
+    // El resultado de la cita manda; la etapa de confirmación solo aplica si aún no hay resultado.
+    switch (getCitaAsistencia(existingCita)) {
+      case 'asistio': return <Badge className="bg-emerald-500 text-white border-0"><CheckCircle2 className="h-3 w-3 mr-1" />Asistió</Badge>;
       case 'no_asistio': return <Badge variant="destructive"><RefreshCw className="h-3 w-3 mr-1" />No asistió</Badge>;
       case 'cancelada': return <Badge variant="outline" className="text-muted-foreground">Cancelada</Badge>;
-      default: return null;
+      default: break;
     }
+    const estatusCita = (existingCita as any).id_estatus_cita;
+    if (estatusCita === 3) return <Badge className="bg-teal-600 text-white border-0"><CheckCircle2 className="h-3 w-3 mr-1" />Confirmada</Badge>;
+    if (estatusCita === 2) return <Badge className="bg-amber-500 text-white border-0"><Clock className="h-3 w-3 mr-1" />Pendiente de confirmación</Badge>;
+    return <Badge className="bg-blue-500 text-white border-0"><CalendarDays className="h-3 w-3 mr-1" />Agendada</Badge>;
   };
 
   // Get the config name to display as title
@@ -2030,12 +2037,13 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
     }
   };
 
-  // Completed = at least one cita confirmed across all configs
-  const anyCompleted = allCitas.some((c: any) => c.id_estatus_cita === 3 || c.estatus === 'asistio');
+  // Completed = al menos una cita con asistencia registrada. Una cita solo "Confirmada"
+  // (id_estatus_cita = 3) todavía no cuenta como capacitación cumplida.
+  const anyCompleted = allCitas.some((c: any) => getCitaAsistencia(c) === 'asistio');
   const allCompleted = hasTrainingComplete || anyCompleted;
   // For the current selected config, check if there's already a programmed cita
   const currentConfigCita = selectedConfigId ? allCitas.find((c: any) => c.id_configuracion_cita === selectedConfigId) : existingCita;
-  const isProgrammedForConfig = currentConfigCita && (currentConfigCita.estatus === 'programada' || (currentConfigCita as any).id_estatus_cita === 1) && !citaCancelledExternally;
+  const isProgrammedForConfig = currentConfigCita && !esCitaResuelta(currentConfigCita) && (currentConfigCita as any).id_estatus_cita !== 2 && !citaCancelledExternally;
   const isPendingConfirmation = (currentConfigCita as any)?.id_estatus_cita === 2;
   const isNoShow = currentConfigCita?.estatus === 'no_asistio';
 
@@ -2088,13 +2096,13 @@ function AgentTrainingStep({ personaId, onSaved, onTrackSave, onTrackFieldChange
             {allCitas.map((cita: any) => {
               const status = getTrainingAppointmentStatus(cita);
               const badge = status.tone === 'success'
-                ? <Badge className="bg-emerald-500 text-white border-0 text-xs"><CheckCircle2 className="h-3 w-3 mr-0.5" />Confirmada</Badge>
+                ? <Badge className="bg-emerald-500 text-white border-0 text-xs"><CheckCircle2 className="h-3 w-3 mr-0.5" />{status.label}</Badge>
                 : status.tone === 'warning'
-                  ? <Badge className="bg-amber-500 text-white border-0 text-xs"><Clock className="h-3 w-3 mr-0.5" />Pend. confirmación</Badge>
+                  ? <Badge className="bg-amber-500 text-white border-0 text-xs"><Clock className="h-3 w-3 mr-0.5" />{status.label}</Badge>
                   : status.tone === 'info'
                     ? <Badge className="bg-blue-500 text-white border-0 text-xs"><CalendarDays className="h-3 w-3 mr-0.5" />Agendada</Badge>
                     : status.tone === 'danger'
-                      ? <Badge variant="destructive" className="text-xs">No asistió</Badge>
+                      ? <Badge variant="destructive" className="text-xs">{status.label}</Badge>
                       : <Badge variant="outline" className="text-xs">{status.label}</Badge>;
               return (
                 <div key={cita.id} className="flex items-center justify-between rounded-lg border border-border/60 p-2.5 bg-card">

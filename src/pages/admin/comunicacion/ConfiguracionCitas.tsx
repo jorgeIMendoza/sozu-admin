@@ -136,6 +136,24 @@ export default function ConfiguracionCitas() {
     },
   });
 
+  // Desarrollos vinculados a la config que ya no aceptan citas
+  // (dados de baja o despublicados). Se avisan pero no se pueden re-seleccionar.
+  const { data: proyectosNoDisponibles = [] } = useQuery({
+    queryKey: ["config-citas-proyectos-no-disponibles", selectedProyectoIds, proyectosPublicados.map((p) => p.id)],
+    queryFn: async () => {
+      const publicadosIds = new Set(proyectosPublicados.map((p) => p.id));
+      const faltantes = selectedProyectoIds.filter((id) => !publicadosIds.has(id));
+      if (faltantes.length === 0) return [];
+      const { data, error } = await supabase
+        .from("proyectos")
+        .select("id, nombre, activo, publicar")
+        .in("id", faltantes);
+      if (error) throw error;
+      return (data || []) as { id: number; nombre: string; activo: boolean; publicar: boolean }[];
+    },
+    enabled: selectedProyectoIds.length > 0,
+  });
+
   const addTipoCitaMutation = useMutation({
     mutationFn: async ({ nombre }: { nombre: string }) => {
       const { error } = await supabase.from("tipos_cita").insert({ nombre, activo: true });
@@ -162,6 +180,25 @@ export default function ConfiguracionCitas() {
       toast.success("Tipo de cita actualizado");
     },
     onError: (e) => toast.error(`Error: ${e.message}`),
+  });
+
+  // Citas configuradas activas por tipo (de todos los usuarios). El switch de
+  // tipo apaga el tipo completo, así que se avisa a cuántas afecta.
+  const { data: configsActivasPorTipo = {} as Record<number, string[]> } = useQuery({
+    queryKey: ["configs-activas-por-tipo"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("configuracion_citas_usuarios")
+        .select("nombre, id_tipo_cita")
+        .eq("activo", true);
+      if (error) throw error;
+      const map: Record<number, string[]> = {};
+      (data || []).forEach((c: any) => {
+        map[c.id_tipo_cita] = [...(map[c.id_tipo_cita] || []), c.nombre];
+      });
+      return map;
+    },
+    enabled: isSuperAdmin,
   });
 
   const toggleTipoCitaMutation = useMutation({
@@ -215,8 +252,8 @@ export default function ConfiguracionCitas() {
       const { data, error } = await supabase
         .from("configuracion_citas_usuarios")
         .select("*")
+        // Se traen también las deshabilitadas (activo=false) para poder reactivarlas
         .eq("id_usuario_email", selectedUserEmail)
-        .eq("activo", true)
         .order("id");
       if (error) throw error;
       return data || [];
@@ -569,6 +606,24 @@ export default function ConfiguracionCitas() {
   const hasFutureAttendees = futureAttendeesData?.has_attendees || false;
 
 
+  // Habilitar / deshabilitar una cita configurada sin borrarla.
+  // Con activo=false el desarrollo deja de ofrecer horarios al agendar.
+  const toggleConfigActivoMutation = useMutation({
+    mutationFn: async ({ configId, activo }: { configId: number; activo: boolean }) => {
+      const { error } = await supabase
+        .from("configuracion_citas_usuarios")
+        .update({ activo, fecha_actualizacion: new Date().toISOString() } as any)
+        .eq("id", configId);
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["config-citas-usuarios-all", selectedUserEmail] });
+      queryClient.invalidateQueries({ queryKey: ["configs-activas-por-tipo"] });
+      toast.success(vars.activo ? "Citas habilitadas" : "Citas deshabilitadas");
+    },
+    onError: (e) => toast.error(`Error: ${e.message}`),
+  });
+
   const deleteCitaMutation = useMutation({
     mutationFn: async (configId: number) => {
       // First, delete all associated Google Calendar events
@@ -715,7 +770,7 @@ export default function ConfiguracionCitas() {
                   Administrar Tipos de Cita
                   <Badge variant="secondary" className="ml-auto">{allTiposCita.length}</Badge>
                 </CardTitle>
-                <CardDescription>Agregar, editar o desactivar tipos de cita</CardDescription>
+                <CardDescription>Agregar, editar o desactivar tipos de cita (aplica a todos los desarrollos)</CardDescription>
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -760,7 +815,14 @@ export default function ConfiguracionCitas() {
                           </Button>
                         </div>
                       ) : (
-                        <span className={cn("text-sm font-medium flex-1", !tc.activo && "text-muted-foreground line-through")}>{tc.nombre}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className={cn("text-sm font-medium", !tc.activo && "text-muted-foreground line-through")}>{tc.nombre}</span>
+                          {(configsActivasPorTipo[tc.id]?.length || 0) > 0 && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              Afecta {configsActivasPorTipo[tc.id].length} cita(s): {configsActivasPorTipo[tc.id].join(", ")}
+                            </p>
+                          )}
+                        </div>
                       )}
                       <Switch
                         checked={tc.activo}
@@ -868,7 +930,11 @@ export default function ConfiguracionCitas() {
               <Plus className="h-4 w-4 mr-1" /> Nueva Cita
             </Button>
             {userCitaConfigs.length > 0 && (
-              <span className="text-xs text-muted-foreground">{userCitaConfigs.length} cita(s) configurada(s)</span>
+              <span className="text-xs text-muted-foreground">
+                {userCitaConfigs.length} cita(s) configurada(s)
+                {userCitaConfigs.some((c: any) => !c.activo) &&
+                  ` · ${userCitaConfigs.filter((c: any) => !c.activo).length} deshabilitada(s)`}
+              </span>
             )}
           </div>
 
@@ -879,8 +945,13 @@ export default function ConfiguracionCitas() {
                   const tipoCita = tiposCita.find((t: any) => t.id === cfg.id_tipo_cita);
                   return (
                     <TabsTrigger key={cfg.id} value={cfg.id.toString()} className="text-xs gap-1.5">
-                      {cfg.nombre}
+                      <span className={cn(!cfg.activo && "line-through text-muted-foreground")}>{cfg.nombre}</span>
                       {tipoCita && <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-normal">{tipoCita.nombre}</Badge>}
+                      {!cfg.activo && (
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-normal text-destructive border-destructive/40">
+                          Deshabilitada
+                        </Badge>
+                      )}
                     </TabsTrigger>
                   );
                 })}
@@ -900,18 +971,40 @@ export default function ConfiguracionCitas() {
                               <CardTitle className="text-base">Configuración general</CardTitle>
                               <CardDescription>Duración, calendario y configuración de {cfg.nombre}</CardDescription>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => {
-                                setDeleteConfigTarget({ id: cfg.id, nombre: cfg.nombre });
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" /> Eliminar
-                            </Button>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  id={`cita-activa-${cfg.id}`}
+                                  checked={!!cfg.activo}
+                                  disabled={toggleConfigActivoMutation.isPending}
+                                  onCheckedChange={(checked) =>
+                                    toggleConfigActivoMutation.mutate({ configId: cfg.id, activo: checked })
+                                  }
+                                />
+                                <Label htmlFor={`cita-activa-${cfg.id}`} className="text-sm font-normal cursor-pointer">
+                                  Citas habilitadas
+                                </Label>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteConfigTarget({ id: cfg.id, nombre: cfg.nombre });
+                                  setDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" /> Eliminar
+                              </Button>
+                            </div>
                           </div>
+                          {!cfg.activo && (
+                            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                              <p className="text-xs text-amber-800">
+                                Esta cita está deshabilitada: no se ofrecen horarios al agendar. Actívala con el switch para volver a publicarla.
+                              </p>
+                            </div>
+                          )}
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="space-y-2">
@@ -998,6 +1091,20 @@ export default function ConfiguracionCitas() {
                             </div>
                             {selectedProyectoIds.length === 0 && (
                               <p className="text-xs text-destructive">Selecciona al menos un proyecto</p>
+                            )}
+                            {proyectosNoDisponibles.length > 0 && (
+                              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
+                                <p className="text-xs text-amber-800 flex items-center gap-1.5">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                  Sin citas disponibles:{" "}
+                                  {proyectosNoDisponibles
+                                    .map((p) => `${p.nombre} (${!p.activo ? "dado de baja" : "no publicado"})`)
+                                    .join(", ")}
+                                </p>
+                                <p className="text-xs text-amber-700">
+                                  Solo los desarrollos activos y publicados ofrecen horarios, aunque sigan vinculados aquí.
+                                </p>
+                              </div>
                             )}
                           </div>
 

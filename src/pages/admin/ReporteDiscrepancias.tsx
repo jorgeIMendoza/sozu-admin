@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, Loader2, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { diferenciaDinero, difiereEnDinero } from "@/utils/dinero";
 
 interface Discrepancia {
   proyecto: string;
@@ -97,9 +98,9 @@ export default function ReporteDiscrepancias() {
           console.log(`Cuenta ${cuenta.id}: suma=${sumaAcuerdos}, existe en mapa=${cuentaIdStr in sumasPorCuenta}`);
         }
         const precioFinal = Number(cuenta.precio_final);
-        const diferencia = precioFinal - sumaAcuerdos;
+        const diferencia = diferenciaDinero(precioFinal, sumaAcuerdos);
 
-        if (Math.abs(diferencia) > 0.01) {
+        if (difiereEnDinero(precioFinal, sumaAcuerdos)) {
           const oferta = cuenta.ofertas as any;
           const propiedad = oferta?.propiedades;
           const producto = oferta?.productos_servicios;

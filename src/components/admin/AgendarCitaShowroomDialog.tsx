@@ -17,6 +17,7 @@ import { AddProspectoFloatingDialog } from "@/components/admin/AddProspectoFloat
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { fetchProyectosConCitasHabilitadas } from "@/utils/citasProyectosHabilitados";
 
 // Color palette for projects
 const PROJECT_COLORS = [
@@ -165,19 +166,26 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
   const { data: availabilityData, isLoading: availLoading } = useQuery({
     queryKey: ["showroom-availability-multi", projectIds],
     queryFn: async () => {
-      if (projectIds.length === 0) return { configs: [], horarios: [] };
+      if (projectIds.length === 0) return { configs: [], horarios: [], habilitados: [] as number[] };
+
+      // Check 1: el desarrollo debe estar activo y publicado. Uno dado de baja
+      // no ofrece citas aunque su configuración siga viva.
+      const proyectosHabilitadosSet = await fetchProyectosConCitasHabilitadas(projectIds);
+      const habilitados = projectIds.filter((id) => proyectosHabilitadosSet.has(id));
+      if (habilitados.length === 0) return { configs: [], horarios: [], habilitados };
 
       const { data: projectLinks } = await supabase
         .from("configuracion_citas_proyectos")
         .select("id_configuracion_cita, id_proyecto")
-        .in("id_proyecto", projectIds);
+        .in("id_proyecto", habilitados);
 
-      if (!projectLinks || projectLinks.length === 0) return { configs: [], horarios: [] };
+      if (!projectLinks || projectLinks.length === 0) return { configs: [], horarios: [], habilitados };
 
       const configIds = [...new Set(projectLinks.map((p: any) => p.id_configuracion_cita))];
       const configToProject = new Map<number, number>();
       projectLinks.forEach((pl: any) => configToProject.set(pl.id_configuracion_cita, pl.id_proyecto));
 
+      // Check 2: la configuración de cita debe estar habilitada (activo = true).
       const { data: configs } = await supabase
         .from("configuracion_citas_usuarios")
         .select("id, nombre, duracion_minutos, fecha_fin_recurrencia, id_usuario_email, id_tipo_cita")
@@ -185,7 +193,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
         .eq("activo", true)
         .in("id", configIds);
 
-      if (!configs || configs.length === 0) return { configs: [], horarios: [] };
+      if (!configs || configs.length === 0) return { configs: [], horarios: [], habilitados };
 
       const { data: horarios } = await supabase
         .from("configuracion_citas_horarios")
@@ -207,10 +215,21 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
         tipo_cita_id: c.id_tipo_cita,
       }));
 
-      return { configs: enrichedConfigs, horarios: horarios || [] };
+      return { configs: enrichedConfigs, horarios: horarios || [], habilitados };
     },
     enabled: projectIds.length > 0,
   });
+
+  // Desarrollos del prospecto que sí aceptan citas
+  const proyectosHabilitados = useMemo(() => {
+    const allowed = new Set(availabilityData?.habilitados || []);
+    return (selectedProspectoData?.proyectos || []).filter((p) => allowed.has(p.id));
+  }, [availabilityData, selectedProspectoData]);
+
+  const proyectoSeleccionadoDeshabilitado =
+    !!selectedProyectoId &&
+    !availLoading &&
+    !(availabilityData?.habilitados || []).includes(selectedProyectoId);
 
   // Fetch existing reservations to exclude booked slots
   const { data: existingReservations = [] } = useQuery({
@@ -396,13 +415,24 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
     }
   }, [open, rescheduleData]);
 
-  // Auto-select project when prospect has only one (skip if rescheduling)
+  // Auto-select project when prospect has only one habilitado (skip if rescheduling)
   useEffect(() => {
     if (rescheduleData) return;
-    if (selectedProspecto && selectedProspectoData && selectedProspectoData.proyectos.length === 1 && !selectedProyectoId) {
-      handleSelectProject(selectedProspectoData.proyectos[0].id);
+    if (selectedProspecto && proyectosHabilitados.length === 1 && !selectedProyectoId) {
+      handleSelectProject(proyectosHabilitados[0].id);
     }
-  }, [selectedProspecto, selectedProspectoData]);
+  }, [selectedProspecto, proyectosHabilitados]);
+
+  // Si el desarrollo elegido dejó de aceptar citas, limpiar la selección
+  useEffect(() => {
+    if (rescheduleData) return;
+    if (proyectoSeleccionadoDeshabilitado) {
+      setSelectedProyectoId(null);
+      setSelectedDate("");
+      setSelectedHour("");
+      setSelectedConfigId(null);
+    }
+  }, [proyectoSeleccionadoDeshabilitado, rescheduleData]);
 
   const handleSelectProject = (projId: number) => {
     setSelectedProyectoId(projId);
@@ -523,9 +553,24 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     {rescheduleData.proyectoName || 'Desarrollo'}
                   </div>
-                ) : selectedProspectoData && selectedProspectoData.proyectos.length === 1 ? (
+                ) : availLoading ? (
+                  <div className={readonlyBoxCls}>
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <span className="text-muted-foreground">Cargando desarrollos…</span>
+                  </div>
+                ) : proyectosHabilitados.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5">
+                    <p className="text-sm text-amber-800 flex items-center gap-1.5">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      Ningún desarrollo de este prospecto tiene citas habilitadas.
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      El desarrollo debe estar activo y publicado, y su cita habilitada en Configuración de Citas.
+                    </p>
+                  </div>
+                ) : proyectosHabilitados.length === 1 ? (
                   (() => {
-                    const p = selectedProspectoData.proyectos[0];
+                    const p = proyectosHabilitados[0];
                     const color = projectColorMap.get(p.id) || PROJECT_COLORS[0];
                     return (
                       <div className={readonlyBoxCls}>
@@ -534,7 +579,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                       </div>
                     );
                   })()
-                ) : selectedProspectoData ? (
+                ) : (
                   <Select
                     value={selectedProyectoId?.toString() || ""}
                     onValueChange={(v) => handleSelectProject(parseInt(v))}
@@ -543,7 +588,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                       <SelectValue placeholder="Selecciona desarrollo…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {selectedProspectoData.proyectos.map(p => {
+                      {proyectosHabilitados.map(p => {
                         const color = projectColorMap.get(p.id) || PROJECT_COLORS[0];
                         return (
                           <SelectItem key={p.id} value={p.id.toString()}>
@@ -556,7 +601,7 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                       })}
                     </SelectContent>
                   </Select>
-                ) : null}
+                )}
               </div>
             )}
 
@@ -583,14 +628,18 @@ export function AgendarCitaShowroomDialog({ open, onOpenChange, rescheduleData }
                       <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5">
                         <p className="text-sm text-amber-800 flex items-center gap-1.5">
                           <AlertCircle className="h-4 w-4 shrink-0" />
-                          {sinHorarios
-                            ? "Este desarrollo aún no tiene horarios configurados."
-                            : "No hay fechas disponibles para este desarrollo."}
+                          {proyectoSeleccionadoDeshabilitado
+                            ? "Este desarrollo no tiene citas habilitadas."
+                            : sinHorarios
+                              ? "Este desarrollo aún no tiene horarios configurados."
+                              : "No hay fechas disponibles para este desarrollo."}
                         </p>
                         <p className="text-xs text-amber-700 mt-1">
-                          {sinHorarios
-                            ? "Configura los horarios en Configuración de Citas."
-                            : "Contacta a tu Asesor Sozu para más información."}
+                          {proyectoSeleccionadoDeshabilitado
+                            ? "El desarrollo está dado de baja o despublicado."
+                            : sinHorarios
+                              ? "Configura los horarios en Configuración de Citas."
+                              : "Contacta a tu Asesor Sozu para más información."}
                         </p>
                       </div>
                     );

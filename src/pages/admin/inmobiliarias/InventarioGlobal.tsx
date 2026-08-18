@@ -1,6 +1,7 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { usePagePermissions } from "@/hooks/usePagePermissions";
 import { useInventarioDisponiblePaginado } from "@/hooks/useInventarioDisponiblePaginado";
+import { cantidadDesdeEtiqueta, etiquetaCajones } from "@/utils/estacionamientoFiltro";
 import { fetchExtrasPorPropiedad, precioTotalUnidad } from "@/lib/inventario/precio-unidad";
 import type { InventarioPropiedad } from "@/hooks/useInventarioDisponible";
 import { Badge } from "@/components/ui/badge";
@@ -175,6 +176,7 @@ const InventarioGlobal = () => {
   const [filterBedrooms, setFilterBedrooms] = useState<string[]>([]);
   const [filterLevels, setFilterLevels] = useState<string[]>([]);
   const [filterBodega, setFilterBodega] = useState<string | null>(null);
+  // Cantidad exacta de cajones como string ("0", "1", "2"…) o null = todos.
   const [filterEstacionamiento, setFilterEstacionamiento] = useState<string | null>(null);
   const [schemesOpen, setSchemesOpen] = useState(false);
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(shouldOpenFilters);
@@ -210,7 +212,7 @@ const InventarioGlobal = () => {
     bedrooms: bedroomNums.length > 0 ? bedroomNums : undefined,
     levels: filterLevels.length > 0 ? filterLevels : undefined,
     hasBodega: filterBodega === "con" ? true : filterBodega === "sin" ? false : null,
-    hasEstacionamiento: filterEstacionamiento === "con" ? true : filterEstacionamiento === "sin" ? false : null,
+    estacionamientos: filterEstacionamiento != null ? [Number(filterEstacionamiento)] : undefined,
     sortPrice: sortOrder === "none" ? null : sortOrder,
     page,
     pageSize: PAGE_SIZE,
@@ -271,6 +273,10 @@ const InventarioGlobal = () => {
     [inventarioData.filterOptions.recamaras]
   );
   const availableLevelOptions = inventarioData.filterOptions.niveles;
+  // Cantidades de cajones presentes en el inventario: la RPC las calcula antes de aplicar
+  // este filtro, así que elegir "2 cajones" no borra la opción "1 cajón" del select.
+  const availableEstacionamientos = inventarioData.filterOptions.estacionamientos;
+  const estacionamientoOptions = availableEstacionamientos.map((n) => etiquetaCajones(n));
 
   const totalCount = inventarioData.totalCount;
   const totalPages = inventarioData.totalPages;
@@ -396,12 +402,17 @@ const InventarioGlobal = () => {
           <span className="text-sm font-semibold text-foreground">Estacionamiento</span>
         </div>
         <MultiSelectFilter
-          values={filterEstacionamiento ? [filterEstacionamiento === "con" ? "Con estac." : "Sin estac."] : []}
+          values={filterEstacionamiento != null ? [etiquetaCajones(Number(filterEstacionamiento))] : []}
           onValuesChange={(vals) => {
             if (vals.length === 0) setFilterEstacionamiento(null);
-            else { const last = vals[vals.length - 1]; setFilterEstacionamiento(last === "Con estac." ? "con" : "sin"); track({ page: "inventario", elementId: "btn_busqueda", metadata: { filtro: "estacionamiento" } }); }
+            else {
+              const last = vals[vals.length - 1];
+              const n = cantidadDesdeEtiqueta(last, availableEstacionamientos);
+              setFilterEstacionamiento(n == null ? null : String(n));
+              track({ page: "inventario", elementId: "btn_busqueda", metadata: { filtro: "estacionamiento" } });
+            }
           }}
-          options={["Con estac.", "Sin estac."]}
+          options={estacionamientoOptions}
           placeholder="Todos"
         />
       </div>
@@ -549,7 +560,7 @@ const InventarioGlobal = () => {
               )}
               {filterEstacionamiento && (
                 <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterEstacionamiento(null)}>
-                  {filterEstacionamiento === "con" ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
+                  {etiquetaCajones(Number(filterEstacionamiento))} <X className="h-2.5 w-2.5" />
                 </Badge>
               )}
               <button className="text-[10px] text-destructive font-medium px-1" onClick={clearAllFilters}>Limpiar</button>
@@ -588,7 +599,7 @@ const InventarioGlobal = () => {
           )}
           {filterEstacionamiento && (
             <Badge variant="secondary" className="text-[10px] gap-1 cursor-pointer px-2 py-0.5" onClick={() => setFilterEstacionamiento(null)}>
-              {filterEstacionamiento === "con" ? "Con estac." : "Sin estac."} <X className="h-2.5 w-2.5" />
+              {etiquetaCajones(Number(filterEstacionamiento))} <X className="h-2.5 w-2.5" />
             </Badge>
           )}
           <button className="text-[10px] text-destructive font-medium px-1" onClick={clearAllFilters}>Limpiar</button>
