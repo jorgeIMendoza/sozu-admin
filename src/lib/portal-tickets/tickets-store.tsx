@@ -146,6 +146,18 @@ export function enviarCorreoNota(destinatarios: Destinatario[], info: CorreoTick
   );
 }
 
+// Correo + WhatsApp "chat interno iniciado — únete" a los stakeholders (creador + propietarios).
+export function enviarCorreoChatInvite(destinatarios: Destinatario[], info: CorreoTicketInfo) {
+  const asunto = `Ticket #${info.folio} — chat interno: ${info.nombre}`;
+  enviarCorreoTicket(
+    destinatarios,
+    asunto,
+    `Invitación al chat interno del ticket #${info.folio}: ${info.nombre}`,
+    detallesHtml(info, "Iniciado por"),
+    textoWa(info, "Chat interno iniciado — únete", "Iniciado por"),
+  );
+}
+
 type NuevoTicket = {
   nombre: string;
   pipelineId: string;
