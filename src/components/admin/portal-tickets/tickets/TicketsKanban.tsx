@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ChevronLeft, ChevronRight, Mail, Pencil, Phone } from "lucide-react";
-import { antiguedad, fechaCorta, type Ticket } from "@/lib/portal-tickets/tickets-data";
+import { antiguedad, fechaCorta, fechaCreada, type Ticket } from "@/lib/portal-tickets/tickets-data";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PriorityDot } from "./PriorityDot";
@@ -150,7 +150,7 @@ export function TicketsKanban({
                       {ownerLabel || "Sin asignar"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Fecha de creación: {fechaCorta(t.fechaCreacion)}
+                      Fecha de creación: {fechaCreada(t.fechaCreacion)}
                     </p>
                     {t.fechaCierre && (
                       <p className="text-xs text-muted-foreground">

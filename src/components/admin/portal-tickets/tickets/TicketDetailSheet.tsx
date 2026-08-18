@@ -17,6 +17,7 @@ import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import {
   FUENTES,
   PRIORIDADES,
+  fechaCreada,
   fechaLarga,
   iniciales,
   type Ticket,
@@ -101,7 +102,7 @@ export function TicketDetailSheet({
             )}
           </SheetTitle>
           <p className="text-left text-sm text-muted-foreground">
-            Creado el {fechaLarga(ticket.fechaCreacion)}
+            Creado el {fechaCreada(ticket.fechaCreacion)}
           </p>
         </SheetHeader>
 

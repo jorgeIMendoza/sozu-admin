@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fechaLarga, type Ticket } from "@/lib/portal-tickets/tickets-data";
+import { fechaCreada, type Ticket } from "@/lib/portal-tickets/tickets-data";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
 import { PriorityDot } from "./PriorityDot";
 
@@ -112,7 +112,7 @@ export function TicketsTable({
                 <TableCell className="whitespace-nowrap text-sm">{pipeline?.nombre}</TableCell>
                 <TableCell className="whitespace-nowrap text-sm">{etapa?.nombre}</TableCell>
                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {fechaLarga(t.fechaCreacion)}
+                  {fechaCreada(t.fechaCreacion)}
                 </TableCell>
                 <TableCell>
                   <PriorityDot prioridad={t.prioridad} />
