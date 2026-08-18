@@ -66,6 +66,22 @@ export interface PagoCliente {
   url_recibo: string | null;
 }
 
+/** Un pago realizado por el cliente, con su desglose completo. */
+export interface PagoDetalle {
+  /** Monto aplicado (sin multas). */
+  monto: number;
+  /** Fecha del pago (YYYY-MM-DD). */
+  fecha: string;
+  /** Concepto (Apartado, Enganche, A la entrega, Parcialidad…). */
+  concepto: string;
+  /** Método de pago (STP, Transferencia, Efectivo…). */
+  metodo: string | null;
+  /** Evidencia del pago (recibo). */
+  url_recibo: string | null;
+  /** Comprobante Electrónico de Pago (CEP / STP). */
+  url_cep: string | null;
+}
+
 export interface ExpedienteVentaDetalle {
   id_cuenta_cobranza: number;
   folio: string;
@@ -83,7 +99,15 @@ export interface ExpedienteVentaDetalle {
   comision_total_sozu: number;
   comision_externa: number;
   comision_a_dispersar: number;
-  compradores: Array<{ nombre: string; porcentaje: number }>;
+  /** % de comisión externa (suma de los externos) sobre el precio de venta. */
+  comision_externa_pct: number;
+  /** % dispersado al equipo interno (suma de los internos) sobre el precio. */
+  comision_a_dispersar_pct: number;
+  /** Agente que vendió (creador de la oferta) y la inmobiliaria a la que pertenece. */
+  agente: string;
+  agente_email: string | null;
+  inmobiliaria: string | null;
+  compradores: Array<{ idPersona: number; nombre: string; porcentaje: number }>;
   propietario: string;
   rfc_comprador: string;
   fecha_compra: string;
@@ -107,6 +131,9 @@ export interface ExpedienteVentaDetalle {
   /** Pagos del cliente aplicados a conceptos distintos de Apartado/Enganche
    *  (a la entrega, parcialidades) — abonos por encima del enganche. */
   pagos_adicionales: PagoCliente[];
+  /** Desglose completo de los pagos realizados (aplicaciones no-multa) que
+   *  componen el Total Pagado: monto, fecha, concepto, evidencia y CEP. */
+  pagos_detalle: PagoDetalle[];
   oferta_comercial: {
     id_oferta: number | null;
     precio_final: number;
@@ -309,6 +336,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
 
       const compradores = (compradoresRaw || [])
         .map((c) => ({
+          idPersona: c.id_persona as number,
           nombre: personaMap.get(c.id_persona) || "",
           porcentaje: Number(c.porcentaje_copropiedad) || 0,
         }))
@@ -472,6 +500,34 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         return out.sort((a, b) => a.fecha.localeCompare(b.fecha));
       };
 
+      // Desglose completo de los pagos realizados (para el detalle del Total
+      // Pagado): una fila por aplicación no-multa, con concepto, método,
+      // evidencia (recibo) y comprobante CEP por separado.
+      const conceptoIds = Array.from(
+        new Set((acuerdos || []).map((a: any) => a.id_concepto).filter((v): v is number => v != null)),
+      );
+      const { data: conceptosRows } = conceptoIds.length
+        ? await supabase.from("conceptos_pago").select("id, nombre").in("id", conceptoIds)
+        : { data: [] as Array<{ id: number; nombre: string | null }> };
+      const conceptoNombreById = new Map<number, string>(
+        (conceptosRows || []).map((c) => [c.id, c.nombre ?? ""]),
+      );
+      const pagosDetalle: PagoDetalle[] = ((aplicacionesPago || []) as Array<any>)
+        .filter((ap) => !ap.es_multa && ap.pagos?.id != null && ap.pagos?.fecha_pago)
+        .map((ap) => {
+          const concepto = acuerdoConceptoMap.get(ap.id_acuerdo_pago);
+          const metodoId = ap.pagos?.id_metodos_pago as number | null | undefined;
+          return {
+            monto: Number(ap.monto ?? ap.pagos?.monto ?? 0),
+            fecha: new Date(ap.pagos.fecha_pago).toISOString().slice(0, 10),
+            concepto: (concepto != null ? conceptoNombreById.get(concepto) : "") || "—",
+            metodo: metodoId != null ? metodoNombreById.get(metodoId) || null : null,
+            url_recibo: ap.pagos?.url_recibo ?? null,
+            url_cep: ap.pagos?.url_cep ?? null,
+          } as PagoDetalle;
+        })
+        .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
       // Persona-lead (prospecto inicial)
       const idPersonaLead = (oferta as any)?.id_persona_lead ?? null;
       const { data: personaLead, error: plErr } = idPersonaLead != null
@@ -603,6 +659,48 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         .filter((c) => !c.es_externo)
         .reduce((sum, c) => sum + c.monto, 0)
         .toFixed(2);
+      const comisionExternaPct = +comisionistasDetalle
+        .filter((c) => c.es_externo)
+        .reduce((sum, c) => sum + c.porcentaje, 0)
+        .toFixed(3);
+      const comisionADispersarPct = +comisionistasDetalle
+        .filter((c) => !c.es_externo)
+        .reduce((sum, c) => sum + c.porcentaje, 0)
+        .toFixed(3);
+
+      // Agente que vendió (creador de la oferta) y la inmobiliaria a la que
+      // pertenece. Waterfall (patrón #1): email_creador → usuarios.id_persona →
+      // personas (nombre) y entidades_relacionadas (tipo 19) con
+      // `id_persona_duena_lead` → persona de la inmobiliaria → nombre.
+      const emailAgente = ((oferta as any)?.email_creador ?? null) as string | null;
+      let agenteNombre = emailAgente ?? "";
+      let inmobiliariaNombre: string | null = null;
+      if (emailAgente) {
+        const { data: usuarioAg } = await supabase
+          .from("usuarios").select("id_persona, nombre").eq("email", emailAgente).maybeSingle();
+        agenteNombre = (usuarioAg as any)?.nombre || emailAgente;
+        const personaAg = (usuarioAg as any)?.id_persona ?? null;
+        if (personaAg) {
+          const { data: pAg } = await (supabase as any)
+            .from("personas").select("nombre_legal, nombre_comercial").eq("id", personaAg).maybeSingle();
+          agenteNombre = pAg?.nombre_comercial || pAg?.nombre_legal || agenteNombre;
+          const { data: rel } = await (supabase as any)
+            .from("entidades_relacionadas")
+            .select("id_persona_duena_lead")
+            .eq("id_persona", personaAg)
+            .eq("id_tipo_entidad", 19)
+            .eq("activo", true)
+            .not("id_persona_duena_lead", "is", null)
+            .limit(1)
+            .maybeSingle();
+          const personaInmob = rel?.id_persona_duena_lead ?? null;
+          if (personaInmob) {
+            const { data: inmob } = await (supabase as any)
+              .from("personas").select("nombre_comercial, nombre_legal").eq("id", personaInmob).maybeSingle();
+            inmobiliariaNombre = inmob?.nombre_comercial || inmob?.nombre_legal || null;
+          }
+        }
+      }
 
       const metraje =
         (Number(propiedad?.m2_interiores) || 0) +
@@ -1103,6 +1201,11 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         comision_total_sozu: comisionTotalSozu,
         comision_externa: comisionExterna,
         comision_a_dispersar: comisionADispersar,
+        comision_externa_pct: comisionExternaPct,
+        comision_a_dispersar_pct: comisionADispersarPct,
+        agente: agenteNombre,
+        agente_email: emailAgente,
+        inmobiliaria: inmobiliariaNombre,
         compradores,
         propietario,
         rfc_comprador: rfcComprador,
@@ -1123,6 +1226,7 @@ export function useExpedienteVentaDetalle(folio: string | null | undefined) {
         pagos_apartado: pagosDeConcepto(1),
         pagos_enganche: pagosDeConcepto(2),
         pagos_adicionales: pagosAdicionales(),
+        pagos_detalle: pagosDetalle,
         oferta_comercial: (() => {
           const sumMonto = (concepto: number) =>
             (acuerdos || [])

@@ -3,7 +3,7 @@
 // tarjeta arrastrable, menú de acciones). Extraído de crm.tsx. Consumido por
 // CrmContactDetail, CrmDeals y CrmDealDetail (que se quedan y orquestan dnd-kit).
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -46,9 +46,11 @@ import {
 import { fmtMXN, fmtDate, relTime } from "@/lib/crm-lib";
 import { fetchCrmOwners } from "@/hooks/useCrmCatalogos";
 import { useCrmCanDelete } from "@/hooks/useCrmCanDelete";
+import { useCrmNegociosPortal } from "@/hooks/useCrmContactosPortal";
 
 // ─── (símbolos extraídos abajo; se les añade `export` automáticamente) ──────────
 export function DealsCard({ contactId, deals, onSaved }: { contactId: string; deals: any[]; onSaved: () => void }) {
+  const { basePath: negociosBase } = useCrmNegociosPortal();
   const list = deals ?? [];
   return (
     <AccordionItem value="deals">
@@ -70,7 +72,7 @@ export function DealsCard({ contactId, deals, onSaved }: { contactId: string; de
           ) : (
             <div className="space-y-1.5">
               {list.map((d: any) => (
-                <Link key={d.id} to={`/admin/portal-crm/ventas/negocios/${d.id}`}
+                <Link key={d.id} to={`${negociosBase}/${d.id}`}
                   className="block rounded-md border border-border p-2.5 bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors">
                   <div className="flex items-center gap-1.5">
                     {d.prioridad && PRIORIDAD_META[d.prioridad] && (
@@ -301,7 +303,7 @@ export function ExistingDealForm({ contactId, onDone, onCancel }: { contactId: s
 // Diálogo "Crear negocio" desde el módulo (contacto OPCIONAL, con búsqueda).
 // A diferencia de NewDealForm (que exige un contacto), aquí el contacto puede
 // quedar en NULL para crear un negocio suelto desde la vista de Negocios.
-export function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void }) {
+export function NewDealDialog({ open, onOpenChange, onSaved, soloContactos = null, contactoObligatorio = false }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void; soloContactos?: number[] | null; contactoObligatorio?: boolean }) {
   const { user } = useAuth();
   const empty = { nombre: "", id_pipeline: "", id_etapa: "", valor: "", moneda: "MXN", fecha_cierre: "", id_propietario: user?.id ?? "", tipo_negocio: "", prioridad: "" };
   const [form, setForm] = useState(empty);
@@ -327,8 +329,9 @@ export function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; 
   const { data: owners } = useQuery({ queryKey: ["crm-owners"], queryFn: fetchCrmOwners });
 
   // Búsqueda de contacto (mismo patrón que el diálogo global de tarea).
+  const permitidos = useMemo(() => (soloContactos ? new Set(soloContactos) : null), [soloContactos]);
   const { data: contactResults = [], isFetching } = useQuery({
-    queryKey: ["crm-deal-contact-search", contactSearch],
+    queryKey: ["crm-deal-contact-search", contactSearch, soloContactos?.length ?? null],
     enabled: open && contactSearch.trim().length >= 2,
     queryFn: async () => {
       const term = contactSearch.trim();
@@ -341,11 +344,15 @@ export function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; 
       const { data: ents } = await (supabase as any).from("entidades_relacionadas")
         .select("id, id_persona").in("id_persona", pIds).in("id_tipo_entidad", [2, 7]).eq("activo", true).limit(20);
       const pName: Record<number, string> = Object.fromEntries((personas ?? []).map((p: any) => [p.id, (p.nombre_legal || p.nombre_comercial || "Sin nombre").trim()]));
-      return (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
+      const encontrados = (ents ?? []).map((e: any) => ({ id: e.id, name: pName[e.id_persona] ?? "Sin nombre" })) as { id: number; name: string }[];
+      // En el Portal del Personal solo se puede colgar el negocio de un contacto
+      // propio: de otro modo se crearía un negocio que la persona no vería.
+      return permitidos ? encontrados.filter((c) => permitidos.has(c.id)) : encontrados;
     },
   });
 
-  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
+  const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving
+    && (!contactoObligatorio || !!contact);
   const reset = () => { setForm(empty); setContact(null); setContactSearch(""); };
 
   const save = async (close: boolean) => {
@@ -387,7 +394,12 @@ export function NewDealDialog({ open, onOpenChange, onSaved }: { open: boolean; 
           </DField>
           {/* Contacto asociado (opcional) */}
           <div>
-            <Label>Contacto asociado <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+            <Label>
+              Contacto asociado{" "}
+              <span className="text-muted-foreground font-normal">
+                {contactoObligatorio ? "(obligatorio — debe ser uno de tus referidos)" : "(opcional)"}
+              </span>
+            </Label>
             {contact ? (
               <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
                 <span className="font-medium truncate">{contact.name}</span>
@@ -469,7 +481,8 @@ export function DealMetric({ label, value }: { label: string; value: string }) {
 
 // Menú de acciones (Ver · Editar · Eliminar) de un negocio.
 export function DealActionsMenu({ deal, onOpen, onEdit, onDelete, onBoard }: { deal: any; onOpen: (id: number) => void; onEdit: (d: any) => void; onDelete: (d: any) => void; onBoard?: boolean }) {
-  const canDelete = useCrmCanDelete("/admin/portal-crm/ventas/negocios");
+  const { permisosPath: negociosPermisos } = useCrmNegociosPortal();
+  const canDelete = useCrmCanDelete(negociosPermisos);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

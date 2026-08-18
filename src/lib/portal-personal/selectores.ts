@@ -53,8 +53,14 @@ export function gananciaPorMonto(monto: number): number {
   return Math.round(monto * CAMPANIA_VIGENTE.pct_comision);
 }
 
+/**
+ * Estas funciones sólo necesitan la fecha de entrega, así que piden lo mínimo:
+ * así sirven igual para un desarrollo del mock que para un proyecto real de BD.
+ */
+type ConEntrega = Pick<Desarrollo, "entrega_estimada">;
+
 /** Horizonte de cobro estimado — obligatorio junto a todo monto proyectado. */
-export function cobroEstimado(dev: Desarrollo): string {
+export function cobroEstimado(dev: ConEntrega): string {
   return dev.entrega_estimada;
 }
 
@@ -66,7 +72,7 @@ export type NodoLinea = {
 };
 
 /** Fecha estimada de escrituración del desarrollo. */
-function fechaEscrituracion(dev: Desarrollo): string {
+function fechaEscrituracion(dev: ConEntrega): string {
   return dev.entrega_estimada;
 }
 
@@ -74,20 +80,24 @@ function fechaEscrituracion(dev: Desarrollo): string {
  * INVARIANTE — UNA SOLA FECHA: el trimestre del encabezado y el último nodo
  * de la línea de tiempo se leen de aquí. Siempre es la fecha del PAGO.
  */
-export function fechaDePago(dev: Desarrollo): string {
-  const anio = Number(dev.entrega_estimada.split(" ")[1] ?? "2028");
-  const q = Number((dev.entrega_estimada.split(" ")[0] ?? "Q1").replace("Q", ""));
+export function fechaDePago(dev: ConEntrega): string {
+  const [trimestre, anioTexto] = dev.entrega_estimada.split(" ");
+  const anio = Number(anioTexto);
+  const q = Number((trimestre ?? "").replace("Q", ""));
+  // Un proyecto real puede no tener fecha de entrega capturada: mejor decirlo
+  // que inventar un trimestre.
+  if (!Number.isFinite(anio) || !Number.isFinite(q) || q < 1 || q > 4) return "Por definir";
   const siguiente = q + 1;
   return siguiente > 4 ? `Q1 ${anio + 1}` : `Q${siguiente} ${anio}`;
 }
 
 /** SWAP POINT: supabase.reglas_programa.hitos_pago */
-export function hitosDePago(dev: Desarrollo): HitoPago[] {
+export function hitosDePago(dev: ConEntrega): HitoPago[] {
   return HITOS_PAGO.map((h) => ({ ...h, fecha_estimada: fechaDePago(dev) }));
 }
 
 export function lineaDeCobro(
-  dev: Desarrollo,
+  dev: ConEntrega,
   etapaAlcanzada = 1,
   hitos: HitoPago[] = hitosDePago(dev),
 ): NodoLinea[] {
@@ -115,7 +125,11 @@ export function lineaDeCobro(
 
 /**
  * INVARIANTE — SEGURIDAD: solo el renglón del usuario autenticado.
- * SWAP POINT: supabase.vw_mi_comision_por_canal
+ *
+ * @deprecated Ya hay fuente real: `hooks/usePortalPersonalComisiones` resuelve
+ * los canales y porcentajes de la persona desde `comisiones_reglas` (la misma
+ * matriz que valida Alta Dirección). Estos tres selectores quedan solo para el
+ * mock; no los uses para mostrar una comisión.
  */
 export function misCanales(): ComisionCanal[] {
   return MI_COMISION_POR_CANAL;

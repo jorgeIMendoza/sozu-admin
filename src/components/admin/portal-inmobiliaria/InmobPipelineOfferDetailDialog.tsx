@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, DollarSign, Lock, Info, ExternalLink, ArrowRight } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronUp, FileText, User, Building2, Calendar, DollarSign, Lock, Info, ExternalLink, ArrowRight, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -64,6 +64,36 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
       return data;
     },
     enabled: open && !!card?.id_propiedad,
+  });
+
+  // Inmobiliaria a la que está ligado el agente creador de la oferta.
+  // Waterfall (patrón #1 de CLAUDE.md): email_creador → usuarios.id_persona →
+  // entidades_relacionadas (tipo 19, agente) con `id_persona_duena_lead` (la
+  // persona de la inmobiliaria) → nombre de esa persona. `null` = agente
+  // independiente (sin inmobiliaria) o usuario interno.
+  const { data: inmobiliariaAgente, isLoading: loadingInmobiliaria } = useQuery({
+    queryKey: ["inmob-pipeline-agente-inmobiliaria", card?.email_creador],
+    enabled: open && !card?.is_internal && !!card?.email_creador,
+    queryFn: async () => {
+      const { data: usuario } = await (supabase as any)
+        .from("usuarios").select("id_persona").eq("email", card.email_creador).maybeSingle();
+      const personaAgente = usuario?.id_persona;
+      if (!personaAgente) return null;
+      const { data: rel } = await (supabase as any)
+        .from("entidades_relacionadas")
+        .select("id_persona_duena_lead")
+        .eq("id_persona", personaAgente)
+        .eq("id_tipo_entidad", 19)
+        .eq("activo", true)
+        .not("id_persona_duena_lead", "is", null)
+        .limit(1)
+        .maybeSingle();
+      const personaInmob = rel?.id_persona_duena_lead;
+      if (!personaInmob) return null;
+      const { data: persona } = await (supabase as any)
+        .from("personas").select("nombre_comercial, nombre_legal").eq("id", personaInmob).maybeSingle();
+      return persona?.nombre_comercial || persona?.nombre_legal || null;
+    },
   });
 
   // Fetch product details with category tiene_metraje
@@ -263,6 +293,16 @@ export function InmobPipelineOfferDetailDialog({ open, onOpenChange, card, stage
                   </Badge>
                 )}
               </div>
+
+              {/* Inmobiliaria a la que está ligado el agente (solo agentes externos). */}
+              {!card.is_internal && card.email_creador && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+                  <Store className="h-3 w-3 shrink-0" />
+                  <span className="truncate">
+                    Inmobiliaria: {loadingInmobiliaria ? "…" : (inmobiliariaAgente ?? "Independiente")}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* CTA: Ciclo de Venta del Expediente de Venta (solo si hay cuenta de

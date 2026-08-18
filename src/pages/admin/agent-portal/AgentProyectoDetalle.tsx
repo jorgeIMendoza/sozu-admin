@@ -2,8 +2,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
-import { useAgentPortalPermissions } from "@/hooks/useAgentPortalPermissions";
 import { useAgentOnboardingStatus } from "@/hooks/useAgentOnboardingStatus";
+import { useInventarioPortal } from "@/hooks/useInventarioPortal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentImpersonation } from "@/contexts/AgentImpersonationContext";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
@@ -234,8 +234,9 @@ const AgentProyectoDetalle = () => {
   const personaId = isImpersonating ? impersonatedAgentPersonaId : profile?.id_persona;
   const isAgentRole = profile?.rol_nombre === 'Agente Inmobiliario';
   const { hasTrainingComplete, isLoading: onboardingLoading } = useAgentOnboardingStatus(personaId);
-  const { permissions } = useAgentPortalPermissions();
-  const inventarioPerms = permissions['/admin/agent/inventario'];
+  // Misma vista para Portal Agente y Portal del Personal.
+  const { basePath, portalPrefix } = useInventarioPortal();
+  const PAGE = `${portalPrefix}_detalle_desarrollo`;
   const { registrarVista, registrarExportacion } = useActivityLogger();
   const { track } = useCtaTracker();
   const [shareOpen, setShareOpen] = useState(false);
@@ -250,14 +251,14 @@ const AgentProyectoDetalle = () => {
   // Log page view
   useEffect(() => {
     if (projectId > 0) {
-      registrarVista(`/admin/agent/inventario/proyecto/${projectId}`, { proyecto_id: projectId });
-      track({ page: 'agent_detalle_desarrollo', elementId: 'page_view', elementType: 'page', metadata: { proyecto_id: projectId } });
+      registrarVista(`${basePath}/proyecto/${projectId}`, { proyecto_id: projectId });
+      track({ page: PAGE, elementId: 'page_view', elementType: 'page', metadata: { proyecto_id: projectId } });
     }
-  }, [projectId]);
+  }, [projectId, basePath, PAGE]);
 
   const handleShareMethod = (method: string) => {
     const name = project?.nombre || "";
-    track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir_plataforma', elementLabel: `Compartir ${method}`, metadata: { plataforma: method, proyecto_id: projectId } });
+    track({ page: PAGE, elementId: 'btn_compartir_plataforma', elementLabel: `Compartir ${method}`, metadata: { plataforma: method, proyecto_id: projectId } });
     switch (method) {
       case "web":
         window.open(publicUrl, "_blank");
@@ -679,7 +680,7 @@ const AgentProyectoDetalle = () => {
             <ActionButton
               icon={Building2}
               className="h-11 flex-1"
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}`); }}
+              onClick={() => { track({ page: PAGE, elementId: 'btn_ver_inventario', elementLabel: 'Ver inventario', metadata: { proyecto_id: projectId } }); navigate(`${basePath}/unidades?proyecto=${projectId}`); }}
             >
               Ver inventario
             </ActionButton>
@@ -687,7 +688,7 @@ const AgentProyectoDetalle = () => {
               icon={CalendarPlus}
               variant="outline"
               className="h-11 flex-1"
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
+              onClick={() => { track({ page: PAGE, elementId: 'btn_agendar_cita', elementLabel: 'Agendar cita', metadata: { proyecto_id: projectId } }); setAgendarCitaOpen(true); }}
             >
               Agendar cita
             </ActionButton>
@@ -695,7 +696,7 @@ const AgentProyectoDetalle = () => {
               icon={Share2}
               variant="outline"
               className="h-11 flex-1"
-              onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
+              onClick={() => { track({ page: PAGE, elementId: 'btn_compartir', elementLabel: 'Compartir proyecto' }); setShareOpen(true); }}
             >
               Compartir
             </ActionButton>
@@ -788,7 +789,7 @@ const AgentProyectoDetalle = () => {
                           <Button
                             variant="primary-outline"
                             className="mt-2.5 w-full"
-                            onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_ver_inventario_modelo', elementLabel: 'Ver inventario', metadata: { modelo_id: m.id } }); navigate(`/admin/agent/inventario/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
+                            onClick={() => { track({ page: PAGE, elementId: 'btn_ver_inventario_modelo', elementLabel: 'Ver inventario', metadata: { modelo_id: m.id } }); navigate(`${basePath}/unidades?proyecto=${projectId}&modelo=${m.id}`); }}
                           > Ver inventario 
                           </Button>
                         )}
@@ -1015,7 +1016,7 @@ const AgentProyectoDetalle = () => {
               {brochure && (
                 <div
                   className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); setPreviewFile({ url: brochure.url, name: 'Brochure' }); }}
+                  onClick={() => { track({ page: PAGE, elementId: 'btn_descargar_brochure', elementLabel: 'Brochure' }); registrarExportacion('brochure', { proyecto_id: projectId }); setPreviewFile({ url: brochure.url, name: 'Brochure' }); }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
@@ -1027,7 +1028,7 @@ const AgentProyectoDetalle = () => {
               {fichaTecnica && (
                 <div
                   className="bg-card rounded-md border border-gray-100 p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => { track({ page: 'agent_detalle_desarrollo', elementId: 'btn_descargar_ficha', elementLabel: 'Ficha técnica' }); registrarExportacion('ficha_tecnica', { proyecto_id: projectId }); window.open(fichaTecnica.url, '_blank'); }}
+                  onClick={() => { track({ page: PAGE, elementId: 'btn_descargar_ficha', elementLabel: 'Ficha técnica' }); registrarExportacion('ficha_tecnica', { proyecto_id: projectId }); window.open(fichaTecnica.url, '_blank'); }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
