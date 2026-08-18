@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { FileText, Loader } from 'lucide-react';
 import { fmtCurrency, fmtDate, isImage, SelectSearch } from '@/pages/admin/portal-cobranza/cuentaDetalleShared';
 import type { PagoRecord } from '@/hooks/useRelacionPagos';
+import { difiereEnDinero } from '@/utils/dinero';
 
 // Detalle del pago — comprobante a la izquierda (55%), info + edición a la derecha.
 // Todo en una vista: campos editables (fecha pagado, monto, método, estatus) + un
@@ -111,7 +112,7 @@ export function PaymentDetailDialog({
   const url = payment.url_cep || payment.url_recibo || null;
   const conceptoLabel = detail?.concepto?.toLowerCase().includes('contra entrega') ? 'A escrituración' : (detail?.concepto ?? 'Sin registro');
   const descuadrado = detail?.montoPago != null && detail?.totalAplicado != null
-    && Math.abs(Number(detail.montoPago) - Number(detail.totalAplicado)) > 0.01;
+    && difiereEnDinero(detail.montoPago, detail.totalAplicado);
 
   const fechaChanged = !!form.fecha && form.fecha !== payment.fecha_pago;
   const metodoChanged = !!form.metodo && Number(form.metodo) !== detail?.idMetodo;

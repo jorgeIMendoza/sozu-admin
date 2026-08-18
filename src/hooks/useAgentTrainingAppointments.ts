@@ -22,32 +22,45 @@ export interface AgentTrainingAppointment {
   status_name: string | null;
 }
 
-export function getTrainingAppointmentStatus(appointment: Pick<AgentTrainingAppointment, "fecha" | "estatus" | "id_estatus_cita" | "status_name">) {
-  if (appointment.id_estatus_cita === 3 || appointment.estatus === "asistio") {
-    return { label: "Confirmada", tone: "success" as const };
-  }
+/**
+ * Una cita tiene DOS ejes independientes:
+ *  - `id_estatus_cita`: etapa de confirmación previa (1 Agendada, 2 Pend. confirmación, 3 Confirmada)
+ *  - `estatus` (texto): resultado de la cita (programada, asistio, no_asistio, cancelada)
+ * Confirmada != Asistió. Mezclarlos deja citas confirmadas sin forma de registrar asistencia.
+ */
+export type CitaAsistencia = "asistio" | "no_asistio" | "cancelada" | "pendiente";
 
-  // If the date has passed and it's still just "programada", show as unconfirmed
+export function getCitaAsistencia(appointment: { estatus: string | null }): CitaAsistencia {
+  if (appointment.estatus === "asistio") return "asistio";
+  if (appointment.estatus === "no_asistio") return "no_asistio";
+  if (appointment.estatus === "cancelada") return "cancelada";
+  return "pendiente";
+}
+
+/** La asistencia ya quedó registrada (no admite más acciones). */
+export function esCitaResuelta(appointment: { estatus: string | null }): boolean {
+  return getCitaAsistencia(appointment) !== "pendiente";
+}
+
+export function getTrainingAppointmentStatus(appointment: Pick<AgentTrainingAppointment, "fecha" | "estatus" | "id_estatus_cita" | "status_name">) {
+  // 1) El resultado de la cita manda sobre la etapa de confirmación.
+  const asistencia = getCitaAsistencia(appointment);
+  if (asistencia === "asistio") return { label: "Asistió", tone: "success" as const };
+  if (asistencia === "no_asistio") return { label: "No asistió", tone: "danger" as const };
+  if (asistencia === "cancelada") return { label: "Cancelada", tone: "neutral" as const };
+
+  // 2) Sin resultado todavía: se reporta la etapa de confirmación.
+  if (appointment.id_estatus_cita === 3) return { label: "Confirmada", tone: "success" as const };
+  if (appointment.id_estatus_cita === 2) return { label: "Pend. confirmación", tone: "warning" as const };
+
   const today = new Date().toISOString().split("T")[0];
   const isPast = appointment.fecha < today;
-
-  if (appointment.id_estatus_cita === 2) {
-    return { label: "Pend. confirmación", tone: "warning" as const };
-  }
 
   if (appointment.id_estatus_cita === 1 || appointment.estatus === "programada") {
     if (isPast) {
       return { label: "Sin confirmar", tone: "neutral" as const };
     }
     return { label: "Agendada", tone: "info" as const };
-  }
-
-  if (appointment.estatus === "no_asistio") {
-    return { label: "No asistió", tone: "danger" as const };
-  }
-
-  if (appointment.estatus === "cancelada") {
-    return { label: "Cancelada", tone: "neutral" as const };
   }
 
   return {

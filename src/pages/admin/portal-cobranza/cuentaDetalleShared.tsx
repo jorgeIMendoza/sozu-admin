@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { DesgloseDescuento } from '@/utils/descuentoEsquema';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -218,7 +219,7 @@ export function KpiCard({ label, value, sub, accent, children }: {
   );
 }
 
-export function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+export function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: ReactNode }) {
   return (
     <div className="flex items-start gap-3 py-2 border-b border-border/50 last:border-0">
       <Icon className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
@@ -341,6 +342,8 @@ export interface CuentaDetalleCtx {
   propiedadId: number | null;
   esquemaNombre: string;
   esquemaPct: any;
+  /** Desglose del descuento del esquema (lista → descuento → final); null si no hay. */
+  desgloseDescuento: DesgloseDescuento | null;
   proyectoNombre: string;
   edificioNombre: string;
   modeloNombre: string;

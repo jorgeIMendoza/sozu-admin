@@ -20,6 +20,7 @@ import { NewReservaDialog } from "@/components/admin/NewReservaDialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useActivityLogger } from "@/hooks/useActivityLogger";
+import { diferenciaDinero, difiereEnDinero, sumarDinero } from "@/utils/dinero";
 
 interface AcuerdoPago {
   id: number;
@@ -700,9 +701,10 @@ export default function DetalleCuentaMantenimiento() {
   const estaAlCorriente = !tieneSaldoPendiente && !tieneExcedenteNeto;
 
   // Detectar discrepancia entre pagos reales y aplicaciones (para mostrar botón recalcular)
-  const totalAplicacionesGlobal = aplicacionesPorPago?.reduce((sum, app) => sum + (app.monto || 0), 0) || 0;
-  const discrepanciaPagosVsAplicaciones = totalPagado - totalAplicacionesGlobal;
-  const hayDiscrepanciaAplicaciones = pagosData && pagosData.length > 0 && aplicacionesPorPago !== undefined && Math.abs(discrepanciaPagosVsAplicaciones) > 0.01;
+  const totalAplicacionesGlobal = sumarDinero(aplicacionesPorPago, (app) => app.monto);
+  const discrepanciaPagosVsAplicaciones = diferenciaDinero(totalPagado, totalAplicacionesGlobal);
+  const hayDiscrepanciaAplicaciones = pagosData && pagosData.length > 0 && aplicacionesPorPago !== undefined
+    && difiereEnDinero(totalPagado, totalAplicacionesGlobal);
 
   // Botón recalcular mantenimiento: solo ante inconsistencia real (saldo a favor sin aplicar
   // + meses pendientes) Y siendo día 1 del mes (ventana en que n8n aún no aplicó los pagos).

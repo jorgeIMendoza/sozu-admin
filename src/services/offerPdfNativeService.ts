@@ -664,6 +664,43 @@ export class OfertaPdfNativeService {
       y += 4;
     }
 
+    // Descuento del esquema seleccionado — homologa "Datos de la Propiedad" con el
+    // desglose de los esquemas de pago (que ya muestra el ahorro). Solo se pinta
+    // cuando el esquema elegido descuenta (porcentaje negativo).
+    const esquemaSeleccionado = data.paymentSchemes.find(
+      (s) => s.id === data.offerData.id_esquema_pago_seleccionado
+    );
+    const pctDescuentoSeleccionado = Number(
+      esquemaSeleccionado?.porcentaje_descuento_aumento ?? 0
+    );
+    if (esquemaSeleccionado && pctDescuentoSeleccionado < 0) {
+      const baseDescuento =
+        Number(data.propertyDetails.precio_lista ?? 0) + bodegasIncluidasTotal;
+      const montoDescuento = (baseDescuento * Math.abs(pctDescuentoSeleccionado)) / 100;
+
+      y += 2;
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(grayColor);
+      pdf.text(
+        `Descuento (${Math.abs(pctDescuentoSeleccionado)}%):`,
+        margin,
+        y
+      );
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(primaryColor);
+      pdf.text(`-${formatCurrency(montoDescuento)}`, margin + 35, y);
+      y += 5;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(grayColor);
+      pdf.text("Precio final:", margin, y);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(primaryColor);
+      pdf.text(formatCurrency(baseDescuento - montoDescuento), margin + 35, y);
+      y += 5;
+    }
+
     drawLine(y);
     y += 6;
 
