@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows, fetchInBatches } from "@/utils/supabasePagination";
 
@@ -32,6 +32,8 @@ export interface FacturaPorPagar {
   beneficiario_nombre: string;
   beneficiario_rfc: string;
   beneficiario_tipo: TipoBeneficiario;
+  /** Email del comisionista — clave para ubicar/eliminar su factura (documentos.numero). */
+  email_usuario: string;
   venta_referencia: string;
   id_cuenta_cobranza: number;
   concepto: string;
@@ -454,6 +456,7 @@ export function useFacturasPorPagar() {
           beneficiario_nombre: beneficiarioNombre,
           beneficiario_rfc: beneficiarioRfc,
           beneficiario_tipo: tipoBeneficiario,
+          email_usuario: c.email_usuario ?? "",
           venta_referencia: ventaReferencia,
           id_cuenta_cobranza: cuentaIdRef,
           concepto: `Comisión ${pctComExterno}% — ${propiedadLabel || producto?.nombre || `Proyecto ${proyectoNombre}`}`,
@@ -477,6 +480,62 @@ export function useFacturasPorPagar() {
           estatus_pago: estatusPago,
         };
       });
+    },
+  });
+}
+
+/**
+ * Elimina (soft-delete) la factura que subió un comisionista externo cuando tiene
+ * un error, para que el Agente deba volver a subirla y sea validada de nuevo.
+ *
+ *   1. `documentos` tipo 46 (factura del externo) de la cuenta+email → activo=false.
+ *      La factura desaparece de "Facturas por Pagar" y la comisión regresa a
+ *      "Aprobada/Sin factura" (el Agente puede re-subir, ya que `aprobada` se
+ *      mantiene en true).
+ *   2. `cuentas_cobranza.estatus_autorizacion_comision_externa` → null, para que
+ *      el pago tenga que volver a validarse.
+ *
+ * No toca los campos SOZU de la cuenta (`url_factura_comision` /
+ * `es_draft_factura_comision`) para no afectar la factura SOZU al desarrollador
+ * ni el pipeline de "Cobros por gestionar".
+ */
+export function useEliminarFacturaExterna() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ idCuenta, email }: { idCuenta: number; email: string }) => {
+      if (!idCuenta) throw new Error("No se pudo identificar la cuenta de la factura.");
+
+      // 1) Soft-delete del documento de la factura del externo.
+      let del = (supabase as any)
+        .from("documentos")
+        .update({ activo: false, fecha_actualizacion: new Date().toISOString() })
+        .eq("id_cuenta_cobranza", idCuenta)
+        .eq("id_tipo_documento", TIPO_DOC_FACTURA_EXTERNA)
+        .eq("activo", true);
+      // La factura se sube con numero = email del comisionista; si viene el email
+      // se limita a esa factura (una cuenta puede tener varios externos).
+      if (email) del = del.eq("numero", email);
+      const { error: docError } = await del;
+      if (docError) throw docError;
+
+      // 2) Reset de la autorización de pago del externo → debe re-validarse.
+      const { error: cuentaError } = await (supabase as any)
+        .from("cuentas_cobranza")
+        .update({
+          estatus_autorizacion_comision_externa: null,
+          fecha_actualizacion: new Date().toISOString(),
+        })
+        .eq("id", idCuenta);
+      if (cuentaError) throw cuentaError;
+
+      return { idCuenta, email };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["facturas_por_pagar_alta_direccion"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones-externas"] });
+      queryClient.invalidateQueries({ queryKey: ["comisiones_externas_alta_direccion"] });
+      queryClient.invalidateQueries({ queryKey: ["cobros_por_gestionar"] });
+      queryClient.invalidateQueries({ queryKey: ["pagar-comisiones"] });
     },
   });
 }
