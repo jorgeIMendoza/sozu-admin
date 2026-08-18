@@ -119,6 +119,45 @@ export default function ActivosComercialesNuevo() {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(!isEdit);
 
+  /**
+   * Autorización real de la operación.
+   *
+   * `crear_activo_comercial` exige Super Administrador y, si no lo eres,
+   * responde `not authorized` — en inglés y solo DESPUÉS de llenar las cuatro
+   * pestañas. El permiso del menú deja entrar a más roles que los que la
+   * función acepta, así que se comprueba al abrir la pantalla y se dice quién
+   * eres: sin eso, un rechazo por sesión caducada y uno por rol se ven igual.
+   */
+  const [permiso, setPermiso] = useState<
+    { estado: "verificando" } |
+    { estado: "ok" } |
+    { estado: "sin_sesion" } |
+    { estado: "sin_rol"; email: string }
+  >({ estado: "verificando" });
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (cancel) return;
+      if (!auth?.user) {
+        setPermiso({ estado: "sin_sesion" });
+        return;
+      }
+      const { data, error } = await (supabase as any).rpc("is_super_admin");
+      if (cancel) return;
+      // Si la comprobación misma falla no se bloquea la pantalla: que decida
+      // el servidor al guardar, en vez de impedir trabajar por un error de red.
+      if (error) { setPermiso({ estado: "ok" }); return; }
+      setPermiso(
+        data === true
+          ? { estado: "ok" }
+          : { estado: "sin_rol", email: auth.user.email ?? "tu cuenta" },
+      );
+    })();
+    return () => { cancel = true; };
+  }, []);
+
   const [prop, setProp] = useState<Dict>({
     id_tipo_propiedad: "11",
     id_tipo_transaccion: "1",
@@ -256,9 +295,19 @@ export default function ActivosComercialesNuevo() {
       navigate(`/admin/activos-comerciales/${data}/editar`);
     } catch (e: any) {
       console.error(e);
+      // `not authorized` es el RAISE de la función cuando quien llama no es
+      // Super Administrador. Traducirlo evita que el usuario lea un mensaje en
+      // inglés que no dice qué hacer.
+      const crudo = e?.message ?? "Error desconocido";
+      const descripcion =
+        crudo === "not authorized"
+          ? "Solo un Super Administrador puede dar de alta activos comerciales. Si crees que deberías poder, cierra sesión y vuelve a entrar: la sesión pudo haber caducado."
+          : crudo === "permission denied for function crear_activo_comercial"
+            ? "Tu sesión caducó. Cierra sesión y vuelve a entrar para guardar el activo."
+            : crudo;
       toast({
         title: isEdit ? "No se pudo actualizar" : "No se pudo crear",
-        description: e.message ?? "Error desconocido",
+        description: descripcion,
         variant: "destructive",
       });
     } finally {
@@ -332,7 +381,7 @@ export default function ActivosComercialesNuevo() {
             </p>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={!canSave || saving || !loaded}>
+        <Button onClick={handleSave} disabled={!canSave || saving || !loaded || permiso.estado !== "ok"}>
           {saving ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -341,6 +390,29 @@ export default function ActivosComercialesNuevo() {
           {isEdit ? "Guardar cambios" : "Guardar activo"}
         </Button>
       </div>
+
+      {permiso.estado === "sin_sesion" && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <p className="text-sm font-medium text-destructive">Tu sesión caducó</p>
+          <p className="mt-0.5 text-sm text-foreground/80">
+            Cierra sesión y vuelve a entrar. Si guardas ahora, el servidor rechazará el
+            activo y perderás lo capturado.
+          </p>
+        </div>
+      )}
+
+      {permiso.estado === "sin_rol" && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+            No puedes dar de alta activos comerciales
+          </p>
+          <p className="mt-0.5 text-sm text-foreground/80">
+            La operación exige el rol Super Administrador y {permiso.email} no lo tiene.
+            Puedes consultar el módulo, pero no crear ni editar. Pide el alta a un Super
+            Administrador.
+          </p>
+        </div>
+      )}
 
       {isEdit && !loaded && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -718,7 +790,7 @@ export default function ActivosComercialesNuevo() {
       </Tabs>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!canSave || saving} size="lg">
+        <Button onClick={handleSave} disabled={!canSave || saving || permiso.estado !== "ok"} size="lg">
           {saving ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
