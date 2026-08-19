@@ -256,12 +256,6 @@ export function TicketDetailSheet({
 
           <Separator />
 
-          <Section titulo="Chat interno">
-            <TicketChatInterno ticket={ticket} />
-          </Section>
-
-          <Separator />
-
           {!readOnly && (
             <div className="space-y-3">
               <Label>Agregar nota</Label>
@@ -302,6 +296,12 @@ export function TicketDetailSheet({
               </div>
             </div>
           )}
+
+          <Separator />
+
+          <Section titulo="Chat interno">
+            <TicketChatInterno ticket={ticket} />
+          </Section>
 
           <Separator />
 
