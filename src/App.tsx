@@ -1234,7 +1234,7 @@ const App = () => (
                   <Route path="portal-crm/configuracion/desarrollos"          element={<CrmSettingsDevelopments />} />
                   <Route path="portal-crm/configuracion/pipelines"             element={<CrmSettingsPipelines />} />
                   <Route path="portal-crm/configuracion/estados-lead"          element={<CrmSettingsLeadStates />} />
-                  <Route path="portal-crm/configuracion/logs"                  element={<CrmLogs />} />
+                  <Route path="portal-crm/configuracion/auditoria"                  element={<CrmLogs />} />
                   {/* rutas antiguas (conservadas) */}
                   <Route path="portal-crm/configuracion/roles"                       element={<CrmSettingsRoles />} />
                   <Route path="portal-crm/configuracion/etapas-pipeline"             element={<CrmSettingsPipelineStages />} />

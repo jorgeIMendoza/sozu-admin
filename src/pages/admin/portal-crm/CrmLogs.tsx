@@ -84,7 +84,7 @@ export function CrmLogs() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2"><ScrollText className="h-6 w-6 text-primary" />Logs de actividad</h1>
+          <h1 className="text-2xl font-semibold flex items-center gap-2"><ScrollText className="h-6 w-6 text-primary" />Auditoría</h1>
           <p className="text-sm text-muted-foreground">Registro de quién hace cada acción en el CRM · {total} evento{total === 1 ? "" : "s"}</p>
         </div>
       </div>
