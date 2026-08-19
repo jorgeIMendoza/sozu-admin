@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -159,6 +160,7 @@ export function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId
 
   const canSave = !!form.nombre.trim() && !!form.id_pipeline && !!form.id_etapa && !saving;
 
+  const { logCrear } = useCrmLogger();
   const save = async (close: boolean) => {
     if (!canSave) return;
     setSaving(true);
@@ -172,6 +174,7 @@ export function NewDealForm({ contactId, userId, onDone, onCancel }: { contactId
     });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("negocio", { nombre: form.nombre, id_pipeline: form.id_pipeline, contactId });
     toast.success("Negocio creado");
     // "Crear y agregar otro": limpia datos pero conserva pipeline/etapa/propietario para encadenar.
     setForm(close ? empty : { ...empty, id_pipeline: form.id_pipeline, id_etapa: form.id_etapa, id_propietario: form.id_propietario });
@@ -355,6 +358,7 @@ export function NewDealDialog({ open, onOpenChange, onSaved, soloContactos = nul
     && (!contactoObligatorio || !!contact);
   const reset = () => { setForm(empty); setContact(null); setContactSearch(""); };
 
+  const { logCrear } = useCrmLogger();
   const save = async (close: boolean) => {
     if (!canSave) return;
     setSaving(true);
@@ -368,6 +372,7 @@ export function NewDealDialog({ open, onOpenChange, onSaved, soloContactos = nul
     });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("negocio", { nombre: form.nombre, id_pipeline: form.id_pipeline, contactId: contact?.id ?? null });
     toast.success("Negocio creado");
     onSaved();
     if (close) { reset(); onOpenChange(false); }
@@ -569,6 +574,7 @@ export function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved 
     },
   });
 
+  const { logActualizar } = useCrmLogger();
   const save = async () => {
     if (!form || !form.nombre.trim() || !deal) return;
     setSaving(true);
@@ -585,6 +591,7 @@ export function EditDealDialog({ deal, pipelines, owners, onOpenChange, onSaved 
     }).eq("id", deal.id);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logActualizar("negocio", null, { id: deal.id, nombre: form.nombre });
     toast.success("Negocio actualizado");
     const etGanado = !!(etapas ?? []).find((e: any) => String(e.id) === form.id_etapa)?.es_ganado;
     firePurchaseIfWon({ id_entidad_relacionada: deal.id_entidad_relacionada, valor: form.valor ? Number(form.valor) : null, moneda: form.moneda, esGanado: etGanado });

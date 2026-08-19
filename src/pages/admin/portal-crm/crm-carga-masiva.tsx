@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Upload, Loader2, CheckCircle2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
@@ -79,6 +80,7 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
   const [dataRows, setDataRows] = useState<unknown[][]>([]);
   const [mapping, setMapping] = useState<Record<FieldKey, number>>({ nombre: -1, apellidos: -1, correo: -1, telefono: -1, lead_status: -1, origen_agente: -1, etapa_ciclo_vida: -1, propietario: -1 });
   const [catFija, setCatFija] = useState<string>(""); // id de categoría fija para todo el lote ("" = ninguna)
+  const { logCrear } = useCrmLogger();
 
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -209,7 +211,7 @@ export function CargaMasivaDialog({ onCreated }: { onCreated: () => void }) {
     }
 
     setResult(res); setImporting(false); setStep(4);
-    if (res.creados > 0) { toast.success(`${res.creados} contactos importados`); onCreated(); }
+    if (res.creados > 0) { logCrear("carga_masiva", { creados: res.creados, errores: res.errores }); toast.success(`${res.creados} contactos importados`); onCreated(); }
   };
 
   const setMap = (key: FieldKey, val: string) => setMapping((m) => ({ ...m, [key]: val === NONE ? -1 : Number(val) }));
