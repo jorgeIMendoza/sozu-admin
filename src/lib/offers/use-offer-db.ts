@@ -248,7 +248,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       .eq("id_proyecto", proyectoId)
       .eq("activo", true),
     propiedad.id_vista
-      ? supabase.from("vistas").select("nombre").eq("id", propiedad.id_vista).maybeSingle()
+      ? supabase.from("vistas").select("nombre, url").eq("id", propiedad.id_vista).maybeSingle()
       : Promise.resolve({ data: null }),
     // Esquemas filtrados por proyecto (no todos los esquemas de la BD)
     supabase
@@ -382,6 +382,12 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       planoUbicacionRegiones = (nivelPlano as any).regiones || [];
     }
   }
+  const vistaUrlRaw = (vista as any)?.url;
+  const vistaUrl: string | undefined =
+    typeof vistaUrlRaw === "string" && vistaUrlRaw.trim()
+      ? toOptimizedUrl(vistaUrlRaw.trim(), 1600, 82)
+      : undefined;
+
   // Total de niveles del edificio (edificios.numero_pisos). La columna es de tipo
   // `character`, así que llega con padding de espacios y a veces vacía: hay que
   // recortar antes de convertir o el diagrama del edificio queda sin escala.
@@ -983,6 +989,11 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     bodegas,
     estacionamientos,
     clabeStp,
+    // Render de la vista de la unidad (`vistas.url`). Es por proyecto+orientación,
+    // no por unidad: de las 28 vistas del catálogo solo 19 tienen imagen (p. ej.
+    // Mutuo Vive tiene las 8 orientaciones sin cargar), así que la sección de la
+    // oferta se monta solo cuando hay archivo.
+    ...(vistaUrl ? { vistaUrl } : {}),
     planoUbicacionUrl,
     planoUbicacionRegiones,
     unitDepto,

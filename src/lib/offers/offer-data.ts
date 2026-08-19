@@ -315,6 +315,13 @@ export interface OfertaComercial {
    * apartado; undefined → `APARTADO_DEFAULT_MXN`.
    */
   apartadoAmount?: number;
+  /**
+   * Render de la vista de la unidad (`vistas.url`, vía `propiedades.id_vista`).
+   * El catálogo es por proyecto + orientación, así que la imagen es la misma para
+   * todas las unidades que miran hacia el mismo lado; el nombre de la orientación
+   * va en `property.view`.
+   */
+  vistaUrl?: string;
   /** Plano del nivel (edificios_niveles_planos.imagen_url) para señalar la ubicación de la unidad. */
   planoUbicacionUrl?: string;
   /** Regiones/polígonos del plano de nivel (edificios_niveles_planos.regiones) para resaltar la unidad. */

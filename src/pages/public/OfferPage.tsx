@@ -14,6 +14,7 @@ import OfferLocation from "@/components/offer/OfferLocation";
 import OfferPaymentPlansComparator from "@/components/offer/OfferPaymentPlansComparator";
 import OfferPropertyDetails from "@/components/offer/OfferPropertyDetails";
 import OfferUnitLocation from "@/components/offer/OfferUnitLocation";
+import OfferUnitView from "@/components/offer/OfferUnitView";
 import PreReservationActiveView from "@/components/offer/PreReservationActiveView";
 import PublicShell from "@/components/offer/PublicShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -393,6 +394,14 @@ const OfferPage = () => {
                   bodegas={offer.bodegas}
                   estacionamientos={offer.estacionamientos}
                   clabeStp={offer.clabeStp}
+                />
+
+                {/* Vista tentativa (después de Datos de la propiedad, que ya nombra
+                    la orientación pero no la muestra) */}
+                <OfferUnitView
+                  imageUrl={offer.vistaUrl}
+                  view={offer.property.view}
+                  level={offer.property.level}
                 />
 
                 {/* Recorre tu unidad (Tour 360) - antes del plano */}
