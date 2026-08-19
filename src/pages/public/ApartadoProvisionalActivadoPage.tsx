@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { useOfferById, formatMXN } from "@/lib/offers/offer-data";
-import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import type { Agent } from "@/lib/offers/agent-data";
 import { supabase } from "@/integrations/supabase/client";
 import PublicShell from "@/components/offer/PublicShell";
 import DevelopmentLogo from "@/components/offer/DevelopmentLogo";
@@ -27,7 +27,6 @@ const ApartadoProvisionalActivadoPage = () => {
   );
 
   const offer = useOfferById(formalReservation?.offerId ?? "");
-  const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = formalReservation?.offerId;
   useEffect(() => {
@@ -54,7 +53,7 @@ const ApartadoProvisionalActivadoPage = () => {
       });
     })();
   }, [agentOfferId]);
-  const agent = agentFromDB ?? mockAgent ?? undefined;
+  const agent = agentFromDB;
 
   useEffect(() => {
     if (formalReservation && formalReservation.status !== "apartado_provisional") {

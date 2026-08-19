@@ -3,7 +3,7 @@ import { Maximize2, X, ZoomIn, ZoomOut, Square, Bed, Bath, Building2, Eye } from
 
 interface Props {
   imageUrl: string;
-  unitArea: number;
+  unitArea?: number | string;
   bedrooms: number;
   bathrooms: number;
   view?: string;
@@ -27,6 +27,11 @@ const MetaCell = ({ label, value }: { label: string; value: string }) => (
 );
 
 const OfferFloorPlanLarge = ({ imageUrl, unitArea, bedrooms, bathrooms, view, floor }: Props) => {
+  // `property.area` llega ya formateada desde `use-offer-db`; el número es el caso viejo.
+  const areaLabel =
+    typeof unitArea === "number"
+      ? `${unitArea.toLocaleString("es-MX")} m²`
+      : (unitArea ?? "").trim();
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
 
@@ -38,7 +43,7 @@ const OfferFloorPlanLarge = ({ imageUrl, unitArea, bedrooms, bathrooms, view, fl
   };
 
   const metaCells = [
-    { label: "Área total", value: `${unitArea.toLocaleString("es-MX")} m²` },
+    { label: "Área total", value: areaLabel },
     { label: "Recámaras", value: String(bedrooms) },
     { label: "Baños", value: String(bathrooms) },
     ...(view ? [{ label: "Vista", value: view }] : []),
@@ -73,7 +78,7 @@ const OfferFloorPlanLarge = ({ imageUrl, unitArea, bedrooms, bathrooms, view, fl
           </div>
 
           <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-1.5">
-            <InfoChip icon={Square} label={`${unitArea.toLocaleString("es-MX")} m²`} />
+            <InfoChip icon={Square} label={areaLabel} />
             <InfoChip icon={Bed} label={`${bedrooms} rec`} />
             <InfoChip icon={Bath} label={`${bathrooms} baños`} />
             {floor && <InfoChip icon={Building2} label={`Nivel ${floor}`} />}

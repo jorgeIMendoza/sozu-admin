@@ -13,15 +13,15 @@ import OfferGallery from "@/components/offer/OfferGallery";
 import OfferLocation from "@/components/offer/OfferLocation";
 import OfferPaymentPlansComparator from "@/components/offer/OfferPaymentPlansComparator";
 import OfferPropertyDetails from "@/components/offer/OfferPropertyDetails";
+import OfferUnitLocation from "@/components/offer/OfferUnitLocation";
+import OfferUnitView from "@/components/offer/OfferUnitView";
 import PreReservationActiveView from "@/components/offer/PreReservationActiveView";
 import PublicShell from "@/components/offer/PublicShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAgentById } from "@/lib/offers/agent-data";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import {
   formatPropertyTitle,
   useInjectOffer,
-  useOfferById,
   useOfferStore,
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
@@ -101,16 +101,14 @@ const OfferPage = () => {
   const { data: offerResult, isLoading: dbLoading } = useOfferFromDB(offerId ?? "");
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
-  const mockOffer = useOfferById(offerId ?? "");
-  const offer = dbOffer ?? (import.meta.env.DEV ? mockOffer : null);
+  const offer = dbOffer;
   const injectOffer = useInjectOffer();
 
   useEffect(() => {
     if (dbOffer) injectOffer(dbOffer);
   }, [dbOffer, injectOffer]);
 
-  const mockAgent = useAgentById(offer?.agentId ?? "");
-  const agent = dbAgent ?? mockAgent;
+  const agent = dbAgent;
   const navigate = useNavigate();
   const [gateModalOpen, setGateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("unidad");
@@ -398,6 +396,14 @@ const OfferPage = () => {
                   clabeStp={offer.clabeStp}
                 />
 
+                {/* Vista tentativa (después de Datos de la propiedad, que ya nombra
+                    la orientación pero no la muestra) */}
+                <OfferUnitView
+                  imageUrl={offer.vistaUrl}
+                  view={offer.property.view}
+                  level={offer.property.level}
+                />
+
                 {/* Recorre tu unidad (Tour 360) - antes del plano */}
                 {offer.tour360 ? (
                   <div id="tour-360">
@@ -425,7 +431,7 @@ const OfferPage = () => {
                 ) : null}
 
                 {/* Plano */}
-                {offer.floorPlanUrl || offer.planoUbicacionUrl ? (
+                {offer.floorPlanUrl ? (
                   <OfferFloorPlanLarge
                     imageUrl={offer.floorPlanUrl}
                     unitArea={offer.property.area}
@@ -433,10 +439,6 @@ const OfferPage = () => {
                     bathrooms={offer.property.bathrooms}
                     view={offer.property.view}
                     floor={offer.property.level}
-                    planoUbicacionUrl={offer.planoUbicacionUrl}
-                    planoUbicacionRegiones={offer.planoUbicacionRegiones}
-                    highlightUnit={offer.unitDepto}
-                    fullPropertyNumber={offer.property.unitNumber}
                   />
                 ) : import.meta.env.DEV ? (
                   <div className="rounded-md border border-border bg-card overflow-hidden">
@@ -456,6 +458,17 @@ const OfferPage = () => {
                     </div>
                   </div>
                 ) : null}
+
+                {/* Ubicación de la unidad dentro del edificio (después del plano) */}
+                <OfferUnitLocation
+                  level={offer.property.level}
+                  totalPisos={offer.totalPisos}
+                  unitNumber={offer.property.unitNumber}
+                  unitDepto={offer.unitDepto}
+                  area={offer.property.area}
+                  planoUbicacionUrl={offer.planoUbicacionUrl}
+                  planoUbicacionRegiones={offer.planoUbicacionRegiones}
+                />
 
               </TabsContent>
 

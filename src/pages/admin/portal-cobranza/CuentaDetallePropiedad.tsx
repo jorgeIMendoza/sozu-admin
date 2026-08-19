@@ -14,7 +14,7 @@ import { buildOfferUrl } from '@/lib/offers/offer-links';
 import {
   fmtCurrency, fmtDate, acuerdoEstado,
   KpiCard, TabBar, EstadoBadge, ValidacionBadge, ClaveCopyable, IconTip,
-  InfoRow,
+  InfoRow, RecalcularDispersionButton,
   INFO_TABS, ACTIVITY_TABS,
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
@@ -206,6 +206,14 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <CreditCard className="size-3.5" />Agregar Pago
           </button>
         )}
+        {!isEnDemanda && (
+          <RecalcularDispersionButton
+            show={hayDiscrepanciaAplicaciones}
+            loading={recalculandoAplic}
+            onClick={handleRecalcularAplicaciones}
+            hayAcuerdosAbiertos={acuerdosPendientes > 0}
+          />
+        )}
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         <button
           onClick={handleEstadoCuenta}
@@ -238,18 +246,6 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
           >
             <Scale className="size-3.5" />En demanda
           </span>
-        )}
-        {/* Recalcular pagos — solo visible cuando hay discrepancia en aplicaciones */}
-        {!isEnDemanda && hayDiscrepanciaAplicaciones && (
-          <button
-            onClick={handleRecalcularAplicaciones}
-            disabled={recalculandoAplic}
-            title="Recalcular la aplicación de pagos de esta cuenta"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-300 bg-background text-[12px] font-medium text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-60"
-          >
-            {recalculandoAplic ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-            Recalcular pagos
-          </button>
         )}
         {/* Reiniciar financiamiento — acción interna de emergencia. Solo si ya hay
             un método elegido (tipo_financiamiento definido). */}
