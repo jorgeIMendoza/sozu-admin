@@ -97,7 +97,7 @@ const ApartadoProvisionalDashboardPage = () => {
         navigate(`/en-adquisicion/${formalReservation.id}/expediente`, { replace: true });
       }
       if (formalReservation.status === "provisional_cancelado") {
-        navigate(`/apartado-provisional/${formalReservation.id}/liberado`, { replace: true });
+        navigate(`/apartado-liberado/${formalReservation.id}`, { replace: true });
       }
     }
   }, [formalReservation, navigate]);

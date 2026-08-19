@@ -110,7 +110,7 @@ const CancelarFunnelModal = ({ formalReservation, open, onClose }: CancelarFunne
       CANCELLATION_REASONS.find((r) => r.id === selectedReasonId)?.label ?? selectedReasonId;
     cancelHoldVoluntary(formalReservation.id, reasonLabel);
     onClose();
-    navigate(`/apartado-provisional/${formalReservation.id}/liberado`, { replace: true });
+    navigate(`/apartado-liberado/${formalReservation.id}`, { replace: true });
   };
 
   const handleKeepApartado = () => onClose();
