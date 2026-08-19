@@ -95,6 +95,7 @@ export interface UploadedDoc {
   createdAt: string;
   rejectedReason?: string;
   managedBySozu?: boolean; // para certificado RPP gestionado por SOZU
+  needsManualEntry?: boolean; // el PDF no se pudo extraer (escaneado/imagen): captura manual
 }
 
 export type CheckStatus = "ok" | "warn" | "fail" | "idle";

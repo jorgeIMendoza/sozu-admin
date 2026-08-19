@@ -27,26 +27,56 @@ function isIdType(type: DocType): boolean {
   return type === "id_oficial" || type === "id_rl";
 }
 
+type ExtractResult = {
+  fields: DocField[];
+  status: DocStatus;
+  confidence: number;
+  needsManualEntry?: boolean;
+};
+
+const CURP_SKELETON = [
+  { key: "curp", label: "CURP", value: "" },
+  { key: "nombre", label: "Nombre", value: "" },
+  { key: "fecha_nacimiento", label: "Fecha de nacimiento", value: "" },
+  { key: "sexo", label: "Sexo", value: "" },
+];
+const CSF_SKELETON = [
+  { key: "rfc", label: "RFC", value: "" },
+  { key: "razon_social", label: "Nombre / Razón social", value: "" },
+  { key: "regimen", label: "Régimen", value: "" },
+  { key: "codigo_postal", label: "Código postal fiscal", value: "" },
+  { key: "domicilio", label: "Domicilio fiscal", value: "" },
+];
+
 /**
- * Extrae los campos reales de un PDF (CURP RENAPO / CSF SAT) reutilizando las
- * utilerías existentes: valida autenticidad+antigüedad y saca datos por regex.
+ * Extrae los campos de un PDF (CURP RENAPO / CSF SAT). Si el PDF es un escaneado
+ * o imagen (sin texto legible), o no se pudo leer, NO se rechaza: se acepta con
+ * `needsManualEntry` para que la persona capture los datos a mano (decisión de
+ * negocio). La antigüedad tampoco bloquea (ver pdfDocumentValidators).
  */
-async function extractFromPdf(
-  type: DocType,
-  file: File,
-  docId: string,
-): Promise<{ fields: DocField[]; status: DocStatus; confidence: number }> {
-  const text = await extractPdfText(file);
-  if (!text || text.length < 20) {
-    throw new Error("El PDF no tiene texto legible (¿es un escaneado o imagen?). Sube el PDF oficial descargado.");
-  }
+async function extractFromPdf(type: DocType, file: File, docId: string): Promise<ExtractResult> {
   const mk = (arr: { key: string; label: string; value: string }[]): DocField[] =>
     arr.map((x) => ({ ...x, sourceDocId: docId, status: "en_revision" as const }));
+  const manual = (skeleton: { key: string; label: string; value: string }[]): ExtractResult => ({
+    status: "por_confirmar",
+    confidence: 0,
+    needsManualEntry: true,
+    fields: mk(skeleton),
+  });
+
+  let text = "";
+  try {
+    text = await extractPdfText(file);
+  } catch {
+    text = "";
+  }
+  // Escaneado/imagen o PDF ilegible → se acepta igual, con captura manual.
+  if (!text || text.length < 20) return manual(type === "curp" ? CURP_SKELETON : CSF_SKELETON);
 
   if (type === "curp") {
-    const v = validateCURPPdf(text);
-    if (!v.ok) throw new Error(v.reason);
+    if (!validateCURPPdf(text).ok) return manual(CURP_SKELETON);
     const f = extractCURPFields(text);
+    if (!f.curp && !f.nombre) return manual(CURP_SKELETON);
     return {
       status: "en_revision",
       confidence: 0.95,
@@ -60,9 +90,9 @@ async function extractFromPdf(
   }
 
   // csf
-  const v = validateCSFPdf(text);
-  if (!v.ok) throw new Error(v.reason);
+  if (!validateCSFPdf(text).ok) return manual(CSF_SKELETON);
   const f = extractCSFFields(text);
+  if (!f.rfc && !f.nombre) return manual(CSF_SKELETON);
   const domicilio = [
     f.calle,
     f.numExt ? `#${f.numExt}` : null,
@@ -107,6 +137,9 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
 
   const isPdfExtract = isPdfExtractType(type);
   const idType = isIdType(type);
+  // Doc con captura manual (no se pudo extraer): campos vacíos siempre editables.
+  const manualEntry = !!doc?.needsManualEntry;
+  const showInputs = manualEntry || editing;
 
   async function onFile(file: File) {
     const id = "doc-" + Math.random().toString(36).slice(2, 9);
@@ -134,6 +167,7 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         fields: res.fields,
         confirmed: false,
         createdAt: new Date().toISOString(),
+        needsManualEntry: (res as { needsManualEntry?: boolean }).needsManualEntry === true,
       };
       // Guarda el archivo en IndexedDB (sobrevive F5) para subirlo a Storage al
       // finalizar el wizard. No se persiste en el store (solo metadatos).
@@ -232,7 +266,8 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
 
       {isPdfExtract && !doc && !error && (
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Sube el PDF oficial (no una foto ni escaneado). Leemos los datos y solo confirmas.
+          Sube el PDF oficial y leemos los datos automáticamente. Si es un escaneado o imagen, igual
+          puedes subirlo y capturar los datos a mano.
         </p>
       )}
 
@@ -296,21 +331,40 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
         </div>
       )}
 
-      {/* Documento CON datos extraídos (CURP / CSF): revisar y confirmar */}
+      {/* Documento CON campos (CURP / CSF): extraídos (verde) o captura manual (ámbar) */}
       {doc && !doc.managedBySozu && doc.fields.length > 0 && (
-        <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
-            <CheckCircle2 className="h-4 w-4" />
-            Detectamos estos datos. Revísalos y confírmalos.
+        <div
+          className={`rounded-md border p-3 ${
+            manualEntry
+              ? "border-amber-300/70 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-950/20"
+              : "border-primary/30 bg-primary/5"
+          }`}
+        >
+          <div
+            className={`mb-2 flex items-start gap-2 text-sm font-medium ${
+              manualEntry ? "text-amber-800 dark:text-amber-300" : "text-primary"
+            }`}
+          >
+            {manualEntry ? (
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            )}
+            <span>
+              {manualEntry
+                ? "Se cargó el archivo, pero no pudimos extraer la información. Captúrala manualmente."
+                : "Detectamos estos datos. Revísalos y confírmalos."}
+            </span>
           </div>
           <div className="space-y-2">
             {doc.fields.map((f) => (
               <div key={f.key} className="grid grid-cols-3 items-center gap-2">
                 <Label className="text-xs text-muted-foreground">{f.label}</Label>
-                {editing ? (
+                {showInputs ? (
                   <Input
                     className="col-span-2 h-8 num text-sm"
                     value={f.value}
+                    placeholder={manualEntry ? f.label : undefined}
                     onChange={(e) =>
                       updateDoc(doc.id, {
                         fields: doc.fields.map((x) =>
@@ -331,15 +385,21 @@ export function DocumentUploader({ type, allowManagedBySozu, optional }: Props) 
             ))}
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[11px] text-muted-foreground">
-              Confianza: <span className="num">{Math.round(doc.confidence * 100)}%</span>
-              {doc.confidence < 0.75 && " · marcado como Por confirmar"}
-            </div>
+            {manualEntry ? (
+              <span className="truncate text-[11px] text-muted-foreground">{doc.filename}</span>
+            ) : (
+              <div className="text-[11px] text-muted-foreground">
+                Confianza: <span className="num">{Math.round(doc.confidence * 100)}%</span>
+                {doc.confidence < 0.75 && " · marcado como Por confirmar"}
+              </div>
+            )}
             <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)} type="button">
-                <Pencil className="mr-1 h-3 w-3" />
-                {editing ? "Listo" : "Corregir"}
-              </Button>
+              {!manualEntry && (
+                <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)} type="button">
+                  <Pencil className="mr-1 h-3 w-3" />
+                  {editing ? "Listo" : "Corregir"}
+                </Button>
+              )}
               <Button size="sm" variant="ghost" onClick={() => removeCurrent(doc.id)} type="button">
                 <Trash2 className="mr-1 h-3 w-3" /> Quitar
               </Button>
