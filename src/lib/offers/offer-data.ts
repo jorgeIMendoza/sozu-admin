@@ -321,6 +321,11 @@ export interface OfertaComercial {
   planoUbicacionRegiones?: any[];
   /** Número de depto derivado (numero_propiedad − piso) para el match del resaltado en el plano. */
   unitDepto?: string;
+  /**
+   * Total de niveles del edificio (`edificios.numero_pisos`) para dibujar el corte
+   * del edificio a escala. Solo se envía si la oferta muestra el piso.
+   */
+  totalPisos?: number;
 }
 
 /** Esquema de pago de una bodega, tomado de la oferta de producto del mismo lead. */

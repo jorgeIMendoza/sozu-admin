@@ -13,6 +13,7 @@ import OfferGallery from "@/components/offer/OfferGallery";
 import OfferLocation from "@/components/offer/OfferLocation";
 import OfferPaymentPlansComparator from "@/components/offer/OfferPaymentPlansComparator";
 import OfferPropertyDetails from "@/components/offer/OfferPropertyDetails";
+import OfferUnitLocation from "@/components/offer/OfferUnitLocation";
 import PreReservationActiveView from "@/components/offer/PreReservationActiveView";
 import PublicShell from "@/components/offer/PublicShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -421,7 +422,7 @@ const OfferPage = () => {
                 ) : null}
 
                 {/* Plano */}
-                {offer.floorPlanUrl || offer.planoUbicacionUrl ? (
+                {offer.floorPlanUrl ? (
                   <OfferFloorPlanLarge
                     imageUrl={offer.floorPlanUrl}
                     unitArea={offer.property.area}
@@ -429,10 +430,6 @@ const OfferPage = () => {
                     bathrooms={offer.property.bathrooms}
                     view={offer.property.view}
                     floor={offer.property.level}
-                    planoUbicacionUrl={offer.planoUbicacionUrl}
-                    planoUbicacionRegiones={offer.planoUbicacionRegiones}
-                    highlightUnit={offer.unitDepto}
-                    fullPropertyNumber={offer.property.unitNumber}
                   />
                 ) : import.meta.env.DEV ? (
                   <div className="rounded-md border border-border bg-card overflow-hidden">
@@ -452,6 +449,17 @@ const OfferPage = () => {
                     </div>
                   </div>
                 ) : null}
+
+                {/* Ubicación de la unidad dentro del edificio (después del plano) */}
+                <OfferUnitLocation
+                  level={offer.property.level}
+                  totalPisos={offer.totalPisos}
+                  unitNumber={offer.property.unitNumber}
+                  unitDepto={offer.unitDepto}
+                  area={offer.property.area}
+                  planoUbicacionUrl={offer.planoUbicacionUrl}
+                  planoUbicacionRegiones={offer.planoUbicacionRegiones}
+                />
 
               </TabsContent>
 

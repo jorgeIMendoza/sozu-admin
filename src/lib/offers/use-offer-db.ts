@@ -201,7 +201,7 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
   // 3. Edificio_modelo → modelo + edificio → proyectoId
   const { data: emData } = await supabase
     .from("edificios_modelos")
-    .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(id, nombre, id_proyecto), modelos:edificios_modelos_id_modelo_fkey(id, nombre, numero_recamaras, numero_completo_banos, numero_medio_bano, plano_arquitectonico, url_imagen_portada)")
+    .select("id, id_edificio, id_modelo, edificios:edificios_modelos_id_edificio_fkey!inner(id, nombre, id_proyecto, numero_pisos), modelos:edificios_modelos_id_modelo_fkey(id, nombre, numero_recamaras, numero_completo_banos, numero_medio_bano, plano_arquitectonico, url_imagen_portada)")
     .eq("id", propiedad.id_edificio_modelo)
     .maybeSingle();
 
@@ -382,6 +382,13 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
       planoUbicacionRegiones = (nivelPlano as any).regiones || [];
     }
   }
+  // Total de niveles del edificio (edificios.numero_pisos). La columna es de tipo
+  // `character`, así que llega con padding de espacios y a veces vacía: hay que
+  // recortar antes de convertir o el diagrama del edificio queda sin escala.
+  const totalPisosRaw = (edificio as any)?.numero_pisos;
+  const totalPisosNum = Number(String(totalPisosRaw ?? "").trim().replace(/\D/g, ""));
+  const totalPisos = Number.isFinite(totalPisosNum) && totalPisosNum > 0 ? totalPisosNum : undefined;
+
   // Depto derivado (numero_propiedad menos dígitos del piso) para el match del resaltado.
   const rawPropNum = ((propiedad as any).numero_propiedad || "").toString().trim();
   const propNumDigits = rawPropNum.replace(/\D/g, "");
@@ -979,6 +986,9 @@ async function fetchOfertaFromDB(ofertaId: string): Promise<OfferWithAgent | nul
     planoUbicacionUrl,
     planoUbicacionRegiones,
     unitDepto,
+    // Se respeta el mismo interruptor que `property.level`: si la oferta oculta el
+    // piso, tampoco se revela por el diagrama de ubicación.
+    ...(oferta.mostrar_piso_en_oferta && totalPisos != null ? { totalPisos } : {}),
     ...(mesesRestantes != null ? { mesesRestantes } : {}),
     ...(apartadoAmount != null ? { apartadoAmount } : {}),
   } as unknown as OfertaComercial;
