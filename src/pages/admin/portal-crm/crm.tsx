@@ -87,6 +87,7 @@ import {
   TASK_TYPE_META, TASK_PRIORITY_META, RECURRENCE_LABEL,
   type GlobalCita,
 } from "./crm-tareas-citas";
+import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
@@ -226,6 +227,7 @@ function DateChip({ date }: { date: string | null }) {
 // Categoría del contacto en la ficha (select único; persiste al instante).
 function ContactCategories({ contactId, disabled = false }: { contactId: number; disabled?: boolean }) {
   const qc = useQueryClient();
+  const { logActualizar } = useCrmLogger();
   const [saving, setSaving] = useState(false);
   const { data: catalog = [] } = useQuery({ queryKey: ["crm-categorias"], queryFn: fetchCrmCategorias });
   const { data: selected = [], refetch } = useQuery({
@@ -258,6 +260,7 @@ function ContactCategories({ contactId, disabled = false }: { contactId: number;
       if (off.error) throw off.error;
       await refetch();
       qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
+      logActualizar("categoria", null, { contactId, id_categoria: id });
     } catch (e: any) {
       toast.error(e?.message ?? "No se pudo guardar la categoría");
     } finally {
@@ -751,6 +754,7 @@ export function CrmContacts() {
   const rangeEnd = Math.min(page * pageSize + pageSize, totalCount);
   const devName = (id: string | null) => (developments as any[])?.find((d: any) => d.id === id)?.name ?? null;
 
+  const { logEliminar } = useCrmLogger();
   const doDelete = async () => {
     const ids = rowToDelete ? [rowToDelete.id] : Array.from(selectedIds);
     if (!ids.length) return;
@@ -759,6 +763,7 @@ export function CrmContacts() {
       .update({ activo: false }).in("id", ids.map(Number));
     setDeleting(false);
     if (error) { toast.error(error.message); return; }
+    ids.forEach((id) => logEliminar("contacto", { id: Number(id) }));
     toast.success(ids.length > 1 ? `${ids.length} contactos eliminados` : "Contacto eliminado");
     setSelectedIds(new Set()); setRowToDelete(null); setDeleteOpen(false);
     qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
@@ -1212,6 +1217,7 @@ function CreateContactDialog({ orgId, developments, onCreated, basePath = "/admi
   const findDuplicates = (email: string, phone: string) =>
     buscarProspectosExistentes({ email, telefono: phone, miAuthUserId: user?.id ?? null });
 
+  const { logCrear } = useCrmLogger();
   const submit = async (force = false) => {
     if (!form.full_name) return;
     const email = form.email.trim();
@@ -1245,6 +1251,7 @@ function CreateContactDialog({ orgId, developments, onCreated, basePath = "/admi
         p_id_categoria: form.categoria ? Number(form.categoria) : null,
       });
       if (error) throw error;
+      logCrear("contacto", { nombre: form.full_name, email: email || null, telefono: phone || null, estatus_lead: form.lead_status });
       toast.success("Contacto creado");
       setOpen(false);
       setDuplicates([]);
@@ -1642,9 +1649,11 @@ export function CrmContactDetail() {
     qc.invalidateQueries({ queryKey: ["contacts-sozu"] });
   };
 
+  const { logActualizar, logEliminar } = useCrmLogger();
   const completeTask = async (id: number) => {
     const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    logActualizar("tarea", null, { id, estatus: "completada" });
     // Si la tarea es recurrente, genera la siguiente ocurrencia.
     const done = (tasks ?? []).find((t: any) => t.id === id);
     if (done?.raw?.recurrencia && done.raw.fecha_vencimiento) {
@@ -1658,6 +1667,7 @@ export function CrmContactDetail() {
   const deleteTask = async (id: number) => {
     const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    logEliminar("tarea", { id });
     toast.success("Tarea eliminada"); invalidateAll();
   };
   // Edición inline de la tarea desde el TaskCard (reagendar, estado, prioridad, tipo, asignado,
@@ -1665,21 +1675,25 @@ export function CrmContactDetail() {
   const updateTask = async (id: number, patch: Record<string, any>) => {
     const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    logActualizar("tarea", null, { id, ...patch });
     invalidateAll();
   };
   const deleteNote = async (id: number) => {
     const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    logEliminar("nota", { id });
     toast.success("Nota eliminada"); invalidateAll();
   };
   const updateCitaStatus = async (id: number, estatus: string) => {
     const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    logActualizar("cita", null, { id, estatus });
     toast.success("Cita actualizada"); invalidateAll();
   };
   const deleteCita = async (id: number) => {
     const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    logEliminar("cita", { id });
     toast.success("Cita eliminada"); invalidateAll();
   };
 
@@ -1953,13 +1967,16 @@ function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: a
       telefono: phone || null,
       fecha_actualizacion: new Date().toISOString(),
     }).eq("id", contact.id_persona));
+    logActualizar("contacto", null, { id: contact.id, email: email || null, telefono: phone || null });
   };
 
-  const persistProyecto = (value: string) =>
+  const persistProyecto = (value: string) => {
     run(() => (supabase as any).from("entidades_relacionadas").update({
       id_proyecto: value ? Number(value) : null,
       fecha_actualizacion: new Date().toISOString(),
     }).eq("id", Number(contact.id)));
+    logActualizar("contacto", null, { id: contact.id, id_proyecto: value ? Number(value) : null });
+  };
 
   const persistAtribucion = (override: { lead_status?: string; lifecycle_stage?: string; contact_owner?: string }) =>
     run(async () => {
@@ -1969,6 +1986,7 @@ function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: a
         etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage,
         id_propietario: (override.contact_owner ?? form.contact_owner) || null,
       }, { onConflict: "id_entidad_relacionada" });
+      if (!resp.error) logActualizar("contacto", null, { id: contact.id, estatus_lead: override.lead_status ?? form.lead_status, etapa_ciclo_vida: override.lifecycle_stage ?? form.lifecycle_stage, id_propietario: (override.contact_owner ?? form.contact_owner) || null });
       // Señal a Meta (Conversions API for Leads) cuando la etapa entra a una mapeada (ej. MQL).
       // Fire-and-forget: no bloquea el guardado; la Edge Function omite leads que no vinieron de Meta.
       const stage = override.lifecycle_stage;
@@ -2456,6 +2474,7 @@ export function CrmDeals() {
 
   const activeDeal = rows.find((r) => r.id === activeId) ?? null;
 
+  const { logActualizar, logEliminar } = useCrmLogger();
   const handleDragEnd = async (e: DragEndEvent) => {
     setActiveId(null);
     const dealId = Number(e.active.id);
@@ -2479,6 +2498,7 @@ export function CrmDeals() {
     const { error } = await (supabase as any).from("crm_negocios").update({ id_etapa: targetEtapa }).eq("id", dealId);
     if (error) { toast.error(error.message); qc.invalidateQueries({ queryKey: ["deals-list"] }); return; }
     toast.success(`Movido a "${targetEt?.nombre ?? "etapa"}"`);
+    logActualizar("negocio", null, { id: dealId, id_etapa: targetEtapa, etapa: targetEt?.nombre });
     qc.invalidateQueries({ queryKey: ["deals-list"] });
     if (deal.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
     // Si el negocio cayó en una etapa "ganada" → señal Purchase a Meta (si el toggle está activo).
@@ -2493,6 +2513,7 @@ export function CrmDeals() {
     const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", deleteTarget.id);
     setDeleting(false);
     if (error) { toast.error(error.message); return; }
+    logEliminar("negocio", { id: deleteTarget.id });
     toast.success("Negocio eliminado");
     const er = deleteTarget.id_entidad_relacionada;
     setDeleteTarget(null);
@@ -2836,6 +2857,7 @@ export function CrmDealDetail() {
     const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", Number(dealId));
     setDeleting(false);
     if (error) { toast.error(error.message); return; }
+    logEliminar("negocio", { id: Number(dealId) });
     toast.success("Negocio eliminado");
     qc.invalidateQueries({ queryKey: ["deals-list"] });
     if (deal?.id_entidad_relacionada) qc.invalidateQueries({ queryKey: ["contact-deals", String(deal.id_entidad_relacionada)] });
@@ -2885,12 +2907,13 @@ export function CrmDealDetail() {
     },
   });
   const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
-  const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea completada"); invalidateActivity(); };
-  const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Tarea eliminada"); invalidateActivity(); };
-  const updateTask = async (id: number, patch: Record<string, any>) => { const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id); if (error) { toast.error(error.message); return; } invalidateActivity(); };
-  const deleteNote = async (id: number) => { const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Nota eliminada"); invalidateActivity(); };
-  const updateCitaStatus = async (id: number, estatus: string) => { const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita actualizada"); invalidateActivity(); };
-  const deleteCita = async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } toast.success("Cita eliminada"); invalidateActivity(); };
+  const { logActualizar, logEliminar } = useCrmLogger();
+  const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("tarea", null, { id, estatus: "completada" }); toast.success("Tarea completada"); invalidateActivity(); };
+  const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } logEliminar("tarea", { id }); toast.success("Tarea eliminada"); invalidateActivity(); };
+  const updateTask = async (id: number, patch: Record<string, any>) => { const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("tarea", null, { id, ...patch }); invalidateActivity(); };
+  const deleteNote = async (id: number) => { const { error } = await (supabase as any).from("crm_notas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } logEliminar("nota", { id }); toast.success("Nota eliminada"); invalidateActivity(); };
+  const updateCitaStatus = async (id: number, estatus: string) => { const { error } = await (supabase as any).from("crm_citas").update({ estatus }).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("cita", null, { id, estatus }); toast.success("Cita actualizada"); invalidateActivity(); };
+  const deleteCita = async (id: number) => { const { error } = await (supabase as any).from("crm_citas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } logEliminar("cita", { id }); toast.success("Cita eliminada"); invalidateActivity(); };
 
   if (isLoading || !form) {
     return (
@@ -3621,6 +3644,7 @@ export function CrmTasks() {
       });
   }, [tasks, tab, search, fType, fPriority, fAssignee]);
 
+  const { logActualizar, logEliminar } = useCrmLogger();
   const toggleComplete = useMutation({
     mutationFn: async (t: GlobalTask) => {
       const completing = !isDone(t);
@@ -3631,6 +3655,7 @@ export function CrmTasks() {
       if (completing && t.recurrencia && t.fecha_vencimiento) await regenerateRecurringTask(t);
     },
     onSuccess: (_d, t) => {
+      logActualizar("tarea", null, { id: t.id, estatus: isDone(t) ? "pendiente" : "completada" });
       qc.invalidateQueries({ queryKey: ["crm-tasks-global"] });
       if (!isDone(t) && t.recurrencia) toast.success("Tarea completada · se generó la siguiente");
     },
@@ -3642,7 +3667,7 @@ export function CrmTasks() {
       const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }); toast.success("Tarea eliminada"); },
+    onSuccess: (_d, id) => { logEliminar("tarea", { id }); qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }); toast.success("Tarea eliminada"); },
     onError: (e: any) => toast.error(e.message ?? "No se pudo eliminar"),
   });
 
@@ -3652,7 +3677,7 @@ export function CrmTasks() {
       const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }),
+    onSuccess: (_d, v) => { logActualizar("tarea", null, { id: v.id, ...v.patch }); qc.invalidateQueries({ queryKey: ["crm-tasks-global"] }); },
     onError: (e: any) => toast.error(e.message ?? "No se pudo actualizar"),
   });
 

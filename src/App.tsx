@@ -459,6 +459,7 @@ const CrmOperationsDevelopments = lazyRetry(() => import("./pages/admin/portal-c
 
 // Portal CRM Sozu — Configuración
 const CrmSettingsUsers                = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsUsers })));
+const CrmLogs                         = lazyRetry(() => import("./pages/admin/portal-crm/CrmLogs").then(m => ({ default: m.CrmLogs })));
 const CrmSettingsRoles                = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsRoles })));
 const CrmSettingsPipelineStages       = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelineStages })));
 const CrmSettingsCustomFields         = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsCustomFields })));
@@ -1233,6 +1234,7 @@ const App = () => (
                   <Route path="portal-crm/configuracion/desarrollos"          element={<CrmSettingsDevelopments />} />
                   <Route path="portal-crm/configuracion/pipelines"             element={<CrmSettingsPipelines />} />
                   <Route path="portal-crm/configuracion/estados-lead"          element={<CrmSettingsLeadStates />} />
+                  <Route path="portal-crm/configuracion/logs"                  element={<CrmLogs />} />
                   {/* rutas antiguas (conservadas) */}
                   <Route path="portal-crm/configuracion/roles"                       element={<CrmSettingsRoles />} />
                   <Route path="portal-crm/configuracion/etapas-pipeline"             element={<CrmSettingsPipelineStages />} />
