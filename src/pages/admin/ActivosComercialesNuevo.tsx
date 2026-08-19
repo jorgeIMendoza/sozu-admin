@@ -176,16 +176,53 @@ function Seccion({
  * Waterfall explícito (patrón #1 de CLAUDE.md): el join anidado de PostgREST
  * sobre tres niveles devuelve null sin error.
  */
+/**
+ * ¿La base ya sabe vincular una propiedad directamente con un edificio?
+ *
+ * `propiedades.id_edificio` la agrega
+ * `Ejecuciones_manuales/20260818_activos_comerciales_estructura.md`. Mientras
+ * no se ejecute, la única vía es `id_edificio_modelo` y hay que seguir pidiendo
+ * el modelo. Se detecta en vez de asumirse (patrón #6 de CLAUDE.md): así la
+ * pantalla funciona antes y después del DDL, y el paso de más desaparece solo
+ * cuando deja de hacer falta.
+ */
+function useSoportaEdificioDirecto() {
+  return useQuery({
+    queryKey: ["ac-soporta-id-edificio"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const probe = await (supabase as any).from("propiedades").select("id_edificio").limit(0);
+      return !probe.error;
+    },
+  });
+}
+
+/**
+ * Ubicación del activo dentro del inventario: Proyecto → Edificio.
+ *
+ * El modelo describe la distribución de un departamento y no aplica a un
+ * activo comercial: las oficinas que ya existen cuelgan de modelos inventados
+ * ("Oficina 1", "Oficina 2", "Oficina 3") creados solo para poder guardarlas.
+ *
+ * Solo se pide mientras la base no admita el vínculo directo con el edificio.
+ *
+ * Waterfall explícito (patrón #1 de CLAUDE.md): el join anidado de PostgREST
+ * sobre tres niveles devuelve null sin error.
+ */
 function UbicacionInventario({
-  idEdificio,
+  valor,
   onChange,
   disabled,
+  pideModelo,
 }: {
-  idEdificio: string;
+  valor: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  /** La base aún no tiene `id_edificio`: el valor es el vínculo edificio×modelo. */
+  pideModelo: boolean;
 }) {
   const [idProyecto, setIdProyecto] = useState<string>("");
+  const [idEdificio, setIdEdificio] = useState<string>("");
 
   const { data: proyectos = [], isLoading: cargandoProyectos } = useQuery({
     queryKey: ["ac-proyectos"],
@@ -209,12 +246,35 @@ function UbicacionInventario({
     },
   });
 
+  const { data: modelos = [] } = useQuery({
+    queryKey: ["ac-modelos", idEdificio],
+    enabled: pideModelo && !!idEdificio,
+    queryFn: async () => {
+      const { data: vinculos, error } = await (supabase as any)
+        .from("edificios_modelos").select("id, id_modelo")
+        .eq("id_edificio", Number(idEdificio)).eq("activo", true);
+      if (error) throw error;
+      const ids = (vinculos ?? []).map((v: any) => v.id_modelo);
+      if (!ids.length) return [] as { id: number; nombre: string }[];
+      const { data: mods } = await (supabase as any)
+        .from("modelos").select("id, nombre").in("id", ids).order("nombre");
+      const nombre = new Map((mods ?? []).map((m: any) => [m.id, m.nombre]));
+      // El valor guardado es el id del VÍNCULO edificio×modelo, no el del modelo.
+      return (vinculos ?? [])
+        .map((v: any) => ({ id: v.id as number, nombre: (nombre.get(v.id_modelo) as string) ?? `Modelo ${v.id_modelo}` }))
+        .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
+    },
+  });
+
+  // Sin modelo el valor ES el edificio; con modelo, el vínculo edificio×modelo.
+  const edificioElegido = pideModelo ? idEdificio : valor;
+
   return (
     <>
       <Field label="Proyecto *">
         <Select
           value={idProyecto || undefined}
-          onValueChange={(v) => { setIdProyecto(v); onChange(""); }}
+          onValueChange={(v) => { setIdProyecto(v); setIdEdificio(""); onChange(""); }}
           disabled={disabled}
         >
           <SelectTrigger>
@@ -229,8 +289,12 @@ function UbicacionInventario({
       </Field>
       <Field label="Edificio *">
         <Select
-          value={idEdificio || undefined}
-          onValueChange={onChange}
+          value={edificioElegido || undefined}
+          onValueChange={(v) => {
+            setIdEdificio(v);
+            // Con modelo, elegir edificio no basta: falta el vínculo.
+            onChange(pideModelo ? "" : v);
+          }}
           disabled={disabled || !idProyecto}
         >
           <SelectTrigger>
@@ -243,6 +307,20 @@ function UbicacionInventario({
           </SelectContent>
         </Select>
       </Field>
+      {pideModelo && (
+        <Field label="Modelo *">
+          <Select value={valor || undefined} onValueChange={onChange} disabled={disabled || !idEdificio}>
+            <SelectTrigger>
+              <SelectValue placeholder={idEdificio ? "Selecciona el modelo" : "Elige un edificio primero"} />
+            </SelectTrigger>
+            <SelectContent>
+              {modelos.map((m: any) => (
+                <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
     </>
   );
 }
@@ -263,6 +341,11 @@ export default function ActivosComercialesNuevo() {
    * que cambiar de tipo no arrastre una decisión que ya no aplica.
    */
   const [enProyecto, setEnProyecto] = useState(true);
+
+  // Mientras la base no tenga `id_edificio` hay que seguir pidiendo el modelo
+  // y capturando el número a mano: ambas cosas llegan en el mismo DDL.
+  const { data: soportaEdificio = false } = useSoportaEdificioDirecto();
+  const pideModelo = !soportaEdificio;
 
   /**
    * Lo único que se exige para capturar es una sesión activa.
@@ -414,15 +497,17 @@ export default function ActivosComercialesNuevo() {
     const f: { campo: string; paso: string }[] = [];
     const falta = (campo: string, paso: string) => f.push({ campo, paso });
 
-    if (!isEdit && enProyecto && !prop.id_edificio) falta("Proyecto y Edificio", "general");
+    if (!isEdit && enProyecto && !prop.id_edificio)
+      falta(soportaEdificio ? "Proyecto y Edificio" : "Proyecto, Edificio y Modelo", "general");
     if (!prop.id_tipo_propiedad) falta("Tipo de activo", "general");
     if (!prop.id_tipo_transaccion) falta("Transacción", "general");
-    // El número no se pide en el alta: lo asigna la base al guardar.
-    if (isEdit && !String(prop.numero_propiedad ?? "").trim()) falta("Número / Clave interna", "general");
+    // El número lo asigna la base solo cuando el DDL del folio está aplicado.
+    if ((isEdit || !soportaEdificio) && !String(prop.numero_propiedad ?? "").trim())
+      falta("Número / Clave interna", "general");
     if (showVenta && !(Number(prop.precio_lista) > 0)) falta("Precio de lista", "general");
     if (showRenta && !(Number(renta.renta_mensual) > 0)) falta("Renta mensual", "renta");
     return f;
-  }, [prop, renta, showVenta, showRenta, isEdit, enProyecto]);
+  }, [prop, renta, showVenta, showRenta, isEdit, enProyecto, soportaEdificio]);
 
   const canSave = faltantes.length === 0;
 
@@ -462,9 +547,11 @@ export default function ActivosComercialesNuevo() {
           // proyecto": sin esta bandera no puede validar la terna solo cuando
           // corresponde.
           en_proyecto: admiteProyecto(tipo) ? enProyecto : false,
-          // El número lo asigna la base con un consecutivo por tipo. Mandar la
-          // cadena vacía del formulario crearía activos sin identificador.
-          numero_propiedad: undefined,
+          // Con el DDL aplicado el vínculo es el edificio; sin él, el modelo.
+          // Se manda solo la clave que la base sabe leer.
+          ...(soportaEdificio
+            ? { id_edificio: prop.id_edificio || null, numero_propiedad: undefined }
+            : { id_edificio_modelo: prop.id_edificio || null }),
         },
         activo_comercial: pac,
         atributos: atts,
@@ -650,6 +737,24 @@ export default function ActivosComercialesNuevo() {
         </div>
       )}
 
+      {/*
+        El DDL que permite vincular por edificio y generar el folio todavía no
+        está aplicado en este ambiente, así que la pantalla pide el modelo y el
+        número, como antes. Se dice para que no parezca un requisito nuevo.
+      */}
+      {!isEdit && !soportaEdificio && (
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-2.5">
+          <p className="text-sm text-muted-foreground">
+            Este ambiente aún pide <strong className="text-foreground">Modelo</strong> y
+            {" "}<strong className="text-foreground">Número</strong>. Dejarán de pedirse al
+            aplicar{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+              Ejecuciones_manuales/20260818_activos_comerciales_estructura.md
+            </code>.
+          </p>
+        </div>
+      )}
+
       {permiso.estado === "sin_sesion" && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
           <p className="text-sm font-medium text-destructive">Tu sesión caducó</p>
@@ -790,9 +895,10 @@ export default function ActivosComercialesNuevo() {
 
                     {enProyecto ? (
                       <UbicacionInventario
-                        idEdificio={prop.id_edificio}
+                        valor={prop.id_edificio}
                         onChange={(v) => setP("id_edificio", v)}
                         disabled={isEdit}
+                        pideModelo={pideModelo}
                       />
                     ) : (
                       <p className="text-sm text-muted-foreground md:col-span-3">
@@ -819,7 +925,7 @@ export default function ActivosComercialesNuevo() {
                   actuales van de "MOH - 13" a "3"— y no había nada que impidiera
                   repetirlo. En alta se muestra el dato, no un campo vacío.
                 */}
-                {!isEdit ? (
+                {!isEdit && soportaEdificio ? (
                   <Field label="Número / Clave interna">
                     <div className="flex h-10 items-center rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground">
                       Se genera al guardar
