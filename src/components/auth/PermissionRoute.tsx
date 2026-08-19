@@ -5,6 +5,7 @@ import { useDynamicMenus } from '@/hooks/useDynamicMenus';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHasEmbajadorRole } from '@/hooks/useHasEmbajadorRole';
 import { computePortalHostAccess } from '@/lib/portalHostAccess';
+import { decidePortalAccess } from '@/lib/routeAccess';
 import { CURRENT_PORTAL_SUBDOMAIN } from '@/lib/portalUrls';
 import { PortalSinAcceso } from './PortalSinAcceso';
 import { Loader2 } from 'lucide-react';
@@ -31,12 +32,11 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
 
   // ---------------------------------------------------------------------------
   // GATE DE SEGURIDAD GLOBAL — debe evaluarse ANTES de cualquier atajo por
-  // portal. Los atajos de abajo (/admin/agent, portal-cliente,
-  // portal-estructura-comisiones, portal-productos, portal-embajador, y los
-  // shortcuts por rol_id 1/2) hacían `return children` sin pasar por aquí, así
-  // que un submenú apagado en "Administrar Menús" desaparecía del sidebar pero
-  // seguía siendo accesible escribiendo la URL directa. Aplica a TODOS los
-  // portales y a TODOS los roles, incluido Super Admin.
+  // portal. Los atajos de abajo (/admin/agent, portal-cliente, y el gate de
+  // portales) hacían `return children` sin pasar por aquí, así que un submenú
+  // apagado en "Administrar Menús" desaparecía del sidebar pero seguía siendo
+  // accesible escribiendo la URL directa. Aplica a TODOS los portales y a TODOS
+  // los roles, incluido Super Admin.
   // ---------------------------------------------------------------------------
   if (isLoading || isMenuLoading) {
     return (
@@ -116,99 +116,34 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
-  // Allow portal-estructura-comisiones for Super Admin (1) and Administrador de Proyectos (2),
-  // o cualquier rol con permiso explícito en la BD.
-  if (location.pathname.startsWith('/admin/portal-estructura-comisiones')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
-      return <>{children}</>;
-    }
-    let tieneAccesoEC = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-estructura-comisiones')) {
-        tieneAccesoEC = true;
-        break;
-      }
-    }
-    return tieneAccesoEC
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
+  // ---------------------------------------------------------------------------
+  // GATE ÚNICO DE PORTALES — antes había un `if` por portal, cada uno con su
+  // propio bucle sobre `allowedPaths`, y el de portal-embajador se quedó sin
+  // ese bucle: solo aceptaba rol_id 1/2/23 y el rol Embajador, así que un rol
+  // con permiso de lectura en BD (Admin Soporte, rol 30) veía el submenú en el
+  // sidebar y recibía 403 al entrar. La tabla vive en `lib/routeAccess.ts` y
+  // trata el permiso en BD como condición suficiente para todos los portales;
+  // agregar uno nuevo es agregar su prefijo ahí, no copiar un `if`.
+  // ---------------------------------------------------------------------------
+  const portalDecision = decidePortalAccess(location.pathname, {
+    rolId: profile?.rol_id,
+    rolNombre: profile?.rol_nombre,
+    allowedPaths,
+    isSuperAdmin,
+    hasEmbajadorRole,
+  });
 
-  // Allow portal-productos para Super Admin (1) y Administrador de Proyectos (2),
-  // o cualquier rol con permiso explícito en la BD.
-  if (location.pathname.startsWith('/admin/portal-productos')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
-      return <>{children}</>;
-    }
-    let tieneAccesoPP = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-productos')) {
-        tieneAccesoPP = true;
-        break;
-      }
-    }
-    return tieneAccesoPP
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
+  if (portalDecision === 'pending') {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
-
-  // Allow portal-embajador routes para el rol Embajador, Super Admin / Admin, y usuarios con rol dual
-  // Portal Tickets de Seguimiento: Super Admin (1) y Administrador de Proyectos (2),
-  // o cualquier rol con permiso explícito en la BD.
-  if (location.pathname.startsWith('/admin/portal-tickets')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
-      return <>{children}</>;
-    }
-    let tieneAccesoTk = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-tickets')) {
-        tieneAccesoTk = true;
-        break;
-      }
-    }
-    return tieneAccesoTk
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
+  if (portalDecision === 'allow') {
+    return <>{children}</>;
   }
-
-  // Portal del Personal: Super Admin (1) y Administrador de Proyectos (2),
-  // o cualquier rol con permiso explícito en la BD.
-  if (location.pathname.startsWith('/admin/portal-personal')) {
-    if (profile?.rol_id === 1 || profile?.rol_id === 2) {
-      return <>{children}</>;
-    }
-    let tieneAccesoPers = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-personal')) {
-        tieneAccesoPers = true;
-        break;
-      }
-    }
-    return tieneAccesoPers
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  if (location.pathname.startsWith('/admin/portal-embajador')) {
-    // El rol Cliente (23) entra al portal de Embajadores por rol, sin fila en
-    // user_roles: todo cliente puede referir con su misma cuenta.
-    if (
-      profile?.rol_id === 1 ||
-      profile?.rol_id === 2 ||
-      profile?.rol_id === 23 ||
-      profile?.rol_nombre === 'Embajador' ||
-      profile?.rol_nombre === 'Cliente'
-    ) {
-      return <>{children}</>;
-    }
-    if (hasEmbajadorRole === null) {
-      return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      );
-    }
-    if (hasEmbajadorRole) return <>{children}</>;
+  if (portalDecision === 'deny') {
     return <Navigate to="/admin/access-denied" replace />;
   }
 
@@ -222,175 +157,9 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
     return <>{children}</>;
   }
 
-  // Módulo de Precios (Inventarios → Precios): el submenu registrado en BD es el
-  // prefijo '/admin/inventario/precios', pero las pestañas reales viven en
-  // subrutas (tabla, motor, calibracion, escenarios/*, auditoria/*) que no tienen
-  // submenu propio. Patrón coarse: basta tener permiso de lectura sobre el módulo
-  // para habilitar todas sus pestañas. Va DESPUÉS del shortcut de Super Admin
-  // porque para él allowedPaths es {'*'} y no haría match por prefijo.
-  if (location.pathname.startsWith('/admin/inventario/precios')) {
-    let tieneAccesoPrecios = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/inventario/precios')) {
-        tieneAccesoPrecios = true;
-        break;
-      }
-    }
-    return tieneAccesoPrecios
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal de Administración: varias rutas de ejecución (bandeja, ciclo-venta, etc.)
-  // pueden no tener un submenu propio y nunca aparecer en allowedPaths, por lo que el
-  // landing del portal mandaba a 403 a roles no-superadmin con acceso al portal.
-  // Si el rol tiene permiso sobre CUALQUIER submenu del portal, habilitamos sus rutas
-  // (coarse, igual que el caso de /reportes/ver).
-  if (location.pathname.startsWith('/admin/portal-administracion')) {
-    // allowedPaths es un Set<string>: iterar, no usar Array.some
-    let tieneAccesoPortalAdmin = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-administracion')) {
-        tieneAccesoPortalAdmin = true;
-        break;
-      }
-    }
-    return tieneAccesoPortalAdmin
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal Legal Flow: varias rutas (cases/:id, requests/new, templates, etc.)
-  // no tienen un submenu propio en allowedPaths. Si el rol tiene permiso sobre
-  // CUALQUIER submenu del portal, habilitamos todas sus rutas (coarse, igual
-  // que portal-administracion). Antes este gate estaba hardcodeado a rol_id 1/2,
-  // lo que daba 403 a roles como Admin Legal pese a tener el permiso en DB.
-  if (location.pathname.startsWith('/admin/legal-flow')) {
-    let tieneAccesoLegalFlow = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/legal-flow')) {
-        tieneAccesoLegalFlow = true;
-        break;
-      }
-    }
-    return tieneAccesoLegalFlow
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal Cobranza: patrón coarse — basta tener permiso sobre cualquier submenu
-  // del portal para habilitar todas sus rutas (expediente/:id, etc. no tienen submenu propio).
-  if (location.pathname.startsWith('/admin/portal-cobranza')) {
-    let tieneAccesoCobranza = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-cobranza')) {
-        tieneAccesoCobranza = true;
-        break;
-      }
-    }
-    return tieneAccesoCobranza
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal de Escrituración: varias rutas (expedientes, unidades, relacion-pagos, etc.)
-  // pueden no tener un submenu propio en allowedPaths. Si el rol tiene permiso sobre
-  // CUALQUIER submenu del portal, habilitamos todas sus rutas (coarse, igual que
-  // portal-administracion y legal-flow). Antes este gate estaba hardcodeado a rol_id 1,
-  // lo que daba 403 a roles como Administrador de Finanzas pese a tener el permiso en DB.
-  if (location.pathname.startsWith('/admin/portal-escrituracion')) {
-    let tieneAccesoEscrituracion = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-escrituracion')) {
-        tieneAccesoEscrituracion = true;
-        break;
-      }
-    }
-    return tieneAccesoEscrituracion
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal Condominio Administración: mismo patrón coarse — basta tener permiso
-  // sobre cualquier submenu del portal para habilitar todas sus rutas.
-  if (location.pathname.startsWith('/admin/portal-condominio')) {
-    let tieneAccesoCondominio = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-condominio')) {
-        tieneAccesoCondominio = true;
-        break;
-      }
-    }
-    return tieneAccesoCondominio
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal CRM Sozu: mismo patrón coarse — basta tener permiso sobre cualquier
-  // submenu del portal para habilitar todas sus rutas.
-  if (location.pathname.startsWith('/admin/portal-crm')) {
-    let tieneAccesoCrm = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-crm')) {
-        tieneAccesoCrm = true;
-        break;
-      }
-    }
-    return tieneAccesoCrm
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal Socio Bancario: mismo patrón coarse — basta tener permiso sobre
-  // cualquier submenu del portal para habilitar todas sus rutas.
-  if (location.pathname.startsWith('/admin/portal-socio-bancario')) {
-    let tieneAccesoSocioBancario = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-socio-bancario')) {
-        tieneAccesoSocioBancario = true;
-        break;
-      }
-    }
-    return tieneAccesoSocioBancario
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
-  // Portal Bancos: mismo patrón coarse — basta tener permiso sobre cualquier
-  // submenu del portal para habilitar todas sus rutas. Además permitimos al rol
-  // "Banco" entrar directamente (fallback por si los submenús aún no están
-  // asignados a su rol en BD para ese ambiente).
-  if (location.pathname.startsWith('/admin/portal-bancos')) {
-    // Administración del portal (equipo / bancos con convenio): requiere permiso
-    // EXPLÍCITO de lectura sobre ESA vista en BD. Antes estaba hardcodeado a
-    // rol_id === 1, lo que mandaba a 403 a Supervisor Banco / Operador Banco pese
-    // a tener el permiso asignado en `submenus_permisos`.
-    const ADMIN_PATHS = [
-      '/admin/portal-bancos/equipo',
-      '/admin/portal-bancos/bancos',
-    ];
-    const adminPath = ADMIN_PATHS.find((p) => location.pathname.startsWith(p));
-    if (adminPath) {
-      return allowedPaths.has(adminPath)
-        ? <>{children}</>
-        : <Navigate to="/admin/access-denied" replace />;
-    }
-    if (profile?.rol_nombre === 'Banco') return <>{children}</>;
-    let tieneAccesoBancos = false;
-    for (const p of allowedPaths) {
-      if (p.startsWith('/admin/portal-bancos')) {
-        tieneAccesoBancos = true;
-        break;
-      }
-    }
-    return tieneAccesoBancos
-      ? <>{children}</>
-      : <Navigate to="/admin/access-denied" replace />;
-  }
-
   // Check if current path is allowed
   const currentPath = location.pathname;
-  
+
   // On /admin, respect dynamic menu order and send user to first allowed page.
   //
   // Excepción: si TODOS los menús del rol son portales y hay más de uno (p. ej. un
@@ -413,7 +182,7 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
 
   // Handle nested routes (e.g., /admin/cuentas-cobranza/:id/detalle)
   const basePath = getBasePath(currentPath);
-  
+
   if (isPathAllowed(basePath)) {
     return <>{children}</>;
   }
@@ -455,7 +224,7 @@ function getFirstAllowedPath(menuItems: any[]): string | null {
 function getBasePath(fullPath: string): string {
   // Remove trailing slashes
   const path = fullPath.replace(/\/$/, '');
-  
+
   // Special cases for nested routes
   const nestedPatterns = [
     /^(\/admin\/cuentas-cobranza)\/\d+\/detalle$/,
@@ -469,13 +238,13 @@ function getBasePath(fullPath: string): string {
     /^(\/admin\/activos-comerciales)\/\d+$/,
     /^(\/admin\/activos-comerciales)\/\d+\/editar$/,
   ];
-  
+
   for (const pattern of nestedPatterns) {
     const match = path.match(pattern);
     if (match) {
       return match[1];
     }
   }
-  
+
   return path;
 }
