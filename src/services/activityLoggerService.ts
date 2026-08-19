@@ -180,6 +180,28 @@ export const activityLoggerService = {
     });
   },
 
+  /**
+   * Se mostró la pantalla "Sin acceso a este portal". Se registra como VER (la
+   * actividad existe en catálogo) pero con workflow propio, para poder auditar
+   * los rechazos de portal sin mezclarlos con las vistas de página:
+   *   SELECT * FROM logs_actividad WHERE workflow = 'portal_denegado';
+   */
+  registrarPortalDenegado: async (
+    usuarioId: string,
+    portal: string,
+    datos?: Record<string, unknown>
+  ) => {
+    await insertarLog({
+      usuarioId,
+      actividadId: ACTIVIDADES.VER,
+      nuevoValor: { portal, ...datos },
+      estatusEjecucion: 'error',
+      workflow: 'portal_denegado',
+      primerNodo: portal,
+      ultimoNodo: portal,
+    });
+  },
+
   registrarExportacion: async (
     usuarioId: string,
     tipo: string,

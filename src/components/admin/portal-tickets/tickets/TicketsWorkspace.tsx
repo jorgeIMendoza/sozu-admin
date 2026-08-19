@@ -20,7 +20,7 @@ import {
   SELECT_TRIGGER_CLS,
 } from "@/components/ui/select";
 import { useTickets } from "@/lib/portal-tickets/tickets-store";
-import { PRIORIDADES, type Ticket } from "@/lib/portal-tickets/tickets-data";
+import { PRIORIDADES, fechaCreada, type Ticket } from "@/lib/portal-tickets/tickets-data";
 import { TicketsTable, type OrdenCampo } from "./TicketsTable";
 import { TicketsKanban } from "./TicketsKanban";
 import { TicketDetailSheet } from "./TicketDetailSheet";
@@ -210,7 +210,7 @@ export function TicketsWorkspace({
         t.prioridad,
         t.propietarios.map((id) => agentes.find((a) => a.id === id)?.nombre).filter(Boolean).join("; ") ||
           "Sin asignar",
-        new Date(t.fechaCreacion).toLocaleDateString("es-MX"),
+        fechaCreada(t.fechaCreacion),
       ].join(","),
     );
     const csv = ["Folio,Nombre,Pipeline,Etapa,Prioridad,Propietario,Fecha creación", ...filas].join("\n");

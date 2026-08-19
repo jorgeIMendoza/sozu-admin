@@ -60,7 +60,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [permissionVersion, setPermissionVersion] = useState(0);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const fetchProfile = useCallback(async () => {
+  // Usuario dueño de la sesión vigente. Es la referencia contra la que
+  // fetchProfile decide si su resultado todavía sirve: una consulta lanzada para
+  // el usuario A no debe escribir el perfil cuando ya hay sesión de B (login con
+  // huella/autocompletado tarda menos que el fetch, así que la carrera es real y
+  // deja "usuario nuevo con rol viejo" — de ahí las pantallas de "sin acceso a
+  // este portal" contra cuentas que sí tienen acceso).
+  const sesionActivaRef = useRef<string | null>(null);
+  const fetchProfile = useCallback(async (usuarioEsperado?: string | null) => {
+    const dueno = usuarioEsperado ?? sesionActivaRef.current;
+    // El resultado solo se aplica si la sesión sigue siendo la misma que al
+    // arrancar; si no, se descarta en silencio (el fetch del usuario vigente ya
+    // viene en camino).
+    const sigueVigente = () => sesionActivaRef.current === dueno;
+
     setIsProfileLoading(true);
     try {
       // Add timeout to prevent infinite loading
@@ -73,9 +86,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Error fetching profile:", error);
-        setProfile(null);
+        if (sigueVigente()) setProfile(null);
         return;
       }
+
+      if (!sigueVigente()) return;
 
       if (data && data.length > 0) {
         const row = data[0] as Partial<UserProfile>;
@@ -137,15 +152,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.error("Error fetching perfil foto:", e);
         }
-        setProfile({ ...base, email_confirmado, foto_perfil_url, frase_perfil });
-      } else {
+        if (sigueVigente()) {
+          setProfile({ ...base, email_confirmado, foto_perfil_url, frase_perfil });
+        }
+      } else if (sigueVigente()) {
         setProfile(null);
       }
     } catch (err) {
       console.error("Error in fetchProfile:", err);
-      setProfile(null);
+      if (sigueVigente()) setProfile(null);
     } finally {
-      setIsProfileLoading(false);
+      if (sigueVigente()) setIsProfileLoading(false);
     }
   }, []);
 
@@ -160,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       realtimeChannelRef.current = null;
     }
     await supabase.auth.signOut();
+    sesionActivaRef.current = null;
     setUser(null);
     setSession(null);
     setProfile(null);
@@ -309,14 +327,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return; // No disparar re-carga de perfil
       }
 
+      const usuarioAnterior = currentUserId;
       currentUserId = newSession?.user?.id ?? null;
+      sesionActivaRef.current = currentUserId;
       setSession(newSession);
       setUser(newSession?.user ?? null);
 
       if (newSession?.user) {
+        // Cambio de cuenta en la misma pestaña: el perfil anterior NO puede
+        // sobrevivir al cambio. Si se queda, los gates de permisos deciden con el
+        // rol del usuario que se fue (y como useAllowedMenus ya cargó una vez, no
+        // muestra spinner: decide con datos ajenos en lugar de esperar).
+        if (usuarioAnterior && usuarioAnterior !== newSession.user.id) {
+          setProfile(null);
+          setIsLoading(true);
+        }
         // Defer profile fetch to avoid Supabase deadlock
-        profileFetchPromise = fetchProfile().finally(() => {
-          if (isMounted) {
+        profileFetchPromise = fetchProfile(newSession.user.id).finally(() => {
+          if (isMounted && sesionActivaRef.current === newSession.user.id) {
             setIsLoading(false);
           }
         });
@@ -330,13 +358,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
 
+      // Si el listener ya registró una sesión (login rápido con huella/
+      // autocompletado que llega antes que getSession), esta respuesta es vieja:
+      // no debe pisar al usuario vigente.
+      if (sesionActivaRef.current && sesionActivaRef.current !== (session?.user?.id ?? null)) {
+        return;
+      }
+
       currentUserId = session?.user?.id ?? null;
+      sesionActivaRef.current = currentUserId;
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        fetchProfile().finally(() => {
-          if (isMounted) {
+        fetchProfile(session.user.id).finally(() => {
+          if (isMounted && sesionActivaRef.current === session.user.id) {
             setIsLoading(false);
           }
         });
@@ -389,6 +425,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await supabase.auth.signOut();
     limpiarTodosLosFiltros(); // los filtros de tabla no deben sobrevivir a un cambio de usuario
+    sesionActivaRef.current = null;
     setUser(null);
     setSession(null);
     setProfile(null);
