@@ -232,6 +232,9 @@ const PORTAL_LANDING_URL_OVERRIDES: Array<{ match: RegExp; href: string }> = [
    const [menuItems, setMenuItems] = useState<DynamicMenuItem[]>([]);
    const [isLoading, setIsLoading] = useState(true);
    const hasLoadedOnce = useRef(false);
+   // Correo del perfil con el que se armaron los menús actuales (ver el efecto
+   // de abajo): distingue recarga del mismo usuario de un cambio de cuenta.
+   const identidadCargadaRef = useRef<string | null>(null);
  
    const isSuperAdmin = profile?.rol_nombre === 'Super Administrador';
    const isProfileStillLoading = !!user && !profile && !isAuthLoading;
@@ -430,6 +433,17 @@ const PORTAL_LANDING_URL_OVERRIDES: Array<{ match: RegExp; href: string }> = [
    useEffect(() => {
      if (isAuthLoading) return;
      if (user && !profile) return;
+ 
+     // Cambió la cuenta: los menús del usuario anterior no deben seguir pintados
+     // (ni alimentar el redirect a "primera vista permitida") mientras llegan los
+     // del nuevo. `hasLoadedOnce` apagaba el spinner y los dejaba vivos.
+     const identidad = profile?.email ?? null;
+     if (identidadCargadaRef.current !== identidad) {
+       identidadCargadaRef.current = identidad;
+       hasLoadedOnce.current = false;
+       setMenuItems([]);
+       setIsLoading(true);
+     }
  
      if (!profile?.rol_id) {
        setIsLoading(false);
