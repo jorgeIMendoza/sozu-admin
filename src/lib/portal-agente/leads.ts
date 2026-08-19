@@ -139,32 +139,118 @@ async function fetchAtribuciones(erIds: number[]): Promise<{ data: any[] }> {
 interface Args {
   authUserId?: string | null;
   personaId?: number | null;
+  /** Texto libre: nombre, correo o teléfono de la persona. Se resuelve en la base. */
+  search?: string | null;
+  estatus?: number | null;
+  proyecto?: number | null;
+  /** Tamaño de página. */
+  limit?: number;
+  offset?: number;
+}
+
+export interface ProspectosPagina {
+  rows: ProspectoRow[];
+  /** Prospectos que cumplen el filtro **en la base**, no los de esta página. */
+  total: number;
+  viaRpc: boolean;
+}
+
+/** Desarrollo con prospectos del agente, para poblar el filtro sin depender de la página. */
+export interface ProyectoFaceta {
+  id_proyecto: number | null;
+  proyecto: string;
+  prospectos: number;
 }
 
 /**
- * Prospectos del agente con sus proyectos y, dentro de cada uno, sus unidades.
+ * Desarrollos en los que el agente tiene prospectos. Va aparte de la página porque el
+ * filtro tiene que ofrecer **todos** sus desarrollos, no los de las 25 filas visibles.
+ * Devuelve `null` si la RPC aún no existe: la UI cae a lo que trae la página.
+ */
+export async function fetchAgenteProspectosFacetas(
+  authUserId: string | null,
+): Promise<ProyectoFaceta[] | null> {
+  if (!authUserId) return [];
+
+  const rpc = await (supabase as any).rpc("get_agente_prospectos_facetas", {
+    p_auth_user_id: authUserId,
+  });
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    return (rpc.data as any[]).map((r) => ({
+      id_proyecto: r.id_proyecto ?? null,
+      proyecto: r.proyecto ?? "Sin desarrollo",
+      prospectos: Number(r.prospectos ?? 0),
+    }));
+  }
+  return null;
+}
+
+/**
+ * Valor centinela para «Sin desarrollo»: 2,587 de 4,225 leads no tienen proyecto, así que
+ * es un filtro real y no se puede expresar con `p_proyecto IS NULL` (eso significa «todos»).
+ */
+export const PROYECTO_SIN_DESARROLLO = -1;
+
+/** Mismos filtros que la RPC, para el camino de transición (que lee sin paginar). */
+function aplicarFiltros(
+  rows: ProspectoRow[],
+  { search, estatus, proyecto }: { search?: string | null; estatus?: number | null; proyecto?: number | null },
+): ProspectoRow[] {
+  const q = (search ?? "").trim().toLowerCase();
+  return rows.filter((p) => {
+    if (q && !(
+      p.nombre.toLowerCase().includes(q) ||
+      (p.email ?? "").toLowerCase().includes(q) ||
+      (p.telefono ?? "").toLowerCase().includes(q) ||
+      p.proyectos.some((pr) => pr.proyecto.toLowerCase().includes(q))
+    )) return false;
+    if (estatus != null && !p.proyectos.some((pr) => pr.id_estatus_lead === estatus)) return false;
+    if (proyecto != null) {
+      const sinDesarrollo = proyecto === PROYECTO_SIN_DESARROLLO;
+      const coincide = p.proyectos.some((pr) =>
+        sinDesarrollo ? pr.id_proyecto == null : pr.id_proyecto === proyecto);
+      if (!coincide) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Una página de prospectos del agente, con sus proyectos y, dentro de cada uno, sus unidades.
+ *
+ * Búsqueda y paginación son **del lado de la base**: la RPC devuelve `total_personas` con el
+ * universo filtrado completo. Antes se pedían 500 filas y se filtraba en memoria, así que un
+ * agente con más de 500 prospectos no podía encontrar a los de la cola — la búsqueda solo
+ * miraba el trozo ya descargado y nada avisaba del corte.
+ *
  * Devuelve `viaRpc` para poder avisar en la UI de qué camino se está leyendo.
  */
-export async function fetchAgenteProspectos({ authUserId, personaId }: Args): Promise<{
-  rows: ProspectoRow[];
-  viaRpc: boolean;
-}> {
+export async function fetchAgenteProspectos({
+  authUserId,
+  personaId,
+  search = null,
+  estatus = null,
+  proyecto = null,
+  limit = 25,
+  offset = 0,
+}: Args): Promise<ProspectosPagina> {
   // Sin identidad efectiva no se lee nada: devolver "todo" sería exponer la cartera
   // ajena (es justo lo que pasaba al impersonar a un usuario sin cuenta auth).
-  if (!authUserId && !personaId) return { rows: [], viaRpc: false };
+  if (!authUserId && !personaId) return { rows: [], total: 0, viaRpc: false };
 
   // ── Camino definitivo: la RPC filtra por dueño del lado de la base ──
   // `p_auth_user_id` = agente a consultar. Va SIEMPRE explícito: cuando un admin
   // impersona, `auth.uid()` es el del admin y la RPC devolvía la cartera del CRM
   // del admin dentro del Portal Agente. `fn_agente_actual` valida el permiso de
   // impersonación en la base antes de aceptar un uid distinto al de la sesión.
+  const termino = (search ?? "").trim();
   const rpc = await (supabase as any).rpc("get_agente_prospectos", {
-    p_search: null,
-    p_estatus: null,
-    p_proyecto: null,
+    p_search: termino || null,
+    p_estatus: estatus ?? null,
+    p_proyecto: proyecto ?? null,
     p_auth_user_id: authUserId ?? null,
-    p_limit: 500,
-    p_offset: 0,
+    p_limit: limit,
+    p_offset: offset,
   });
 
   if (!rpc.error && Array.isArray(rpc.data)) {
@@ -202,7 +288,9 @@ export async function fetchAgenteProspectos({ authUserId, personaId }: Args): Pr
         total_unidades: unidades.length,
       };
     });
-    return { rows, viaRpc: true };
+    // `total_personas` viene de un count(*) OVER () previo al LIMIT: es el universo, no la página.
+    const total = Number((rpc.data as any[])[0]?.total_personas ?? rows.length);
+    return { rows, total, viaRpc: true };
   }
 
   // ── Camino de transición: unión de los dos modelos de propiedad del lead ──
@@ -236,7 +324,7 @@ export async function fetchAgenteProspectos({ authUserId, personaId }: Args): Pr
 
   const ers = new Map<number, any>();
   [...(porDuenaLead.data ?? []), ...porAtribucion].forEach((er: any) => ers.set(er.id, er));
-  if (ers.size === 0) return { rows: [], viaRpc: false };
+  if (ers.size === 0) return { rows: [], total: 0, viaRpc: false };
 
   const lista = [...ers.values()];
   const personaIds = [...new Set(lista.map((e) => e.id_persona).filter(Boolean))] as number[];
@@ -313,7 +401,10 @@ export async function fetchAgenteProspectos({ authUserId, personaId }: Args): Pr
   });
   rows.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-  return { rows, viaRpc: false };
+  // Este camino ya trajo todo a memoria, así que filtra y recorta aquí para exponer la
+  // misma forma que la RPC: la UI pagina igual con o sin ella.
+  const filtradas = aplicarFiltros(rows, { search, estatus, proyecto });
+  return { rows: filtradas.slice(offset, offset + limit), total: filtradas.length, viaRpc: false };
 }
 
 /* ─────────────────────────── Reasignación de leads ─────────────────────────── */
