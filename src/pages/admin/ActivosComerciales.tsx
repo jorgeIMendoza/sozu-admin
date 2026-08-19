@@ -80,6 +80,19 @@ export default function ActivosComerciales() {
       });
     },
   });
+  /**
+   * Precio por m² del activo: precio de lista entre la superficie total
+   * (interior + exterior).
+   *
+   * Sin superficie capturada no hay cifra que dar: dividir entre cero produce
+   * Infinity, y mostrarlo como "$Infinity" es peor que no mostrar nada.
+   */
+  const precioPorM2 = (r: any): number | null => {
+    const m2 = Number(r.m2_interiores ?? 0) + Number(r.m2_exteriores ?? 0);
+    const precio = Number(r.precio_lista ?? 0);
+    if (!(m2 > 0) || !(precio > 0)) return null;
+    return precio / m2;
+  };
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["activos-comerciales", tab, estado],
@@ -89,6 +102,7 @@ export default function ActivosComerciales() {
         .select(`
           id, numero_propiedad, id_tipo_propiedad, m2_interiores, m2_exteriores,
           precio_lista, id_estatus_disponibilidad, activo, es_aprobado,
+          id_edificio_modelo,
           tipos_propiedad:id_tipo_propiedad ( nombre ),
           estatus_disponibilidad:id_estatus_disponibilidad ( nombre ),
           propiedades_activo_comercial!inner ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
@@ -103,7 +117,50 @@ export default function ActivosComerciales() {
 
       const { data, error } = await q;
       if (error) throw error;
-      return data ?? [];
+      const filas = (data ?? []) as any[];
+
+      /*
+       * Proyecto de cada activo, en waterfall explícito (patrón #1 de
+       * CLAUDE.md): edificios_modelos → edificios → proyectos. El embed
+       * anidado de PostgREST sobre tres niveles devuelve null sin error, y
+       * aquí eso se leería como "no pertenece a ningún proyecto", que es una
+       * conclusión distinta y falsa.
+       *
+       * Un activo independiente no tiene vínculo y se queda sin proyecto, que
+       * es lo correcto.
+       */
+      const idsVinculo = [...new Set(filas.map((r) => r.id_edificio_modelo).filter(Boolean))];
+      const proyectoPorVinculo = new Map<number, string>();
+
+      if (idsVinculo.length > 0) {
+        const { data: vinculos } = await (supabase as any)
+          .from("edificios_modelos").select("id, id_edificio").in("id", idsVinculo);
+        const idsEdificio = [...new Set((vinculos ?? []).map((v: any) => v.id_edificio).filter(Boolean))];
+
+        if (idsEdificio.length > 0) {
+          const { data: edificios } = await (supabase as any)
+            .from("edificios").select("id, id_proyecto").in("id", idsEdificio);
+          const idsProyecto = [...new Set((edificios ?? []).map((e: any) => e.id_proyecto).filter(Boolean))];
+
+          const { data: proyectos } = idsProyecto.length
+            ? await (supabase as any).from("proyectos").select("id, nombre").in("id", idsProyecto)
+            : { data: [] };
+
+          const nombrePorProyecto = new Map((proyectos ?? []).map((p: any) => [p.id, p.nombre]));
+          const proyectoPorEdificio = new Map(
+            (edificios ?? []).map((e: any) => [e.id, nombrePorProyecto.get(e.id_proyecto)]),
+          );
+          for (const v of vinculos ?? []) {
+            const nombre = proyectoPorEdificio.get(v.id_edificio);
+            if (nombre) proyectoPorVinculo.set(v.id, nombre as string);
+          }
+        }
+      }
+
+      return filas.map((r) => ({
+        ...r,
+        proyecto: r.id_edificio_modelo ? proyectoPorVinculo.get(r.id_edificio_modelo) ?? null : null,
+      }));
     },
   });
 
@@ -209,10 +266,12 @@ export default function ActivosComerciales() {
                     <TableHead>Número</TableHead>
                     <TableHead>Código</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Proyecto</TableHead>
                     <TableHead>Ciudad</TableHead>
                     <TableHead className="text-right">m² interior</TableHead>
                     <TableHead className="text-right">m² exterior</TableHead>
                     <TableHead className="text-right">Precio de lista</TableHead>
+                    <TableHead className="text-right">Precio por m²</TableHead>
                     <TableHead>Estatus</TableHead>
                     <TableHead>Activo</TableHead>
                     <TableHead>Aprobación</TableHead>
@@ -230,10 +289,25 @@ export default function ActivosComerciales() {
                       <TableCell>{r.numero_propiedad ?? "-"}</TableCell>
                       <TableCell className="font-mono text-xs">{r.propiedades_activo_comercial?.codigo_interno ?? "-"}</TableCell>
                       <TableCell>{r.tipos_propiedad?.nombre ?? "-"}</TableCell>
+                      {/* Un activo independiente no cuelga de ningún desarrollo:
+                          se marca como tal en vez de dejar la celda vacía, que se
+                          leería como un dato que falta. */}
+                      <TableCell>
+                        {r.proyecto ?? (
+                          <span className="text-muted-foreground">Independiente</span>
+                        )}
+                      </TableCell>
                       <TableCell>{r.propiedades_activo_comercial?.ubicacion_ciudad ?? "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.m2_interiores ?? "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.m2_exteriores ?? "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatMoney(r.precio_lista)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {precioPorM2(r) == null ? (
+                          <span className="text-muted-foreground">-</span>
+                        ) : (
+                          formatMoney(precioPorM2(r))
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary">{r.estatus_disponibilidad?.nombre ?? "-"}</Badge>
                       </TableCell>
