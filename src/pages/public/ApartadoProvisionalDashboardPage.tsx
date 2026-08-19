@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import { useOfferById } from "@/lib/offers/offer-data";
-import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import type { Agent } from "@/lib/offers/agent-data";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateCountdown } from "@/lib/offers/hold-countdown";
 import PublicShell from "@/components/offer/PublicShell";
@@ -62,7 +62,6 @@ const ApartadoProvisionalDashboardPage = () => {
     s.reservations.find((r) => r.id === formalReservationId)
   );
   const offer = useOfferById(formalReservation?.offerId ?? "");
-  const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = formalReservation?.offerId;
   useEffect(() => {
@@ -89,7 +88,7 @@ const ApartadoProvisionalDashboardPage = () => {
       });
     })();
   }, [agentOfferId]);
-  const agent = agentFromDB ?? mockAgent ?? undefined;
+  const agent = agentFromDB;
 
   useEffect(() => {
     if (formalReservation) {

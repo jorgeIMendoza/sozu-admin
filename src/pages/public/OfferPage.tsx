@@ -16,12 +16,10 @@ import OfferPropertyDetails from "@/components/offer/OfferPropertyDetails";
 import PreReservationActiveView from "@/components/offer/PreReservationActiveView";
 import PublicShell from "@/components/offer/PublicShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAgentById } from "@/lib/offers/agent-data";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import {
   formatPropertyTitle,
   useInjectOffer,
-  useOfferById,
   useOfferStore,
 } from "@/lib/offers/offer-data";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
@@ -101,16 +99,14 @@ const OfferPage = () => {
   const { data: offerResult, isLoading: dbLoading } = useOfferFromDB(offerId ?? "");
   const dbOffer = offerResult?.offer ?? null;
   const dbAgent = offerResult?.agent ?? null;
-  const mockOffer = useOfferById(offerId ?? "");
-  const offer = dbOffer ?? (import.meta.env.DEV ? mockOffer : null);
+  const offer = dbOffer;
   const injectOffer = useInjectOffer();
 
   useEffect(() => {
     if (dbOffer) injectOffer(dbOffer);
   }, [dbOffer, injectOffer]);
 
-  const mockAgent = useAgentById(offer?.agentId ?? "");
-  const agent = dbAgent ?? mockAgent;
+  const agent = dbAgent;
   const navigate = useNavigate();
   const [gateModalOpen, setGateModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("unidad");

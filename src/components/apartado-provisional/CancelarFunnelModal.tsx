@@ -13,8 +13,8 @@ import {
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
 import type { FormalReservation } from "@/lib/offers/formal-reservation-data";
 import { calculateCountdown } from "@/lib/offers/hold-countdown";
+import type { Agent } from "@/lib/offers/agent-data";
 import { getOfferById } from "@/lib/offers/offer-data";
-import { useAgentById, type Agent } from "@/lib/offers/agent-data";
 import {
   CANCELLATION_REASONS,
   EMPATHETIC_MESSAGES,
@@ -229,9 +229,8 @@ const FunnelStep1Reconsider = ({ formalReservation, onContinue, onKeep }: Funnel
     ? calculateCountdown(formalReservation.hold.expiresAt)
     : null;
   const { developmentName, propertyLabel } = getPropertyLabels(formalReservation);
-  const agent = useAgentById(formalReservation.agentId);
-  const agentFirstName = agent?.firstName ?? "tu asesor";
-  const agentWhatsApp = agent?.whatsapp ?? AGENT_WHATSAPP;
+  const agentFirstName = "tu asesor";
+  const agentWhatsApp = AGENT_WHATSAPP;
 
   return (
     <div>
@@ -292,7 +291,7 @@ const FunnelStep1Reconsider = ({ formalReservation, onContinue, onKeep }: Funnel
 
       <div className="rounded-xl bg-primary/[0.04] border border-primary/15 p-4 mb-6">
         <div className="flex items-start gap-3">
-          <AgentAvatar agent={agent} />
+          <AgentAvatar agent={undefined} />
           <div>
             <p className="text-xs font-semibold text-foreground mb-0.5">
               ¿Quieres hablar primero con {agentFirstName}?
@@ -428,8 +427,7 @@ const FunnelStep3Empathetic = ({ reasonId, formalReservation, onContinue }: Funn
   const message = EMPATHETIC_MESSAGES[reasonId];
   const ReasonIcon =
     CANCELLATION_REASONS.find((r) => r.id === reasonId)?.icon ?? MessageCircle;
-  const agent = useAgentById(formalReservation.agentId);
-  const agentWhatsApp = agent?.whatsapp ?? AGENT_WHATSAPP;
+  const agentWhatsApp = AGENT_WHATSAPP;
 
   return (
     <div>
@@ -450,13 +448,13 @@ const FunnelStep3Empathetic = ({ reasonId, formalReservation, onContinue }: Funn
 
       <div className="rounded-xl bg-card border border-border p-4 mb-5">
         <div className="flex items-start gap-3 mb-3">
-          <AgentAvatar agent={agent} />
+          <AgentAvatar agent={undefined} />
           <div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
               Tu agente
             </p>
-            <p className="text-xs font-bold text-foreground">{agent?.fullName ?? "Tu asesor"}</p>
-            <p className="text-[10px] text-muted-foreground">{agent?.title ?? "Asesor Inmobiliario"}</p>
+            <p className="text-xs font-bold text-foreground">Tu asesor</p>
+            <p className="text-[10px] text-muted-foreground">Asesor Inmobiliario</p>
           </div>
         </div>
 

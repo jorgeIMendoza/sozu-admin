@@ -17,7 +17,7 @@ import {
   type EstadoApartado,
 } from "@/lib/offers/apartado-status";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
-import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import type { Agent } from "@/lib/offers/agent-data";
 import { getPortalLoginUrl } from "@/lib/portalUrls";
 import PublicShell from "@/components/offer/PublicShell";
 import OfferFooter from "@/components/offer/OfferFooter";
@@ -652,11 +652,10 @@ const ReservarPage = () => {
     (reservacion?.id_oferta != null ? String(reservacion.id_oferta) : "");
   const isNumericOffer = !!offerId && !isNaN(parseInt(offerId, 10));
   const { data: dbOfferResult, isLoading: cargandoOferta } = useOfferFromDB(offerId);
-  const mockOffer = useOfferById(offerId);
-  const offer = isNumericOffer ? (dbOfferResult?.offer ?? null) : (mockOffer ?? null);
+  const ofertaDelStore = useOfferById(offerId);
+  const offer = isNumericOffer ? (dbOfferResult?.offer ?? null) : (ofertaDelStore ?? null);
   // Monto del apartado del proyecto (RPC get_oferta_financials → proyectos.monto_apartado).
   const montoApartado = apartadoDeOferta(offer);
-  const mockAgent = useAgentById(offer?.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = offerId || undefined;
   useEffect(() => {
@@ -683,7 +682,7 @@ const ReservarPage = () => {
       });
     })();
   }, [agentOfferId]);
-  const agent = dbOfferResult?.agent ?? agentFromDB ?? mockAgent ?? undefined;
+  const agent = dbOfferResult?.agent ?? agentFromDB;
 
   // El alta del cliente NO se dispara desde aquí. La cadena autoritativa vive en el
   // backend: al aplicarse el pago se crea la cuenta de cobranza y su fila en

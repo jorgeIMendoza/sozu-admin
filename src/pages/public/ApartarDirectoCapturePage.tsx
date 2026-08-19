@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useOfferFromDB } from "@/lib/offers/use-offer-db";
 import { useOfferById, useOfferStore } from "@/lib/offers/offer-data";
 import { useFormalReservationStore } from "@/lib/offers/formal-reservation-data";
-import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import type { Agent } from "@/lib/offers/agent-data";
 import { supabase } from "@/integrations/supabase/client";
 import ProspectCaptureForm from "@/components/capture/ProspectCaptureForm";
 import PublicShell from "@/components/offer/PublicShell";
@@ -38,10 +38,9 @@ const ApartarDirectoCapturePage = () => {
   const reservationToken = parseReservationToken(searchParams.get(RESERVATION_TOKEN_PARAM));
 
   const isNumericToken = !!offerToken && !isNaN(parseInt(offerToken, 10));
-  const mockOffer = useOfferById(offerToken ?? "");
+  const ofertaDelStore = useOfferById(offerToken ?? "");
   const { data: dbOfferResult, isLoading: dbLoading } = useOfferFromDB(offerToken ?? "");
-  const offer = isNumericToken ? (dbOfferResult?.offer ?? null) : (mockOffer ?? null);
-  const mockAgent = useAgentById(offer?.agentId ?? "");
+  const offer = isNumericToken ? (dbOfferResult?.offer ?? null) : (ofertaDelStore ?? null);
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const [csfLista, setCsfLista] = useState(false);
 
@@ -100,7 +99,7 @@ const ApartarDirectoCapturePage = () => {
       });
     })();
   }, [agentOfferId]);
-  const agent = agentFromDB ?? mockAgent ?? undefined;
+  const agent = agentFromDB;
 
   if (isNumericToken && dbLoading) return null;
 
