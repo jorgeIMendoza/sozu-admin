@@ -25,6 +25,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
 
   const {
     cuentaId, precio_final, totalPagado, parcialidadesVencidas, montoVencido,
+    acuerdosPendientes,
     acuerdos, docs, docsLoading,
     expandedAcuerdos, setExpandedAcuerdos,
     acuerdosPage, setAcuerdosPage,
@@ -94,6 +95,7 @@ export function CuentaDetalleMantenimiento({ ctx }: { ctx: CuentaDetalleCtx }) {
           show={hayDiscrepanciaAplicaciones}
           loading={recalculandoAplic}
           onClick={handleRecalcularAplicaciones}
+          hayAcuerdosAbiertos={acuerdosPendientes > 0}
         />
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         <button
