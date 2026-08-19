@@ -30,7 +30,7 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { leadStatusLabel, relTime } from "@/lib/crm-lib";
+import { leadStatusLabel, relTime, fmtMXN } from "@/lib/crm-lib";
 import {
   computeLeadIntelligence, LEAD_LABEL_TONE, type AdvisorLoad, recommendOwner,
 } from "@/lib/crm-lead-scoring";
@@ -499,41 +499,70 @@ export function CrmLeadIntelligence() {
 // ─── CrmAgentPerformance ──────────────────────────────────────────────────────
 
 export function CrmAgentPerformance() {
-  const orgId = useCrmOrgId();
   const [range, setRange] = useState<DateRange>("30d");
-
   const since = useMemo(() => rangeToSince(range), [range]);
 
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["crm-agent-perf-contacts", orgId, since],
+  const { data, isLoading } = useQuery({
+    queryKey: ["crm-agent-perf-real", since],
     queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_contacts")
-        .select("id,contact_owner,lead_status,lifecycle_stage,created_at,last_contacted_at,crm_deals(deal_stage,value)")
-        .eq("organization_id", orgId).gte("created_at", since).limit(500);
-      return data ?? [];
+      const [usuarios, negocios, etapas, citas, tareas] = await Promise.all([
+        (supabase as any).from("usuarios").select("auth_user_id, nombre, email"),
+        (supabase as any).from("crm_negocios").select("id_usuario_propietario, valor, id_etapa").eq("activo", true).gte("fecha_creacion", since),
+        (supabase as any).from("crm_pipeline_etapas").select("id, es_ganado, es_perdido").eq("activo", true),
+        (supabase as any).from("crm_citas").select("id_usuario_asignado").eq("activo", true).gte("fecha_inicio", since),
+        (supabase as any).from("crm_tareas").select("id_usuario_asignado, estatus, fecha_vencimiento").eq("activo", true).gte("fecha_creacion", since),
+      ]);
+      return {
+        usuarios: usuarios.data ?? [],
+        negocios: negocios.data ?? [],
+        etapas: etapas.data ?? [],
+        citas: citas.data ?? [],
+        tareas: tareas.data ?? [],
+      };
     },
-    enabled: !!orgId,
   });
 
-  const { data: tasks = [] } = useQuery({
-    queryKey: ["crm-agent-perf-tasks", orgId, since],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data } = await (supabase as any).from("crm_tasks")
-        .select("assigned_to,status,due_date").eq("organization_id", orgId).gte("created_at", since).limit(2000);
-      return data ?? [];
-    },
-    enabled: !!orgId,
-  });
-
-  const perf = useMemo(() => aggregateAgentPerf(contacts, [], [], tasks, []), [contacts, tasks]);
+  const perf = useMemo(() => {
+    if (!data) return [];
+    const nameMap = new Map((data.usuarios ?? []).map((u: any) => [u.auth_user_id, u.nombre || u.email || "—"]));
+    const etapaMap = new Map((data.etapas ?? []).map((e: any) => [e.id, e]));
+    const DONE = new Set(["completada", "completado", "hecha", "hecho", "done", "cerrada", "cerrado", "finalizada"]);
+    const now = Date.now();
+    type Agg = { uuid: string; name: string; negocios: number; ganados: number; valorGanado: number; pipeline: number; citas: number; pend: number; vencidas: number };
+    const map = new Map<string, Agg>();
+    const get = (uuid: string | null): Agg => {
+      const key = uuid ?? "__none__";
+      let a = map.get(key);
+      if (!a) { a = { uuid: key, name: (uuid && (nameMap.get(uuid) as string)) || "Sin asesor", negocios: 0, ganados: 0, valorGanado: 0, pipeline: 0, citas: 0, pend: 0, vencidas: 0 }; map.set(key, a); }
+      return a;
+    };
+    for (const n of data.negocios) {
+      const a = get(n.id_usuario_propietario);
+      const et = etapaMap.get(n.id_etapa) as any;
+      const val = Number(n.valor ?? 0);
+      a.negocios += 1;
+      if (et?.es_ganado) { a.ganados += 1; a.valorGanado += val; }
+      else if (!et?.es_perdido) a.pipeline += val;
+    }
+    for (const c of data.citas) get(c.id_usuario_asignado).citas += 1;
+    for (const t of data.tareas) {
+      const a = get(t.id_usuario_asignado);
+      const done = t.estatus && DONE.has(String(t.estatus).toLowerCase());
+      if (!done) {
+        a.pend += 1;
+        if (t.fecha_vencimiento && new Date(t.fecha_vencimiento).getTime() < now) a.vencidas += 1;
+      }
+    }
+    return [...map.values()]
+      .filter((a) => a.negocios || a.citas || a.pend)
+      .sort((x, y) => y.valorGanado - x.valorGanado || y.pipeline - x.pipeline);
+  }, [data]);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Desempeño de asesores"
-        description="Métricas de conversión por asesor"
+        description="Negocios, valor y actividad por asesor (período seleccionado)"
         actions={
           <Select value={range} onValueChange={v => setRange(v as DateRange)}>
             <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -543,34 +572,32 @@ export function CrmAgentPerformance() {
       />
 
       {isLoading ? <Skeleton className="h-40 w-full" /> : perf.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-10">Sin datos para el período</p>
+        <p className="text-sm text-muted-foreground text-center py-10">Sin actividad de asesores en el período</p>
       ) : (
         <div className="rounded-md border overflow-auto">
           <Table>
             <TableHeader><TableRow>
               <TableHead>Asesor</TableHead>
-              <TableHead className="text-right">Leads</TableHead>
-              <TableHead className="text-right">Contactados</TableHead>
+              <TableHead className="text-right">Negocios</TableHead>
+              <TableHead className="text-right">Ganados</TableHead>
+              <TableHead className="text-right">Valor ganado</TableHead>
+              <TableHead className="text-right">Pipeline</TableHead>
               <TableHead className="text-right">Citas</TableHead>
-              <TableHead className="text-right">Reservas</TableHead>
-              <TableHead className="text-right">Lead→Cita</TableHead>
-              <TableHead className="text-right">Cita→Reserva</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
+              <TableHead className="text-right">Tareas pend.</TableHead>
               <TableHead className="text-right">Vencidas</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {perf.map(a => (
-                <TableRow key={a.user_id}>
-                  <TableCell className="font-medium text-sm">{a.name ?? "Sin asesor"}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_assigned)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.leads_contacted)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.appointments_scheduled)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.reservations)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.lead_to_appt_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(a.appt_to_reservation_rate)}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtNum(a.revenue)}</TableCell>
+                <TableRow key={a.uuid}>
+                  <TableCell className="font-medium text-sm">{a.name}</TableCell>
+                  <TableCell className="text-right text-sm">{fmtNum(a.negocios)}</TableCell>
+                  <TableCell className="text-right text-sm">{fmtNum(a.ganados)}</TableCell>
+                  <TableCell className="text-right text-sm">{fmtMXN(a.valorGanado)}</TableCell>
+                  <TableCell className="text-right text-sm">{fmtMXN(a.pipeline)}</TableCell>
+                  <TableCell className="text-right text-sm">{fmtNum(a.citas)}</TableCell>
+                  <TableCell className="text-right text-sm">{fmtNum(a.pend)}</TableCell>
                   <TableCell className="text-right text-sm">
-                    <span className={a.overdue_tasks > 3 ? "text-red-500 font-medium" : ""}>{fmtNum(a.overdue_tasks)}</span>
+                    <span className={a.vencidas > 3 ? "text-red-500 font-medium" : ""}>{fmtNum(a.vencidas)}</span>
                   </TableCell>
                 </TableRow>
               ))}
