@@ -19,6 +19,8 @@ import {
   Building2,
   Layers3,
   Briefcase,
+  Store,
+  Gift,
   RefreshCw,
   X,
   Check,
@@ -106,8 +108,21 @@ export default function AltaDireccionForecastIngresosPage() {
   const totalForecast = filtered.reduce((s, r) => s + r.monto, 0);
   const filasCuentas = filtered.filter((r) => r.fuente === "cuenta");
   const filasInventario = filtered.filter((r) => r.fuente === "inventario");
+  const filasActivos = filtered.filter((r) => r.fuente === "activo_comercial");
+  const filasAsignadas = filtered.filter((r) => r.fuente === "asignada");
   const totalCuentas = filasCuentas.reduce((s, r) => s + r.monto, 0);
   const totalInventario = filasInventario.reduce((s, r) => s + r.monto, 0);
+  const totalActivos = filasActivos.reduce((s, r) => s + r.monto, 0);
+  const totalAsignadas = filasAsignadas.reduce((s, r) => s + r.monto, 0);
+
+  // Composición del Forecast total (para la barra del hero). Mismos colores que
+  // las cards de fuente para que el mapeo se lea por color.
+  const composicion = [
+    { key: "cuentas", label: "Cuentas con flujo", value: totalCuentas, color: "bg-blue-500" },
+    { key: "inventario", label: "Inventario disponible", value: totalInventario, color: "bg-amber-500" },
+    { key: "activos", label: "Activos comerciales", value: totalActivos, color: "bg-violet-500" },
+    { key: "asignadas", label: "Propiedades asignadas", value: totalAsignadas, color: "bg-rose-500" },
+  ];
 
   // Breakdowns
   const porProyecto = useMemo(() => agruparMonto(filtered, (r) => r.proyecto_nombre || "Sin proyecto"), [filtered]);
@@ -126,7 +141,7 @@ export default function AltaDireccionForecastIngresosPage() {
     <>
       <PageHeader
         title="Forecast de Ingresos"
-        description="Estimación de ingresos = cuentas de cobranza con estatus de flujo + inventario disponible."
+        description="Estimación de ingresos = cuentas de cobranza con estatus de flujo + inventario disponible + activos comerciales (Locales, Oficinas, Bodegas, Terrenos) + propiedades asignadas (aportación)."
         action={
           <Button
             variant="outline"
@@ -142,15 +157,43 @@ export default function AltaDireccionForecastIngresosPage() {
         }
       />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <KpiTile
-          icon={TrendingUp}
-          tone="emerald"
-          label="Forecast total"
-          value={fmtMxn(totalForecast)}
-          sub={`${filtered.length} ${filtered.length === 1 ? "registro" : "registros"}`}
-        />
+      {/* Forecast total — hero con barra de composición */}
+      <div className="mb-3 rounded-xl ring-1 ring-emerald-200 bg-emerald-50/70 p-5 dark:bg-emerald-950/30 dark:ring-emerald-900/40">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80">
+              Forecast total
+            </p>
+            <p className="mt-1 text-3xl font-bold tabular-nums leading-tight text-foreground sm:text-4xl">
+              {fmtMxn(totalForecast)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {filtered.length} {filtered.length === 1 ? "registro" : "registros"}
+              {hayFiltros ? " · filtrado" : ""}
+            </p>
+          </div>
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-white/70 text-emerald-700 dark:bg-white/10 dark:text-emerald-300">
+            <TrendingUp className="h-6 w-6" />
+          </span>
+        </div>
+        {totalForecast > 0 && (
+          <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-muted" role="img" aria-label="Composición del forecast">
+            {composicion.map((c) =>
+              c.value > 0 ? (
+                <div
+                  key={c.key}
+                  className={c.color}
+                  style={{ width: `${(c.value / totalForecast) * 100}%` }}
+                  title={`${c.label}: ${fmtMxn(c.value)}`}
+                />
+              ) : null,
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Desglose por fuente */}
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile
           icon={Briefcase}
           tone="blue"
@@ -164,6 +207,20 @@ export default function AltaDireccionForecastIngresosPage() {
           label="Inventario disponible"
           value={fmtMxn(totalInventario)}
           sub={`${filasInventario.length} ${filasInventario.length === 1 ? "propiedad" : "propiedades"} en venta · precio de lista`}
+        />
+        <KpiTile
+          icon={Store}
+          tone="violet"
+          label="Activos comerciales"
+          value={fmtMxn(totalActivos)}
+          sub={`${filasActivos.length} ${filasActivos.length === 1 ? "activo" : "activos"} activos y aprobados · Locales, Oficinas, Bodegas, Terrenos`}
+        />
+        <KpiTile
+          icon={Gift}
+          tone="rose"
+          label="Propiedades asignadas"
+          value={fmtMxn(totalAsignadas)}
+          sub={`${filasAsignadas.length} ${filasAsignadas.length === 1 ? "propiedad" : "propiedades"} en aportación · valor de mercado`}
         />
       </div>
 
@@ -188,6 +245,11 @@ export default function AltaDireccionForecastIngresosPage() {
             <SelectItem value="Propiedad">Propiedad</SelectItem>
             <SelectItem value="Producto">Producto</SelectItem>
             <SelectItem value="Servicio">Servicio</SelectItem>
+            <SelectItem value="Locales comerciales">Locales comerciales</SelectItem>
+            <SelectItem value="Oficinas">Oficinas</SelectItem>
+            <SelectItem value="Bodegas comerciales">Bodegas comerciales</SelectItem>
+            <SelectItem value="Terrenos">Terrenos</SelectItem>
+            <SelectItem value="Propiedades Asignadas">Propiedades Asignadas</SelectItem>
           </SelectContent>
         </Select>
 
@@ -294,10 +356,20 @@ export default function AltaDireccionForecastIngresosPage() {
                             "text-[10px]",
                             r.fuente === "cuenta"
                               ? "border-blue-400 text-blue-700 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-300"
-                              : "border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300",
+                              : r.fuente === "activo_comercial"
+                                ? "border-violet-400 text-violet-700 bg-violet-50 dark:bg-violet-950/40 dark:text-violet-300"
+                                : r.fuente === "asignada"
+                                  ? "border-rose-400 text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300"
+                                  : "border-amber-400 text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300",
                           )}
                         >
-                          {r.fuente === "cuenta" ? "Cuenta" : "Inventario"}
+                          {r.fuente === "cuenta"
+                            ? "Cuenta"
+                            : r.fuente === "activo_comercial"
+                              ? "Activo comercial"
+                              : r.fuente === "asignada"
+                                ? "Asignada"
+                                : "Inventario"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">{r.tipo}</TableCell>
@@ -411,7 +483,7 @@ function KpiTile({
   icon: Icon, tone, label, value, sub,
 }: {
   icon: typeof TrendingUp;
-  tone: "emerald" | "blue" | "amber";
+  tone: "emerald" | "blue" | "amber" | "violet" | "rose";
   label: string;
   value: string;
   sub: string;
@@ -421,13 +493,17 @@ function KpiTile({
       ? "bg-emerald-50 ring-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:ring-emerald-900/40 dark:text-emerald-300"
       : tone === "blue"
         ? "bg-blue-50 ring-blue-200 text-blue-700 dark:bg-blue-950/30 dark:ring-blue-900/40 dark:text-blue-300"
-        : "bg-amber-50 ring-amber-200 text-amber-700 dark:bg-amber-950/30 dark:ring-amber-900/40 dark:text-amber-300";
+        : tone === "violet"
+          ? "bg-violet-50 ring-violet-200 text-violet-700 dark:bg-violet-950/30 dark:ring-violet-900/40 dark:text-violet-300"
+          : tone === "rose"
+            ? "bg-rose-50 ring-rose-200 text-rose-700 dark:bg-rose-950/30 dark:ring-rose-900/40 dark:text-rose-300"
+            : "bg-amber-50 ring-amber-200 text-amber-700 dark:bg-amber-950/30 dark:ring-amber-900/40 dark:text-amber-300";
   return (
     <div className={cn("rounded-xl ring-1 p-4", cls)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider font-medium opacity-80">{label}</p>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{value}</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-foreground leading-tight break-words">{value}</p>
           <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
         </div>
         <span className="grid h-10 w-10 place-items-center rounded-lg bg-white/60 dark:bg-white/10">
