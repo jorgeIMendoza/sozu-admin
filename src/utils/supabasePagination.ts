@@ -38,12 +38,14 @@ export async function fetchAllRows<T = any>(
 
 /**
  * Helper para ejecutar un query con `.in(...)` partiendo la lista de IDs en
- * lotes para no exceder el límite de longitud del URL en PostgREST
- * (~8 KB). Con IDs como bigint, ~500 IDs son seguros (~3-4 KB en el
- * querystring incluso URL-encoded).
+ * lotes para no exceder el límite de longitud del URL/headers en el gateway
+ * (kong/Cloudflare). El lote es pequeño por defecto (100) porque el querystring
+ * del `.in(id, [...])` MÁS el JWT en los headers debe caber holgadamente; con
+ * 500 IDs el request se hacía demasiado largo y el gateway cortaba la conexión
+ * → "TypeError: Failed to fetch".
  *
- * Cada batch ejecuta el query en paralelo y los resultados se concatenan
- * preservando el orden de aparición.
+ * Los batches se ejecutan con concurrencia acotada (pool) y los resultados se
+ * concatenan preservando el orden de aparición.
  *
  * Uso:
  *
@@ -95,20 +97,38 @@ export async function fetchInBatchesPaged<T = any>(
 export async function fetchInBatches<T = any>(
   ids: ReadonlyArray<number | string>,
   build: (batch: Array<number | string>) => PromiseLike<{ data: T[] | null; error: any }>,
-  options: { batchSize?: number } = {},
+  options: { batchSize?: number; concurrency?: number } = {},
 ): Promise<T[]> {
-  const batchSize = options.batchSize ?? 500;
+  // Lote pequeño: el querystring de `.in(id, [...])` + el JWT en los headers
+  // no debe exceder el límite del gateway (kong/Cloudflare). 500 IDs generaban
+  // un URL demasiado largo y el gateway cortaba la conexión → "Failed to fetch"
+  // (solo se veía en hooks que llenan lotes grandes, p.ej. Facturas por Cobrar).
+  // ~100 IDs ≈ 1-1.5 KB de querystring — con amplio margen.
+  const batchSize = options.batchSize ?? 100;
+  // Concurrencia acotada: NO disparar todos los lotes a la vez. Con listas de
+  // IDs grandes (hooks que recorren muchas cuentas, p.ej. Facturas por Cobrar)
+  // un `Promise.all` sin límite lanza decenas de requests simultáneos; el
+  // gateway (kong/Cloudflare) tira conexiones y devuelve "TypeError: Failed to
+  // fetch". Un pool pequeño ritma los requests sin cambiar el resultado ni el
+  // orden. 6 ≈ límite de conexiones por host del navegador.
+  const concurrency = Math.max(1, options.concurrency ?? 6);
   if (!ids.length) return [];
   const batches: Array<Array<number | string>> = [];
   for (let i = 0; i < ids.length; i += batchSize) {
     batches.push(ids.slice(i, i + batchSize) as Array<number | string>);
   }
-  const results = await Promise.all(
-    batches.map(async (batch) => {
-      const { data, error } = await build(batch);
+  const results: T[][] = new Array(batches.length);
+  let cursor = 0;
+  const worker = async () => {
+    for (;;) {
+      const idx = cursor++;
+      if (idx >= batches.length) return;
+      const { data, error } = await build(batches[idx]);
       if (error) throw error;
-      return (data ?? []) as T[];
-    }),
-  );
+      results[idx] = (data ?? []) as T[];
+    }
+  };
+  const pool = Array.from({ length: Math.min(concurrency, batches.length) }, () => worker());
+  await Promise.all(pool);
   return results.flat();
 }

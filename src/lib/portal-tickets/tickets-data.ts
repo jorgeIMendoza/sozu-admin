@@ -86,6 +86,19 @@ export function fechaLarga(iso: string) {
   });
 }
 
+// `fecha_creacion` es una FECHA (el form la guarda como medianoche UTC). Se formatea en UTC y
+// SIN hora → no se recorre un día al convertir a hora local (evita el bug de zona horaria).
+// NO usar fechaCorta/fechaLarga aquí: esas van en hora local (correcto para timestamps reales
+// como actividad o fecha de cierre, pero recorren el día en una fecha guardada a medianoche UTC).
+export function fechaCreada(iso: string) {
+  return new Date(iso).toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function iniciales(nombre: string) {
   return nombre
     .split(/\s+/)
