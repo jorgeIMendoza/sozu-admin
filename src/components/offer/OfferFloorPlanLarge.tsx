@@ -12,7 +12,12 @@ import SectionCard from "./SectionCard";
  */
 interface Props {
   imageUrl?: string;
-  unitArea: number;
+  /**
+   * Metraje de la unidad. `use-offer-db` ya lo entrega formateado y CON unidad
+   * ('38.60 m²'), así que el tipo admite string: sufijar de nuevo dejaba
+   * "38.60 m² m²" en la celda, y un metraje ausente reventaba en toLocaleString.
+   */
+  unitArea?: number | string;
   bedrooms: number;
   bathrooms: number;
   view?: string;
@@ -48,8 +53,13 @@ const OfferFloorPlanLarge = ({
     setLightbox(null);
   };
 
+  const areaLabel =
+    typeof unitArea === "number"
+      ? `${unitArea.toLocaleString("es-MX")} m²`
+      : (unitArea ?? "").trim();
+
   const metaCells = [
-    { label: "Área total", value: `${unitArea.toLocaleString("es-MX")} m²` },
+    ...(areaLabel ? [{ label: "Área total", value: areaLabel }] : []),
     { label: "Recámaras", value: String(bedrooms) },
     { label: "Baños", value: String(bathrooms) },
     ...(view ? [{ label: "Vista", value: view }] : []),
