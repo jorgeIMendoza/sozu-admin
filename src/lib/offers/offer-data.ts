@@ -238,7 +238,8 @@ export interface PropertyDetails {
   unitNumber: string;
   level: number;
   view: string;
-  area: number;
+  /** Metraje ya formateado, ej. '77.34 m²' — lo arma `use-offer-db`. */
+  area?: string;
   bedrooms: number;
   bathrooms: number;
   halfBathrooms: number;
