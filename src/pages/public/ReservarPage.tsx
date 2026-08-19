@@ -658,8 +658,12 @@ const ReservarPage = () => {
   const montoApartado = apartadoDeOferta(offer);
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = offerId || undefined;
+  const agenteDelRpc = dbOfferResult?.agent;
   useEffect(() => {
-    if (!agentOfferId) return;
+    // `get_oferta_financials` ya resuelve al asesor con permiso para `anon`. La cascada de
+    // abajo solo cubre las ofertas que el RPC no alcanza: como anónimo, `usuarios` solo
+    // expone al rol Cliente (23), así que pedirla para un asesor interno devuelve 406.
+    if (!agentOfferId || agenteDelRpc) return;
     (async () => {
       const { data: oferta } = await supabase
         .from("ofertas").select("email_creador").eq("id", Number(agentOfferId)).single();
@@ -681,8 +685,8 @@ const ReservarPage = () => {
         isAllied: true,
       });
     })();
-  }, [agentOfferId]);
-  const agent = dbOfferResult?.agent ?? agentFromDB;
+  }, [agentOfferId, agenteDelRpc]);
+  const agent = agenteDelRpc ?? agentFromDB;
 
   // El alta del cliente NO se dispara desde aquí. La cadena autoritativa vive en el
   // backend: al aplicarse el pago se crea la cuenta de cobranza y su fila en

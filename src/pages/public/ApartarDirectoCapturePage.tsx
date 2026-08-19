@@ -75,8 +75,12 @@ const ApartarDirectoCapturePage = () => {
   const esClienteExistente = !!estadoCliente?.es_cliente_existente;
 
   const agentOfferId = offer?.id;
+  const agenteDelRpc = dbOfferResult?.agent;
   useEffect(() => {
-    if (!agentOfferId) return;
+    // `get_oferta_financials` ya resuelve al asesor con permiso para `anon`. La cascada de
+    // abajo solo cubre las ofertas que el RPC no alcanza: como anónimo, `usuarios` solo
+    // expone al rol Cliente (23), así que pedirla para un asesor interno devuelve 406.
+    if (!agentOfferId || agenteDelRpc) return;
     (async () => {
       const { data: oferta } = await supabase
         .from("ofertas").select("email_creador").eq("id", Number(agentOfferId)).single();
@@ -98,8 +102,8 @@ const ApartarDirectoCapturePage = () => {
         isAllied: true,
       });
     })();
-  }, [agentOfferId]);
-  const agent = agentFromDB;
+  }, [agentOfferId, agenteDelRpc]);
+  const agent = agenteDelRpc ?? agentFromDB;
 
   if (isNumericToken && dbLoading) return null;
 
