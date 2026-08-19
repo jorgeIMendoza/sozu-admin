@@ -22,6 +22,11 @@ export function useAllowedMenus() {
   
   // Ref para evitar mostrar spinner en recargas subsecuentes
   const hasLoadedOnce = useRef(false);
+  // Identidad (correo) del perfil con el que se cargaron los permisos actuales.
+  // Sirve para distinguir una recarga silenciosa del MISMO usuario de un cambio
+  // de cuenta: en el segundo caso los permisos viejos no pueden seguir usándose
+  // como base de autorización mientras llegan los nuevos.
+  const identidadCargadaRef = useRef<string | null>(null);
 
   // OJO: este hook resuelve AUTORIZACIÓN de rutas (lo consume `PermissionRoute`),
   // no solo el pintado del menú. Por eso usa SIEMPRE el rol de la sesión real y
@@ -161,6 +166,17 @@ export function useAllowedMenus() {
     // If we have a user but profile hasn't loaded yet, wait
     if (user && !profile) {
       return;
+    }
+
+    // Cambió la cuenta: descartar los permisos del usuario anterior y volver a
+    // estado de carga. Sin esto, `hasLoadedOnce` mantenía el spinner apagado y
+    // PermissionRoute autorizaba (o negaba) con el rol del usuario que se fue.
+    const identidad = profile?.email ?? null;
+    if (identidadCargadaRef.current !== identidad) {
+      identidadCargadaRef.current = identidad;
+      hasLoadedOnce.current = false;
+      setAllowedPaths(new Set());
+      setIsLoadingPermissions(true);
     }
 
     // If Super Admin, skip fetching permissions — but still load the disabled
