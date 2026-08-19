@@ -18,7 +18,7 @@ interface PermissionRouteProps {
 export function PermissionRoute({ children }: PermissionRouteProps) {
   const { isPathAllowed, isPathDisabled, isLoading, isSuperAdmin, allowedPaths } = useAllowedMenus();
   const { menuItems, isLoading: isMenuLoading } = useDynamicMenus();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const hasEmbajadorRole = useHasEmbajadorRole();
   const location = useLocation();
 
@@ -68,9 +68,12 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
   // esto aplica, así que el comportamiento del panel completo no cambia.
   // ---------------------------------------------------------------------------
   if (CURRENT_PORTAL_SUBDOMAIN) {
+    // Sesión sin perfil todavía: NUNCA juzgar el acceso sin saber el rol. El rol
+    // es la única señal que distingue a un usuario de portal de otro, así que sin
+    // perfil el gate negaría a cuentas que sí tienen acceso.
     // hasEmbajadorRole arranca en null mientras consulta user_roles; esperar a
     // que resuelva evita mostrar "sin acceso" a un embajador por una carrera.
-    if (hasEmbajadorRole === null) {
+    if ((user && !profile) || hasEmbajadorRole === null) {
       return (
         <div className="flex items-center justify-center min-h-screen bg-background">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -93,6 +96,8 @@ export function PermissionRoute({ children }: PermissionRouteProps) {
           portal={CURRENT_PORTAL_SUBDOMAIN}
           accessiblePortals={portalAccess.accessiblePortals}
           canGoToAdmin={portalAccess.canGoToAdmin}
+          email={profile?.email ?? user?.email ?? null}
+          rolNombre={profile?.rol_nombre ?? null}
         />
       );
     }
