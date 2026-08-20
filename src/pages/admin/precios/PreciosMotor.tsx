@@ -514,6 +514,32 @@ function PantallaMotor() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-xl font-semibold">Factores Multiplicativos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="torre">
+            <TabsList>
+              {SUB_PESTANAS.map((s) => (
+                <TabsTrigger key={s.valor} value={s.valor} className="text-xs">
+                  {s.titulo}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {SUB_PESTANAS.map((s) => (
+              <TabsContent key={s.valor} value={s.valor} className="mt-4">
+                <TablaFactores
+                  tipo={s.valor}
+                  factores={motor.factores.filter((f) => f.tipo_factor === s.valor)}
+                  propiedades={propiedadesFiltradas}
+                />
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-xl font-semibold">Precio Base por Modelo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1001,32 +1027,6 @@ function PantallaMotor() {
           de publicar cualquier precio.
         </AlertDescription>
       </Alert>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold">Factores Multiplicativos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="torre">
-            <TabsList>
-              {SUB_PESTANAS.map((s) => (
-                <TabsTrigger key={s.valor} value={s.valor} className="text-xs">
-                  {s.titulo}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {SUB_PESTANAS.map((s) => (
-              <TabsContent key={s.valor} value={s.valor} className="mt-4">
-                <TablaFactores
-                  tipo={s.valor}
-                  factores={motor.factores.filter((f) => f.tipo_factor === s.valor)}
-                  propiedades={propiedadesFiltradas}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background px-6 py-3">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
