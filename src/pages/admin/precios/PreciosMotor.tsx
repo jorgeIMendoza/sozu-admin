@@ -118,6 +118,19 @@ function PantallaMotor() {
     unidadesPorModelo.set(p.id_modelo, (unidadesPorModelo.get(p.id_modelo) ?? 0) + 1);
   }
 
+  /*
+   * De mayor a menor inventario. Los modelos llegan en el orden del catálogo,
+   * que no dice nada: el modelo con 145 unidades y el que tiene 2 pesan igual
+   * en la lista y muy distinto en el desarrollo. Ordenar por unidades pone
+   * arriba las decisiones que mueven más dinero. Empate: por nombre, para que
+   * la tabla no baile entre renders.
+   */
+  const basesOrdenadas = [...bases].sort((a, b) => {
+    const ua = unidadesPorModelo.get(a.id_modelo) ?? 0;
+    const ub = unidadesPorModelo.get(b.id_modelo) ?? 0;
+    return ub - ua || a.nombre_modelo.localeCompare(b.nombre_modelo, "es");
+  });
+
   const nivelesPreview = [1, 3, 5, 8, 10, 14, 18];
 
   const puntosNivel = Array.from({ length: 20 }, (_, i) => ({
@@ -241,6 +254,9 @@ function PantallaMotor() {
                     Modelo
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Unidades
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Factor s/ base
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
@@ -250,15 +266,18 @@ function PantallaMotor() {
                     M² de referencia
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Unidades
+                    Precio promedio ponderado
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {bases.map((b) => (
+                {basesOrdenadas.map((b) => (
                   <tr key={b.id_modelo} className="border-t border-border">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
+                    </td>
+                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      {unidadesPorModelo.get(b.id_modelo) ?? 0}
                     </td>
                     <td className="px-3 py-1.5">
                       <Input
@@ -302,8 +321,11 @@ function PantallaMotor() {
                         className="w-32 tabular-nums"
                       />
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
-                      {unidadesPorModelo.get(b.id_modelo) ?? 0}
+                    {/* Precio de una unidad de referencia del modelo. Es
+                        derivado —precio por m² x m² de referencia— y se mueve
+                        al capturar cualquiera de los dos. */}
+                    <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                      {formatoMoneda(b.precio_base_m2 * b.m2_referencia)}
                     </td>
                   </tr>
                 ))}
@@ -314,6 +336,13 @@ function PantallaMotor() {
             El modelo es una variable más sobre el precio base del proyecto: su factor dice
             cuánto se separa de él. Puedes capturar el factor o el precio por m² resultante —
             son la misma cifra vista de dos formas y el otro se recalcula solo.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Los modelos van de mayor a menor número de unidades. El <strong>m² de
+            referencia</strong> es el promedio de las unidades del modelo, no el metraje de
+            una sola: dentro de un mismo modelo el área varía. El <strong>precio promedio
+            ponderado</strong> es lo que cuesta esa unidad de referencia —precio por m² × m²
+            de referencia— y al sembrar reproduce el precio promedio real del modelo.
           </p>
         </CardContent>
       </Card>

@@ -195,20 +195,42 @@ export function construirMotorSemilla(
     const unidades = activas.filter((p) => p.id_modelo === mod.id_modelo);
     const areas = unidades.map((p) => calcularAreaPonderada(p, motorBase));
 
-    const m2_referencia = areas.length
-      ? r2(areas.reduce((a, b) => a + b, 0) / areas.length)
-      : 0;
-
     let sumaPrecio = 0;
     let sumaArea = 0;
+    let conPrecio = 0;
     for (let i = 0; i < unidades.length; i++) {
       const precio = unidades[i]!.precio_lista_actual;
       const area = areas[i]!;
       if (precio > 0 && area > 0) {
         sumaPrecio += precio;
         sumaArea += area;
+        conPrecio++;
       }
     }
+
+    /*
+     * M² de referencia: promedio de las áreas ponderadas del modelo sobre sus
+     * unidades. Las unidades de un mismo modelo no miden exactamente igual —en
+     * el inventario real un modelo llega a variar varios m² entre la unidad más
+     * chica y la más grande— así que tomar el metraje de una sola describiría
+     * mal al conjunto.
+     *
+     * Se promedia sobre las MISMAS unidades que forman el precio base: las que
+     * tienen precio de lista y área. Así `precio_base_m2 × m2_referencia`
+     * reproduce exactamente el precio promedio del modelo. Promediar sobre
+     * todas —incluidas las que no tienen precio— rompe esa identidad y el
+     * renglón deja de cuadrar contra la lista.
+     *
+     * Sin ninguna unidad con precio se cae al promedio de todas: el metraje se
+     * conoce aunque el precio no, y dejarlo en 0 volvería inservible el factor
+     * de tamaño, que pivota sobre este valor.
+     */
+    const m2_referencia =
+      conPrecio > 0
+        ? r2(sumaArea / conPrecio)
+        : areas.length
+          ? r2(areas.reduce((a, b) => a + b, 0) / areas.length)
+          : 0;
 
     if (sumaArea === 0) modelosSinPrecio.push(mod.nombre);
 
