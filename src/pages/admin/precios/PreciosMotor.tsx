@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { Info, RefreshCw, RotateCcw, TriangleAlert } from "lucide-react";
+import { Info, RefreshCw, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,8 +106,55 @@ function formatoPesosCompacto(valor: number): string {
   return `${valor.toFixed(0)}`;
 }
 
-/** Opción del selector que no filtra por modelo. */
-const TODOS_LOS_MODELOS = "__todos__";
+/**
+ * Un filtro del encabezado.
+ *
+ * Los cuatro se comportan igual: una opción neutra que no filtra, más los
+ * valores que el inventario del proyecto realmente usa. No se listan catálogos
+ * completos —una vista que ningún departamento tiene solo estorba— y por eso
+ * las opciones salen del inventario y no de una constante.
+ */
+function FiltroInventario({
+  etiqueta,
+  etiquetaTodos,
+  valor,
+  onChange,
+  opciones,
+  todos,
+}: {
+  etiqueta: string;
+  etiquetaTodos: string;
+  valor: string;
+  onChange: (v: string) => void;
+  opciones: Array<{ id: string; nombre: string; unidades: number }>;
+  todos: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[13px] font-medium text-muted-foreground">{etiqueta}</Label>
+      {/* Con una sola opción no hay nada que discriminar: elegirla devuelve el
+          mismo universo. Pasa de verdad —hay proyectos sin vista capturada, donde
+          las 320 unidades caen en "Sin vista"— y dejarlo activo invita a un clic
+          que no cambia nada. */}
+      <Select value={valor} onValueChange={onChange} disabled={opciones.length <= 1}>
+        <SelectTrigger className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={todos}>{etiquetaTodos}</SelectItem>
+          {opciones.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.nombre} · {o.unidades} u.
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Opción neutra de los filtros: no acota nada. */
+const SIN_FILTRO = "__todos__";
 
 const SUB_PESTANAS: Array<{ valor: TipoFactor; titulo: string }> = [
   { valor: "torre", titulo: "Torre" },
@@ -127,21 +174,122 @@ function PantallaMotor() {
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
-  const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
+  const { motor, propiedades, desgloses, totales, indices, alertasPorUnidad } =
+    usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [dialogoCalibrado, setDialogoCalibrado] = useState(false);
-  const [modeloCurva, setModeloCurva] = useState("");
+  const [filtros, setFiltros] = useState({
+    torre: SIN_FILTRO,
+    modelo: SIN_FILTRO,
+    vista: SIN_FILTRO,
+    estatus: SIN_FILTRO,
+  });
   const [justificacion, setJustificacion] = useState("");
 
+  /*
+   * Opciones de los filtros: solo lo que el inventario del proyecto usa, con
+   * su conteo. Se calculan sobre el inventario COMPLETO y no en cascada: si
+   * las opciones de Modelo dependieran de la Torre elegida, cambiar de torre
+   * dejaría un modelo seleccionado que ya no existe en la lista y el filtro
+   * se quedaría mostrando cero unidades sin decir por qué.
+   */
+  const opcionesFiltro = useMemo(() => {
+    const cuenta = <T,>(clave: (p: (typeof propiedades)[number]) => T | null) => {
+      const m = new Map<T, number>();
+      for (const p of propiedades) {
+        const k = clave(p);
+        if (k === null || k === "") continue;
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    };
+    const listar = (m: Map<string, number>, nombre: (id: string) => string) =>
+      [...m.entries()]
+        .map(([id, unidades]) => ({ id, nombre: nombre(id), unidades }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+    return {
+      torres: listar(cuenta((p) => p.id_torre), (id) =>
+        indices?.torresPorId[id]?.nombre ?? id,
+      ),
+      modelos: listar(cuenta((p) => p.id_modelo), (id) =>
+        indices?.modelosPorId[id]?.nombre ?? id,
+      ),
+      vistas: listar(cuenta((p) => p.vista), (id) => id),
+      estatus: listar(cuenta((p) => p.estatus), (id) => id),
+    };
+  }, [propiedades, indices]);
+
+  const hayFiltro = Object.values(filtros).some((v) => v !== SIN_FILTRO);
+
+  const propiedadesFiltradas = useMemo(
+    () =>
+      !hayFiltro
+        ? propiedades
+        : propiedades.filter(
+            (p) =>
+              (filtros.torre === SIN_FILTRO || p.id_torre === filtros.torre) &&
+              (filtros.modelo === SIN_FILTRO || p.id_modelo === filtros.modelo) &&
+              (filtros.vista === SIN_FILTRO || p.vista === filtros.vista) &&
+              (filtros.estatus === SIN_FILTRO || p.estatus === filtros.estatus),
+          ),
+    [propiedades, filtros, hayFiltro],
+  );
+
+  const desglosesFiltrados = useMemo(() => {
+    if (!hayFiltro) return desgloses;
+    const ids = new Set(propiedadesFiltradas.map((p) => p.id_propiedad));
+    return desgloses.filter((d) => ids.has(d.id_propiedad));
+  }, [desgloses, propiedadesFiltradas, hayFiltro]);
+
+  /*
+   * Totales del subconjunto. Se recalculan aquí en vez de pedírselos al hook
+   * porque el filtro es de esta pantalla: el resto del módulo sigue viendo el
+   * proyecto completo, y mover ese cálculo al hook cambiaría lo que ven la
+   * Tabla de Precios y la Calibración.
+   */
+  const totalesFiltrados = useMemo(() => {
+    if (!hayFiltro) return totales;
+    const totalCalculado = desglosesFiltrados.reduce((a, d) => a + d.precio_lista, 0);
+    const totalActual = propiedadesFiltradas.reduce((a, p) => a + p.precio_lista_actual, 0);
+    return {
+      unidades: propiedadesFiltradas.length,
+      totalCalculado,
+      totalActual,
+      delta: totalCalculado - totalActual,
+      deltaPct: totalActual > 0 ? ((totalCalculado - totalActual) / totalActual) * 100 : 0,
+      conAlertas: desglosesFiltrados.filter((d) =>
+        (alertasPorUnidad[d.id_propiedad] ?? []).some((a) => a.severidad !== "informativa"),
+      ).length,
+      desviadas: desglosesFiltrados.filter((d) =>
+        d.alertas.some((a) => a.codigo === "DELTA_ALTO"),
+      ).length,
+      bloqueadas: desglosesFiltrados.filter((d) => d.bloqueada_para_reprecio).length,
+    };
+  }, [hayFiltro, totales, desglosesFiltrados, propiedadesFiltradas, alertasPorUnidad]);
+
+  const limpiarFiltros = () =>
+    setFiltros({
+      torre: SIN_FILTRO,
+      modelo: SIN_FILTRO,
+      vista: SIN_FILTRO,
+      estatus: SIN_FILTRO,
+    });
+
   const bases = motor.bases_modelo ?? [];
-  const m2RefPreview =
-    bases.length > 0
-      ? bases.reduce((a, b) => a + b.m2_referencia, 0) / bases.length
-      : 80;
   const unidadesPorModelo = new Map<string, number>();
-  for (const p of propiedades) {
+  for (const p of propiedadesFiltradas) {
     unidadesPorModelo.set(p.id_modelo, (unidadesPorModelo.get(p.id_modelo) ?? 0) + 1);
   }
+
+  /*
+   * Con un filtro puesto, los modelos que no aparecen en el subconjunto se
+   * ocultan: dejarlos en 0 unidades haría creer que el filtro no funcionó.
+   * Sin filtro se muestran todos, incluidos los que aún no tienen inventario.
+   */
+  const basesVisibles = hayFiltro
+    ? bases.filter((b) => (unidadesPorModelo.get(b.id_modelo) ?? 0) > 0)
+    : bases;
 
   /*
    * De mayor a menor inventario. Los modelos llegan en el orden del catálogo,
@@ -150,19 +298,18 @@ function PantallaMotor() {
    * arriba las decisiones que mueven más dinero. Empate: por nombre, para que
    * la tabla no baile entre renders.
    */
-  const basesOrdenadas = [...bases].sort((a, b) => {
+  const basesOrdenadas = [...basesVisibles].sort((a, b) => {
     const ua = unidadesPorModelo.get(a.id_modelo) ?? 0;
     const ub = unidadesPorModelo.get(b.id_modelo) ?? 0;
     return ub - ua || a.nombre_modelo.localeCompare(b.nombre_modelo, "es");
   });
 
-  /*
-   * El modelo con más unidades arranca elegido. Con "Todos" de arranque el
-   * primer vistazo mezclaría plantas distintas y la curva se leería con
-   * brincos que no vienen de los coeficientes sino de la composición.
-   */
-  const modeloCurvaVigente =
-    modeloCurva || basesOrdenadas[0]?.id_modelo || TODOS_LOS_MODELOS;
+  /** Área pivote de la curva de tamaño: la de los modelos que están a la vista. */
+  const m2RefPreview =
+    basesOrdenadas.length > 0
+      ? basesOrdenadas.reduce((a, b) => a + b.m2_referencia, 0) / basesOrdenadas.length
+      : 80;
+
 
   /*
    * La curva de nivel vista sobre el inventario real, nivel por nivel.
@@ -178,13 +325,10 @@ function PantallaMotor() {
    * que se está tratando de ver.
    */
   const nivelesDelModelo = useMemo(() => {
-    const desglosePorId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
+    const desglosePorId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
     const acum = new Map<number, { unidades: number; area: number; precio: number }>();
 
-    for (const p of propiedades) {
-      if (modeloCurvaVigente !== TODOS_LOS_MODELOS && p.id_modelo !== modeloCurvaVigente) {
-        continue;
-      }
+    for (const p of propiedadesFiltradas) {
       const d = desglosePorId.get(p.id_propiedad);
       if (!d || d.area_ponderada <= 0) continue;
       const a = acum.get(p.nivel) ?? { unidades: 0, area: 0, precio: 0 };
@@ -203,7 +347,7 @@ function PantallaMotor() {
         precio_depto: a.precio / a.unidades,
       }))
       .sort((a, b) => a.nivel - b.nivel);
-  }, [propiedades, desgloses, modeloCurvaVigente]);
+  }, [propiedadesFiltradas, desglosesFiltrados]);
 
   const nivelesPreview = [1, 3, 5, 8, 10, 14, 18];
 
@@ -276,6 +420,59 @@ function PantallaMotor() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      <Card>
+        <CardContent className="space-y-3 pt-6">
+          <div className="flex flex-wrap items-end gap-3">
+            <FiltroInventario
+              etiqueta="Torre"
+              etiquetaTodos="Todas las torres"
+              valor={filtros.torre}
+              onChange={(v) => setFiltros((x) => ({ ...x, torre: v }))}
+              opciones={opcionesFiltro.torres}
+              todos={SIN_FILTRO}
+            />
+            <FiltroInventario
+              etiqueta="Modelo"
+              etiquetaTodos="Todos los modelos"
+              valor={filtros.modelo}
+              onChange={(v) => setFiltros((x) => ({ ...x, modelo: v }))}
+              opciones={opcionesFiltro.modelos}
+              todos={SIN_FILTRO}
+            />
+            <FiltroInventario
+              etiqueta="Vista"
+              etiquetaTodos="Todas las vistas"
+              valor={filtros.vista}
+              onChange={(v) => setFiltros((x) => ({ ...x, vista: v }))}
+              opciones={opcionesFiltro.vistas}
+              todos={SIN_FILTRO}
+            />
+            <FiltroInventario
+              etiqueta="Estatus"
+              etiquetaTodos="Todos los estatus"
+              valor={filtros.estatus}
+              onChange={(v) => setFiltros((x) => ({ ...x, estatus: v }))}
+              opciones={opcionesFiltro.estatus}
+              todos={SIN_FILTRO}
+            />
+            {hayFiltro ? (
+              <Button variant="ghost" onClick={limpiarFiltros} className="mb-0.5">
+                <X className="size-4" />
+                Limpiar filtros
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {hayFiltro
+              ? `${totalesFiltrados.unidades} de ${totales.unidades} unidades.`
+              : `${totales.unidades} unidades en el proyecto.`}{" "}
+            Los filtros cambian lo que se ve —conteos, promedios por modelo, curvas y
+            totales—, no lo que se guarda: cualquier valor que captures aquí sigue
+            aplicando a todo el desarrollo.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -571,30 +768,9 @@ function PantallaMotor() {
                   Efecto sobre el inventario
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Precios reales del proyecto, nivel por nivel. Mueve la pendiente o el
-                  amortiguamiento y las cuatro columnas se recalculan.
+                  Precios reales por nivel de lo que esté filtrado arriba. Mueve la
+                  pendiente o el amortiguamiento y las cuatro columnas se recalculan.
                 </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="modelo-curva"
-                  className="text-[13px] font-medium text-muted-foreground"
-                >
-                  Modelo
-                </Label>
-                <Select value={modeloCurvaVigente} onValueChange={setModeloCurva}>
-                  <SelectTrigger id="modelo-curva" className="w-60">
-                    <SelectValue placeholder="Elige un modelo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={TODOS_LOS_MODELOS}>Todos los modelos</SelectItem>
-                    {basesOrdenadas.map((b) => (
-                      <SelectItem key={b.id_modelo} value={b.id_modelo}>
-                        {b.nombre_modelo} · {unidadesPorModelo.get(b.id_modelo) ?? 0} u.
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 
@@ -679,11 +855,12 @@ function PantallaMotor() {
                   porque el metraje no es idéntico piso por piso. Se grafica el precio que
                   calcula el motor, no el de lista: un precio forzado a mano no responde a la
                   curva y taparía justo lo que se quiere ver.
-                  {modeloCurvaVigente === TODOS_LOS_MODELOS ? (
+                  {filtros.modelo === SIN_FILTRO ? (
                     <>
                       {" "}
                       Con todos los modelos juntos, un brinco entre niveles puede venir de que
-                      arriba haya modelos distintos y no de los coeficientes.
+                      arriba haya modelos distintos y no de los coeficientes: filtra por Modelo
+                      para aislar uno.
                     </>
                   ) : null}
                 </p>
@@ -843,7 +1020,7 @@ function PantallaMotor() {
                 <TablaFactores
                   tipo={s.valor}
                   factores={motor.factores.filter((f) => f.tipo_factor === s.valor)}
-                  propiedades={propiedades}
+                  propiedades={propiedadesFiltradas}
                 />
               </TabsContent>
             ))}
@@ -855,30 +1032,30 @@ function PantallaMotor() {
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
           <span className="tabular-nums">
             <span className="text-muted-foreground">Unidades: </span>
-            {totales.unidades}
+            {hayFiltro ? `${totalesFiltrados.unidades} de ${totales.unidades}` : totales.unidades}
           </span>
           <span className="tabular-nums">
             <span className="text-muted-foreground">Valor total calculado: </span>
-            {formatoMoneda(totales.totalCalculado)}{" "}
+            {formatoMoneda(totalesFiltrados.totalCalculado)}{" "}
             <span className="text-xs text-muted-foreground">Libro: Comercial</span>
           </span>
           <span className="tabular-nums">
             <span className="text-muted-foreground">Valor total actual: </span>
-            {formatoMoneda(totales.totalActual)}
+            {formatoMoneda(totalesFiltrados.totalActual)}
           </span>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-xs tabular-nums",
-              totales.delta >= 0
+              totalesFiltrados.delta >= 0
                 ? "bg-primary/10 text-primary"
                 : "bg-destructive/10 text-destructive",
             )}
           >
-            {formatoPorcentaje(totales.deltaPct)} · {formatoMoneda(totales.delta)}
+            {formatoPorcentaje(totalesFiltrados.deltaPct)} · {formatoMoneda(totalesFiltrados.delta)}
           </span>
           <span className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
             <TriangleAlert className="size-4" />
-            Alertas: {totales.conAlertas}
+            Alertas: {totalesFiltrados.conAlertas}
           </span>
         </div>
       </div>
