@@ -43,6 +43,7 @@ export function EntregaDetalle() {
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [itemsLoading, setItemsLoading] = useState<Set<number>>(new Set());
+  const [catsLoading, setCatsLoading] = useState<Set<number>>(new Set());
   const [noCumpleModal, setNoCumpleModal] = useState<{ itemId: number; nombre: string } | null>(null);
   const [noCumpleObs, setNoCumpleObs] = useState('');
   const [evidenciaModal, setEvidenciaModal] = useState<{ itemId: number; nombre: string } | null>(null);
@@ -141,13 +142,26 @@ export function EntregaDetalle() {
     setLogLoading(true);
     (supabase as any)
       .from('entregas_checklist_log')
-      .select('id, id_checklist_item, tipo_evento, accion, estatus_anterior, estatus_nuevo, observaciones, usuario, fecha_creacion')
+      .select('id, id_checklist_item, id_categoria, tipo_entidad_afectada, tipo_evento, accion, estatus_anterior, estatus_nuevo, observaciones, usuario, fecha_creacion')
       .eq('id_entrega', entregaId)
       .eq('activo', true)
       .order('fecha_creacion', { ascending: false })
       .limit(100)
-      .then(({ data }: { data: any[] | null }) => {
-        setLogData(data ?? []);
+      .then(async ({ data, error }: { data: any[] | null; error: any }) => {
+        if (!error) {
+          setLogData(data ?? []);
+          setLogLoading(false);
+          return;
+        }
+        // DDL probe — 20260819_entregas_categoria_tecnico_supervisor.md aún no ejecutado
+        const { data: fallback } = await (supabase as any)
+          .from('entregas_checklist_log')
+          .select('id, id_checklist_item, tipo_evento, accion, estatus_anterior, estatus_nuevo, observaciones, usuario, fecha_creacion')
+          .eq('id_entrega', entregaId)
+          .eq('activo', true)
+          .order('fecha_creacion', { ascending: false })
+          .limit(100);
+        setLogData((fallback ?? []).map((ev: any) => ({ ...ev, id_categoria: null, tipo_entidad_afectada: 'ITEM' })));
         setLogLoading(false);
       });
   }, [activeTab, entregaId]);
@@ -156,15 +170,30 @@ export function EntregaDetalle() {
   const { data: checklist = [] } = useQuery<ChecklistCategoria[]>({
     queryKey: ['checklist-entrega', entregaId],
     queryFn: async () => {
-      const { data: cats } = await (supabase as any)
+      let cats: any[] = [];
+      const { data: catsNew, error: catsErr } = await (supabase as any)
         .from('entregas_checklist_categorias')
-        .select('id, nombre, tipo_checklist, responsable, cargo, fecha_vobo, estatus, total_items, items_completos, id_plantilla_categoria')
+        .select('id, nombre, tipo_checklist, responsable, cargo, fecha_vobo, estatus, total_items, items_completos, id_plantilla_categoria, id_tecnico_default_er, id_supervisor_default_er')
         .eq('id_entrega', entregaId!)
         .eq('activo', true)
         .order('id_plantilla_categoria', { ascending: true, nullsFirst: false })
         .order('id', { ascending: true });
 
-      const catIds = (cats ?? []).map((c: any) => c.id);
+      if (!catsErr) {
+        cats = catsNew ?? [];
+      } else {
+        // DDL probe — 20260819_entregas_categoria_tecnico_supervisor.md aún no ejecutado
+        const { data: catsFallback } = await (supabase as any)
+          .from('entregas_checklist_categorias')
+          .select('id, nombre, tipo_checklist, responsable, cargo, fecha_vobo, estatus, total_items, items_completos, id_plantilla_categoria')
+          .eq('id_entrega', entregaId!)
+          .eq('activo', true)
+          .order('id_plantilla_categoria', { ascending: true, nullsFirst: false })
+          .order('id', { ascending: true });
+        cats = (catsFallback ?? []).map((c: any) => ({ ...c, id_tecnico_default_er: null, id_supervisor_default_er: null }));
+      }
+
+      const catIds = cats.map((c: any) => c.id);
       if (!catIds.length) return [];
 
       let items: any[] = [];
@@ -286,6 +315,20 @@ export function EntregaDetalle() {
   const supervisores = responsablesCat.supervisores;
   const tecnicos     = responsablesCat.tecnicos;
 
+  // ── Probe: ¿ya existen los defaults de técnico/supervisor por categoría? ────
+  // DDL: Ejecuciones_manuales/20260819_entregas_categoria_tecnico_supervisor.md
+  const { data: categoriaDefaultsDisponibles = false } = useQuery<boolean>({
+    queryKey: ['entregas-cat-defaults-probe'],
+    queryFn: async () => {
+      const probe = await (supabase as any)
+        .from('entregas_checklist_categorias')
+        .select('id_tecnico_default_er, id_supervisor_default_er')
+        .limit(0);
+      return !probe.error;
+    },
+    staleTime: 60_000,
+  });
+
   // ── Plantilla preview (prop-mode: resumen del checklist a crear) ─────────────
   const modeloIdForPreview   = isPropMode ? (pageData?.modelo?.id ?? null) : null;
   const proyectoIdForPreview = isPropMode ? ((pageData?.edificio as any)?.id_proyecto ?? null) : null;
@@ -341,6 +384,13 @@ export function EntregaDetalle() {
       return next;
     });
 
+  const setCatLoading = (catId: number, loading: boolean) =>
+    setCatsLoading(prev => {
+      const next = new Set(prev);
+      loading ? next.add(catId) : next.delete(catId);
+      return next;
+    });
+
   const insertLog = async (opts: {
     id_checklist_item: number;
     tipo_evento: string;
@@ -362,6 +412,32 @@ export function EntregaDetalle() {
       usuario:           profile?.email ?? null,
       metadata:          opts.metadata ?? null,
       activo:            true,
+    });
+  };
+
+  // Bitácora de eventos a nivel CATEGORÍA (técnico/supervisor default).
+  // Requiere entregas_checklist_log.tipo_entidad_afectada / id_categoria
+  // (DDL: 20260819_entregas_categoria_tecnico_supervisor.md). Si el DDL aún
+  // no fue ejecutado, el insert falla silenciosamente (catálogo no crítico
+  // para la asignación en sí, que ya se hizo sobre la categoría).
+  const insertLogCategoria = async (opts: {
+    id_categoria: number;
+    tipo_evento: string;
+    accion?: string;
+    observaciones?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    if (!entregaId) return;
+    await (supabase as any).from('entregas_checklist_log').insert({
+      id_entrega:            entregaId,
+      id_categoria:          opts.id_categoria,
+      tipo_entidad_afectada: 'CATEGORIA',
+      tipo_evento:           opts.tipo_evento,
+      accion:                opts.accion ?? null,
+      observaciones:         opts.observaciones ?? null,
+      usuario:               profile?.email ?? null,
+      metadata:              opts.metadata ?? null,
+      activo:                true,
     });
   };
 
@@ -452,6 +528,56 @@ export function EntregaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
     }
     setItemLoading(itemId, false);
+  };
+
+  // ── Defaults de categoría (herencia lógica — NO se propagan a los ítems) ────
+  // tecnico_efectivo/supervisor_efectivo de cada ítem se resuelve en lectura
+  // vía resolverTecnicoEfectivo/resolverSupervisorEfectivo (EntregaTypes.ts).
+
+  const handleAsignarTecnicoCategoria = async (catId: number, entidadId: number | null) => {
+    setCatLoading(catId, true);
+    const nombre = entidadId ? (tecnicos.find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
+    const { error } = await (supabase as any)
+      .from('entregas_checklist_categorias')
+      .update({ id_tecnico_default_er: entidadId })
+      .eq('id', catId);
+    if (error) {
+      toast.error('Error al asignar técnico de categoría');
+    } else {
+      toast.success(entidadId ? `Técnico default de categoría: ${nombre}` : 'Técnico default de categoría removido');
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+      await insertLogCategoria({
+        id_categoria: catId,
+        tipo_evento:  'ASIGNACION_TECNICO_CATEGORIA',
+        accion:       entidadId ? `Técnico default asignado: ${nombre}` : 'Técnico default removido',
+        observaciones: nombre ?? undefined,
+        metadata:     entidadId ? { id_entidad: entidadId } : undefined,
+      });
+    }
+    setCatLoading(catId, false);
+  };
+
+  const handleAsignarSupervisorCategoria = async (catId: number, entidadId: number | null) => {
+    setCatLoading(catId, true);
+    const nombre = entidadId ? (supervisores.find(e => e.id === entidadId)?.nombre ?? `Entidad #${entidadId}`) : null;
+    const { error } = await (supabase as any)
+      .from('entregas_checklist_categorias')
+      .update({ id_supervisor_default_er: entidadId })
+      .eq('id', catId);
+    if (error) {
+      toast.error('Error al asignar supervisor de categoría');
+    } else {
+      toast.success(entidadId ? `Supervisor default de categoría: ${nombre}` : 'Supervisor default de categoría removido');
+      queryClient.invalidateQueries({ queryKey: ['checklist-entrega', entregaId] });
+      await insertLogCategoria({
+        id_categoria: catId,
+        tipo_evento:  'ASIGNACION_SUPERVISOR_CATEGORIA',
+        accion:       entidadId ? `Supervisor default asignado: ${nombre}` : 'Supervisor default removido',
+        observaciones: nombre ?? undefined,
+        metadata:     entidadId ? { id_entidad: entidadId } : undefined,
+      });
+    }
+    setCatLoading(catId, false);
   };
 
   const handleGuardarNoCumple = async () => {
@@ -1007,8 +1133,10 @@ export function EntregaDetalle() {
                           isExpanded={expandedCats.includes(cat.id)}
                           isSelected={selectedCat?.id === cat.id}
                           itemsLoading={itemsLoading}
+                          catLoading={catsLoading.has(cat.id)}
                           supervisores={supervisores}
                           tecnicos={tecnicos}
+                          categoriaDefaultsDisponibles={categoriaDefaultsDisponibles}
                           getEstatusNombre={getEstatusNombre}
                           onToggle={() => toggleCat(cat.id)}
                           onSelect={() => setSelectedCat(cat)}
@@ -1016,6 +1144,8 @@ export function EntregaDetalle() {
                           onOpenNoCumple={(itemId, nombre) => { setNoCumpleModal({ itemId, nombre }); setNoCumpleObs(''); }}
                           onAsignarSupervisor={handleAsignarSupervisor}
                           onAsignarTecnico={handleAsignarTecnico}
+                          onAsignarTecnicoCategoria={handleAsignarTecnicoCategoria}
+                          onAsignarSupervisorCategoria={handleAsignarSupervisorCategoria}
                           onOpenEvidencia={(itemId, nombre) => setEvidenciaModal({ itemId, nombre })}
                         />
                       ))}
@@ -1028,9 +1158,14 @@ export function EntregaDetalle() {
             {/* VoBo Panel */}
             {selectedCat && (
               <VoBoPanel
-                selectedCat={selectedCat}
+                // Se relee de `checklist` (no del snapshot capturado en onSelect) para
+                // reflejar de inmediato un cambio de default de técnico/supervisor
+                // sin tener que cerrar y reabrir el panel.
+                selectedCat={checklist.find(c => c.id === selectedCat.id) ?? selectedCat}
                 onClose={() => setSelectedCat(null)}
                 getEstatusNombre={getEstatusNombre}
+                supervisores={supervisores}
+                tecnicos={tecnicos}
               />
             )}
           </div>
@@ -1360,15 +1495,17 @@ export function EntregaDetalle() {
                     const isVoBoRechazado = ev.tipo_evento === 'VOBO_RECHAZADO';
                     const isReversion     = ev.tipo_evento === 'REVERSION_ESTATUS';
                     const isAsignacion    = ev.tipo_evento === 'ASIGNACION_RESPONSABLE';
+                    const isCategoria     = ev.tipo_entidad_afectada === 'CATEGORIA';
                     const iconBg = isVoBoAprobado  ? 'bg-emerald-50 text-emerald-600'
                                  : isVoBoRechazado ? 'bg-red-50 text-red-600'
                                  : isReversion     ? 'bg-amber-50 text-amber-600'
+                                 : isCategoria     ? 'bg-indigo-50 text-indigo-600'
                                  : isAsignacion    ? 'bg-violet-50 text-violet-600'
                                  : 'bg-sky-50 text-sky-600';
                     const EvIcon = isVoBoAprobado  ? CheckCheck
                                  : isVoBoRechazado ? X
                                  : isReversion     ? RotateCcw
-                                 : isAsignacion    ? User
+                                 : isAsignacion || isCategoria ? User
                                  : Wrench;
                     return (
                       <div key={ev.id} className="relative flex gap-3 pb-5 last:pb-0">
@@ -1377,7 +1514,14 @@ export function EntregaDetalle() {
                         </div>
                         <div className="flex-1 min-w-0 pt-1">
                           <div className="flex items-start justify-between gap-3">
-                            <p className="text-xs font-semibold text-slate-900 leading-tight">{ev.accion ?? ev.tipo_evento}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-semibold text-slate-900 leading-tight">{ev.accion ?? ev.tipo_evento}</p>
+                              {isCategoria && (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[9px] font-semibold uppercase tracking-wide">
+                                  Categoría
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-400 shrink-0 whitespace-nowrap">{fmtDt(ev.fecha_creacion)}</p>
                           </div>
                           {(ev.estatus_anterior || ev.estatus_nuevo) && (
