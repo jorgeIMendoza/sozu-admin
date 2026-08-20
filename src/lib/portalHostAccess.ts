@@ -1,3 +1,7 @@
+// Los roles de banco se detectan por NOMBRE, no por id: sus ids difieren entre
+// ambientes (ver useBancoRoles en hooks/usePortalBancos/useBancoEquipo.ts).
+// Compartido con el gate de rutas para que ambos usen el mismo criterio.
+import { isRolDeBanco } from './routeAccess';
 import {
   CURRENT_PORTAL_SUBDOMAIN,
   PORTAL_ROUTE_PREFIX,
@@ -12,14 +16,6 @@ const AGENT_PORTAL_ROLE_IDS = [1, 2, 3, 9, 30];
 const ROL_INMOBILIARIA = 4;
 const ROL_CLIENTE = 23;
 
-// Los roles de banco se detectan por NOMBRE, no por id: sus ids difieren entre
-// ambientes (ver useBancoRoles en hooks/usePortalBancos/useBancoEquipo.ts).
-// Tolerante a singular/plural, igual que allí: "Operador Banco" / "Operador Bancos".
-// 'Banco' a secas es el fallback que ya usa PermissionRoute para el portal.
-const isRolDeBanco = (rolNombre: string | null | undefined): boolean => {
-  const n = (rolNombre ?? '').trim().toLowerCase();
-  return n === 'banco' || n.startsWith('operador banco') || n.startsWith('supervisor banco');
-};
 
 export interface PortalHostAccessInput {
   rolId: number | null | undefined;
@@ -94,7 +90,9 @@ export function computePortalHostAccess(input: PortalHostAccessInput): PortalHos
       case 'clientes':
         return rolId === ROL_CLIENTE || rolNombre === 'Cliente';
       case 'embajadores':
-        // Mismas condiciones que el gate de portal-embajador en PermissionRoute.
+        // Mismos bypass por rol que el gate de portal-embajador en
+        // PORTAL_GATES (lib/routeAccess.ts). El permiso en BD ya se resolvió
+        // arriba con hasPathUnder().
         // ROL_CLIENTE (23): todo cliente entra al portal de Embajadores por rol.
         return (
           rolId === 1 ||

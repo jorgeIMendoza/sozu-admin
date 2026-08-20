@@ -456,9 +456,11 @@ const CrmSlaMonitor            = lazyRetry(() => import("./pages/admin/portal-cr
 const CrmCampaignBuilder       = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmCampaignBuilder })));
 const CrmAiCopilot             = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmAiCopilot })));
 const CrmOperationsDevelopments = lazyRetry(() => import("./pages/admin/portal-crm/operations").then(m => ({ default: m.CrmOperationsDevelopments })));
+const CrmWhatsApp              = lazyRetry(() => import("./pages/admin/portal-crm/whatsapp").then(m => ({ default: m.CrmWhatsApp })));
 
 // Portal CRM Sozu — Configuración
 const CrmSettingsUsers                = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsUsers })));
+const CrmLogs                         = lazyRetry(() => import("./pages/admin/portal-crm/CrmLogs").then(m => ({ default: m.CrmLogs })));
 const CrmSettingsRoles                = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsRoles })));
 const CrmSettingsPipelineStages       = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsPipelineStages })));
 const CrmSettingsCustomFields         = lazyRetry(() => import("./pages/admin/portal-crm/settings").then(m => ({ default: m.CrmSettingsCustomFields })));
@@ -1222,6 +1224,7 @@ const App = () => (
                   <Route path="portal-crm/operacion/bandeja"   element={<CrmUnifiedInbox />} />
                   <Route path="portal-crm/operacion/colas"  element={<CrmQueues />} />
                   <Route path="portal-crm/operacion/sla"     element={<CrmSlaMonitor />} />
+                  <Route path="portal-crm/operacion/whatsapp" element={<CrmWhatsApp />} />
 
                   {/* Portal CRM Sozu — Configuración */}
                   <Route path="portal-crm/configuracion/conexiones"           element={<CrmSettingsConnections />} />
@@ -1233,6 +1236,7 @@ const App = () => (
                   <Route path="portal-crm/configuracion/desarrollos"          element={<CrmSettingsDevelopments />} />
                   <Route path="portal-crm/configuracion/pipelines"             element={<CrmSettingsPipelines />} />
                   <Route path="portal-crm/configuracion/estados-lead"          element={<CrmSettingsLeadStates />} />
+                  <Route path="portal-crm/configuracion/auditoria"                  element={<CrmLogs />} />
                   {/* rutas antiguas (conservadas) */}
                   <Route path="portal-crm/configuracion/roles"                       element={<CrmSettingsRoles />} />
                   <Route path="portal-crm/configuracion/etapas-pipeline"             element={<CrmSettingsPipelineStages />} />

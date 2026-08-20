@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useEffectiveAgent } from "@/hooks/useEffectiveAgent";
 import { useAgentPresentation } from "@/contexts/AgentPresentationContext";
 import { AgentPortalHeader } from "@/components/admin/agent-portal/AgentPortalHeader";
@@ -14,16 +14,21 @@ import { ActionButton } from "@/components/ui/action-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { IconTip } from "@/components/ui/icon-tip";
+import { SimplePagination } from "@/components/ui/simple-pagination";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
-  fetchAgenteProspectos, fetchAgentesAsignables, fetchEstatusLead, reasignarLead, setLeadEstatus,
+  fetchAgenteProspectos, fetchAgenteProspectosFacetas, fetchAgentesAsignables, fetchEstatusLead,
+  reasignarLead, setLeadEstatus, PROYECTO_SIN_DESARROLLO,
   type ProspectoRow,
 } from "@/lib/portal-agente/leads";
 import { etapaDef } from "@/lib/portal-agente/negocios";
 import {
   Loader2, Search, UserPlus, ChevronRight, ChevronDown, EyeOff, Eye, Plus, Users, ArrowLeftRight,
 } from "lucide-react";
+
+/** Prospectos por página. La búsqueda y el corte los resuelve la base, no el navegador. */
+const POR_PAGINA = 25;
 
 const fmtCurrency = (v: number | null) =>
   v == null ? "—" : new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(v);
@@ -43,8 +48,12 @@ const AgentProspectos = () => {
   const [addProspectoOpen, setAddProspectoOpen] = useState(false);
   const [editPersonaId, setEditPersonaId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  // Lo que realmente viaja a la base: el tecleo se acumula 350 ms para no lanzar una
+  // consulta por letra.
+  const [searchAplicado, setSearchAplicado] = useState("");
   const [filtroEstatus, setFiltroEstatus] = useState<string>("all");
   const [filtroProyecto, setFiltroProyecto] = useState<string>("all");
+  const [page, setPage] = useState(1);
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
   const [guardando, setGuardando] = useState<number | null>(null);
   // Traspaso: el agente puede pasar su prospecto a otro y lo pierde.
@@ -58,16 +67,51 @@ const AgentProspectos = () => {
     track({ page: "agent_prospectos", elementId: "page_view", elementType: "page" });
   }, []);
 
+  useEffect(() => {
+    const t = setTimeout(() => setSearchAplicado(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Cualquier cambio de filtro vuelve a la primera página: la página 8 de la búsqueda
+  // anterior no significa nada en la nueva.
+  useEffect(() => {
+    setPage(1);
+  }, [searchAplicado, filtroEstatus, filtroProyecto, effectiveAuthUserId, effectivePersonaId]);
+
   const { data: catalogoEstatus = [] } = useQuery({
     queryKey: ["estatus-lead"],
     queryFn: fetchEstatusLead,
     staleTime: 5 * 60_000,
   });
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["agent-prospectos", effectivePersonaId, effectiveAuthUserId],
-    queryFn: () => fetchAgenteProspectos({ authUserId: effectiveAuthUserId, personaId: effectivePersonaId ?? null }),
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: [
+      "agent-prospectos", effectivePersonaId, effectiveAuthUserId,
+      searchAplicado, filtroEstatus, filtroProyecto, page,
+    ],
+    queryFn: () => fetchAgenteProspectos({
+      authUserId: effectiveAuthUserId,
+      personaId: effectivePersonaId ?? null,
+      search: searchAplicado || null,
+      estatus: filtroEstatus === "all" ? null : Number(filtroEstatus),
+      proyecto: filtroProyecto === "all"
+        ? null
+        : (filtroProyecto === "null" ? PROYECTO_SIN_DESARROLLO : Number(filtroProyecto)),
+      limit: POR_PAGINA,
+      offset: (page - 1) * POR_PAGINA,
+    }),
     enabled: !!effectivePersonaId || !!effectiveAuthUserId,
+    // Evita el parpadeo a "sin prospectos" mientras llega la página siguiente.
+    placeholderData: keepPreviousData,
+  });
+
+  // Desarrollos del agente completos, no los de la página visible: si el filtro se armara
+  // con las 25 filas de la página, un desarrollo suyo desaparecería del selector.
+  const { data: facetas } = useQuery({
+    queryKey: ["agent-prospectos-facetas", effectiveAuthUserId],
+    queryFn: () => fetchAgenteProspectosFacetas(effectiveAuthUserId),
+    enabled: !!effectiveAuthUserId,
+    staleTime: 5 * 60_000,
   });
 
   const { data: agentes = [] } = useQuery({
@@ -78,32 +122,34 @@ const AgentProspectos = () => {
   });
 
   const prospectos: ProspectoRow[] = data?.rows ?? [];
+  const total = data?.total ?? 0;
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const desde = total === 0 ? 0 : (page - 1) * POR_PAGINA + 1;
+  const hasta = total === 0 ? 0 : Math.min(page * POR_PAGINA, total);
+  const hayFiltros = !!searchAplicado || filtroEstatus !== "all" || filtroProyecto !== "all";
+
+  // Si un traspaso o un filtro dejó la página fuera de rango, regresar a la última válida.
+  useEffect(() => {
+    if (!isFetching && page > totalPaginas) setPage(totalPaginas);
+  }, [isFetching, page, totalPaginas]);
 
   const proyectosDisponibles = useMemo(() => {
+    if (facetas) {
+      return facetas.map((f) => [String(f.id_proyecto ?? "null"), f.proyecto] as [string, string]);
+    }
+    // Sin la RPC de facetas: los desarrollos de esta página, y sin «Sin desarrollo» —
+    // ese filtro viaja como centinela -1 y la versión previa de la RPC no lo entiende.
     const map = new Map<string, string>();
-    prospectos.forEach((p) => p.proyectos.forEach((pr) => map.set(String(pr.id_proyecto ?? "null"), pr.proyecto)));
+    prospectos.forEach((p) => p.proyectos.forEach((pr) => {
+      if (pr.id_proyecto != null) map.set(String(pr.id_proyecto), pr.proyecto);
+    }));
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [prospectos]);
+  }, [facetas, prospectos]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return prospectos.filter((p) => {
-      if (q && !(
-        p.nombre.toLowerCase().includes(q) ||
-        (p.email ?? "").toLowerCase().includes(q) ||
-        (p.telefono ?? "").toLowerCase().includes(q) ||
-        p.proyectos.some((pr) => pr.proyecto.toLowerCase().includes(q))
-      )) return false;
-      if (filtroEstatus !== "all" && !p.proyectos.some((pr) => String(pr.id_estatus_lead) === filtroEstatus)) return false;
-      if (filtroProyecto !== "all" && !p.proyectos.some((pr) => String(pr.id_proyecto ?? "null") === filtroProyecto)) return false;
-      return true;
-    });
-  }, [prospectos, search, filtroEstatus, filtroProyecto]);
-
-  const totales = useMemo(() => ({
-    unidades: filtered.reduce((n, p) => n + p.total_unidades, 0),
-    clientes: filtered.filter((p) => p.es_cliente).length,
-  }), [filtered]);
+  const totalesPagina = useMemo(() => ({
+    unidades: prospectos.reduce((n, p) => n + p.total_unidades, 0),
+    clientes: prospectos.filter((p) => p.es_cliente).length,
+  }), [prospectos]);
 
   const toggle = (id: number) => {
     setExpandidos((prev) => {
@@ -121,6 +167,7 @@ const AgentProspectos = () => {
       track({ page: "agent_prospectos", elementId: "cambio_estatus_lead", metadata: { er: idEntidadRelacionada } });
       toast({ title: "Estado actualizado" });
       queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos-facetas"] });
     } catch (e: any) {
       toast({ title: "No se pudo actualizar el estado", description: e?.message, variant: "destructive" });
     } finally {
@@ -138,6 +185,7 @@ const AgentProspectos = () => {
       setTraspaso(null);
       setDestino("");
       queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-prospectos-facetas"] });
     } catch (e: any) {
       toast({ title: "No se pudo transferir", description: e?.message, variant: "destructive" });
     } finally {
@@ -180,7 +228,7 @@ const AgentProspectos = () => {
           <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
             <Input
-              placeholder="Buscar por nombre, correo, teléfono o desarrollo…"
+              placeholder="Buscar por nombre, correo o teléfono…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-10 rounded-md border-border bg-card pl-9 text-sm shadow-none focus-visible:ring-primary/25"
@@ -234,7 +282,12 @@ const AgentProspectos = () => {
 
         {!isLoading && (
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-            {filtered.length} {filtered.length === 1 ? "prospecto" : "prospectos"} · {totales.unidades} unidades · {totales.clientes} con compra
+            {total.toLocaleString()} {total === 1 ? "prospecto" : "prospectos"}
+            {hayFiltros ? " con este filtro" : ""}
+            {prospectos.length > 0 && (
+              <> · en esta página {totalesPagina.unidades} unidades · {totalesPagina.clientes} con compra</>
+            )}
+            {isFetching && <Loader2 className="ml-2 inline size-3 animate-spin align-[-1px]" />}
           </p>
         )}
 
@@ -242,13 +295,13 @@ const AgentProspectos = () => {
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : prospectos.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card py-16 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <UserPlus className="h-6 w-6 text-primary" />
             </span>
             <p className="text-sm text-muted-foreground">
-              {search || filtroEstatus !== "all" || filtroProyecto !== "all" ? "No se encontraron prospectos" : "Aún no tienes prospectos"}
+              {hayFiltros ? "No se encontraron prospectos" : "Aún no tienes prospectos"}
             </p>
             {!search && perms.canCreate && (
               <ActionButton icon={Plus} size="sm" onClick={() => { setEditPersonaId(null); setAddProspectoOpen(true); }}>
@@ -272,7 +325,7 @@ const AgentProspectos = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p) => {
+                  {prospectos.map((p) => {
                     const abierto = expandidos.has(p.id_persona);
                     const unico = p.proyectos.length === 1 ? p.proyectos[0] : null;
                     const desarrollos = p.proyectos.map((pr) => pr.proyecto).join(" · ");
@@ -448,10 +501,23 @@ const AgentProspectos = () => {
                 </tbody>
               </table>
             </div>
+
+            <SimplePagination
+              page={page}
+              totalPages={totalPaginas}
+              onPageChange={(p) => {
+                setPage(p);
+                setExpandidos(new Set());
+                track({ page: "agent_prospectos", elementId: "paginacion", metadata: { pagina: p } });
+              }}
+              total={total}
+              from={desde}
+              to={hasta}
+            />
           </div>
         )}
 
-        {!isLoading && filtered.length > 0 && data?.viaRpc === false && (
+        {!isLoading && prospectos.length > 0 && data?.viaRpc === false && (
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
             <Users className="size-3.5" />
             Leyendo del modelo de transición (dueño por agente + atribución del CRM).
@@ -505,6 +571,7 @@ const AgentProspectos = () => {
           if (!v) {
             setEditPersonaId(null);
             queryClient.invalidateQueries({ queryKey: ["agent-prospectos"] });
+            queryClient.invalidateQueries({ queryKey: ["agent-prospectos-facetas"] });
           }
         }}
         preSelectedPersonaId={editPersonaId}

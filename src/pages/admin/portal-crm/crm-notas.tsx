@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -184,6 +185,7 @@ export function InlineNoteForm({ contactId, userId, onSaved }: { contactId: stri
 
   const canSave = !!userId && !!editor && (!isEmpty || pending.length > 0) && !recording;
 
+  const { logCrear } = useCrmLogger();
   const save = async () => {
     if (!canSave || !editor) return;
     setSaving(true);
@@ -197,6 +199,7 @@ export function InlineNoteForm({ contactId, userId, onSaved }: { contactId: stri
     if (error) { setSaving(false); toast.error(error.message); return; }
     if (data?.id && pending.length) await saveNoteAttachments(data.id, userId, pending);
     setSaving(false);
+    logCrear("nota", { id: data?.id, contactId });
     toast.success("Nota guardada");
     editor.commands.clearContent();
     setIsEmpty(true);
@@ -297,12 +300,14 @@ export function NoteEditDialog({ open, onOpenChange, noteId, initialHtml, onSave
     if (open && editor) editor.commands.setContent(initialHtml || "");
   }, [open, editor, initialHtml]);
 
+  const { logActualizar } = useCrmLogger();
   const save = async () => {
     if (!editor) return;
     setSaving(true);
     const { error } = await (supabase as any).from("crm_notas").update({ contenido: editor.getHTML() }).eq("id", noteId);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logActualizar("nota", null, { id: noteId });
     toast.success("Nota actualizada");
     onOpenChange(false);
     onSaved();
@@ -367,11 +372,13 @@ export function NoteCard({ note, contactName, onEdited, onDelete, defaultExpande
     catch { toast.error("No se pudo copiar el enlace"); }
   };
 
+  const { logActualizar } = useCrmLogger();
   const togglePin = async () => {
     const next = !pinned;
     setPinned(next);
     const { error } = await (supabase as any).from("crm_notas").update({ anclado: next }).eq("id", note.id);
     if (error) { setPinned(!next); toast.error(error.message); return; }
+    logActualizar("nota", null, { id: note.id, anclado: next });
     toast.success(next ? "Nota anclada" : "Nota desanclada");
     onEdited();
   };
@@ -638,6 +645,7 @@ export function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId:
 
   const canSave = !!userId && !!editor && (!isEmpty || pending.length > 0) && !recording;
 
+  const { logCrear } = useCrmLogger();
   const save = async () => {
     if (!canSave || !editor) return;
     setSaving(true);
@@ -650,6 +658,7 @@ export function NoteDialog({ contactId, userId, onSaved, trigger }: { contactId:
     if (error) { setSaving(false); toast.error(error.message); return; }
     if (data?.id && pending.length) await saveNoteAttachments(data.id, userId, pending);
     setSaving(false);
+    logCrear("nota", { id: data?.id, contactId });
     toast.success("Nota guardada");
     setOpen(false);
     editor.commands.clearContent();

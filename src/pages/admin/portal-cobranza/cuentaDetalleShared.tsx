@@ -1,7 +1,7 @@
 import { useState, useRef, type ReactNode } from 'react';
 import {
   Copy, ChevronsUpDown, Search, Check, Download, ExternalLink, X,
-  LayoutDashboard, Users, Calendar, FileText, RefreshCw, Loader2,
+  LayoutDashboard, Users, Calendar, FileText, RefreshCw, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -305,12 +305,34 @@ export function TabBar<T extends string>({
 // ── Botón "Recalcular dispersión" (compartido por los 3 tipos de detalle) ──────
 // Aparece SOLO cuando hay dinero recibido (pagos) que aún no está distribuido en
 // aplicaciones_pago (`show`). Dispara la edge function `recalcular-aplicaciones`.
-export function RecalcularDispersionButton({ show, loading, onClick }: {
+// Único botón de recálculo del portal: propiedad, producto y mantenimiento usan
+// este mismo, con la misma pinta y en la misma posición de la botonera.
+//
+// `hayAcuerdosAbiertos = false` no se puede recalcular aunque haya descuadre: la EF
+// reparte hasta el monto de cada acuerdo, así que si el plan entero ya está pagado
+// no queda dónde poner el sobrante y el botón no haría nada (CC 1248, 1140, 988…).
+// Reconciliar tampoco: `fn_reconciliar_acuerdos_cuenta` solo ajusta el último
+// acuerdo ABIERTO. En ese caso se muestra el motivo, no un botón muerto.
+export function RecalcularDispersionButton({ show, loading, onClick, hayAcuerdosAbiertos = true }: {
   show: boolean;
   loading: boolean;
   onClick: () => void;
+  hayAcuerdosAbiertos?: boolean;
 }) {
   if (!show) return null;
+
+  if (!hayAcuerdosAbiertos) {
+    return (
+      <span
+        title="El plan de pagos ya está liquidado por completo, así que el sobrante no tiene acuerdo al cual aplicarse y recalcular no lo movería. Si son centavos de redondeo se cuadra con cuadrar_centavos_cuenta; si es un monto de negocio, se revisa contra el documento que fija el precio (el contrato en una propiedad, la oferta en un producto)."
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-medium text-amber-700 cursor-default select-none"
+      >
+        <AlertTriangle className="size-3.5" />
+        Sobrante sin acuerdo abierto
+      </span>
+    );
+  }
+
   return (
     <button
       onClick={onClick}

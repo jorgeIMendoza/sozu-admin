@@ -60,6 +60,8 @@ import {
   Wand2,
   Bot,
   Settings,
+  ScrollText,
+  MessageSquare,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -132,6 +134,7 @@ const PATH_ICONS: Record<string, LucideIcon> = {
   "/admin/portal-crm/operacion/copiloto":                     Bot,
   "/admin/portal-crm/operacion/desarrollos":                  Building2,
   "/admin/portal-crm/operacion/bandeja":                      InboxIcon,
+  "/admin/portal-crm/operacion/whatsapp":                     MessageSquare,
   "/admin/portal-crm/operacion/colas":                        ListChecks,
   "/admin/portal-crm/operacion/sla":                          Timer,
   "/admin/portal-crm/configuracion/conexiones":               Plug,
@@ -143,6 +146,7 @@ const PATH_ICONS: Record<string, LucideIcon> = {
   "/admin/portal-crm/configuracion/desarrollos":              Building2,
   "/admin/portal-crm/configuracion/pipelines":                Briefcase,
   "/admin/portal-crm/configuracion/estados-lead":             Target,
+  "/admin/portal-crm/configuracion/auditoria":                ScrollText,
   "/admin/portal-crm/configuracion/roles":                    KeyRound,
   "/admin/portal-crm/configuracion/etapas-pipeline":          ListTree,
   "/admin/portal-crm/configuracion/campos-personalizados":    SlidersHorizontal,

@@ -370,7 +370,7 @@ export async function fetchForecast(): Promise<ForecastRow[]> {
     rows.push({
       fuente: "cuenta",
       id: c.id,
-      folio: formatCuentaCobranzaId(c.id, tipo),
+      folio: formatCuentaCobranzaId(c.id, tipo === "Propiedad" ? "Propiedad" : "Producto"),
       tipo,
       ...dims,
       estatus_id: estatusId,

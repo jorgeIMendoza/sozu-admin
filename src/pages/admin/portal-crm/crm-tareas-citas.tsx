@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -43,12 +44,14 @@ export function TaskDialog({ contactId, owners, userId, onSaved, trigger }: any)
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm(userId ?? ""));
+  const { logCrear } = useCrmLogger();
   const save = async () => {
     if (!form.titulo.trim()) return;
     setSaving(true);
     const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, Number(contactId)));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("tarea", { titulo: form.titulo, contactId });
     toast.success("Tarea creada"); setOpen(false); setForm(emptyTaskForm(userId ?? "")); onSaved();
   };
   return (
@@ -74,12 +77,14 @@ export function CitaDialog({ contactId, owners, userId, onSaved, trigger }: any)
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<CitaFormState>(emptyCitaForm(userId ?? ""));
+  const { logCrear } = useCrmLogger();
   const save = async () => {
     if (!form.titulo.trim()) return;
     setSaving(true);
     const { error } = await (supabase as any).from("crm_citas").insert(buildCitaInsert(form, Number(contactId)));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("cita", { titulo: form.titulo, contactId });
     toast.success("Cita creada"); setOpen(false); setForm(emptyCitaForm(userId ?? "")); onSaved();
   };
   return (
@@ -558,6 +563,7 @@ export function InlineTaskDue({ due, reminder, done, onChange }: {
 export function TaskComments({ taskId }: { taskId: number }) {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const { logCrear } = useCrmLogger();
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const { data: comments = [] } = useQuery({
@@ -586,6 +592,7 @@ export function TaskComments({ taskId }: { taskId: number }) {
       .insert({ id_tarea: taskId, id_usuario: user?.id ?? null, contenido: text });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("comentario", { id_tarea: taskId });
     setDraft("");
     qc.invalidateQueries({ queryKey: ["tarea-comentarios", taskId] });
   };
@@ -668,12 +675,14 @@ export function NewGlobalCitaDialog({ open, onOpenChange, owners, defaultAssigne
   });
 
   const reset = () => { setForm(emptyCitaForm(defaultAssignee)); setContact(null); setContactSearch(""); };
+  const { logCrear } = useCrmLogger();
   const save = async () => {
     if (!form.titulo.trim() || !contact) return;
     setSaving(true);
     const { error } = await (supabase as any).from("crm_citas").insert(buildCitaInsert(form, contact.id));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("cita", { titulo: form.titulo, contactId: contact.id });
     toast.success("Cita creada"); reset(); onOpenChange(false); onCreated();
   };
 
@@ -1172,12 +1181,14 @@ export function NewGlobalTaskDialog({ open, onOpenChange, owners, defaultAssigne
 
   const reset = () => { setForm(emptyTaskForm(defaultAssignee)); setContact(null); setContactSearch(""); };
 
+  const { logCrear } = useCrmLogger();
   const save = async () => {
     if (!form.titulo.trim() || !contact) return;
     setSaving(true);
     const { error } = await (supabase as any).from("crm_tareas").insert(buildTaskInsert(form, contact.id));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    logCrear("tarea", { titulo: form.titulo, contactId: contact.id });
     toast.success("Tarea creada");
     reset();
     onOpenChange(false);

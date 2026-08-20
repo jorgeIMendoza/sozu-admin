@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, Target, LineChart as LineChartIcon, Briefcase,
@@ -261,89 +262,120 @@ export function CrmForecast() {
 }
 
 export function CrmPipelineReview() {
-  const [risk, setRisk] = useState<string>("todos");
-  const filtered = useMemo(
-    () => risk === "todos" ? PIPELINE_REVIEW : PIPELINE_REVIEW.filter((d) => d.risk === risk),
-    [risk],
-  );
-  const totalValue = filtered.reduce((s, d) => s + d.value, 0);
+  const { data, isLoading } = useQuery({
+    queryKey: ["crm-pipeline-review-real"],
+    queryFn: async () => {
+      const [negRes, etapasRes] = await Promise.all([
+        (supabase as any).from("crm_negocios").select("id, nombre, valor, id_etapa, fecha_actualizacion").eq("activo", true),
+        (supabase as any).from("crm_pipeline_etapas").select("id, nombre, orden, es_ganado, es_perdido, color").eq("activo", true),
+      ]);
+      return { negocios: negRes.data ?? [], etapas: etapasRes.data ?? [] };
+    },
+  });
+
+  const { stageHealth, atRisk, openCount, pipelineValue } = useMemo(() => {
+    const negocios = data?.negocios ?? [];
+    const etapaMap = new Map((data?.etapas ?? []).map((e: any) => [e.id, e]));
+    const daysSince = (iso?: string | null) => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 864e5)) : 0);
+    const riskOf = (d: number) => (d > 60 ? "critico" : d > 30 ? "alto" : d > 14 ? "medio" : "bajo");
+
+    const byStage = new Map<number, { nombre: string; orden: number; color: string | null; count: number; valor: number; agingSum: number }>();
+    const enriched: { id: number; nombre: string | null; etapa: string; valor: number; dias: number; riesgo: string }[] = [];
+    let openCount = 0, pipelineValue = 0;
+    for (const n of negocios) {
+      const et = etapaMap.get(n.id_etapa) as any;
+      if (!et || et.es_ganado || et.es_perdido) continue; // solo negocios abiertos
+      const val = Number(n.valor ?? 0);
+      const dias = daysSince(n.fecha_actualizacion);
+      openCount += 1; pipelineValue += val;
+      const cur = byStage.get(n.id_etapa) ?? { nombre: et.nombre, orden: et.orden ?? 999, color: et.color ?? null, count: 0, valor: 0, agingSum: 0 };
+      cur.count += 1; cur.valor += val; cur.agingSum += dias;
+      byStage.set(n.id_etapa, cur);
+      enriched.push({ id: n.id, nombre: n.nombre, etapa: et.nombre, valor: val, dias, riesgo: riskOf(dias) });
+    }
+    const stageHealth = [...byStage.values()].sort((a, b) => a.orden - b.orden).map((s) => ({ ...s, aging: s.count ? Math.round(s.agingSum / s.count) : 0 }));
+    const atRisk = enriched.filter((d) => d.riesgo === "alto" || d.riesgo === "critico").sort((a, b) => b.valor - a.valor);
+    return { stageHealth, atRisk, openCount, pipelineValue };
+  }, [data]);
+
+  const RISK_TONE_LOCAL: Record<string, string> = {
+    bajo: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    medio: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    alto: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+    critico: "bg-red-500/15 text-red-700 dark:text-red-400",
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Pipeline review"
-        description="Revisión semanal de deals en negociación / propuesta con riesgo."
-        actions={
-          <div className="flex items-center gap-2">
-            <Select value={risk} onValueChange={setRisk}>
-              <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="Riesgo" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los riesgos</SelectItem>
-                <SelectItem value="alto">Riesgo alto</SelectItem>
-                <SelectItem value="medio">Riesgo medio</SelectItem>
-                <SelectItem value="bajo">Riesgo bajo</SelectItem>
-              </SelectContent>
-            </Select>
-            <MockBadge />
-          </div>
-        }
+        description="Negocios activos por etapa y en riesgo por antigüedad (datos reales)."
       />
 
       <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground">Deals en revisión</p>
-          <p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
+          <p className="text-xs text-muted-foreground">Negocios activos</p>
+          <p className="mt-1 text-2xl font-semibold">{isLoading ? "…" : fmtNum(openCount)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground">Valor total</p>
-          <p className="mt-1 text-2xl font-semibold">{fmtMXN(totalValue)}</p>
+          <p className="text-xs text-muted-foreground">Valor en pipeline</p>
+          <p className="mt-1 text-2xl font-semibold">{isLoading ? "…" : fmtMXN(pipelineValue)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground">Riesgo alto</p>
-          <p className="mt-1 text-2xl font-semibold">{PIPELINE_REVIEW.filter((d) => d.risk === "alto").length}</p>
+          <p className="text-xs text-muted-foreground">En riesgo (alto/crítico)</p>
+          <p className="mt-1 text-2xl font-semibold text-orange-600">{isLoading ? "…" : fmtNum(atRisk.length)}</p>
         </CardContent></Card>
       </div>
 
       <Panel title="Salud del pipeline por etapa">
-        <div className="grid gap-2 grid-cols-1 md:grid-cols-5">
-          {PIPELINE_HEALTH.map((s) => (
-            <div key={s.stage} className="rounded-lg border border-border p-3">
-              <p className="text-[11px] text-muted-foreground">{s.stage}</p>
-              <p className="text-lg font-semibold">{s.count}</p>
-              <p className="text-[11px] text-muted-foreground">{fmtMXN(s.value)}</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">Aging {s.aging}d · Conv {fmtPct(s.conv, 0)}</p>
-            </div>
-          ))}
-        </div>
+        {isLoading ? <Skeleton className="h-24" /> : !stageHealth.length ? (
+          <p className="text-sm text-muted-foreground">Sin negocios activos.</p>
+        ) : (
+          <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
+            {stageHealth.map((s) => (
+              <div key={s.nombre} className="rounded-lg border border-border p-3">
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: s.color ?? "var(--muted-foreground)" }} />
+                  {s.nombre}
+                </p>
+                <p className="text-lg font-semibold">{fmtNum(s.count)}</p>
+                <p className="text-[11px] text-muted-foreground">{fmtMXN(s.valor)}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">Antigüedad prom. {s.aging}d</p>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
 
-      <Panel>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Contacto</TableHead>
-              <TableHead>Desarrollo</TableHead>
-              <TableHead>Etapa</TableHead>
-              <TableHead className="text-right">Valor</TableHead>
-              <TableHead>Owner</TableHead>
-              <TableHead>Riesgo</TableHead>
-              <TableHead>Próxima acción</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-medium">{d.contact}</TableCell>
-                <TableCell className="text-muted-foreground">{d.dev}</TableCell>
-                <TableCell>{d.stage}</TableCell>
-                <TableCell className="text-right">{fmtMXN(d.value)}</TableCell>
-                <TableCell className="text-muted-foreground">{d.owner}</TableCell>
-                <TableCell><RiskBadge r={d.risk as "bajo" | "medio" | "alto"} /></TableCell>
-                <TableCell className="text-muted-foreground">{d.next}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <Panel title="Negocios en riesgo" description="Abiertos sin avanzar, por días desde su última actualización">
+        {isLoading ? <Skeleton className="h-40" /> : !atRisk.length ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Sin negocios en riesgo 🎉</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Negocio</TableHead>
+                  <TableHead>Etapa</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="text-right">Días sin avanzar</TableHead>
+                  <TableHead>Riesgo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {atRisk.slice(0, 100).map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell className="font-medium"><Link to={`/admin/portal-crm/ventas/negocios/${d.id}`} className="hover:underline text-primary">{d.nombre ?? `#${d.id}`}</Link></TableCell>
+                    <TableCell className="text-sm">{d.etapa}</TableCell>
+                    <TableCell className="text-right">{fmtMXN(d.valor)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{d.dias}</TableCell>
+                    <TableCell><span className={`text-[10px] px-1.5 py-0.5 rounded capitalize ${RISK_TONE_LOCAL[d.riesgo]}`}>{d.riesgo}</span></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </Panel>
     </div>
   );

@@ -20,7 +20,7 @@ import {
 import type { OfertaComercial, PreReservation } from "@/lib/offers/offer-data";
 import type { FormalReservation } from "@/lib/offers/formal-reservation-data";
 import { formatMXN, formatPropertyTitle } from "@/lib/offers/offer-data";
-import { useAgentById, type Agent } from "@/lib/offers/agent-data";
+import type { Agent } from "@/lib/offers/agent-data";
 import { supabase } from "@/integrations/supabase/client";
 import PublicShell from "@/components/offer/PublicShell";
 
@@ -31,7 +31,6 @@ interface Props {
 }
 
 const CustomerAccountView = ({ offer, preReservation, formalReservation }: Props) => {
-  const mockAgent = useAgentById(offer.agentId ?? "");
   const [agentFromDB, setAgentFromDB] = useState<Agent | undefined>(undefined);
   const agentOfferId = offer.id;
   useEffect(() => {
@@ -58,7 +57,7 @@ const CustomerAccountView = ({ offer, preReservation, formalReservation }: Props
       });
     })();
   }, [agentOfferId]);
-  const agent = agentFromDB ?? mockAgent ?? undefined;
+  const agent = agentFromDB;
   const propertyLabel = formatPropertyTitle(offer.property);
 
   const plan = offer.paymentPlans.find((p) => p.id === formalReservation.selectedPlanId);
