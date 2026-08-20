@@ -209,6 +209,81 @@ function useSoportaEdificioDirecto() {
  * Waterfall explícito (patrón #1 de CLAUDE.md): el join anidado de PostgREST
  * sobre tres niveles devuelve null sin error.
  */
+/**
+ * Parque industrial al que pertenece el lote.
+ *
+ * `proyectos_industriales` es una entidad distinta de `proyectos`: aquella
+ * modela vivienda y comercial con edificios, modelos y unidades; un parque
+ * industrial tiene lotes, superficie urbanizable y etapas propias. Por eso el
+ * terreno no se liga al selector de Proyecto del paso General.
+ *
+ * La tabla llega con
+ * `Ejecuciones_manuales/20260819_proyectos_industriales_terrenos.md`. Mientras
+ * no exista, el campo no se pinta en vez de reventar la pantalla (patrón #6 de
+ * CLAUDE.md).
+ */
+function ProyectoIndustrial({
+  valor,
+  onChange,
+}: {
+  valor: string | undefined;
+  onChange: (v: string) => void;
+}) {
+  const { data: parques, isLoading } = useQuery({
+    queryKey: ["ac-proyectos-industriales"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("proyectos_industriales")
+        .select("id, nombre, clave")
+        .eq("activo", true)
+        .order("nombre");
+      // `null` = la tabla todavía no existe; `[]` = existe y está vacía. Son
+      // estados distintos y la pantalla los muestra distinto.
+      if (error) return null;
+      return (data ?? []) as { id: number; nombre: string; clave: string | null }[];
+    },
+  });
+
+  if (isLoading) return null;
+
+  if (parques === null) {
+    return (
+      <Field label="Proyecto industrial" className="md:col-span-3">
+        <p className="text-sm text-muted-foreground">
+          Aún no está disponible en este ambiente. Falta aplicar{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            Ejecuciones_manuales/20260819_proyectos_industriales_terrenos.md
+          </code>.
+        </p>
+      </Field>
+    );
+  }
+
+  return (
+    <Field label="Proyecto industrial">
+      <Select value={valor || undefined} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue
+            placeholder={
+              parques.length === 0
+                ? "Sin parques dados de alta"
+                : "Predio suelto o elige un parque"
+            }
+          />
+        </SelectTrigger>
+        <SelectContent>
+          {parques.map((p) => (
+            <SelectItem key={p.id} value={String(p.id)}>
+              {p.clave ? `${p.nombre} · ${p.clave}` : p.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 function UbicacionInventario({
   valor,
   onChange,
@@ -717,11 +792,15 @@ export default function ActivosComercialesNuevo() {
         </div>
       )}
       {/*
-        `propiedades.id_edificio_modelo` es NOT NULL en la base. Mientras no se
-        aplique el DDL que lo hace opcional, un activo sin desarrollo se rechaza
-        al guardar. Se avisa aquí y no al final, que es donde dolería.
+        Solo cuando la base todavía no admite el vínculo por edificio: ahí
+        `id_edificio_modelo` sigue siendo obligatorio y un activo suelto se
+        rechaza al guardar.
+
+        Antes esto se pintaba con una condición fija, sin comprobar nada, así
+        que seguía apareciendo en ambientes donde el DDL ya estaba aplicado y
+        contradecía a la propia pantalla.
       */}
-      {!isEdit && !enProyecto && (
+      {!isEdit && !enProyecto && !soportaEdificio && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
           <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
             Los activos sin desarrollo aún no se pueden guardar
@@ -1049,6 +1128,10 @@ export default function ActivosComercialesNuevo() {
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {tipo === 14 && (
                 <>
+                  <ProyectoIndustrial
+                    valor={atts.id_proyecto_industrial}
+                    onChange={(v) => setA("id_proyecto_industrial", v)}
+                  />
                   <Field label="Tipo de terreno">
                     <CatalogSelect table="tipos_terreno" value={atts.id_tipo_terreno} onChange={(v) => setA("id_tipo_terreno", v)} />
                   </Field>

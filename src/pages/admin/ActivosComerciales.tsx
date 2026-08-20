@@ -105,8 +105,12 @@ export default function ActivosComerciales() {
           id_edificio_modelo,
           tipos_propiedad:id_tipo_propiedad ( nombre ),
           estatus_disponibilidad:id_estatus_disponibilidad ( nombre ),
-          propiedades_activo_comercial!inner ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
+          propiedades_activo_comercial ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
         `)
+        // Lo que hace comercial a un activo es su TIPO, no tener ficha
+        // capturada. El embed era !inner y escondía 95 de las 97 oficinas del
+        // inventario: las históricas no tienen fila en
+        // propiedades_activo_comercial y desaparecían del módulo.
         .gt("id_tipo_propiedad", 10)
         .order("id", { ascending: false })
         .limit(500);
