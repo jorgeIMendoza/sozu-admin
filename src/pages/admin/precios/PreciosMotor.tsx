@@ -45,6 +45,7 @@ import {
   formatoMultiplicador,
   formatoPorcentaje,
 } from "@/features/precios/lib/formato";
+import { ESTATUS_A_LA_VENTA } from "@/features/precios/services/inventarioReal";
 import type { TipoFactor } from "@/features/precios/types/dominio";
 
 /**
@@ -327,26 +328,35 @@ function PantallaMotor() {
       estatus: SIN_FILTRO,
     });
 
+  /** El usuario eligió un estatus a mano: su elección manda sobre la nuestra. */
+  const estatusExplicito = filtros.estatus !== SIN_FILTRO;
+
   /*
-   * Promedios ponderados de lo que el motor calcula hoy.
+   * Precio comercial de hoy: los promedios ponderados de lo que TODAVÍA se
+   * puede vender.
    *
-   * Al sembrar, el precio por m² base ES el promedio ponderado: la semilla lo
-   * define como `Σ precio / Σ área` y reparte la diferencia de cada modelo en
-   * su factor, cuyo promedio ponderado da exactamente 1. Pero el base es el
-   * valor en el ancla, no el promedio: en cuanto se calibra —curvas, factores
-   * de torre o vista— el promedio se separa del base por el efecto acumulado
-   * de todos esos multiplicadores. Por eso se muestran los dos y su distancia,
-   * en vez de dar por hecho que coinciden.
+   * Se acota a `ESTATUS_A_LA_VENTA` porque una unidad vendida hace meses no
+   * dice a cuánto se vende hoy, y en proyectos maduros el saldo vendido pesa
+   * mucho más que el remanente: Margot tiene 293 entregadas contra 5
+   * disponibles, así que el promedio de todo el inventario describiría el
+   * pasado, no el precio vigente.
+   *
+   * Si hay un filtro de Estatus puesto a mano, se respeta ese y no se le
+   * encima este: filtrar por Vendido para ver ese promedio es una intención
+   * legítima, y cruzarla con "a la venta" daría cero unidades sin explicación.
    *
    * Salen de los desgloses vigentes, así que cualquier variable que se toque
    * en esta pantalla los mueve.
    */
   const promediosProyecto = useMemo(() => {
+    const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
     let precio = 0;
     let area = 0;
     let unidades = 0;
-    for (const d of desglosesFiltrados) {
-      if (d.area_ponderada <= 0) continue;
+    for (const p of propiedadesFiltradas) {
+      if (!estatusExplicito && !ESTATUS_A_LA_VENTA.has(p.estatus)) continue;
+      const d = porId.get(p.id_propiedad);
+      if (!d || d.area_ponderada <= 0) continue;
       precio += d.precio_calculado;
       area += d.area_ponderada;
       unidades++;
@@ -356,7 +366,7 @@ function PantallaMotor() {
       porM2: area > 0 ? precio / area : 0,
       porUnidad: unidades > 0 ? precio / unidades : 0,
     };
-  }, [desglosesFiltrados]);
+  }, [propiedadesFiltradas, desglosesFiltrados, estatusExplicito]);
 
   const brechaBase =
     motor.precio_base_m2_proyecto > 0 && promediosProyecto.porM2 > 0
@@ -685,13 +695,21 @@ function PantallaMotor() {
                 Precio promedio ponderado por m²
               </p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
-                {formatoMoneda(promediosProyecto.porM2)}
-                <span className="text-xs font-normal text-muted-foreground"> /m²</span>
+                {promediosProyecto.unidades === 0 ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <>
+                    {formatoMoneda(promediosProyecto.porM2)}
+                    <span className="text-xs font-normal text-muted-foreground"> /m²</span>
+                  </>
+                )}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {Math.abs(brechaBase) < 0.005
-                  ? "Coincide con el precio base."
-                  : `${formatoPorcentaje(brechaBase, 2)} respecto al precio base.`}
+                {promediosProyecto.unidades === 0
+                  ? "Sin unidades a la venta."
+                  : Math.abs(brechaBase) < 0.005
+                    ? "Coincide con el precio base."
+                    : `${formatoPorcentaje(brechaBase, 2)} respecto al precio base.`}
               </p>
             </div>
             <div className="rounded-md border border-border p-3">
@@ -699,10 +717,16 @@ function PantallaMotor() {
                 Precio promedio ponderado {hayFiltro ? "del subconjunto" : "de todo el proyecto"}
               </p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
-                {formatoMoneda(promediosProyecto.porUnidad)}
+                {promediosProyecto.unidades === 0 ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  formatoMoneda(promediosProyecto.porUnidad)
+                )}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Por unidad, sobre {promediosProyecto.unidades} unidades.
+                {estatusExplicito
+                  ? `Por unidad, sobre ${promediosProyecto.unidades} unidades en ${filtros.estatus}.`
+                  : `Por unidad, sobre ${promediosProyecto.unidades} de ${totalesFiltrados.unidades} unidades: las que siguen a la venta.`}
               </p>
             </div>
           </div>
@@ -710,10 +734,16 @@ function PantallaMotor() {
           <p className="text-xs text-muted-foreground">
             Las dos cifras salen del cálculo vigente del motor, así que cualquier variable
             que muevas en esta pantalla —factores, curvas, precio base o el factor de un
-            modelo— las mueve. Al sembrar el motor, el precio por m² base y el promedio
-            ponderado por m² son el mismo número; se separan conforme se calibra, porque el
-            base es el valor en el ancla y el promedio ya trae encima el efecto de todos los
-            multiplicadores.
+            modelo— las mueve. Son el precio comercial de hoy: cuentan solo las unidades en
+            <strong> Disponible</strong> o <strong>Inventario</strong>, las que no están
+            comprometidas con un comprador. Una unidad vendida hace meses no dice a cuánto
+            se vende hoy.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Por eso no tienen por qué coincidir con el precio base ni recién sembrado el
+            motor: el base se calcula con todo el inventario que tiene precio, vendido
+            incluido, y estas dos solo con el remanente. Si pones un filtro de Estatus
+            arriba, manda ese y estas cifras dejan de acotarse por su cuenta.
           </p>
 
           <div className="rounded-md border border-border bg-muted/30 p-3">

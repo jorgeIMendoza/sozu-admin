@@ -78,6 +78,19 @@ export const SIN_VISTA = "Sin vista";
  */
 export const SIN_ORIENTACION = "Sin dato";
 
+/**
+ * Estatus de una unidad que todavía se puede vender.
+ *
+ * Son los dos del catálogo `estatus_disponibilidad` que no implican un
+ * comprador: `Inventario` (1, alta inicial) y `Disponible` (2, en venta).
+ * Apartado, Asignado, Vendido, Escrituración, Entregado, Pagada completamente,
+ * En demanda y Dación en pago ya tienen dueño o proceso encima.
+ *
+ * Se comparan por nombre y no por id porque es lo que `Propiedad.estatus`
+ * guarda: el motor trabaja con el nombre resuelto del catálogo.
+ */
+export const ESTATUS_A_LA_VENTA = new Set(["Disponible", "Inventario"]);
+
 /** Estacionamiento en tándem: los demás tipos cuentan como cajón independiente. */
 const TIPO_ESTACIONAMIENTO_TANDEM = 2;
 
