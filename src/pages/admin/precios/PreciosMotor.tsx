@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import { Info, RefreshCw, RotateCcw, TriangleAlert } from "lucide-react";
+import { Info, RefreshCw, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,13 @@ import { GraficoCurva } from "@/features/precios/components/GraficoCurva";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CampoPrecioM2 } from "@/features/precios/components/CampoPrecioM2";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +39,7 @@ import {
 } from "@/features/precios/engine/pricing";
 import {
   formatoFecha,
+  formatoM2,
   formatoMoneda,
   formatoMultiplicador,
   formatoPorcentaje,
@@ -85,6 +93,69 @@ function CampoNumero({
   );
 }
 
+/**
+ * Pesos abreviados para el eje del gráfico.
+ *
+ * El eje mide 520px de ancho total: "$1,850,432.00" se come el área de dibujo
+ * y se encima con la curva. "$1.85 M" dice lo mismo en un tercio del espacio,
+ * y la cifra exacta está en la tabla de abajo.
+ */
+function formatoPesosCompacto(valor: number): string {
+  if (valor >= 1_000_000) return `${(valor / 1_000_000).toFixed(2)} M`;
+  if (valor >= 1_000) return `${(valor / 1_000).toFixed(1)} k`;
+  return `${valor.toFixed(0)}`;
+}
+
+/**
+ * Un filtro del encabezado.
+ *
+ * Los cuatro se comportan igual: una opción neutra que no filtra, más los
+ * valores que el inventario del proyecto realmente usa. No se listan catálogos
+ * completos —una vista que ningún departamento tiene solo estorba— y por eso
+ * las opciones salen del inventario y no de una constante.
+ */
+function FiltroInventario({
+  etiqueta,
+  etiquetaTodos,
+  valor,
+  onChange,
+  opciones,
+  todos,
+}: {
+  etiqueta: string;
+  etiquetaTodos: string;
+  valor: string;
+  onChange: (v: string) => void;
+  opciones: Array<{ id: string; nombre: string; unidades: number }>;
+  todos: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[13px] font-medium text-muted-foreground">{etiqueta}</Label>
+      {/* Con una sola opción no hay nada que discriminar: elegirla devuelve el
+          mismo universo. Pasa de verdad —hay proyectos sin vista capturada, donde
+          las 320 unidades caen en "Sin vista"— y dejarlo activo invita a un clic
+          que no cambia nada. */}
+      <Select value={valor} onValueChange={onChange} disabled={opciones.length <= 1}>
+        <SelectTrigger className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={todos}>{etiquetaTodos}</SelectItem>
+          {opciones.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.nombre} · {o.unidades} u.
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Opción neutra de los filtros: no acota nada. */
+const SIN_FILTRO = "__todos__";
+
 const SUB_PESTANAS: Array<{ valor: TipoFactor; titulo: string }> = [
   { valor: "torre", titulo: "Torre" },
   { valor: "vista", titulo: "Vista" },
@@ -103,20 +174,180 @@ function PantallaMotor() {
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
-  const { motor, propiedades, totales } = usePreciosProyecto();
+  const { motor, propiedades, desgloses, totales, indices, alertasPorUnidad } =
+    usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [dialogoCalibrado, setDialogoCalibrado] = useState(false);
+  const [filtros, setFiltros] = useState({
+    torre: SIN_FILTRO,
+    modelo: SIN_FILTRO,
+    vista: SIN_FILTRO,
+    estatus: SIN_FILTRO,
+  });
   const [justificacion, setJustificacion] = useState("");
 
+  /*
+   * Opciones de los filtros: solo lo que el inventario del proyecto usa, con
+   * su conteo. Se calculan sobre el inventario COMPLETO y no en cascada: si
+   * las opciones de Modelo dependieran de la Torre elegida, cambiar de torre
+   * dejaría un modelo seleccionado que ya no existe en la lista y el filtro
+   * se quedaría mostrando cero unidades sin decir por qué.
+   */
+  const opcionesFiltro = useMemo(() => {
+    const cuenta = <T,>(clave: (p: (typeof propiedades)[number]) => T | null) => {
+      const m = new Map<T, number>();
+      for (const p of propiedades) {
+        const k = clave(p);
+        if (k === null || k === "") continue;
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    };
+    const listar = (m: Map<string, number>, nombre: (id: string) => string) =>
+      [...m.entries()]
+        .map(([id, unidades]) => ({ id, nombre: nombre(id), unidades }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+    return {
+      torres: listar(cuenta((p) => p.id_torre), (id) =>
+        indices?.torresPorId[id]?.nombre ?? id,
+      ),
+      modelos: listar(cuenta((p) => p.id_modelo), (id) =>
+        indices?.modelosPorId[id]?.nombre ?? id,
+      ),
+      vistas: listar(cuenta((p) => p.vista), (id) => id),
+      estatus: listar(cuenta((p) => p.estatus), (id) => id),
+    };
+  }, [propiedades, indices]);
+
+  const hayFiltro = Object.values(filtros).some((v) => v !== SIN_FILTRO);
+
+  const propiedadesFiltradas = useMemo(
+    () =>
+      !hayFiltro
+        ? propiedades
+        : propiedades.filter(
+            (p) =>
+              (filtros.torre === SIN_FILTRO || p.id_torre === filtros.torre) &&
+              (filtros.modelo === SIN_FILTRO || p.id_modelo === filtros.modelo) &&
+              (filtros.vista === SIN_FILTRO || p.vista === filtros.vista) &&
+              (filtros.estatus === SIN_FILTRO || p.estatus === filtros.estatus),
+          ),
+    [propiedades, filtros, hayFiltro],
+  );
+
+  const desglosesFiltrados = useMemo(() => {
+    if (!hayFiltro) return desgloses;
+    const ids = new Set(propiedadesFiltradas.map((p) => p.id_propiedad));
+    return desgloses.filter((d) => ids.has(d.id_propiedad));
+  }, [desgloses, propiedadesFiltradas, hayFiltro]);
+
+  /*
+   * Totales del subconjunto. Se recalculan aquí en vez de pedírselos al hook
+   * porque el filtro es de esta pantalla: el resto del módulo sigue viendo el
+   * proyecto completo, y mover ese cálculo al hook cambiaría lo que ven la
+   * Tabla de Precios y la Calibración.
+   */
+  const totalesFiltrados = useMemo(() => {
+    if (!hayFiltro) return totales;
+    const totalCalculado = desglosesFiltrados.reduce((a, d) => a + d.precio_lista, 0);
+    const totalActual = propiedadesFiltradas.reduce((a, p) => a + p.precio_lista_actual, 0);
+    return {
+      unidades: propiedadesFiltradas.length,
+      totalCalculado,
+      totalActual,
+      delta: totalCalculado - totalActual,
+      deltaPct: totalActual > 0 ? ((totalCalculado - totalActual) / totalActual) * 100 : 0,
+      conAlertas: desglosesFiltrados.filter((d) =>
+        (alertasPorUnidad[d.id_propiedad] ?? []).some((a) => a.severidad !== "informativa"),
+      ).length,
+      desviadas: desglosesFiltrados.filter((d) =>
+        d.alertas.some((a) => a.codigo === "DELTA_ALTO"),
+      ).length,
+      bloqueadas: desglosesFiltrados.filter((d) => d.bloqueada_para_reprecio).length,
+    };
+  }, [hayFiltro, totales, desglosesFiltrados, propiedadesFiltradas, alertasPorUnidad]);
+
+  const limpiarFiltros = () =>
+    setFiltros({
+      torre: SIN_FILTRO,
+      modelo: SIN_FILTRO,
+      vista: SIN_FILTRO,
+      estatus: SIN_FILTRO,
+    });
+
   const bases = motor.bases_modelo ?? [];
-  const m2RefPreview =
-    bases.length > 0
-      ? bases.reduce((a, b) => a + b.m2_referencia, 0) / bases.length
-      : 80;
   const unidadesPorModelo = new Map<string, number>();
-  for (const p of propiedades) {
+  for (const p of propiedadesFiltradas) {
     unidadesPorModelo.set(p.id_modelo, (unidadesPorModelo.get(p.id_modelo) ?? 0) + 1);
   }
+
+  /*
+   * Con un filtro puesto, los modelos que no aparecen en el subconjunto se
+   * ocultan: dejarlos en 0 unidades haría creer que el filtro no funcionó.
+   * Sin filtro se muestran todos, incluidos los que aún no tienen inventario.
+   */
+  const basesVisibles = hayFiltro
+    ? bases.filter((b) => (unidadesPorModelo.get(b.id_modelo) ?? 0) > 0)
+    : bases;
+
+  /*
+   * De mayor a menor inventario. Los modelos llegan en el orden del catálogo,
+   * que no dice nada: el modelo con 145 unidades y el que tiene 2 pesan igual
+   * en la lista y muy distinto en el desarrollo. Ordenar por unidades pone
+   * arriba las decisiones que mueven más dinero. Empate: por nombre, para que
+   * la tabla no baile entre renders.
+   */
+  const basesOrdenadas = [...basesVisibles].sort((a, b) => {
+    const ua = unidadesPorModelo.get(a.id_modelo) ?? 0;
+    const ub = unidadesPorModelo.get(b.id_modelo) ?? 0;
+    return ub - ua || a.nombre_modelo.localeCompare(b.nombre_modelo, "es");
+  });
+
+  /** Área pivote de la curva de tamaño: la de los modelos que están a la vista. */
+  const m2RefPreview =
+    basesOrdenadas.length > 0
+      ? basesOrdenadas.reduce((a, b) => a + b.m2_referencia, 0) / basesOrdenadas.length
+      : 80;
+
+
+  /*
+   * La curva de nivel vista sobre el inventario real, nivel por nivel.
+   *
+   * El multiplicador de arriba dice cuánto sube el factor; esto dice cuánto
+   * sube el precio, que es la pregunta real al mover la pendiente. Se agrega
+   * con la misma ponderación que la tabla de modelos: el precio por m² es
+   * `Σ precio / Σ área` del nivel, y el del departamento ese precio por el m²
+   * promedio del nivel. Los dos cuadran entre sí por construcción.
+   *
+   * Se usa `precio_calculado` y no `precio_lista`: un override manual es
+   * justo lo que no responde a la curva, y dejarlo dentro aplanaría el efecto
+   * que se está tratando de ver.
+   */
+  const nivelesDelModelo = useMemo(() => {
+    const desglosePorId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const acum = new Map<number, { unidades: number; area: number; precio: number }>();
+
+    for (const p of propiedadesFiltradas) {
+      const d = desglosePorId.get(p.id_propiedad);
+      if (!d || d.area_ponderada <= 0) continue;
+      const a = acum.get(p.nivel) ?? { unidades: 0, area: 0, precio: 0 };
+      a.unidades += 1;
+      a.area += d.area_ponderada;
+      a.precio += d.precio_calculado;
+      acum.set(p.nivel, a);
+    }
+
+    return [...acum.entries()]
+      .map(([nivel, a]) => ({
+        nivel,
+        unidades: a.unidades,
+        m2: a.area / a.unidades,
+        precio_m2: a.precio / a.area,
+        precio_depto: a.precio / a.unidades,
+      }))
+      .sort((a, b) => a.nivel - b.nivel);
+  }, [propiedadesFiltradas, desglosesFiltrados]);
 
   const nivelesPreview = [1, 3, 5, 8, 10, 14, 18];
 
@@ -191,6 +422,59 @@ function PantallaMotor() {
       ) : null}
 
       <Card>
+        <CardContent className="space-y-3 pt-6">
+          <div className="flex flex-wrap items-end gap-3">
+            <FiltroInventario
+              etiqueta="Torre"
+              etiquetaTodos="Todas las torres"
+              valor={filtros.torre}
+              onChange={(v) => setFiltros((x) => ({ ...x, torre: v }))}
+              opciones={opcionesFiltro.torres}
+              todos={SIN_FILTRO}
+            />
+            <FiltroInventario
+              etiqueta="Modelo"
+              etiquetaTodos="Todos los modelos"
+              valor={filtros.modelo}
+              onChange={(v) => setFiltros((x) => ({ ...x, modelo: v }))}
+              opciones={opcionesFiltro.modelos}
+              todos={SIN_FILTRO}
+            />
+            <FiltroInventario
+              etiqueta="Vista"
+              etiquetaTodos="Todas las vistas"
+              valor={filtros.vista}
+              onChange={(v) => setFiltros((x) => ({ ...x, vista: v }))}
+              opciones={opcionesFiltro.vistas}
+              todos={SIN_FILTRO}
+            />
+            <FiltroInventario
+              etiqueta="Estatus"
+              etiquetaTodos="Todos los estatus"
+              valor={filtros.estatus}
+              onChange={(v) => setFiltros((x) => ({ ...x, estatus: v }))}
+              opciones={opcionesFiltro.estatus}
+              todos={SIN_FILTRO}
+            />
+            {hayFiltro ? (
+              <Button variant="ghost" onClick={limpiarFiltros} className="mb-0.5">
+                <X className="size-4" />
+                Limpiar filtros
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {hayFiltro
+              ? `${totalesFiltrados.unidades} de ${totales.unidades} unidades.`
+              : `${totales.unidades} unidades en el proyecto.`}{" "}
+            Los filtros cambian lo que se ve —conteos, promedios por modelo, curvas y
+            totales—, no lo que se guarda: cualquier valor que captures aquí sigue
+            aplicando a todo el desarrollo.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
             Precio por m² base del proyecto
@@ -230,6 +514,32 @@ function PantallaMotor() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-xl font-semibold">Factores Multiplicativos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="torre">
+            <TabsList>
+              {SUB_PESTANAS.map((s) => (
+                <TabsTrigger key={s.valor} value={s.valor} className="text-xs">
+                  {s.titulo}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {SUB_PESTANAS.map((s) => (
+              <TabsContent key={s.valor} value={s.valor} className="mt-4">
+                <TablaFactores
+                  tipo={s.valor}
+                  factores={motor.factores.filter((f) => f.tipo_factor === s.valor)}
+                  propiedades={propiedadesFiltradas}
+                />
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-xl font-semibold">Precio Base por Modelo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -241,6 +551,9 @@ function PantallaMotor() {
                     Modelo
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Unidades
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Factor s/ base
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
@@ -250,15 +563,18 @@ function PantallaMotor() {
                     M² de referencia
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Unidades
+                    Precio promedio ponderado
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {bases.map((b) => (
+                {basesOrdenadas.map((b) => (
                   <tr key={b.id_modelo} className="border-t border-border">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
+                    </td>
+                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      {unidadesPorModelo.get(b.id_modelo) ?? 0}
                     </td>
                     <td className="px-3 py-1.5">
                       <Input
@@ -302,8 +618,11 @@ function PantallaMotor() {
                         className="w-32 tabular-nums"
                       />
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
-                      {unidadesPorModelo.get(b.id_modelo) ?? 0}
+                    {/* Precio de una unidad de referencia del modelo. Es
+                        derivado —precio por m² x m² de referencia— y se mueve
+                        al capturar cualquiera de los dos. */}
+                    <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                      {formatoMoneda(b.precio_base_m2 * b.m2_referencia)}
                     </td>
                   </tr>
                 ))}
@@ -314,6 +633,13 @@ function PantallaMotor() {
             El modelo es una variable más sobre el precio base del proyecto: su factor dice
             cuánto se separa de él. Puedes capturar el factor o el precio por m² resultante —
             son la misma cifra vista de dos formas y el otro se recalcula solo.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Los modelos van de mayor a menor número de unidades. El <strong>m² de
+            referencia</strong> es el promedio de las unidades del modelo, no el metraje de
+            una sola: dentro de un mismo modelo el área varía. El <strong>precio promedio
+            ponderado</strong> es lo que cuesta esa unidad de referencia —precio por m² × m²
+            de referencia— y al sembrar reproduce el precio promedio real del modelo.
           </p>
         </CardContent>
       </Card>
@@ -460,6 +786,113 @@ function PantallaMotor() {
           <p className="text-xs text-muted-foreground">
             Configuración actual de SOZU en Daiku: aproximadamente 0.50% por piso, lineal.
           </p>
+
+          <div className="space-y-4 border-t border-border pt-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Efecto sobre el inventario
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Precios reales por nivel de lo que esté filtrado arriba. Mueve la
+                  pendiente o el amortiguamiento y las cuatro columnas se recalculan.
+                </p>
+              </div>
+            </div>
+
+            {nivelesDelModelo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Este modelo todavía no tiene unidades con precio calculado.
+              </p>
+            ) : (
+              <>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      Precio promedio ponderado por m²
+                    </p>
+                    <GraficoCurva
+                      puntos={nivelesDelModelo.map((n) => ({ x: n.nivel, y: n.precio_m2 }))}
+                      etiquetaX="Nivel"
+                      etiquetaY="Precio por m²"
+                      formatoValor={formatoPesosCompacto}
+                      lineaBase={null}
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      Precio promedio ponderado del departamento
+                    </p>
+                    <GraficoCurva
+                      puntos={nivelesDelModelo.map((n) => ({ x: n.nivel, y: n.precio_depto }))}
+                      etiquetaX="Nivel"
+                      etiquetaY="Precio del departamento"
+                      formatoValor={formatoPesosCompacto}
+                      lineaBase={null}
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Nivel
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Unidades
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          M² promedio
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Precio promedio por m²
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Precio promedio del departamento
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nivelesDelModelo.map((n) => (
+                        <tr key={n.nivel} className="border-t border-border">
+                          <td className="px-3 py-1.5 tabular-nums">{n.nivel}</td>
+                          <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                            {n.unidades}
+                          </td>
+                          <td className="px-3 py-1.5 tabular-nums">{formatoM2(n.m2)}</td>
+                          <td className="px-3 py-1.5 tabular-nums">
+                            {formatoMoneda(n.precio_m2)}
+                          </td>
+                          <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                            {formatoMoneda(n.precio_depto)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Cada renglón promedia las unidades de ese nivel: el precio por m² es la suma
+                  de precios entre la suma de m², y el del departamento es ese precio por el m²
+                  promedio del nivel. Dos niveles pueden diferir aunque la curva sea plana,
+                  porque el metraje no es idéntico piso por piso. Se grafica el precio que
+                  calcula el motor, no el de lista: un precio forzado a mano no responde a la
+                  curva y taparía justo lo que se quiere ver.
+                  {filtros.modelo === SIN_FILTRO ? (
+                    <>
+                      {" "}
+                      Con todos los modelos juntos, un brinco entre niveles puede venir de que
+                      arriba haya modelos distintos y no de los coeficientes: filtra por Modelo
+                      para aislar uno.
+                    </>
+                  ) : null}
+                </p>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -595,60 +1028,34 @@ function PantallaMotor() {
         </AlertDescription>
       </Alert>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold">Factores Multiplicativos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="torre">
-            <TabsList>
-              {SUB_PESTANAS.map((s) => (
-                <TabsTrigger key={s.valor} value={s.valor} className="text-xs">
-                  {s.titulo}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {SUB_PESTANAS.map((s) => (
-              <TabsContent key={s.valor} value={s.valor} className="mt-4">
-                <TablaFactores
-                  tipo={s.valor}
-                  factores={motor.factores.filter((f) => f.tipo_factor === s.valor)}
-                  propiedades={propiedades}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
-
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background px-6 py-3">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
           <span className="tabular-nums">
             <span className="text-muted-foreground">Unidades: </span>
-            {totales.unidades}
+            {hayFiltro ? `${totalesFiltrados.unidades} de ${totales.unidades}` : totales.unidades}
           </span>
           <span className="tabular-nums">
             <span className="text-muted-foreground">Valor total calculado: </span>
-            {formatoMoneda(totales.totalCalculado)}{" "}
+            {formatoMoneda(totalesFiltrados.totalCalculado)}{" "}
             <span className="text-xs text-muted-foreground">Libro: Comercial</span>
           </span>
           <span className="tabular-nums">
             <span className="text-muted-foreground">Valor total actual: </span>
-            {formatoMoneda(totales.totalActual)}
+            {formatoMoneda(totalesFiltrados.totalActual)}
           </span>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-xs tabular-nums",
-              totales.delta >= 0
+              totalesFiltrados.delta >= 0
                 ? "bg-primary/10 text-primary"
                 : "bg-destructive/10 text-destructive",
             )}
           >
-            {formatoPorcentaje(totales.deltaPct)} · {formatoMoneda(totales.delta)}
+            {formatoPorcentaje(totalesFiltrados.deltaPct)} · {formatoMoneda(totalesFiltrados.delta)}
           </span>
           <span className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
             <TriangleAlert className="size-4" />
-            Alertas: {totales.conAlertas}
+            Alertas: {totalesFiltrados.conAlertas}
           </span>
         </div>
       </div>
