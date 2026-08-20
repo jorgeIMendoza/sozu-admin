@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, MapPin, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -292,6 +292,37 @@ function ProyectoIndustrial({
  * del municipio del proyecto, que es el dato estructurado; `direccion` es texto
  * libre y no sirve para filtrar.
  */
+/**
+ * Proyecto al que pertenece un activo ya guardado.
+ *
+ * En edición el selector está deshabilitado, así que el proyecto no llega por
+ * el formulario: se resuelve desde el activo. Contempla los dos vínculos
+ * —`id_edificio` en los comerciales, `id_edificio_modelo` en los históricos—
+ * porque si no, la mitad del inventario no podría volver a heredar.
+ */
+function useProyectoDeActivo(idEdificio: string, idEdificioModelo: string) {
+  return useQuery({
+    queryKey: ["ac-proyecto-de-activo", idEdificio, idEdificioModelo],
+    enabled: !!idEdificio || !!idEdificioModelo,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      let edificio = idEdificio ? Number(idEdificio) : null;
+
+      if (!edificio && idEdificioModelo) {
+        const { data: v } = await (supabase as any)
+          .from("edificios_modelos").select("id_edificio")
+          .eq("id", Number(idEdificioModelo)).maybeSingle();
+        edificio = (v?.id_edificio as number) ?? null;
+      }
+      if (!edificio) return "";
+
+      const { data: e } = await (supabase as any)
+        .from("edificios").select("id_proyecto").eq("id", edificio).maybeSingle();
+      return e?.id_proyecto ? String(e.id_proyecto) : "";
+    },
+  });
+}
+
 function useUbicacionProyecto(idProyecto: string) {
   return useQuery({
     queryKey: ["ac-ubicacion-proyecto", idProyecto],
@@ -464,7 +495,6 @@ export default function ActivosComercialesNuevo() {
    * es el edificio; esto no viaja al payload.
    */
   const [idProyectoElegido, setIdProyectoElegido] = useState("");
-  const { data: ubicacionProyecto } = useUbicacionProyecto(idProyectoElegido);
 
   // Mientras la base no tenga `id_edificio` hay que seguir pidiendo el modelo
   // y capturando el número a mano: ambas cosas llegan en el mismo DDL.
@@ -519,6 +549,14 @@ export default function ActivosComercialesNuevo() {
     cam_es_porcentaje: false,
     comision_es_porcentaje: true,
   });
+
+  // En edición no hay selector: el proyecto sale del activo guardado.
+  const { data: proyectoDelActivo = "" } = useProyectoDeActivo(
+    isEdit ? String(prop.id_edificio ?? "") : "",
+    isEdit ? String(prop.id_edificio_modelo ?? "") : "",
+  );
+  const idProyectoVigente = isEdit ? proyectoDelActivo : idProyectoElegido;
+  const { data: ubicacionProyecto } = useUbicacionProyecto(idProyectoVigente);
   const [rentaId, setRentaId] = useState<number | null>(null);
 
   const tipo = Number(prop.id_tipo_propiedad);
@@ -530,6 +568,32 @@ export default function ActivosComercialesNuevo() {
   useEffect(() => {
     if (!isEdit) setAtts({});
   }, [tipo, isEdit]);
+
+  /**
+   * Vuelve a tomar la ubicación del proyecto, sobrescribiendo lo que haya.
+   *
+   * El prellenado automático solo actúa sobre campos vacíos y solo en alta, que
+   * es lo correcto por defecto. Pero si el proyecto corrige su dirección, o si
+   * el activo se cargó antes de que existiera la herencia, hace falta poder
+   * traerla otra vez. Es una acción explícita: sobrescribir lo capturado no
+   * puede pasar solo.
+   */
+  const tomarUbicacionDelProyecto = () => {
+    if (!ubicacionProyecto) return;
+    setPac((p) => ({
+      ...p,
+      ubicacion_direccion: ubicacionProyecto.direccion,
+      ubicacion_ciudad: ubicacionProyecto.ciudad,
+      ubicacion_lat: ubicacionProyecto.lat,
+      ubicacion_lng: ubicacionProyecto.lng,
+    }));
+    toast({
+      title: "Ubicación tomada del proyecto",
+      description: isEdit
+        ? "Guarda los cambios para conservarla."
+        : "Puedes ajustarla antes de guardar.",
+    });
+  };
 
   /*
    * Hereda la ubicación del proyecto al elegirlo.
@@ -1141,15 +1205,28 @@ export default function ActivosComercialesNuevo() {
         <TabsContent value="ubicacion">
           <Card>
             <CardHeader>
-              <CardTitle>Ubicación y legal</CardTitle>
-              {/* Se dice de dónde vienen los datos: un campo que se llena solo
-                  y no explica por qué se lee como un error. */}
-              {!isEdit && ubicacionProyecto && (
-                <p className="text-sm text-muted-foreground">
-                  Dirección, ciudad y coordenadas se tomaron del proyecto. Puedes
-                  cambiarlas si el activo tiene una ubicación propia.
-                </p>
-              )}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Ubicación y legal</CardTitle>
+                  {ubicacionProyecto && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {isEdit
+                        ? "Este activo pertenece a un proyecto: puedes tomar su dirección, ciudad y coordenadas."
+                        : "Dirección, ciudad y coordenadas se tomaron del proyecto. Puedes cambiarlas si el activo tiene una ubicación propia."}
+                    </p>
+                  )}
+                </div>
+                {/* Sobrescribe lo capturado, así que es una acción explícita y
+                    nunca automática. Sirve para actualizar un activo cargado
+                    antes de que existiera la herencia, o cuando el proyecto
+                    corrige su dirección. */}
+                {ubicacionProyecto && (
+                  <Button variant="outline" size="sm" onClick={tomarUbicacionDelProyecto}>
+                    <MapPin className="h-4 w-4 mr-1.5" />
+                    Tomar del proyecto
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field label="Dirección" className="md:col-span-2">
