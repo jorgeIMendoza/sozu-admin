@@ -88,7 +88,7 @@ function calcPaymentPlans(
 ): PaymentPlan[] {
   // Con `mensualidadesFijas` (proyecto o unidad) manda ese número, sin mirar la entrega.
   // Sin él: meses de mensualidades RESTANTES, de hoy a la entrega MENOS 1 mes (el mes de
-  // entrega es el Pago a escrituración, no mensualidad). Si ya estamos en/después
+  // entrega es el pago a la escritura, no mensualidad). Si ya estamos en/después
   // del mes de entrega → 0 mensualidades → todo el saldo va a escrituración.
   // (fechaGeneracion se ignora: el conteo baja conforme pasan los días).
   const mesesEfectivos = mesesMensualidadesRestantes(fechaEntrega, new Date(), mensualidadesFijas);

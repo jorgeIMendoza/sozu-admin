@@ -414,7 +414,7 @@ export const OfferPDFTemplateProducto = forwardRef<HTMLDivElement, OfferPDFTempl
                       
                       {scheme.porcentaje_entrega > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#000000' }}>A la entrega ({scheme.porcentaje_entrega}%):</span>
+                          <span style={{ color: '#000000' }}>A la escritura ({scheme.porcentaje_entrega}%):</span>
                           <span style={{ color: '#000000', fontWeight: 'bold' }}>
                             {formatCurrency(amounts.entrega)}
                           </span>
