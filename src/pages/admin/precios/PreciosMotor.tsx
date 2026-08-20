@@ -154,17 +154,27 @@ function FiltroInventario({
   );
 }
 
-/** Un eje del ancla. Sin opción neutra: el ancla es siempre una combinación concreta. */
+/**
+ * Un eje del ancla.
+ *
+ * Torre, nivel, vista y orientación son siempre una categoría concreta. El
+ * modelo es el único que admite no elegir ninguno, y entonces el precio base
+ * expresa el promedio del desarrollo; por eso la opción neutra es opcional.
+ */
 function CampoAncla({
   etiqueta,
   valor,
   onChange,
   opciones,
+  etiquetaNeutra,
+  valorNeutro,
 }: {
   etiqueta: string;
   valor: string;
   onChange: (v: string) => void;
   opciones: Array<{ id: string; nombre: string }>;
+  etiquetaNeutra?: string;
+  valorNeutro?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -174,6 +184,9 @@ function CampoAncla({
           <SelectValue placeholder="—" />
         </SelectTrigger>
         <SelectContent>
+          {etiquetaNeutra && valorNeutro ? (
+            <SelectItem value={valorNeutro}>{etiquetaNeutra}</SelectItem>
+          ) : null}
           {opciones.map((o) => (
             <SelectItem key={o.id} value={o.id}>
               {o.nombre}
@@ -361,6 +374,9 @@ function PantallaMotor() {
    */
   const factoresDelAncla = useMemo(() => {
     const nombreTorre = indices?.torresPorId[motor.ancla.id_torre]?.nombre ?? "";
+    const modeloAncla = motor.ancla.id_modelo
+      ? (motor.bases_modelo ?? []).find((b) => b.id_modelo === motor.ancla.id_modelo)
+      : undefined;
     return [
       { etiqueta: "Torre", clave: nombreTorre, valor: valorFactor(motor, "torre", nombreTorre) },
       {
@@ -373,6 +389,18 @@ function PantallaMotor() {
         clave: motor.ancla.clave_orientacion,
         valor: valorFactor(motor, "orientacion", motor.ancla.clave_orientacion),
       },
+      // El modelo solo aparece cuando se ancló en uno: sin modelo ancla no hay
+      // una categoría que deba valer 1.0000, y mostrar un renglón vacío haría
+      // pensar que falta capturarlo.
+      ...(modeloAncla
+        ? [
+            {
+              etiqueta: "Modelo",
+              clave: modeloAncla.nombre_modelo,
+              valor: modeloAncla.factor_modelo ?? 1,
+            },
+          ]
+        : []),
     ];
   }, [motor, indices]);
 
@@ -397,6 +425,7 @@ function PantallaMotor() {
       if (indices?.torresPorId[p.id_torre]?.nombre !== nombreTorre) continue;
       if (p.vista !== motor.ancla.clave_vista) continue;
       if (p.nivel !== motor.ancla.nivel) continue;
+      if (motor.ancla.id_modelo && p.id_modelo !== motor.ancla.id_modelo) continue;
       const d = porId.get(p.id_propiedad);
       if (!d || d.area_ponderada <= 0) continue;
       precio += d.precio_calculado;
@@ -412,12 +441,14 @@ function PantallaMotor() {
     nivel?: number;
     clave_vista?: string;
     clave_orientacion?: string;
+    id_modelo?: string;
   }) => {
     reanclar({
       id_torre: motor.ancla.id_torre,
       nivel: motor.ancla.nivel,
       clave_vista: motor.ancla.clave_vista,
       clave_orientacion: motor.ancla.clave_orientacion,
+      id_modelo: motor.ancla.id_modelo,
       ...parcial,
     });
     toast.success(
@@ -712,11 +743,26 @@ function PantallaMotor() {
                 onChange={(v) => cambiarAncla({ clave_orientacion: v })}
                 opciones={opcionesFiltro.orientaciones}
               />
+              <CampoAncla
+                etiqueta="Modelo"
+                valor={motor.ancla.id_modelo ?? SIN_FILTRO}
+                onChange={(v) =>
+                  cambiarAncla({ id_modelo: v === SIN_FILTRO ? undefined : v })
+                }
+                opciones={opcionesFiltro.modelos}
+                etiquetaNeutra="Promedio de modelos"
+                valorNeutro={SIN_FILTRO}
+              />
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               Cambiar el ancla no mueve ningún precio: las familias se renormalizan y los
               precios base se compensan. Lo que cambia es qué significa el precio base, que
               pasa a ser el precio por m² en la combinación elegida.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {motor.ancla.id_modelo
+                ? "Con un modelo anclado, el precio base es el precio por m² de ese modelo y su factor vale 1.0000; los demás dicen cuánto se separan de él."
+                : "Sin modelo anclado, el precio base expresa el promedio ponderado del desarrollo, que es como nace el motor. Anclar en un modelo lo vuelve la referencia y deja su factor en 1.0000."}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               El nivel del ancla es lo único que el cálculo usa como referencia: ahí la curva

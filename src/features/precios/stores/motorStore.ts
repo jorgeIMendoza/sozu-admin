@@ -57,9 +57,9 @@ function conPrecioBaseDeProyecto(m: MotorPrecio): MotorPrecio {
   };
 }
 
-/** Torres del proyecto activo, para reanclar contra el inventario real. */
-function torresDe(idProyecto: string) {
-  return useInventarioStore.getState().inventarioDe(idProyecto).torres;
+/** Inventario del proyecto activo, para reanclar contra datos reales. */
+function inventarioDe(idProyecto: string) {
+  return useInventarioStore.getState().inventarioDe(idProyecto);
 }
 
 type CampoNumerico =
@@ -261,7 +261,12 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
           })),
 
         setAncla: (ancla) =>
-          mutarMotor((m) => reanclarMotor(m, ancla, torresDe(m.id_proyecto)), false),
+          mutarMotor((m) => {
+            // El modelo ancla necesita las áreas para poder volver al promedio
+            // del desarrollo, así que se pasa el inventario completo.
+            const inv = inventarioDe(m.id_proyecto);
+            return reanclarMotor(m, ancla, inv.torres, inv.modelos, inv.propiedades);
+          }, false),
 
         actualizarFactor: (idFactor, valor) =>
           mutarFactores((fs) =>
