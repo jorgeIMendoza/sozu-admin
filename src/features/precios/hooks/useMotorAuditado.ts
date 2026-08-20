@@ -1,6 +1,6 @@
 import { useMotorStore } from "../stores/motorStore";
 import { registrarEvento } from "../services/auditoria";
-import type { TipoFactor } from "../types/dominio";
+import type { AnclaProyecto, TipoFactor } from "../types/dominio";
 
 const ETIQUETA_CAMPO: Record<string, string> = {
   precio_base_m2: "Precio base por m²",
@@ -110,6 +110,46 @@ export function useMotorAuditado() {
     });
   };
 
+  /**
+   * Cambia el ancla del proyecto.
+   *
+   * Es neutral por construcción: `reanclarMotor` renormaliza las familias
+   * contra las categorías nuevas y compensa los precios base, de modo que
+   * ninguna unidad cambia de precio. Lo que sí cambia es qué SIGNIFICA el
+   * precio base: pasa a ser el precio por m² en la combinación elegida.
+   *
+   * Por eso queda en bitácora con el base de antes y el de después: es la
+   * única forma de explicar más tarde por qué el número se movió sin que se
+   * moviera ningún precio.
+   */
+  const reanclar = (ancla: Omit<AnclaProyecto, "descripcion">) => {
+    const antes = motorActual();
+    const a = antes.ancla;
+    if (
+      a.id_torre === ancla.id_torre &&
+      a.nivel === ancla.nivel &&
+      a.clave_vista === ancla.clave_vista &&
+      a.clave_orientacion === ancla.clave_orientacion
+    ) {
+      return;
+    }
+    store.setAncla(ancla);
+    const despues = motorActual();
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.reanclado",
+      entidad: { tipo: "motor", id: antes.id_motor, etiqueta: antes.nombre },
+      antes: {
+        ancla: a.descripcion,
+        precio_base_m2_proyecto: antes.precio_base_m2_proyecto,
+      },
+      despues: {
+        ancla: despues.ancla.descripcion,
+        precio_base_m2_proyecto: despues.precio_base_m2_proyecto,
+      },
+    });
+  };
+
   const declararCalibradoManualmente = (justificacion: string) => {
     const antes = motorActual();
     store.declararCalibradoManualmente(justificacion);
@@ -199,6 +239,7 @@ export function useMotorAuditado() {
     actualizarConfigNivel,
     actualizarConfigTamano,
     actualizarBaseModelo,
+    reanclar,
     declararCalibradoManualmente,
     actualizarFactor,
     agregarFactor,

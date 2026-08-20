@@ -154,6 +154,37 @@ function FiltroInventario({
   );
 }
 
+/** Un eje del ancla. Sin opción neutra: el ancla es siempre una combinación concreta. */
+function CampoAncla({
+  etiqueta,
+  valor,
+  onChange,
+  opciones,
+}: {
+  etiqueta: string;
+  valor: string;
+  onChange: (v: string) => void;
+  opciones: Array<{ id: string; nombre: string }>;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[13px] font-medium text-muted-foreground">{etiqueta}</Label>
+      <Select value={valor} onValueChange={onChange} disabled={opciones.length === 0}>
+        <SelectTrigger className="w-40">
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          {opciones.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 /** Opción neutra de los filtros: no acota nada. */
 const SIN_FILTRO = "__todos__";
 
@@ -171,6 +202,7 @@ function PantallaMotor() {
     actualizarConfigTamano,
     actualizarPrecioBaseProyecto,
     actualizarBaseModelo,
+    reanclar,
     declararCalibradoManualmente,
     restablecer,
   } = useMotorAuditado();
@@ -218,6 +250,11 @@ function PantallaMotor() {
       ),
       vistas: listar(cuenta((p) => p.vista), (id) => id),
       estatus: listar(cuenta((p) => p.estatus), (id) => id),
+      orientaciones: listar(cuenta((p) => p.orientacion), (id) => id),
+      // El nivel ordena por número, no alfabéticamente: 10 no va antes que 2.
+      niveles: [...cuenta((p) => String(p.nivel)).entries()]
+        .map(([id, unidades]) => ({ id, nombre: id, unidades }))
+        .sort((a, b) => Number(a.id) - Number(b.id)),
     };
   }, [propiedades, indices]);
 
@@ -340,6 +377,53 @@ function PantallaMotor() {
   }, [motor, indices]);
 
   const anclaDesviada = factoresDelAncla.some((x) => Math.abs(x.valor - 1) > 1e-6);
+
+  /*
+   * Lo que el motor calcula hoy para las unidades que SÍ están en la
+   * combinación ancla. Sirve para contrastar contra el precio base, que es lo
+   * que esa combinación debería valer.
+   *
+   * No tiene por qué coincidir: cada unidad de ahí sigue aplicando el factor
+   * de su modelo y el de tamaño. Sobre el inventario completo, no el
+   * filtrado: el ancla es del proyecto.
+   */
+  const observadoEnAncla = useMemo(() => {
+    const nombreTorre = indices?.torresPorId[motor.ancla.id_torre]?.nombre ?? "";
+    const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
+    let precio = 0;
+    let area = 0;
+    let unidades = 0;
+    for (const p of propiedades) {
+      if (indices?.torresPorId[p.id_torre]?.nombre !== nombreTorre) continue;
+      if (p.vista !== motor.ancla.clave_vista) continue;
+      if (p.nivel !== motor.ancla.nivel) continue;
+      const d = porId.get(p.id_propiedad);
+      if (!d || d.area_ponderada <= 0) continue;
+      precio += d.precio_calculado;
+      area += d.area_ponderada;
+      unidades++;
+    }
+    return { unidades, porM2: area > 0 ? precio / area : 0 };
+  }, [propiedades, desgloses, motor.ancla, indices]);
+
+  /** Reancla cambiando un solo eje y conservando los otros tres. */
+  const cambiarAncla = (parcial: {
+    id_torre?: string;
+    nivel?: number;
+    clave_vista?: string;
+    clave_orientacion?: string;
+  }) => {
+    reanclar({
+      id_torre: motor.ancla.id_torre,
+      nivel: motor.ancla.nivel,
+      clave_vista: motor.ancla.clave_vista,
+      clave_orientacion: motor.ancla.clave_orientacion,
+      ...parcial,
+    });
+    toast.success(
+      "Ancla actualizada. Ningún precio cambió: el precio base pasa a expresarse en esa combinación.",
+    );
+  };
 
   const bases = motor.bases_modelo ?? [];
   const unidadesPorModelo = new Map<string, number>();
@@ -602,8 +686,37 @@ function PantallaMotor() {
           </p>
 
           <div className="rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs font-medium text-foreground">
-              Ancla del proyecto: nivel {motor.ancla.nivel}
+            <p className="text-xs font-medium text-foreground">Ancla del proyecto</p>
+            <div className="mt-2 flex flex-wrap items-end gap-3">
+              <CampoAncla
+                etiqueta="Torre"
+                valor={motor.ancla.id_torre}
+                onChange={(v) => cambiarAncla({ id_torre: v })}
+                opciones={opcionesFiltro.torres}
+              />
+              <CampoAncla
+                etiqueta="Nivel"
+                valor={String(motor.ancla.nivel)}
+                onChange={(v) => cambiarAncla({ nivel: Number(v) })}
+                opciones={opcionesFiltro.niveles}
+              />
+              <CampoAncla
+                etiqueta="Vista"
+                valor={motor.ancla.clave_vista}
+                onChange={(v) => cambiarAncla({ clave_vista: v })}
+                opciones={opcionesFiltro.vistas}
+              />
+              <CampoAncla
+                etiqueta="Orientación"
+                valor={motor.ancla.clave_orientacion}
+                onChange={(v) => cambiarAncla({ clave_orientacion: v })}
+                opciones={opcionesFiltro.orientaciones}
+              />
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Cambiar el ancla no mueve ningún precio: las familias se renormalizan y los
+              precios base se compensan. Lo que cambia es qué significa el precio base, que
+              pasa a ser el precio por m² en la combinación elegida.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               El nivel del ancla es lo único que el cálculo usa como referencia: ahí la curva
@@ -631,6 +744,11 @@ function PantallaMotor() {
               {anclaDesviada
                 ? "Alguna de esas categorías ya no vale 1.0000, así que el precio base dejó de ser el precio de esa combinación. No es un error —los factores son editables—, pero el base ya no se lee como \"lo que cuesta la unidad más barata\"."
                 : "Mientras valgan 1.0000, el precio base es el precio por m² de una unidad en esa combinación, antes de aplicar el factor de su modelo."}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {observadoEnAncla.unidades === 0
+                ? "El inventario no tiene ninguna unidad en esa combinación exacta. El ancla sigue siendo válida como referencia de escala, pero no hay contra qué contrastarla."
+                : `El motor calcula ${formatoMoneda(observadoEnAncla.porM2)} /m² para las ${observadoEnAncla.unidades} unidades que sí están en esa combinación. No tiene por qué coincidir con el base: cada una aplica además el factor de su modelo y el de tamaño.`}
             </p>
             <p className="mt-1.5 text-xs text-muted-foreground">
               El precio por m² de una unidad nunca es este base a secas: es base × factor de

@@ -123,6 +123,7 @@ export const ETIQUETA_EVENTO: Record<TipoEvento, string> = {
   "motor.factor_actualizado": "Factor actualizado",
   "motor.factor_desactivado": "Factor desactivado",
   "motor.factor_reactivado": "Factor reactivado",
+  "motor.reanclado": "Ancla del proyecto cambiada",
   "motor.restablecido": "Motor restablecido",
   "calibracion.ejecutada": "Calibración ejecutada",
   "calibracion.declarada_manualmente": "Calibración declarada manualmente",
