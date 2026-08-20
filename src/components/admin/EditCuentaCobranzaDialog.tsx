@@ -1535,46 +1535,35 @@ export function EditCuentaCobranzaDialog({ cuenta, onClose, onUpdate, initialTab
         }
       }
 
-      // Get the project ID from the entidad relacionada dueno
-      if (propiedadDetalle?.id_entidad_relacionada_dueno) {
-        const { data: entidadData } = await supabase
-          .from('entidades_relacionadas')
-          .select('id_proyecto')
-          .eq('id', propiedadDetalle.id_entidad_relacionada_dueno)
-          .single();
-          
-        const projectId = entidadData?.id_proyecto;
-        
-        if (projectId) {
-          // Check if person exists in entidades_relacionadas with id_tipo_entidad=7
-          const { data: existingRelation } = await supabase
-            .from("entidades_relacionadas")
-            .select("id")
-            .eq("id_persona", personaId)
-            .eq("id_tipo_entidad", 7)
-            .eq("activo", true)
-            .maybeSingle();
+      // Todo comprador debe existir como entidad relacionada tipo 2 (Comprador) con
+      // id_proyecto null: es lo que lo hace visible en Personas > Compradores. Se crea
+      // siempre, aunque la persona ya sea prospecto (tipo 7) y sin importar el proyecto
+      // de la propiedad.
+      const { data: existingCompradorRelation } = await supabase
+        .from("entidades_relacionadas")
+        .select("id")
+        .eq("id_persona", personaId)
+        .eq("id_tipo_entidad", 2)
+        .eq("activo", true)
+        .is("id_proyecto", null)
+        .maybeSingle();
 
-          if (!existingRelation) {
-            // Create new relation in entidades_relacionadas with id_tipo_entidad=2
-            const relationData = {
-              id_persona: personaId,
-              id_proyecto: null, // Set to null for buyers as requested
-              id_tipo_entidad: 2,
-              id_estatus_persona: 3,
-              activo: true
-            };
+      if (!existingCompradorRelation) {
+        const relationData = {
+          id_persona: personaId,
+          id_proyecto: null, // los compradores no se anclan a un proyecto
+          id_tipo_entidad: 2,
+          id_estatus_persona: 3,
+          activo: true
+        };
 
-            console.log('Creating entidades_relacionadas with data:', relationData);
-            const { error: relationError } = await supabase
-              .from("entidades_relacionadas")
-              .insert(relationData);
+        const { error: relationError } = await supabase
+          .from("entidades_relacionadas")
+          .insert(relationData);
 
-            if (relationError) {
-              console.error("Error creating entidades_relacionadas:", relationError);
-              throw relationError;
-            }
-          }
+        if (relationError) {
+          console.error("Error creating entidades_relacionadas:", relationError);
+          throw relationError;
         }
       }
 
