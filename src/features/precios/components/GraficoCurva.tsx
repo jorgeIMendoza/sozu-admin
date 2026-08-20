@@ -6,6 +6,7 @@ export function GraficoCurva({
   formatoValor = (v: number) => v.toFixed(4),
   referencia,
   etiquetaReferencia,
+  lineaBase = 1,
 }: {
   puntos: Array<{ x: number; y: number }>;
   etiquetaX: string;
@@ -14,10 +15,16 @@ export function GraficoCurva({
   /** Curva comparativa opcional, dibujada punteada detrás de la principal. */
   referencia?: Array<{ x: number; y: number }>;
   etiquetaReferencia?: string;
+  /**
+   * Valor neutro del eje Y: se dibuja punteado y el eje siempre lo incluye.
+   * Vale 1 porque el gráfico nació para multiplicadores, donde 1 es "sin
+   * efecto". Para una serie en pesos hay que pasar `null`: forzar el 1 dentro
+   * del rango aplastaría la curva contra el borde superior.
+   */
+  lineaBase?: number | null;
 }) {
   const w = 520;
   const h = 200;
-  const m = { top: 12, right: 12, bottom: 26, left: 52 };
 
   if (puntos.length < 2) return null;
 
@@ -25,9 +32,16 @@ export function GraficoCurva({
   const ys = [...puntos.map((p) => p.y), ...(referencia ?? []).map((p) => p.y)];
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
-  const minY = Math.min(...ys, 1);
-  const maxY = Math.max(...ys, 1);
+  const neutro = lineaBase == null ? [] : [lineaBase];
+  const minY = Math.min(...ys, ...neutro);
+  const maxY = Math.max(...ys, ...neutro);
   const spanY = maxY - minY || 1;
+
+  // El margen izquierdo se ajusta a la etiqueta más larga: "1.0250" y
+  // "$1.85 M" caben en 52px, "$12,345,678.90" no, y se encimaría con la curva.
+  const ticksY = [minY, minY + spanY / 2, maxY];
+  const anchoEtiqueta = Math.max(...ticksY.map((t) => formatoValor(t).length));
+  const m = { top: 12, right: 12, bottom: 26, left: Math.max(52, anchoEtiqueta * 6 + 12) };
 
   // Redondeo explícito: sin él, la última cifra del float difiere entre el
   // render del servidor y el del navegador y React reporta hydration mismatch.
@@ -41,7 +55,6 @@ export function GraficoCurva({
   const dRef = (referencia ?? [])
     .map((p, i) => `${i === 0 ? "M" : "L"}${px(p.x)},${py(p.y)}`)
     .join(" ");
-  const ticksY = [minY, minY + spanY / 2, maxY];
 
   return (
     <div className="overflow-x-auto">
@@ -71,15 +84,17 @@ export function GraficoCurva({
             </text>
           </g>
         ))}
-        <line
-          x1={m.left}
-          x2={w - m.right}
-          y1={py(1)}
-          y2={py(1)}
-          className="stroke-muted-foreground/50"
-          strokeDasharray="4 3"
-          strokeWidth={1}
-        />
+        {lineaBase == null ? null : (
+          <line
+            x1={m.left}
+            x2={w - m.right}
+            y1={py(lineaBase)}
+            y2={py(lineaBase)}
+            className="stroke-muted-foreground/50"
+            strokeDasharray="4 3"
+            strokeWidth={1}
+          />
+        )}
         {dRef ? (
           <path
             d={dRef}

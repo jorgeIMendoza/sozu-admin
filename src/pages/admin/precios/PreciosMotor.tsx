@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Info, RefreshCw, RotateCcw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,13 @@ import { GraficoCurva } from "@/features/precios/components/GraficoCurva";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CampoPrecioM2 } from "@/features/precios/components/CampoPrecioM2";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +39,7 @@ import {
 } from "@/features/precios/engine/pricing";
 import {
   formatoFecha,
+  formatoM2,
   formatoMoneda,
   formatoMultiplicador,
   formatoPorcentaje,
@@ -85,6 +93,22 @@ function CampoNumero({
   );
 }
 
+/**
+ * Pesos abreviados para el eje del gráfico.
+ *
+ * El eje mide 520px de ancho total: "$1,850,432.00" se come el área de dibujo
+ * y se encima con la curva. "$1.85 M" dice lo mismo en un tercio del espacio,
+ * y la cifra exacta está en la tabla de abajo.
+ */
+function formatoPesosCompacto(valor: number): string {
+  if (valor >= 1_000_000) return `${(valor / 1_000_000).toFixed(2)} M`;
+  if (valor >= 1_000) return `${(valor / 1_000).toFixed(1)} k`;
+  return `${valor.toFixed(0)}`;
+}
+
+/** Opción del selector que no filtra por modelo. */
+const TODOS_LOS_MODELOS = "__todos__";
+
 const SUB_PESTANAS: Array<{ valor: TipoFactor; titulo: string }> = [
   { valor: "torre", titulo: "Torre" },
   { valor: "vista", titulo: "Vista" },
@@ -103,9 +127,10 @@ function PantallaMotor() {
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
-  const { motor, propiedades, totales } = usePreciosProyecto();
+  const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [dialogoCalibrado, setDialogoCalibrado] = useState(false);
+  const [modeloCurva, setModeloCurva] = useState("");
   const [justificacion, setJustificacion] = useState("");
 
   const bases = motor.bases_modelo ?? [];
@@ -130,6 +155,55 @@ function PantallaMotor() {
     const ub = unidadesPorModelo.get(b.id_modelo) ?? 0;
     return ub - ua || a.nombre_modelo.localeCompare(b.nombre_modelo, "es");
   });
+
+  /*
+   * El modelo con más unidades arranca elegido. Con "Todos" de arranque el
+   * primer vistazo mezclaría plantas distintas y la curva se leería con
+   * brincos que no vienen de los coeficientes sino de la composición.
+   */
+  const modeloCurvaVigente =
+    modeloCurva || basesOrdenadas[0]?.id_modelo || TODOS_LOS_MODELOS;
+
+  /*
+   * La curva de nivel vista sobre el inventario real, nivel por nivel.
+   *
+   * El multiplicador de arriba dice cuánto sube el factor; esto dice cuánto
+   * sube el precio, que es la pregunta real al mover la pendiente. Se agrega
+   * con la misma ponderación que la tabla de modelos: el precio por m² es
+   * `Σ precio / Σ área` del nivel, y el del departamento ese precio por el m²
+   * promedio del nivel. Los dos cuadran entre sí por construcción.
+   *
+   * Se usa `precio_calculado` y no `precio_lista`: un override manual es
+   * justo lo que no responde a la curva, y dejarlo dentro aplanaría el efecto
+   * que se está tratando de ver.
+   */
+  const nivelesDelModelo = useMemo(() => {
+    const desglosePorId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
+    const acum = new Map<number, { unidades: number; area: number; precio: number }>();
+
+    for (const p of propiedades) {
+      if (modeloCurvaVigente !== TODOS_LOS_MODELOS && p.id_modelo !== modeloCurvaVigente) {
+        continue;
+      }
+      const d = desglosePorId.get(p.id_propiedad);
+      if (!d || d.area_ponderada <= 0) continue;
+      const a = acum.get(p.nivel) ?? { unidades: 0, area: 0, precio: 0 };
+      a.unidades += 1;
+      a.area += d.area_ponderada;
+      a.precio += d.precio_calculado;
+      acum.set(p.nivel, a);
+    }
+
+    return [...acum.entries()]
+      .map(([nivel, a]) => ({
+        nivel,
+        unidades: a.unidades,
+        m2: a.area / a.unidades,
+        precio_m2: a.precio / a.area,
+        precio_depto: a.precio / a.unidades,
+      }))
+      .sort((a, b) => a.nivel - b.nivel);
+  }, [propiedades, desgloses, modeloCurvaVigente]);
 
   const nivelesPreview = [1, 3, 5, 8, 10, 14, 18];
 
@@ -489,6 +563,133 @@ function PantallaMotor() {
           <p className="text-xs text-muted-foreground">
             Configuración actual de SOZU en Daiku: aproximadamente 0.50% por piso, lineal.
           </p>
+
+          <div className="space-y-4 border-t border-border pt-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Efecto sobre el inventario
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Precios reales del proyecto, nivel por nivel. Mueve la pendiente o el
+                  amortiguamiento y las cuatro columnas se recalculan.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="modelo-curva"
+                  className="text-[13px] font-medium text-muted-foreground"
+                >
+                  Modelo
+                </Label>
+                <Select value={modeloCurvaVigente} onValueChange={setModeloCurva}>
+                  <SelectTrigger id="modelo-curva" className="w-60">
+                    <SelectValue placeholder="Elige un modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODOS_LOS_MODELOS}>Todos los modelos</SelectItem>
+                    {basesOrdenadas.map((b) => (
+                      <SelectItem key={b.id_modelo} value={b.id_modelo}>
+                        {b.nombre_modelo} · {unidadesPorModelo.get(b.id_modelo) ?? 0} u.
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {nivelesDelModelo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Este modelo todavía no tiene unidades con precio calculado.
+              </p>
+            ) : (
+              <>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      Precio promedio ponderado por m²
+                    </p>
+                    <GraficoCurva
+                      puntos={nivelesDelModelo.map((n) => ({ x: n.nivel, y: n.precio_m2 }))}
+                      etiquetaX="Nivel"
+                      etiquetaY="Precio por m²"
+                      formatoValor={formatoPesosCompacto}
+                      lineaBase={null}
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      Precio promedio ponderado del departamento
+                    </p>
+                    <GraficoCurva
+                      puntos={nivelesDelModelo.map((n) => ({ x: n.nivel, y: n.precio_depto }))}
+                      etiquetaX="Nivel"
+                      etiquetaY="Precio del departamento"
+                      formatoValor={formatoPesosCompacto}
+                      lineaBase={null}
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Nivel
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Unidades
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          M² promedio
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Precio promedio por m²
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Precio promedio del departamento
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nivelesDelModelo.map((n) => (
+                        <tr key={n.nivel} className="border-t border-border">
+                          <td className="px-3 py-1.5 tabular-nums">{n.nivel}</td>
+                          <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                            {n.unidades}
+                          </td>
+                          <td className="px-3 py-1.5 tabular-nums">{formatoM2(n.m2)}</td>
+                          <td className="px-3 py-1.5 tabular-nums">
+                            {formatoMoneda(n.precio_m2)}
+                          </td>
+                          <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                            {formatoMoneda(n.precio_depto)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Cada renglón promedia las unidades de ese nivel: el precio por m² es la suma
+                  de precios entre la suma de m², y el del departamento es ese precio por el m²
+                  promedio del nivel. Dos niveles pueden diferir aunque la curva sea plana,
+                  porque el metraje no es idéntico piso por piso. Se grafica el precio que
+                  calcula el motor, no el de lista: un precio forzado a mano no responde a la
+                  curva y taparía justo lo que se quiere ver.
+                  {modeloCurvaVigente === TODOS_LOS_MODELOS ? (
+                    <>
+                      {" "}
+                      Con todos los modelos juntos, un brinco entre niveles puede venir de que
+                      arriba haya modelos distintos y no de los coeficientes.
+                    </>
+                  ) : null}
+                </p>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
