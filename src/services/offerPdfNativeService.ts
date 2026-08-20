@@ -912,7 +912,7 @@ export class OfertaPdfNativeService {
           // Delivery row
           pdf.setFont("helvetica", "normal");
           pdf.setTextColor(grayColor);
-          pdf.text("A la entrega:", schemeX + schemePadding, lineY);
+          pdf.text("A la escritura:", schemeX + schemePadding, lineY);
           pdf.setTextColor(primaryColor);
           pdf.setFont("helvetica", "bold");
           pdf.text(
@@ -949,7 +949,7 @@ export class OfertaPdfNativeService {
           if (scheme.porcentaje_entrega > 0) {
             pdf.setFont("helvetica", "normal");
             pdf.setTextColor(grayColor);
-            pdf.text("A la entrega:", schemeX + schemePadding, lineY);
+            pdf.text("A la escritura:", schemeX + schemePadding, lineY);
             pdf.setTextColor(primaryColor);
             pdf.setFont("helvetica", "bold");
             pdf.text(
