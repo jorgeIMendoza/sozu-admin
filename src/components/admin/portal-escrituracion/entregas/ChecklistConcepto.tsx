@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Loader2, CheckCircle2, Wrench, CheckCheck, X, RotateCcw, Camera, User, UserCheck } from 'lucide-react';
-import { type ChecklistItem, type EntidadER, ESTATUS_CHECKLIST, ITEM_CLS } from './EntregaTypes';
+import {
+  type ChecklistItem, type ChecklistCategoria, type EntidadER, ESTATUS_CHECKLIST, ITEM_CLS,
+  resolverTecnicoEfectivo, resolverSupervisorEfectivo,
+} from './EntregaTypes';
 
 interface ChecklistConceptoProps {
   item: ChecklistItem;
+  categoria: ChecklistCategoria;
   isLoading: boolean;
   supervisores: EntidadER[];
   tecnicos: EntidadER[];
@@ -19,6 +23,7 @@ type PanelMode = 'supervisor' | 'tecnico' | null;
 
 export function ChecklistConcepto({
   item,
+  categoria,
   isLoading,
   supervisores,
   tecnicos,
@@ -32,11 +37,13 @@ export function ChecklistConcepto({
   const [panel, setPanel]     = useState<PanelMode>(null);
   const [search, setSearch]   = useState('');
 
-  const supervisorAsignado = supervisores.find(e => e.id === item.id_supervisor_er) ?? null;
-  const tecnicoAsignado    = tecnicos.find(e => e.id === item.id_tecnico_er) ?? null;
+  // Responsable EFECTIVO (herencia categoría → override de ítem). Fuente
+  // única: resolverTecnicoEfectivo/resolverSupervisorEfectivo (EntregaTypes.ts).
+  const tecnicoEfectivo    = resolverTecnicoEfectivo(item, categoria, tecnicos);
+  const supervisorEfectivo = resolverSupervisorEfectivo(item, categoria, supervisores);
 
   // Legacy: fallback display cuando no hay nuevas cols pero sí la antigua
-  const legacyNombre = !supervisorAsignado && !tecnicoAsignado && item.id_responsable_er
+  const legacyNombre = !supervisorEfectivo.entidad && !tecnicoEfectivo.entidad && item.id_responsable_er
     ? (supervisores.find(e => e.id === item.id_responsable_er) ?? tecnicos.find(e => e.id === item.id_responsable_er))?.nombre ?? null
     : null;
 
@@ -71,22 +78,28 @@ export function ChecklistConcepto({
             <div className="min-w-0">
               <span className="text-xs text-slate-700 leading-tight">{item.nombre}</span>
 
-              {/* Supervisor asignado */}
-              {supervisorAsignado && (
+              {/* Supervisor efectivo (heredado de categoría u override individual) */}
+              {supervisorEfectivo.entidad && (
                 <div className="flex items-center gap-0.5 mt-0.5 text-[10px] text-blue-500">
                   <UserCheck className="w-2.5 h-2.5 shrink-0" />
-                  <span className="truncate">Sup: {supervisorAsignado.nombre}</span>
+                  <span className="truncate">Sup: {supervisorEfectivo.entidad.nombre}</span>
+                  <span className={`shrink-0 ml-0.5 ${supervisorEfectivo.origen === 'INDIVIDUAL' ? 'text-blue-400 font-medium' : 'text-slate-400 italic'}`}>
+                    ({supervisorEfectivo.origen === 'INDIVIDUAL' ? 'individual' : 'heredado'})
+                  </span>
                 </div>
               )}
-              {/* Técnico asignado */}
-              {tecnicoAsignado && (
+              {/* Técnico efectivo (heredado de categoría u override individual) */}
+              {tecnicoEfectivo.entidad && (
                 <div className="flex items-center gap-0.5 mt-0.5 text-[10px] text-orange-500">
                   <Wrench className="w-2.5 h-2.5 shrink-0" />
-                  <span className="truncate">Téc: {tecnicoAsignado.nombre}</span>
+                  <span className="truncate">Téc: {tecnicoEfectivo.entidad.nombre}</span>
+                  <span className={`shrink-0 ml-0.5 ${tecnicoEfectivo.origen === 'INDIVIDUAL' ? 'text-orange-400 font-medium' : 'text-slate-400 italic'}`}>
+                    ({tecnicoEfectivo.origen === 'INDIVIDUAL' ? 'individual' : 'heredado'})
+                  </span>
                 </div>
               )}
               {/* Legacy fallback */}
-              {legacyNombre && !supervisorAsignado && !tecnicoAsignado && (
+              {legacyNombre && !supervisorEfectivo.entidad && !tecnicoEfectivo.entidad && (
                 <div className="flex items-center gap-0.5 mt-0.5 text-[10px] text-slate-400">
                   <User className="w-2.5 h-2.5 shrink-0" />
                   <span className="truncate">{legacyNombre}</span>
@@ -179,20 +192,36 @@ export function ChecklistConcepto({
               <Camera className="w-3.5 h-3.5" />
             </button>
 
-            {/* Supervisor */}
+            {/* Supervisor — abre el override individual del ítem (prevalece sobre el default de categoría) */}
             <button
               onClick={() => togglePanel('supervisor')}
-              title={supervisorAsignado ? `Supervisor: ${supervisorAsignado.nombre}` : 'Asignar supervisor'}
+              title={
+                supervisorEfectivo.entidad
+                  ? `Supervisor: ${supervisorEfectivo.entidad.nombre} (${supervisorEfectivo.origen === 'INDIVIDUAL' ? 'asignación individual' : 'heredado de categoría'})`
+                  : 'Asignar supervisor individual'
+              }
               className="p-0.5 rounded transition-colors">
-              <UserCheck className={`w-3.5 h-3.5 ${supervisorAsignado ? 'text-blue-500' : 'text-slate-300 hover:text-blue-400'}`} />
+              <UserCheck className={`w-3.5 h-3.5 ${
+                supervisorEfectivo.origen === 'INDIVIDUAL' ? 'text-blue-500' :
+                supervisorEfectivo.origen === 'HEREDADO'   ? 'text-blue-300' :
+                'text-slate-300 hover:text-blue-400'
+              }`} />
             </button>
 
-            {/* Técnico */}
+            {/* Técnico — abre el override individual del ítem (prevalece sobre el default de categoría) */}
             <button
               onClick={() => togglePanel('tecnico')}
-              title={tecnicoAsignado ? `Técnico: ${tecnicoAsignado.nombre}` : 'Asignar técnico'}
+              title={
+                tecnicoEfectivo.entidad
+                  ? `Técnico: ${tecnicoEfectivo.entidad.nombre} (${tecnicoEfectivo.origen === 'INDIVIDUAL' ? 'asignación individual' : 'heredado de categoría'})`
+                  : 'Asignar técnico individual'
+              }
               className="p-0.5 rounded transition-colors">
-              <Wrench className={`w-3.5 h-3.5 ${tecnicoAsignado ? 'text-orange-500' : 'text-slate-300 hover:text-orange-400'}`} />
+              <Wrench className={`w-3.5 h-3.5 ${
+                tecnicoEfectivo.origen === 'INDIVIDUAL' ? 'text-orange-500' :
+                tecnicoEfectivo.origen === 'HEREDADO'   ? 'text-orange-300' :
+                'text-slate-300 hover:text-orange-400'
+              }`} />
             </button>
           </div>
         </div>
@@ -208,8 +237,13 @@ export function ChecklistConcepto({
         {panel !== null && (
           <div className="ml-5 mt-2 space-y-1.5 max-w-xs">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              {panel === 'supervisor' ? 'Asignar Supervisor Responsable' : 'Asignar Técnico Responsable'}
+              {panel === 'supervisor' ? 'Asignar Supervisor — este ítem' : 'Asignar Técnico — este ítem'}
             </p>
+            {(panel === 'supervisor' ? categoria.id_supervisor_default_er : categoria.id_tecnico_default_er) !== null && (
+              <p className="text-[10px] text-slate-400 -mt-1">
+                Sin asignación individual, hereda el default de la categoría.
+              </p>
+            )}
             <input
               type="text"
               value={search}
@@ -224,7 +258,7 @@ export function ChecklistConcepto({
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => handleSelect(null)}
                   className="w-full text-left px-2.5 py-1.5 text-[11px] text-red-500 hover:bg-red-50 transition-colors flex items-center gap-1">
-                  <X className="w-3 h-3" /> Quitar {panel === 'supervisor' ? 'supervisor' : 'técnico'}
+                  <X className="w-3 h-3" /> Quitar asignación individual
                 </button>
               )}
               {filteredList.length === 0 ? (

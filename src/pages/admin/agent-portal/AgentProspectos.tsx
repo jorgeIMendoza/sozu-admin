@@ -24,7 +24,7 @@ import {
 } from "@/lib/portal-agente/leads";
 import { etapaDef } from "@/lib/portal-agente/negocios";
 import {
-  Loader2, Search, UserPlus, ChevronRight, ChevronDown, EyeOff, Eye, Plus, Users, ArrowLeftRight,
+  Loader2, Search, UserPlus, ChevronRight, ChevronDown, EyeOff, Eye, Plus, Users, ArrowLeftRight, Filter,
 } from "lucide-react";
 
 /** Prospectos por página. La búsqueda y el corte los resuelve la base, no el navegador. */
@@ -53,6 +53,10 @@ const AgentProspectos = () => {
   const [searchAplicado, setSearchAplicado] = useState("");
   const [filtroEstatus, setFiltroEstatus] = useState<string>("all");
   const [filtroProyecto, setFiltroProyecto] = useState<string>("all");
+  // Arranca ocultando los estados de descarte (asesor inmobiliario, registro por error,
+  // proveedor…): son el 86% de algunas carteras y sepultan la lista de trabajo. No se
+  // borra nada: se ven al apagar la pastilla o al filtrar por ese estado.
+  const [soloActivos, setSoloActivos] = useState(true);
   const [page, setPage] = useState(1);
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
   const [guardando, setGuardando] = useState<number | null>(null);
@@ -76,7 +80,10 @@ const AgentProspectos = () => {
   // anterior no significa nada en la nueva.
   useEffect(() => {
     setPage(1);
-  }, [searchAplicado, filtroEstatus, filtroProyecto, effectiveAuthUserId, effectivePersonaId]);
+  }, [searchAplicado, filtroEstatus, filtroProyecto, soloActivos, effectiveAuthUserId, effectivePersonaId]);
+
+  // Si el usuario filtra por un estado concreto, ese estado gana aunque sea de descarte.
+  const cortarDescartes = soloActivos && filtroEstatus === "all";
 
   const { data: catalogoEstatus = [] } = useQuery({
     queryKey: ["estatus-lead"],
@@ -87,7 +94,7 @@ const AgentProspectos = () => {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       "agent-prospectos", effectivePersonaId, effectiveAuthUserId,
-      searchAplicado, filtroEstatus, filtroProyecto, page,
+      searchAplicado, filtroEstatus, filtroProyecto, cortarDescartes, page,
     ],
     queryFn: () => fetchAgenteProspectos({
       authUserId: effectiveAuthUserId,
@@ -97,6 +104,7 @@ const AgentProspectos = () => {
       proyecto: filtroProyecto === "all"
         ? null
         : (filtroProyecto === "null" ? PROYECTO_SIN_DESARROLLO : Number(filtroProyecto)),
+      soloActivos: cortarDescartes,
       limit: POR_PAGINA,
       offset: (page - 1) * POR_PAGINA,
     }),
@@ -108,8 +116,8 @@ const AgentProspectos = () => {
   // Desarrollos del agente completos, no los de la página visible: si el filtro se armara
   // con las 25 filas de la página, un desarrollo suyo desaparecería del selector.
   const { data: facetas } = useQuery({
-    queryKey: ["agent-prospectos-facetas", effectiveAuthUserId],
-    queryFn: () => fetchAgenteProspectosFacetas(effectiveAuthUserId),
+    queryKey: ["agent-prospectos-facetas", effectiveAuthUserId, cortarDescartes],
+    queryFn: () => fetchAgenteProspectosFacetas(effectiveAuthUserId, cortarDescartes),
     enabled: !!effectiveAuthUserId,
     staleTime: 5 * 60_000,
   });
@@ -127,6 +135,8 @@ const AgentProspectos = () => {
   const desde = total === 0 ? 0 : (page - 1) * POR_PAGINA + 1;
   const hasta = total === 0 ? 0 : Math.min(page * POR_PAGINA, total);
   const hayFiltros = !!searchAplicado || filtroEstatus !== "all" || filtroProyecto !== "all";
+  // La primera respuesta dice si la base ya sabe cortar descartes (migración 06).
+  const soporteDescartes = data?.soloActivosSoportado !== false;
 
   // Si un traspaso o un filtro dejó la página fuera de rango, regresar a la última válida.
   useEffect(() => {
@@ -264,6 +274,33 @@ const AgentProspectos = () => {
             </SelectContent>
           </Select>
 
+          <IconTip
+            label={
+              soporteDescartes
+                ? "Oculta los estados de cierre del catálogo (asesor inmobiliario, registro por error, proveedor, fuera del área, fuera de presupuesto, sin respuesta 7+). No se borra nada: apaga la pastilla o filtra por ese estado para verlos."
+                : "Requiere la migración 06 en la base. Mientras no esté, la lista muestra todos los estados."
+            }
+          >
+            <button
+              type="button"
+              disabled={!soporteDescartes || filtroEstatus !== "all"}
+              onClick={() => {
+                setSoloActivos((v) => !v);
+                track({ page: "agent_prospectos", elementId: "toggle_solo_activos", metadata: { activo: !soloActivos } });
+              }}
+              className={cn(
+                "flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[12px] font-semibold transition-colors",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                cortarDescartes
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Filter className="size-3.5" />
+              {cortarDescartes ? "Solo activos" : "Todos los estados"}
+            </button>
+          </IconTip>
+
           {perms.canCreate && (
             <ActionButton
               icon={Plus}
@@ -287,6 +324,7 @@ const AgentProspectos = () => {
             {prospectos.length > 0 && (
               <> · en esta página {totalesPagina.unidades} unidades · {totalesPagina.clientes} con compra</>
             )}
+            {cortarDescartes && soporteDescartes && <> · descartes ocultos</>}
             {isFetching && <Loader2 className="ml-2 inline size-3 animate-spin align-[-1px]" />}
           </p>
         )}
@@ -312,15 +350,15 @@ const AgentProspectos = () => {
         ) : (
           <div className="rounded-xl border overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] table-fixed text-sm whitespace-nowrap">
+              <table className="w-full min-w-[930px] table-fixed text-sm whitespace-nowrap">
                 <thead className="sozu-thead [&_th]:uppercase [&_th]:tracking-wide [&_th]:px-3">
                   <tr>
                     <th className="w-[40px]" aria-label="Desplegar" />
                     <th className="w-[220px] text-left">Prospecto</th>
                     <th className="w-[200px] text-left">Contacto</th>
-                    <th className="w-[180px] text-left">Desarrollos</th>
+                    <th className="w-[160px] text-left">Desarrollos</th>
                     <th className="w-[92px] text-center">Unidades</th>
-                    <th className="w-[168px] text-center">Estado</th>
+                    <th className="w-[210px] text-center">Estado</th>
                     <th className="w-[72px] pr-4" aria-label="Acciones" />
                   </tr>
                 </thead>
@@ -367,7 +405,10 @@ const AgentProspectos = () => {
                                 onValueChange={(v) => cambiarEstatus(unico.id_entidad_relacionada, v)}
                                 disabled={guardando === unico.id_entidad_relacionada}
                               >
-                                <SelectTrigger className="h-8 rounded-md border-border bg-card text-[12px] shadow-none">
+                                <SelectTrigger
+                                  title={unico.estatus ?? "Sin estado"}
+                                  className="h-8 rounded-md border-border bg-card text-[12px] shadow-none"
+                                >
                                   <SelectValue placeholder={unico.estatus ?? "Sin estado"} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -425,7 +466,10 @@ const AgentProspectos = () => {
                                           onValueChange={(v) => cambiarEstatus(pr.id_entidad_relacionada, v)}
                                           disabled={guardando === pr.id_entidad_relacionada}
                                         >
-                                          <SelectTrigger className="h-8 w-[168px] rounded-md border-border bg-card text-[12px] shadow-none">
+                                          <SelectTrigger
+                                            title={pr.estatus ?? "Sin estado"}
+                                            className="h-8 w-[200px] rounded-md border-border bg-card text-[12px] shadow-none"
+                                          >
                                             <SelectValue placeholder={pr.estatus ?? "Sin estado"} />
                                           </SelectTrigger>
                                           <SelectContent>

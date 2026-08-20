@@ -1941,6 +1941,7 @@ function LeftPanel({ contact, developments, owners, onSaved, canEdit = true }: a
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const { data: leadStates = META_LEAD_STATUSES } = useLeadStates();
   const { data: capiStageMap = CAPI_STAGE_FALLBACK } = useQuery({ queryKey: ["crm-capi-stage-map"], queryFn: fetchCapiStageMap });
+  const { logActualizar } = useCrmLogger();
 
   // Auto-guardado: cada campo persiste al cambiar (selects) o al salir del campo (texto).
   const run = async (fn: () => Promise<{ error: any }>) => {
