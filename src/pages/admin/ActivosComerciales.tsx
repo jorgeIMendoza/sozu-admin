@@ -102,7 +102,7 @@ export default function ActivosComerciales() {
         .select(`
           id, numero_propiedad, id_tipo_propiedad, m2_interiores, m2_exteriores,
           precio_lista, id_estatus_disponibilidad, activo, es_aprobado,
-          id_edificio_modelo,
+          id_edificio, id_edificio_modelo,
           tipos_propiedad:id_tipo_propiedad ( nombre ),
           estatus_disponibilidad:id_estatus_disponibilidad ( nombre ),
           propiedades_activo_comercial ( codigo_interno, ubicacion_ciudad, ubicacion_direccion )
@@ -124,46 +124,63 @@ export default function ActivosComerciales() {
       const filas = (data ?? []) as any[];
 
       /*
-       * Proyecto de cada activo, en waterfall explícito (patrón #1 de
-       * CLAUDE.md): edificios_modelos → edificios → proyectos. El embed
-       * anidado de PostgREST sobre tres niveles devuelve null sin error, y
-       * aquí eso se leería como "no pertenece a ningún proyecto", que es una
-       * conclusión distinta y falsa.
+       * Proyecto de cada activo, por los DOS vínculos que existen.
        *
-       * Un activo independiente no tiene vínculo y se queda sin proyecto, que
-       * es lo correcto.
+       *   id_edificio        → edificios → proyectos                (comerciales)
+       *   id_edificio_modelo → edificios_modelos → edificios → …    (histórico)
+       *
+       * Un activo comercial cuelga del edificio: el modelo describe la
+       * distribución de un departamento y no le aplica. Las 95 oficinas
+       * capturadas antes de ese cambio siguen colgando del vínculo
+       * edificio×modelo, así que hay que resolver ambos o unas u otras
+       * aparecen como "Independiente" sin serlo.
+       *
+       * Waterfall explícito (patrón #1 de CLAUDE.md): el embed anidado de
+       * PostgREST sobre tres niveles devuelve null sin error, y eso se leería
+       * como "no pertenece a ningún proyecto", que es falso.
        */
       const idsVinculo = [...new Set(filas.map((r) => r.id_edificio_modelo).filter(Boolean))];
-      const proyectoPorVinculo = new Map<number, string>();
+      const idsEdificio = new Set<number>(filas.map((r) => r.id_edificio).filter(Boolean));
 
+      // El vínculo edificio×modelo aporta más edificios que resolver.
+      const edificioPorVinculo = new Map<number, number>();
       if (idsVinculo.length > 0) {
         const { data: vinculos } = await (supabase as any)
           .from("edificios_modelos").select("id, id_edificio").in("id", idsVinculo);
-        const idsEdificio = [...new Set((vinculos ?? []).map((v: any) => v.id_edificio).filter(Boolean))];
-
-        if (idsEdificio.length > 0) {
-          const { data: edificios } = await (supabase as any)
-            .from("edificios").select("id, id_proyecto").in("id", idsEdificio);
-          const idsProyecto = [...new Set((edificios ?? []).map((e: any) => e.id_proyecto).filter(Boolean))];
-
-          const { data: proyectos } = idsProyecto.length
-            ? await (supabase as any).from("proyectos").select("id, nombre").in("id", idsProyecto)
-            : { data: [] };
-
-          const nombrePorProyecto = new Map((proyectos ?? []).map((p: any) => [p.id, p.nombre]));
-          const proyectoPorEdificio = new Map(
-            (edificios ?? []).map((e: any) => [e.id, nombrePorProyecto.get(e.id_proyecto)]),
-          );
-          for (const v of vinculos ?? []) {
-            const nombre = proyectoPorEdificio.get(v.id_edificio);
-            if (nombre) proyectoPorVinculo.set(v.id, nombre as string);
-          }
+        for (const v of vinculos ?? []) {
+          if (!v.id_edificio) continue;
+          edificioPorVinculo.set(v.id, v.id_edificio);
+          idsEdificio.add(v.id_edificio);
         }
       }
 
+      const proyectoPorEdificio = new Map<number, string>();
+      if (idsEdificio.size > 0) {
+        const { data: edificios } = await (supabase as any)
+          .from("edificios").select("id, id_proyecto").in("id", [...idsEdificio]);
+        const idsProyecto = [...new Set((edificios ?? []).map((e: any) => e.id_proyecto).filter(Boolean))];
+
+        const { data: proyectos } = idsProyecto.length
+          ? await (supabase as any).from("proyectos").select("id, nombre").in("id", idsProyecto)
+          : { data: [] };
+        const nombrePorProyecto = new Map((proyectos ?? []).map((p: any) => [p.id, p.nombre]));
+
+        for (const e of edificios ?? []) {
+          const nombre = nombrePorProyecto.get(e.id_proyecto);
+          if (nombre) proyectoPorEdificio.set(e.id, nombre as string);
+        }
+      }
+
+      /** El edificio del activo, venga del vínculo directo o del histórico. */
+      const edificioDe = (r: any): number | null =>
+        r.id_edificio ?? edificioPorVinculo.get(r.id_edificio_modelo) ?? null;
+
       return filas.map((r) => ({
         ...r,
-        proyecto: r.id_edificio_modelo ? proyectoPorVinculo.get(r.id_edificio_modelo) ?? null : null,
+        proyecto: (() => {
+          const idEd = edificioDe(r);
+          return idEd ? proyectoPorEdificio.get(idEd) ?? null : null;
+        })(),
       }));
     },
   });
