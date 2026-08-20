@@ -37,6 +37,7 @@ import {
   calcularFactorNivel,
   calcularFactorTamano,
 } from "@/features/precios/engine/pricing";
+import { valorFactor } from "@/features/precios/engine/anclaje";
 import {
   formatoFecha,
   formatoM2,
@@ -276,6 +277,70 @@ function PantallaMotor() {
       estatus: SIN_FILTRO,
     });
 
+  /*
+   * Promedios ponderados de lo que el motor calcula hoy.
+   *
+   * Al sembrar, el precio por m² base ES el promedio ponderado: la semilla lo
+   * define como `Σ precio / Σ área` y reparte la diferencia de cada modelo en
+   * su factor, cuyo promedio ponderado da exactamente 1. Pero el base es el
+   * valor en el ancla, no el promedio: en cuanto se calibra —curvas, factores
+   * de torre o vista— el promedio se separa del base por el efecto acumulado
+   * de todos esos multiplicadores. Por eso se muestran los dos y su distancia,
+   * en vez de dar por hecho que coinciden.
+   *
+   * Salen de los desgloses vigentes, así que cualquier variable que se toque
+   * en esta pantalla los mueve.
+   */
+  const promediosProyecto = useMemo(() => {
+    let precio = 0;
+    let area = 0;
+    let unidades = 0;
+    for (const d of desglosesFiltrados) {
+      if (d.area_ponderada <= 0) continue;
+      precio += d.precio_calculado;
+      area += d.area_ponderada;
+      unidades++;
+    }
+    return {
+      unidades,
+      porM2: area > 0 ? precio / area : 0,
+      porUnidad: unidades > 0 ? precio / unidades : 0,
+    };
+  }, [desglosesFiltrados]);
+
+  const brechaBase =
+    motor.precio_base_m2_proyecto > 0 && promediosProyecto.porM2 > 0
+      ? ((promediosProyecto.porM2 - motor.precio_base_m2_proyecto) /
+          motor.precio_base_m2_proyecto) *
+        100
+      : 0;
+
+  /*
+   * Qué valen HOY las categorías del ancla.
+   *
+   * El ancla se fija cuando se siembra o se reancla, y en ese momento sus
+   * familias quedan normalizadas a 1.0000. Los factores son editables, así que
+   * nada garantiza que sigan valiendo 1: hay que leerlos, no suponerlos.
+   */
+  const factoresDelAncla = useMemo(() => {
+    const nombreTorre = indices?.torresPorId[motor.ancla.id_torre]?.nombre ?? "";
+    return [
+      { etiqueta: "Torre", clave: nombreTorre, valor: valorFactor(motor, "torre", nombreTorre) },
+      {
+        etiqueta: "Vista",
+        clave: motor.ancla.clave_vista,
+        valor: valorFactor(motor, "vista", motor.ancla.clave_vista),
+      },
+      {
+        etiqueta: "Orientación",
+        clave: motor.ancla.clave_orientacion,
+        valor: valorFactor(motor, "orientacion", motor.ancla.clave_orientacion),
+      },
+    ];
+  }, [motor, indices]);
+
+  const anclaDesviada = factoresDelAncla.some((x) => Math.abs(x.valor - 1) > 1e-6);
+
   const bases = motor.bases_modelo ?? [];
   const unidadesPorModelo = new Map<string, number>();
   for (const p of propiedadesFiltradas) {
@@ -499,14 +564,78 @@ function PantallaMotor() {
             </p>
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Precio promedio ponderado por m²
+              </p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+                {formatoMoneda(promediosProyecto.porM2)}
+                <span className="text-xs font-normal text-muted-foreground"> /m²</span>
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {Math.abs(brechaBase) < 0.005
+                  ? "Coincide con el precio base."
+                  : `${formatoPorcentaje(brechaBase, 2)} respecto al precio base.`}
+              </p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Precio promedio ponderado {hayFiltro ? "del subconjunto" : "de todo el proyecto"}
+              </p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+                {formatoMoneda(promediosProyecto.porUnidad)}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Por unidad, sobre {promediosProyecto.unidades} unidades.
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Las dos cifras salen del cálculo vigente del motor, así que cualquier variable
+            que muevas en esta pantalla —factores, curvas, precio base o el factor de un
+            modelo— las mueve. Al sembrar el motor, el precio por m² base y el promedio
+            ponderado por m² son el mismo número; se separan conforme se calibra, porque el
+            base es el valor en el ancla y el promedio ya trae encima el efecto de todos los
+            multiplicadores.
+          </p>
+
           <div className="rounded-md border border-border bg-muted/30 p-3">
             <p className="text-xs font-medium text-foreground">
-              Aplica en: {motor.ancla.descripcion}
+              Ancla del proyecto: nivel {motor.ancla.nivel}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Es la combinación de condiciones de menor valor del proyecto, donde todos los
-              factores multiplicativos valen exactamente 1.0000. A partir de este precio, cada
-              unidad varía según su modelo, torre, nivel, vista, orientación, extras y tamaño.
+              El nivel del ancla es lo único que el cálculo usa como referencia: ahí la curva
+              de nivel vale exactamente 1.0000 y desde ahí sube o baja. Torre, vista y
+              orientación del ancla no entran en el cálculo de ninguna unidad; son las
+              categorías contra las que se normalizaron sus familias la última vez que se
+              ancló, y hoy valen:
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {factoresDelAncla.map((x) => (
+                <li key={x.etiqueta} className="text-xs tabular-nums text-muted-foreground">
+                  {x.etiqueta} {x.clave || "—"}:{" "}
+                  <span
+                    className={cn(
+                      "font-medium",
+                      Math.abs(x.valor - 1) > 1e-6 ? "text-amber-700 dark:text-amber-400" : "text-foreground",
+                    )}
+                  >
+                    {formatoMultiplicador(x.valor)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {anclaDesviada
+                ? "Alguna de esas categorías ya no vale 1.0000, así que el precio base dejó de ser el precio de esa combinación. No es un error —los factores son editables—, pero el base ya no se lee como \"lo que cuesta la unidad más barata\"."
+                : "Mientras valgan 1.0000, el precio base es el precio por m² de una unidad en esa combinación, antes de aplicar el factor de su modelo."}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              El precio por m² de una unidad nunca es este base a secas: es base × factor de
+              su modelo × nivel × torre × vista × orientación × extras × tamaño. Incluso en
+              la combinación ancla, el modelo aplica su propio factor.
             </p>
           </div>
         </CardContent>
