@@ -284,14 +284,56 @@ function ProyectoIndustrial({
   );
 }
 
+/**
+ * Ubicación registrada del proyecto, para heredarla al activo.
+ *
+ * Una oficina dentro de un desarrollo está en la misma dirección y ciudad que
+ * el desarrollo: volver a teclearlas invita a que no coincidan. La ciudad sale
+ * del municipio del proyecto, que es el dato estructurado; `direccion` es texto
+ * libre y no sirve para filtrar.
+ */
+function useUbicacionProyecto(idProyecto: string) {
+  return useQuery({
+    queryKey: ["ac-ubicacion-proyecto", idProyecto],
+    enabled: !!idProyecto,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("proyectos")
+        .select("id, direccion, latitud, longitud, direccion_id_municipio")
+        .eq("id", Number(idProyecto))
+        .maybeSingle();
+      if (error || !data) return null;
+
+      // Waterfall: el municipio es otra tabla y el embed anidado devolvería
+      // null sin error, que aquí se leería como "el proyecto no tiene ciudad".
+      let ciudad = "";
+      if (data.direccion_id_municipio) {
+        const { data: mun } = await (supabase as any)
+          .from("municipios_mx").select("nombre").eq("id", data.direccion_id_municipio).maybeSingle();
+        ciudad = (mun?.nombre as string) ?? "";
+      }
+      return {
+        direccion: (data.direccion as string) ?? "",
+        ciudad,
+        lat: data.latitud == null ? "" : String(data.latitud),
+        lng: data.longitud == null ? "" : String(data.longitud),
+      };
+    },
+  });
+}
+
 function UbicacionInventario({
   valor,
   onChange,
+  onProyecto,
   disabled,
   pideModelo,
 }: {
   valor: string;
   onChange: (v: string) => void;
+  /** Proyecto elegido, para heredar su ubicación. `""` al limpiarlo. */
+  onProyecto?: (idProyecto: string) => void;
   disabled?: boolean;
   /** La base aún no tiene `id_edificio`: el valor es el vínculo edificio×modelo. */
   pideModelo: boolean;
@@ -349,7 +391,7 @@ function UbicacionInventario({
       <Field label="Proyecto *">
         <Select
           value={idProyecto || undefined}
-          onValueChange={(v) => { setIdProyecto(v); setIdEdificio(""); onChange(""); }}
+          onValueChange={(v) => { setIdProyecto(v); setIdEdificio(""); onChange(""); onProyecto?.(v); }}
           disabled={disabled}
         >
           <SelectTrigger>
@@ -417,6 +459,13 @@ export default function ActivosComercialesNuevo() {
    */
   const [enProyecto, setEnProyecto] = useState(true);
 
+  /**
+   * Proyecto elegido, solo para heredar su ubicación. El vínculo que se guarda
+   * es el edificio; esto no viaja al payload.
+   */
+  const [idProyectoElegido, setIdProyectoElegido] = useState("");
+  const { data: ubicacionProyecto } = useUbicacionProyecto(idProyectoElegido);
+
   // Mientras la base no tenga `id_edificio` hay que seguir pidiendo el modelo
   // y capturando el número a mano: ambas cosas llegan en el mismo DDL.
   const { data: soportaEdificio = false } = useSoportaEdificioDirecto();
@@ -481,6 +530,25 @@ export default function ActivosComercialesNuevo() {
   useEffect(() => {
     if (!isEdit) setAtts({});
   }, [tipo, isEdit]);
+
+  /*
+   * Hereda la ubicación del proyecto al elegirlo.
+   *
+   * Solo rellena lo que esté VACÍO: si alguien ya escribió una dirección
+   * propia —una oficina puede tener acceso por otra calle— cambiar de proyecto
+   * no debe borrársela. Y solo en alta: en edición los datos ya son del activo,
+   * no del proyecto, y pisarlos sería reescribir lo capturado.
+   */
+  useEffect(() => {
+    if (isEdit || !ubicacionProyecto) return;
+    setPac((p) => ({
+      ...p,
+      ubicacion_direccion: p.ubicacion_direccion || ubicacionProyecto.direccion,
+      ubicacion_ciudad:    p.ubicacion_ciudad    || ubicacionProyecto.ciudad,
+      ubicacion_lat:       p.ubicacion_lat       || ubicacionProyecto.lat,
+      ubicacion_lng:       p.ubicacion_lng       || ubicacionProyecto.lng,
+    }));
+  }, [ubicacionProyecto, isEdit]);
 
   // Un terreno no puede quedar ligado a un proyecto: si se venía de otro tipo
   // con proyecto elegido, se limpia el vínculo además de la respuesta.
@@ -976,6 +1044,7 @@ export default function ActivosComercialesNuevo() {
                       <UbicacionInventario
                         valor={prop.id_edificio}
                         onChange={(v) => setP("id_edificio", v)}
+                        onProyecto={setIdProyectoElegido}
                         disabled={isEdit}
                         pideModelo={pideModelo}
                       />
@@ -1071,7 +1140,17 @@ export default function ActivosComercialesNuevo() {
         {/* UBICACION */}
         <TabsContent value="ubicacion">
           <Card>
-            <CardHeader><CardTitle>Ubicación y legal</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Ubicación y legal</CardTitle>
+              {/* Se dice de dónde vienen los datos: un campo que se llena solo
+                  y no explica por qué se lee como un error. */}
+              {!isEdit && ubicacionProyecto && (
+                <p className="text-sm text-muted-foreground">
+                  Dirección, ciudad y coordenadas se tomaron del proyecto. Puedes
+                  cambiarlas si el activo tiene una ubicación propia.
+                </p>
+              )}
+            </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field label="Dirección" className="md:col-span-2">
                 <Input value={pac.ubicacion_direccion ?? ""} onChange={(e) => setC("ubicacion_direccion", e.target.value)} />
