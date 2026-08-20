@@ -792,11 +792,15 @@ export default function ActivosComercialesNuevo() {
         </div>
       )}
       {/*
-        `propiedades.id_edificio_modelo` es NOT NULL en la base. Mientras no se
-        aplique el DDL que lo hace opcional, un activo sin desarrollo se rechaza
-        al guardar. Se avisa aquí y no al final, que es donde dolería.
+        Solo cuando la base todavía no admite el vínculo por edificio: ahí
+        `id_edificio_modelo` sigue siendo obligatorio y un activo suelto se
+        rechaza al guardar.
+
+        Antes esto se pintaba con una condición fija, sin comprobar nada, así
+        que seguía apareciendo en ambientes donde el DDL ya estaba aplicado y
+        contradecía a la propia pantalla.
       */}
-      {!isEdit && !enProyecto && (
+      {!isEdit && !enProyecto && !soportaEdificio && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
           <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
             Los activos sin desarrollo aún no se pueden guardar
