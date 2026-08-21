@@ -155,6 +155,29 @@ function FiltroInventario({
 }
 
 
+/** Una cifra del tablero de inventario: dato grande arriba, contexto abajo. */
+function Cifra({
+  etiqueta,
+  valor,
+  nota,
+  tono,
+}: {
+  etiqueta: string;
+  valor: string;
+  nota?: string;
+  tono?: string;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+      <p className={cn("mt-0.5 text-lg font-semibold tabular-nums", tono ?? "text-foreground")}>
+        {valor}
+      </p>
+      {nota ? <p className="mt-0.5 text-xs text-muted-foreground">{nota}</p> : null}
+    </div>
+  );
+}
+
 /** Opción neutra de los filtros: no acota nada. */
 const SIN_FILTRO = "__todos__";
 
@@ -300,10 +323,12 @@ function PantallaMotor() {
    * Salen de los desgloses vigentes, así que cualquier variable que se toque
    * en esta pantalla los mueve.
    */
-  const promediosProyecto = useMemo(() => {
+  const aLaVenta = useMemo(() => {
     const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
     let precio = 0;
     let area = 0;
+    let areaInterior = 0;
+    let lista = 0;
     let unidades = 0;
     for (const p of propiedadesFiltradas) {
       if (!estatusExplicito && !ESTATUS_A_LA_VENTA.has(p.estatus)) continue;
@@ -311,18 +336,26 @@ function PantallaMotor() {
       if (!d || d.area_ponderada <= 0) continue;
       precio += d.precio_calculado;
       area += d.area_ponderada;
+      areaInterior += p.m2_interiores;
+      lista += p.precio_lista_actual;
       unidades++;
     }
     return {
       unidades,
+      area,
+      areaInterior,
+      calculado: precio,
+      lista,
+      delta: precio - lista,
+      deltaPct: lista > 0 ? ((precio - lista) / lista) * 100 : 0,
       porM2: area > 0 ? precio / area : 0,
       porUnidad: unidades > 0 ? precio / unidades : 0,
     };
   }, [propiedadesFiltradas, desglosesFiltrados, estatusExplicito]);
 
   const brechaBase =
-    motor.precio_base_m2_proyecto > 0 && promediosProyecto.porM2 > 0
-      ? ((promediosProyecto.porM2 - motor.precio_base_m2_proyecto) /
+    motor.precio_base_m2_proyecto > 0 && aLaVenta.porM2 > 0
+      ? ((aLaVenta.porM2 - motor.precio_base_m2_proyecto) /
           motor.precio_base_m2_proyecto) *
         100
       : 0;
@@ -533,6 +566,79 @@ function PantallaMotor() {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
+            Inventario disponible a la venta
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Lo que queda por vender, valuado con el motor tal como está en este momento.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {aLaVenta.unidades === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {estatusExplicito
+                ? `Ninguna unidad del filtro actual tiene precio calculado.`
+                : "Este proyecto no tiene unidades a la venta: todas están comprometidas con un comprador."}
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <Cifra
+                  etiqueta="Unidades"
+                  valor={String(aLaVenta.unidades)}
+                  nota={`de ${totalesFiltrados.unidades} en el proyecto`}
+                />
+                <Cifra
+                  etiqueta="Área ponderada"
+                  valor={formatoM2(aLaVenta.area)}
+                  nota={`${formatoM2(aLaVenta.areaInterior)} de interior`}
+                />
+                <Cifra
+                  etiqueta="Valor calculado"
+                  valor={formatoMoneda(aLaVenta.calculado)}
+                  nota="Con el motor vigente"
+                />
+                <Cifra
+                  etiqueta="Valor en lista actual"
+                  valor={formatoMoneda(aLaVenta.lista)}
+                  nota="Lo capturado en inventario"
+                />
+                <Cifra
+                  etiqueta="Diferencia"
+                  valor={formatoPorcentaje(aLaVenta.deltaPct, 2)}
+                  nota={formatoMoneda(aLaVenta.delta)}
+                  tono={
+                    Math.abs(aLaVenta.deltaPct) < 0.005
+                      ? "text-muted-foreground"
+                      : aLaVenta.deltaPct > 0
+                        ? "text-primary"
+                        : "text-destructive"
+                  }
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Todo se recalcula al mover cualquier variable del motor, así que sirve para
+                ver en el acto qué le hace cada cambio al valor de lo que queda por vender.
+                La <strong>diferencia</strong> compara el valor que calcula el motor contra
+                el precio de lista ya capturado en inventario. Sobre el inventario completo
+                un motor recién sembrado cuadra por construcción, pero sobre el remanente no
+                tiene por qué: las unidades ya vendidas se listaron antes y más baratas, y
+                jalan el promedio del que nace el motor. Una diferencia negativa grande suele
+                querer decir que lo que queda está listado por encima de lo que el motor
+                sostiene, no que el motor esté mal.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {estatusExplicito
+                  ? `Cuenta las unidades en ${filtros.estatus}, por el filtro de Estatus de arriba.`
+                  : "Cuenta solo Disponible e Inventario: lo que no está comprometido con un comprador. Un filtro de Estatus arriba manda sobre este criterio."}
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">
             Precio por m² base del proyecto
           </CardTitle>
         </CardHeader>
@@ -561,17 +667,17 @@ function PantallaMotor() {
                 Precio promedio ponderado por m²
               </p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
-                {promediosProyecto.unidades === 0 ? (
+                {aLaVenta.unidades === 0 ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (
                   <>
-                    {formatoMoneda(promediosProyecto.porM2)}
+                    {formatoMoneda(aLaVenta.porM2)}
                     <span className="text-xs font-normal text-muted-foreground"> /m²</span>
                   </>
                 )}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {promediosProyecto.unidades === 0
+                {aLaVenta.unidades === 0
                   ? "Sin unidades a la venta."
                   : Math.abs(brechaBase) < 0.005
                     ? "Coincide con el precio base."
@@ -583,16 +689,16 @@ function PantallaMotor() {
                 Precio promedio ponderado {hayFiltro ? "del subconjunto" : "de todo el proyecto"}
               </p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
-                {promediosProyecto.unidades === 0 ? (
+                {aLaVenta.unidades === 0 ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (
-                  formatoMoneda(promediosProyecto.porUnidad)
+                  formatoMoneda(aLaVenta.porUnidad)
                 )}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {estatusExplicito
-                  ? `Por unidad, sobre ${promediosProyecto.unidades} unidades en ${filtros.estatus}.`
-                  : `Por unidad, sobre ${promediosProyecto.unidades} de ${totalesFiltrados.unidades} unidades: las que siguen a la venta.`}
+                  ? `Por unidad, sobre ${aLaVenta.unidades} unidades en ${filtros.estatus}.`
+                  : `Por unidad, sobre ${aLaVenta.unidades} de ${totalesFiltrados.unidades} unidades: las que siguen a la venta.`}
               </p>
             </div>
           </div>
