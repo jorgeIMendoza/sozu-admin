@@ -2,15 +2,24 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { EsquemaFinanciamiento } from "../types/dominio";
 import { ESQUEMAS_SEMILLA } from "../mocks/esquemas";
+import { obtenerEsquemasProyecto } from "../services/esquemasReales";
 
 interface EstadoEsquemas {
   esquemasPorProyecto: Record<string, EsquemaFinanciamiento[]>;
   esquemaSeleccionado: string | null;
+  /** Proyectos con una carga en vuelo, para no dispararla dos veces. */
+  cargando: Record<string, boolean>;
+  /** Proyectos ya traídos de la base, aunque hayan venido vacíos. */
+  cargados: Record<string, boolean>;
+  errorCarga: string | null;
 }
 
 const estadoInicial: EstadoEsquemas = {
   esquemasPorProyecto: structuredClone(ESQUEMAS_SEMILLA),
   esquemaSeleccionado: null,
+  cargando: {},
+  cargados: {},
+  errorCarga: null,
 };
 
 export type DatosEsquema = Omit<
@@ -20,6 +29,17 @@ export type DatosEsquema = Omit<
 
 interface AccionesEsquemas {
   getEsquemas: (idProyecto: string) => EsquemaFinanciamiento[];
+  /**
+   * Trae de `esquemas_pago` los esquemas del proyecto y reemplaza los que
+   * hubiera en memoria.
+   *
+   * Reemplaza y no mezcla: la base es la fuente de la verdad de la política
+   * comercial —es lo que ve el prospecto en su oferta— y fusionar dejaría
+   * esquemas fantasma que ya nadie ofrece. Se hace una sola vez por proyecto
+   * y por sesión; `recargarEsquemas` fuerza volver a traerlos.
+   */
+  cargarEsquemas: (idProyecto: string) => Promise<void>;
+  recargarEsquemas: (idProyecto: string) => Promise<void>;
   crearEsquema: (idProyecto: string, datos: DatosEsquema) => string;
   actualizarEsquema: <C extends keyof EsquemaFinanciamiento>(
     idEsquema: string,
@@ -62,6 +82,12 @@ function normalizar(estado: unknown): EstadoEsquemas {
   return {
     esquemasPorProyecto: mapa,
     esquemaSeleccionado: s.esquemaSeleccionado ?? null,
+    // Las banderas de carga no se restauran: cada sesión vuelve a pedir los
+    // esquemas a la base, porque la política comercial pudo cambiar fuera de
+    // esta pantalla y un caché viejo se vería igual que uno vigente.
+    cargando: {},
+    cargados: {},
+    errorCarga: null,
   };
 }
 
@@ -95,6 +121,36 @@ export const useEsquemasStore = create<EstadoEsquemas & AccionesEsquemas>()(
         ...structuredClone(estadoInicial),
 
         getEsquemas: (idProyecto) => get().esquemasPorProyecto[idProyecto] ?? [],
+
+        cargarEsquemas: async (idProyecto) => {
+          const s = get();
+          if (!idProyecto || s.cargados[idProyecto] || s.cargando[idProyecto]) return;
+          await get().recargarEsquemas(idProyecto);
+        },
+
+        recargarEsquemas: async (idProyecto) => {
+          if (!idProyecto) return;
+          set((st) => ({ ...st, cargando: { ...st.cargando, [idProyecto]: true } }));
+          try {
+            const lista = await obtenerEsquemasProyecto(idProyecto);
+            set((st) => ({
+              ...st,
+              esquemasPorProyecto: { ...st.esquemasPorProyecto, [idProyecto]: lista },
+              cargando: { ...st.cargando, [idProyecto]: false },
+              cargados: { ...st.cargados, [idProyecto]: true },
+              errorCarga: null,
+            }));
+          } catch (e) {
+            set((st) => ({
+              ...st,
+              cargando: { ...st.cargando, [idProyecto]: false },
+              errorCarga:
+                e instanceof Error
+                  ? e.message
+                  : "No se pudieron cargar los esquemas de financiamiento del proyecto.",
+            }));
+          }
+        },
 
         crearEsquema: (idProyecto, datos) => {
           const id = `esq-${idProyecto}-${Date.now().toString(36)}`;
