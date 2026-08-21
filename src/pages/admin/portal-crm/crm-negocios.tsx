@@ -10,7 +10,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   Plus, Briefcase, Search, X, Loader2, Check, MoreHorizontal, Pencil, Trash2,
   ChevronRight, ChevronLeft, GripVertical, Calendar, Settings2, ChevronDown,
-  Filter as FilterIcon, UserRound, Sparkles, Phone, MessageSquare, Copy,
+  Filter as FilterIcon, UserRound, Sparkles, Phone, MessageSquare, Copy, FileText, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -1099,6 +1099,102 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
         </>
       )}
     </div>
+  );
+}
+
+// Panel "Cotizaciones" de la ficha del negocio (aside derecho). Lista las ofertas comerciales
+// del cliente (persona del contacto), cada una con liga directa a la oferta, para que el asesor
+// entre y retome el tema. Match por cliente; cada fila muestra su proyecto + unidad.
+// (Unificar en 1-negocio-por-cliente/proyecto y dejar de crear negocios sueltos por oferta es un
+//  cambio del trigger de BD, aparte — documentado para Jorge.)
+export function DealCotizaciones({ deal }: { deal: any }) {
+  const erId = deal?.id_entidad_relacionada ?? null;
+  const { data, isLoading } = useQuery({
+    queryKey: ["deal-cotizaciones", erId],
+    enabled: !!erId,
+    queryFn: async () => {
+      // 1) Persona (cliente) del contacto del negocio.
+      const { data: er } = await (supabase as any).from("entidades_relacionadas")
+        .select("id_persona").eq("id", Number(erId)).maybeSingle();
+      const personaId = er?.id_persona ?? null;
+      if (!personaId) return [];
+      // 2) Ofertas del cliente (cada oferta = una cotización). id_propiedad es NOT NULL.
+      const { data: ofertas } = await (supabase as any).from("ofertas")
+        .select("id, id_propiedad, fecha_generacion, url")
+        .eq("id_persona_lead", Number(personaId)).eq("activo", true)
+        .order("fecha_generacion", { ascending: false });
+      const offs = (ofertas ?? []) as any[];
+      if (!offs.length) return [];
+      // 3) Waterfall propiedad → edificio_modelo → edificio → proyecto (NUNCA triple join PostgREST).
+      const propIds = Array.from(new Set(offs.map((o) => o.id_propiedad).filter(Boolean)));
+      const { data: props } = propIds.length
+        ? await (supabase as any).from("propiedades").select("id, numero_propiedad, id_edificio_modelo, precio_lista").in("id", propIds)
+        : { data: [] };
+      const propById = new Map(((props ?? []) as any[]).map((p) => [p.id, p]));
+      const emIds = Array.from(new Set(((props ?? []) as any[]).map((p) => p.id_edificio_modelo).filter(Boolean)));
+      const { data: ems } = emIds.length
+        ? await (supabase as any).from("edificios_modelos").select("id, id_edificio").in("id", emIds)
+        : { data: [] };
+      const emById = new Map(((ems ?? []) as any[]).map((e) => [e.id, e]));
+      const edIds = Array.from(new Set(((ems ?? []) as any[]).map((e) => e.id_edificio).filter(Boolean)));
+      const { data: eds } = edIds.length
+        ? await (supabase as any).from("edificios").select("id, id_proyecto").in("id", edIds)
+        : { data: [] };
+      const edById = new Map(((eds ?? []) as any[]).map((e) => [e.id, e]));
+      const prIds = Array.from(new Set(((eds ?? []) as any[]).map((e) => e.id_proyecto).filter(Boolean)));
+      const { data: prs } = prIds.length
+        ? await (supabase as any).from("proyectos").select("id, nombre").in("id", prIds)
+        : { data: [] };
+      const prById = new Map(((prs ?? []) as any[]).map((p) => [p.id, p]));
+      return offs.map((o) => {
+        const p = propById.get(o.id_propiedad);
+        const em = p ? emById.get(p.id_edificio_modelo) : null;
+        const ed = em ? edById.get(em.id_edificio) : null;
+        const pr = ed ? prById.get(ed.id_proyecto) : null;
+        return {
+          id: o.id as number,
+          fecha: (o.fecha_generacion ?? null) as string | null,
+          url: (o.url ?? null) as string | null,
+          unidad: (p?.numero_propiedad ?? null) as string | null,
+          proyecto: (pr?.nombre ?? null) as string | null,
+          valor: p?.precio_lista != null ? Number(p.precio_lista) : null,
+        };
+      });
+    },
+  });
+  const rows = data ?? [];
+  return (
+    <AccordionItem value="cotizaciones" className="border-b-0">
+      <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
+        <span className="flex items-center gap-2">Cotizaciones <span className="text-xs text-muted-foreground font-normal">{isLoading ? "…" : rows.length}</span></span>
+      </AccordionTrigger>
+      <AccordionContent>
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground py-2">Cargando…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">Sin cotizaciones asociadas</p>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((c) => (
+              <a key={c.id} href={`/oferta/${c.id}`} target="_blank" rel="noreferrer"
+                className="block rounded-md border border-border p-2.5 bg-card hover:border-primary/50 transition-colors group">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium truncate flex items-center gap-1.5 min-w-0">
+                    <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate">{[c.proyecto, c.unidad].filter(Boolean).join(" · ") || `Oferta ${c.id}`}</span>
+                  </span>
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0" />
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-1 pl-5">
+                  <span className="text-xs text-muted-foreground">{c.valor != null ? fmtMoneda(c.valor, "MXN") : "—"}</span>
+                  {c.fecha && <span className="text-[11px] text-muted-foreground">{fmtDate(c.fecha)}</span>}
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </AccordionContent>
+    </AccordionItem>
   );
 }
 
