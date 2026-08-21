@@ -91,7 +91,7 @@ import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, PRIORIDAD_PILL, firePurchaseIfWon,
+  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, DealCotizaciones, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -3195,12 +3195,7 @@ export function CrmDealDetail() {
               </AccordionTrigger>
               <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin empresas asociadas</p></AccordionContent>
             </AccordionItem>
-            <AccordionItem value="cotizaciones" className="border-b-0">
-              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Cotizaciones <span className="text-xs text-muted-foreground font-normal">0</span></span>
-              </AccordionTrigger>
-              <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin cotizaciones asociadas</p></AccordionContent>
-            </AccordionItem>
+            <DealCotizaciones deal={deal} />
           </Accordion>
         </aside>
       </div>
