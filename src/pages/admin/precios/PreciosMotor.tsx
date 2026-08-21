@@ -66,6 +66,7 @@ function CampoNumero({
   max,
   nota,
   moneda = false,
+  porcentaje = false,
 }: {
   etiqueta: string;
   ayuda: string;
@@ -76,9 +77,20 @@ function CampoNumero({
   max?: number;
   nota?: string;
   moneda?: boolean;
+  /**
+   * El campo se captura en porcentaje aunque el motor guarde la fracción.
+   *
+   * La tasa de descuento se guarda como 0.14 y se muestra como 14% en el resto
+   * del módulo. Con el campo pidiendo la fracción, teclear 10 pensando en "10%"
+   * deja una tasa de 1000% anual, y todo el VPN de Escenarios sale mal sin que
+   * nada se vea roto. Se pide lo que el rótulo dice.
+   */
+  porcentaje?: boolean;
 }) {
   const [editando, setEditando] = useState(false);
   const mostrarTexto = moneda && !editando;
+  // Redondeo al centésimo: 0.14 x 100 da 14.000000000000002 en coma flotante.
+  const enPantalla = porcentaje ? Math.round(valor * 10000) / 100 : valor;
   return (
     <div className="space-y-1.5">
       <Label className="text-[13px] font-medium text-muted-foreground">{etiqueta}</Label>
@@ -87,10 +99,12 @@ function CampoNumero({
         step={step}
         min={min}
         max={max}
-        value={mostrarTexto ? formatoMoneda(valor) : valor}
+        value={mostrarTexto ? formatoMoneda(valor) : enPantalla}
         onFocus={() => moneda && setEditando(true)}
         onBlur={() => setEditando(false)}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) =>
+          onChange(porcentaje ? Number(e.target.value) / 100 : Number(e.target.value))
+        }
         className="tabular-nums"
       />
       <p className="text-xs text-muted-foreground">{ayuda}</p>
@@ -1219,11 +1233,14 @@ function PantallaMotor() {
             onChange={(v) => actualizarParametro("k_loft", v)}
           />
           <CampoNumero
-            etiqueta="Tasa de Descuento Anual"
-            ayuda="Costo de capital del proyecto. Se usa para valuar esquemas de financiamiento. Recomendado: 14.00%."
-            nota="Este parámetro se activa en el módulo de Escenarios."
+            etiqueta="Tasa de Descuento Anual (%)"
+            ayuda="Costo de capital del proyecto. Se usa para valuar los esquemas de financiamiento. Recomendado: 14.00%."
+            nota="Se captura en porcentaje: 14 es 14% anual."
             valor={motor.tasa_descuento_anual}
-            step={0.0001}
+            porcentaje
+            step={0.25}
+            min={0}
+            max={100}
             onChange={(v) => actualizarParametro("tasa_descuento_anual", v)}
           />
         </CardContent>

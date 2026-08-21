@@ -11,6 +11,7 @@ import {
 import { useMotorStore } from "@/features/precios/stores/motorStore";
 import type { VersionLista } from "@/features/precios/types/dominio";
 import { useInventarioStore } from "@/features/precios/stores/inventarioStore";
+import { useEsquemasStore } from "@/features/precios/stores/esquemasStore";
 import { pendientesDelBorrador } from "@/features/precios/engine/semilla";
 import { useVersionesStore } from "@/features/precios/stores/versionesStore";
 import { construirDatosVersion } from "@/features/precios/lib/versiones";
@@ -47,6 +48,7 @@ function PreciosContenido() {
   const proyectosCargados = useInventarioStore((s) => s.proyectosCargados);
   const cargarProyectos = useInventarioStore((s) => s.cargarProyectos);
   const cargarInventario = useInventarioStore((s) => s.cargarInventario);
+  const cargarEsquemas = useEsquemasStore((s) => s.cargarEsquemas);
   const porProyecto = useInventarioStore((s) => s.porProyecto);
   const errorInventario = useInventarioStore((s) => s.error);
 
@@ -67,6 +69,16 @@ function PreciosContenido() {
   useEffect(() => {
     if (idProyectoActivo) void cargarInventario(idProyectoActivo);
   }, [idProyectoActivo, cargarInventario]);
+
+  /*
+   * Los esquemas de financiamiento van aparte del inventario: son política
+   * comercial, no unidades, y se capturan en otra pantalla. Se piden aquí
+   * porque toda la pestaña de Escenarios —comparador, cotizador y flujo del
+   * proyecto— depende de ellos, y sin esto llegaba vacía.
+   */
+  useEffect(() => {
+    if (idProyectoActivo) void cargarEsquemas(idProyectoActivo);
+  }, [idProyectoActivo, cargarEsquemas]);
 
   // Con el inventario en memoria se siembra el motor del proyecto. Es
   // idempotente: solo actúa la primera vez que se abre cada desarrollo.
