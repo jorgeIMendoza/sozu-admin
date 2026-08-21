@@ -827,8 +827,9 @@ function PantallaMotor() {
 
           <GraficoCurva
             puntos={puntosTamano}
-            etiquetaX="Área ponderada (m²)"
+            etiquetaX="Área"
             etiquetaY="Multiplicador de tamaño"
+            formatoX={(v) => `${v.toFixed(1)} m²`}
           />
 
           <div className="overflow-x-auto rounded-md border border-border">
@@ -838,28 +839,28 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Modelo
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Unidades
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Área promedio ↓
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Rango de áreas
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Rango
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Multiplicador de tamaño
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Multiplicador
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Factor s/ base actual
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Factor actual
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por m²
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / m²
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por unidad
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / unidad
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Inventario a la venta
                   </th>
                 </tr>
@@ -871,20 +872,20 @@ function PantallaMotor() {
                   const propuesto = factorDeTamanoDelModelo(b.id_modelo);
                   const igual = Math.abs(propuesto - (b.factor_modelo ?? 1)) < 5e-5;
                   return (
-                    <tr key={b.id_modelo} className="border-t border-border">
+                    <tr key={b.id_modelo} className="border-t border-border transition-colors hover:bg-muted/40">
                       <td className="px-3 py-1.5 font-medium text-foreground">
                         {b.nombre_modelo}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                         {a?.unidades ?? 0}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
                         {a ? formatoM2(a.suma / a.unidades) : "—"}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                         {a ? `${a.min.toFixed(2)} – ${a.max.toFixed(2)} m²` : "—"}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                         {formatoMultiplicador(propuesto)}
                       </td>
                       <td
@@ -895,7 +896,7 @@ function PantallaMotor() {
                       >
                         {formatoMultiplicador(b.factor_modelo ?? 1)}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums text-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
                         {calc && calc.area > 0 ? (
                           <>
                             {formatoMoneda(calc.precio / calc.area)}
@@ -905,7 +906,7 @@ function PantallaMotor() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                         {calc && calc.conDesglose > 0 ? (
                           formatoMoneda(calc.precio / calc.conDesglose)
                         ) : (
@@ -966,23 +967,23 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Modelo
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Unidades
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Factor s/ base
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio por m² resultante
+                    Precio por m²
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     M² de referencia
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por m²
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / m²
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por unidad
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / unidad
                   </th>
                 </tr>
               </thead>
@@ -993,7 +994,7 @@ function PantallaMotor() {
                   const porUnidad =
                     calc && calc.conDesglose > 0 ? calc.precio / calc.conDesglose : 0;
                   return (
-                  <tr key={b.id_modelo} className="border-t border-border">
+                  <tr key={b.id_modelo} className="border-t border-border transition-colors hover:bg-muted/40">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
                       {/* Una curva propia es una excepción a la política del
@@ -1005,7 +1006,7 @@ function PantallaMotor() {
                         </span>
                       ) : null}
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                       {unidadesPorModelo.get(b.id_modelo) ?? 0}
                     </td>
                     <td className="px-3 py-1.5">
@@ -1052,7 +1053,7 @@ function PantallaMotor() {
                     </td>
                     {/* Estas dos salen del cálculo vigente, no de la captura:
                         por eso se mueven al tocar cualquier factor. */}
-                    <td className="px-3 py-1.5 tabular-nums text-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
                       {porM2 > 0 ? (
                         <>
                           {formatoMoneda(porM2)}
@@ -1062,20 +1063,19 @@ function PantallaMotor() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                       {porUnidad > 0 ? (
                         formatoMoneda(porUnidad)
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums text-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
                       {calc && calc.ventaUnidades > 0 ? (
                         <>
                           {formatoMoneda(calc.ventaValor)}
-                          <span className="text-xs text-muted-foreground">
-                            {" · "}
-                            {calc.ventaUnidades} u.
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {calc.ventaUnidades} unidades
                           </span>
                         </>
                       ) : (
@@ -1231,7 +1231,7 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Nivel
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Multiplicador
                   </th>
                 </tr>
@@ -1240,9 +1240,9 @@ function PantallaMotor() {
                 {nivelesPreview.map((n) => {
                   const f = calcularFactorNivel(n, motor.nivel);
                   return (
-                    <tr key={n} className="border-t border-border">
-                      <td className="px-3 py-1.5 tabular-nums">{n}</td>
-                      <td className="px-3 py-1.5 tabular-nums">
+                    <tr key={n} className="border-t border-border transition-colors hover:bg-muted/40">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">{n}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
                         {formatoMultiplicador(f)}{" "}
                         <span className="text-muted-foreground">
                           ({formatoPorcentaje((f - 1) * 100, 2)})
@@ -1419,6 +1419,7 @@ function PantallaMotor() {
                       etiquetaX="Nivel"
                       etiquetaY="Precio por m²"
                       formatoValor={formatoPesosCompacto}
+                      formatoDetalle={formatoMoneda}
                       lineaBase={null}
                     />
                   </div>
@@ -1431,6 +1432,7 @@ function PantallaMotor() {
                       etiquetaX="Nivel"
                       etiquetaY="Precio final de venta"
                       formatoValor={formatoPesosCompacto}
+                      formatoDetalle={formatoMoneda}
                       lineaBase={null}
                     />
                   </div>
@@ -1443,40 +1445,40 @@ function PantallaMotor() {
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                           Nivel
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                           Unidades
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          M² promedio
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                          M² prom.
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          Precio por metro cuadrado
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                          Precio / m²
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          Precio final de venta
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                          Precio final
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                           Variación vs. nivel {nivelesDelModelo[0]?.nivel ?? "—"}
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {nivelesDelModelo.map((n) => (
-                        <tr key={n.nivel} className="border-t border-border">
-                          <td className="px-3 py-1.5 tabular-nums">{n.nivel}</td>
-                          <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                        <tr key={n.nivel} className="border-t border-border transition-colors hover:bg-muted/40">
+                          <td className="px-3 py-1.5 font-medium text-foreground">{n.nivel}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                             {n.unidades}
                           </td>
-                          <td className="px-3 py-1.5 tabular-nums">{formatoM2(n.m2)}</td>
-                          <td className="px-3 py-1.5 tabular-nums">
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">{formatoM2(n.m2)}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
                             {formatoMoneda(n.precio_m2)}
                           </td>
-                          <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                             {formatoMoneda(n.precio_depto)}
                           </td>
                           <td
                             className={cn(
-                              "px-3 py-1.5 tabular-nums",
+                              "px-3 py-1.5 whitespace-nowrap text-right tabular-nums",
                               Math.abs(n.varPct) < 0.005
                                 ? "text-muted-foreground"
                                 : n.varPct > 0
@@ -1485,8 +1487,7 @@ function PantallaMotor() {
                             )}
                           >
                             {formatoPorcentaje(n.varPct, 2)}
-                            <span className="text-xs text-muted-foreground">
-                              {" "}
+                            <span className="block text-xs font-normal text-muted-foreground">
                               {formatoMoneda(n.varMonto)}
                             </span>
                           </td>

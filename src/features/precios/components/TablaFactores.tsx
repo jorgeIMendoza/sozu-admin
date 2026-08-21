@@ -202,14 +202,14 @@ export function TablaFactores({
           <TableHeader>
             <TableRow>
               <TableHead>Clave</TableHead>
-              <TableHead className="w-40">{esExtra ? "Incremento" : "Multiplicador"}</TableHead>
-              <TableHead className="w-32">Efecto</TableHead>
-              <TableHead className="w-44">Precio promedio ponderado por m²</TableHead>
-              <TableHead className="w-44">Precio promedio ponderado</TableHead>
-              <TableHead className="w-48">Inventario a la venta</TableHead>
-              <TableHead className="w-40">Impacto ($)</TableHead>
-              <TableHead className="w-40">Unidades afectadas</TableHead>
-              <TableHead className="w-28">Estado</TableHead>
+              <TableHead className="w-36">{esExtra ? "Incremento" : "Multiplicador"}</TableHead>
+              <TableHead className="w-28">Efecto</TableHead>
+              <TableHead className="w-36 text-right">Precio prom. / m²</TableHead>
+              <TableHead className="w-36 text-right">Precio prom. / unidad</TableHead>
+              <TableHead className="w-44 text-right">Inventario a la venta</TableHead>
+              <TableHead className="w-36 text-right">Impacto</TableHead>
+              <TableHead className="w-24 text-right">Unidades</TableHead>
+              <TableHead className="w-24">Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -230,7 +230,7 @@ export function TablaFactores({
                 <TableCell>
                   <ChipEfecto valor={f.valor} esExtra={esExtra} />
                 </TableCell>
-                <TableCell className="tabular-nums text-foreground">
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-foreground">
                   {(metricas[f.id_factor]?.unidades ?? 0) === 0 ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
@@ -240,29 +240,28 @@ export function TablaFactores({
                     </>
                   )}
                 </TableCell>
-                <TableCell className="tabular-nums text-foreground">
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-foreground">
                   {(metricas[f.id_factor]?.unidades ?? 0) === 0 ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
                     formatoMoneda(metricas[f.id_factor]?.porUnidad ?? 0)
                   )}
                 </TableCell>
-                <TableCell className="tabular-nums text-foreground">
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-foreground">
                   {(metricas[f.id_factor]?.ventaUnidades ?? 0) === 0 ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
                     <>
                       {formatoMoneda(metricas[f.id_factor]?.ventaValor ?? 0)}
-                      <span className="text-xs text-muted-foreground">
-                        {" · "}
-                        {metricas[f.id_factor]?.ventaUnidades} u.
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {metricas[f.id_factor]?.ventaUnidades} unidades
                       </span>
                     </>
                   )}
                 </TableCell>
                 <TableCell
                   className={cn(
-                    "tabular-nums",
+                    "whitespace-nowrap text-right tabular-nums",
                     (metricas[f.id_factor]?.impacto ?? 0) > 0.5
                       ? "text-primary"
                       : (metricas[f.id_factor]?.impacto ?? 0) < -0.5
@@ -272,7 +271,7 @@ export function TablaFactores({
                 >
                   {formatoMoneda(metricas[f.id_factor]?.impacto ?? 0)}
                 </TableCell>
-                <TableCell className="text-muted-foreground tabular-nums">
+                <TableCell className="whitespace-nowrap text-right text-muted-foreground tabular-nums">
                   {metricas[f.id_factor]?.unidades ?? 0}
                 </TableCell>
                 <TableCell>
