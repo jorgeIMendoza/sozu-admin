@@ -110,6 +110,45 @@ export function useMotorAuditado() {
     });
   };
 
+  /**
+   * Aplana el motor para volver a un punto de partida comparable.
+   *
+   * Queda en bitácora con el estado anterior completo —factores, curvas y
+   * parámetros— porque la acción no tiene reversa: es la única forma de
+   * reconstruir después qué había antes de aplanar.
+   */
+  const ponerEnPuntoBase = () => {
+    const antes = motorActual();
+    store.ponerEnPuntoBase();
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.punto_base",
+      entidad: { tipo: "motor", id: antes.id_motor, etiqueta: antes.nombre },
+      antes: {
+        k_ext: antes.k_ext,
+        k_loft: antes.k_loft,
+        tasa_descuento_anual: antes.tasa_descuento_anual,
+        nivel: antes.nivel,
+        tamano: antes.tamano,
+        precio_cajon: antes.precio_cajon,
+        factor_cajon_tandem: antes.factor_cajon_tandem,
+        precio_m2_bodega: antes.precio_m2_bodega,
+        estado_calibracion: antes.estado_calibracion,
+        factores: antes.factores.map((f) => ({
+          tipo: f.tipo_factor,
+          clave: f.clave,
+          valor: f.valor,
+        })),
+        bases_modelo: (antes.bases_modelo ?? []).map((b) => ({
+          modelo: b.nombre_modelo,
+          factor_modelo: b.factor_modelo,
+          precio_base_m2: b.precio_base_m2,
+        })),
+      },
+      despues: { punto_base: true, precio_base_m2_proyecto: antes.precio_base_m2_proyecto },
+    });
+  };
+
   const declararCalibradoManualmente = (justificacion: string) => {
     const antes = motorActual();
     store.declararCalibradoManualmente(justificacion);
@@ -199,6 +238,7 @@ export function useMotorAuditado() {
     actualizarConfigNivel,
     actualizarConfigTamano,
     actualizarBaseModelo,
+    ponerEnPuntoBase,
     declararCalibradoManualmente,
     actualizarFactor,
     agregarFactor,

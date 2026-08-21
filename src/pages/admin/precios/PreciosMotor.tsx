@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { Info, RefreshCw, RotateCcw, TriangleAlert, X } from "lucide-react";
+import { Equal, Info, RefreshCw, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -172,6 +172,7 @@ function PantallaMotor() {
     actualizarConfigTamano,
     actualizarPrecioBaseProyecto,
     actualizarBaseModelo,
+    ponerEnPuntoBase,
     declararCalibradoManualmente,
     restablecer,
   } = useMotorAuditado();
@@ -179,6 +180,7 @@ function PantallaMotor() {
   const { motor, propiedades, desgloses, totales, indices, alertasPorUnidad } =
     usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
+  const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
   const [dialogoCalibrado, setDialogoCalibrado] = useState(false);
   const [filtros, setFiltros] = useState({
     torre: SIN_FILTRO,
@@ -432,6 +434,10 @@ function PantallaMotor() {
         <span className="mr-auto text-xs text-muted-foreground tabular-nums">
           Última actualización: {formatoFecha(motor.actualizado_en)}
         </span>
+        <Button variant="outline" onClick={() => setConfirmarPuntoBase(true)}>
+          <Equal className="size-4" />
+          Llevar a punto base
+        </Button>
         <Button variant="outline" onClick={() => setConfirmar(true)}>
           <RotateCcw className="size-4" />
           Restablecer valores
@@ -1159,6 +1165,69 @@ function PantallaMotor() {
           </span>
         </div>
       </div>
+
+      <AlertDialog open={confirmarPuntoBase} onOpenChange={setConfirmarPuntoBase}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Llevar el motor a su punto base</AlertDialogTitle>
+            <AlertDialogDescription>
+              El motor queda plano: cada unidad pasa a valer el precio por m² base del
+              proyecto por su área interior, sin ninguna diferenciación. Es el punto de
+              partida para mover una variable a la vez y ver qué tanto mueve el precio.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>
+              Factores de torre, vista y orientación a <strong>1.0000</strong>, y los extras
+              a <strong>0</strong>: los extras suman en vez de multiplicar, y ahí el neutro
+              es cero.
+            </li>
+            <li>
+              Factor sobre base de cada modelo a <strong>1.0000</strong>: todos los modelos
+              pasan a valer lo mismo por m².
+            </li>
+            <li>
+              k_ext y k_loft a <strong>0</strong>: el área exterior y la de loft dejan de
+              sumar al precio. Las unidades con balcón, terraza o loft son las que más
+              bajan.
+            </li>
+            <li>
+              Curva de nivel y curva de tamaño a <strong>0</strong>: el piso y el metraje
+              dejan de mover el precio por m².
+            </li>
+            <li>
+              Accesorios a <strong>0</strong>: cajones y bodegas dejan de sumar.
+            </li>
+            <li>Tasa de descuento anual a <strong>0</strong>.</li>
+          </ul>
+
+          <p className="text-sm text-foreground">
+            Los precios van a cambiar, y bastante. No se toca el precio por m² base del
+            proyecto, ni el inventario, ni los precios de lista ya capturados, y la lista
+            sigue en borrador. El motor queda marcado como <strong>sin calibrar</strong>,
+            porque plano no es calibrado.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            No hay deshacer. Lo que había queda registrado en la bitácora, y
+            <strong> Restablecer valores</strong> vuelve a sembrar desde el inventario.
+          </p>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                ponerEnPuntoBase();
+                toast.success(
+                  "El motor quedó en su punto base. Mueve una variable a la vez para ver su efecto.",
+                );
+              }}
+            >
+              Llevar a punto base
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmar} onOpenChange={setConfirmar}>
         <AlertDialogContent>
