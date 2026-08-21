@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { Equal, Info, RefreshCw, RotateCcw, TriangleAlert, X } from "lucide-react";
+import { Equal, Info, RefreshCw, RotateCcw, Save, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useMotorStore } from "@/features/precios/stores/motorStore";
+import { useVersionesStore } from "@/features/precios/stores/versionesStore";
+import { construirDatosVersion } from "@/features/precios/lib/versiones";
+import { registrarEvento } from "@/features/precios/services/auditoria";
 import { useMotorAuditado } from "@/features/precios/hooks/useMotorAuditado";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
 import { TablaFactores } from "@/features/precios/components/TablaFactores";
@@ -40,6 +43,7 @@ import {
 } from "@/features/precios/engine/pricing";
 import {
   formatoFecha,
+  formatoFechaCorta,
   formatoM2,
   formatoMoneda,
   formatoMultiplicador,
@@ -161,6 +165,8 @@ function PantallaMotor() {
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
+  const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
+  const crearBorrador = useVersionesStore((s) => s.crearBorrador);
   const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
@@ -174,6 +180,9 @@ function PantallaMotor() {
    * obligaría a reacomodar toda la pantalla en cada paso.
    */
   const [justificacion, setJustificacion] = useState("");
+  const [guardandoEscenario, setGuardandoEscenario] = useState(false);
+  const [nombreEscenario, setNombreEscenario] = useState("");
+  const [notasEscenario, setNotasEscenario] = useState("");
   const [modeloCurva, setModeloCurva] = useState("");
 
 
@@ -554,6 +563,53 @@ function PantallaMotor() {
     });
   }, [areasPorModelo, areaPivote, motor.tamano.theta, m2RefPreview]);
 
+  /*
+   * Congela la lista que produce el motor de este momento como un escenario.
+   *
+   * Es para lo que existe el motor: mover variables no sirve de nada si no se
+   * puede guardar el resultado y ponerlo al lado del anterior. El escenario
+   * guarda el motor completo y el precio de cada unidad, así que se puede
+   * abrir meses después y ver exactamente con qué configuración salió.
+   *
+   * Nace como borrador, nunca publicado: guardar una hipótesis no puede tener
+   * el mismo peso que decidir el precio con el que se vende.
+   */
+  const guardarEscenario = () => {
+    const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
+    const entradas = propiedades
+      .map((p) => ({ propiedad: p, desglose: porId.get(p.id_propiedad)! }))
+      .filter((e) => e.desglose);
+    const datos = construirDatosVersion({
+      idProyecto: idProyectoActivo,
+      nombre: nombreEscenario.trim(),
+      motor,
+      entradas,
+      notas: notasEscenario.trim(),
+    });
+    const version = crearBorrador(datos);
+    registrarEvento({
+      id_proyecto: idProyectoActivo,
+      tipo: "version.creada",
+      entidad: {
+        tipo: "version",
+        id: version.id_version,
+        etiqueta: `v${version.numero} · ${version.nombre}`,
+      },
+      antes: null,
+      despues: {
+        unidades: version.unidades_incluidas.length,
+        valor_total: version.valor_total,
+        estado_calibracion: motor.estado_calibracion,
+      },
+    });
+    setGuardandoEscenario(false);
+    setNombreEscenario("");
+    setNotasEscenario("");
+    toast.success(
+      `Escenario v${version.numero} guardado con ${version.unidades_incluidas.length} unidades. Ábrelo en la Tabla de Precios para verlo en lista o en plano.`,
+    );
+  };
+
   const recalcular = () => {
     toast.success(
       `Se recalcularon ${totales.unidades} propiedades. ${totales.desviadas} con desviación mayor a 5%.`,
@@ -566,6 +622,15 @@ function PantallaMotor() {
         <span className="mr-auto text-xs text-muted-foreground tabular-nums">
           Última actualización: {formatoFecha(motor.actualizado_en)}
         </span>
+        <Button
+          onClick={() => {
+            setNombreEscenario(`Escenario · ${formatoFechaCorta(new Date().toISOString())}`);
+            setGuardandoEscenario(true);
+          }}
+        >
+          <Save className="size-4" />
+          Guardar como escenario
+        </Button>
         <Button variant="outline" onClick={() => setConfirmarPuntoBase(true)}>
           <Equal className="size-4" />
           Llevar a punto base
@@ -1633,6 +1698,64 @@ function PantallaMotor() {
           </span>
         </div>
       </div>
+
+      <AlertDialog open={guardandoEscenario} onOpenChange={setGuardandoEscenario}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Guardar como escenario</AlertDialogTitle>
+            <AlertDialogDescription>
+              Congela la lista de precios que produce el motor en este momento: la
+              configuración completa y el precio de cada una de las {totales.unidades}
+              {" "}unidades. Después puedes seguir moviendo variables sin perder esto y
+              comparar los dos escenarios.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[13px] text-muted-foreground">Nombre</Label>
+              <Input
+                value={nombreEscenario}
+                onChange={(e) => setNombreEscenario(e.target.value)}
+                placeholder="Cómo reconocerlo después"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[13px] text-muted-foreground">
+                Qué se probó (opcional)
+              </Label>
+              <Input
+                value={notasEscenario}
+                onChange={(e) => setNotasEscenario(e.target.value)}
+                placeholder="Ej.: pendiente por piso al 1.2% y torre VITA en 1.05"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Meses después, el nombre y esta nota son lo único que explica por qué este
+                escenario existe. La configuración queda guardada, pero no dice qué se
+                estaba buscando.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">
+              Queda como <strong>borrador</strong>, no como lista publicada: guardar una
+              hipótesis no puede pesar lo mismo que decidir el precio con el que se vende.
+              Publicar sigue siendo un paso aparte, en Auditoría · Versiones.
+            </p>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={nombreEscenario.trim().length < 3 || totales.unidades === 0}
+              onClick={guardarEscenario}
+            >
+              Guardar escenario
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmarTamano} onOpenChange={setConfirmarTamano}>
         <AlertDialogContent>

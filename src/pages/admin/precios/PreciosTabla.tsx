@@ -89,6 +89,9 @@ const COLUMNAS_ORDENABLES = new Set([
 /** Referencia estable: un arreglo nuevo por render rompe useSyncExternalStore. */
 const SIN_VERSIONES: VersionLista[] = [];
 
+/** Opcion del selector que devuelve la vista al borrador vivo. */
+const SIN_ESCENARIO = "__vivo__";
+
 function ChipRapido({
   activo,
   onClick,
@@ -153,6 +156,8 @@ function TablaPrecios() {
   const setTorrePlano = useListaStore((s) => s.setTorrePlano);
   const modoVersion = useListaStore((s) => s.modoVersion);
   const setModoVersion = useListaStore((s) => s.setModoVersion);
+  const idEscenarioVista = useListaStore((s) => s.idEscenarioVista);
+  const setEscenarioVista = useListaStore((s) => s.setEscenarioVista);
 
   const versionesPorProyecto = useVersionesStore((s) => s.versionesPorProyecto);
   const versionesProyecto = versionesPorProyecto[idProyectoActivo] ?? SIN_VERSIONES;
@@ -162,11 +167,32 @@ function TablaPrecios() {
       ? publicadas.reduce((a, b) => (b.numero > a.numero ? b : a))
       : null;
   }, [versionesProyecto]);
-  const enPublicada = modoVersion === "publicada" && publicada !== null;
-  const preciosPublicados = publicada?.precios ?? {};
+  /*
+   * Qué lista se está mirando.
+   *
+   * Tres posibilidades: el borrador vivo —lo que el motor calcula ahora—, la
+   * publicada, o cualquiera de los escenarios guardados. Las dos últimas son
+   * fotos: se leen igual, así que una sola variable decide y todo lo demás de
+   * la pantalla —columnas, plano, exportación— funciona sin enterarse de cuál
+   * de las dos es.
+   *
+   * El escenario elegido manda sobre el modo. Si se borró mientras estaba
+   * seleccionado, se cae al borrador en vez de mostrar una tabla vacía.
+   */
+  const escenarioVista = useMemo(
+    () =>
+      idEscenarioVista
+        ? (versionesProyecto.find((v) => v.id_version === idEscenarioVista) ?? null)
+        : null,
+    [idEscenarioVista, versionesProyecto],
+  );
+  const versionVista =
+    escenarioVista ?? (modoVersion === "publicada" && publicada !== null ? publicada : null);
+  const enPublicada = versionVista !== null;
+  const preciosPublicados = versionVista?.precios ?? {};
   const excluidosPublicada = useMemo(
-    () => new Set((publicada?.unidades_excluidas ?? []).map((u) => u.id_propiedad)),
-    [publicada],
+    () => new Set((versionVista?.unidades_excluidas ?? []).map((u) => u.id_propiedad)),
+    [versionVista],
   );
 
   const ofertas = useOfertasStore((s) => s.ofertas);
@@ -464,6 +490,26 @@ function TablaPrecios() {
             );
           })}
         </div>
+        {versionesProyecto.length > 0 && (
+          <Select
+            value={idEscenarioVista ?? SIN_ESCENARIO}
+            onValueChange={(v) => setEscenarioVista(v === SIN_ESCENARIO ? null : v)}
+          >
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Comparar con un escenario" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SIN_ESCENARIO}>Sin escenario</SelectItem>
+              {[...versionesProyecto]
+                .sort((a, b) => b.numero - a.numero)
+                .map((v) => (
+                  <SelectItem key={v.id_version} value={v.id_version}>
+                    v{v.numero} · {v.nombre}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="inline-flex rounded-lg border border-border p-0.5">
           {(["lista", "plano"] as const).map((v) => (
             <button
@@ -499,13 +545,27 @@ function TablaPrecios() {
         </div>
       </div>
 
-      {enPublicada && publicada && (
+      {versionVista && (
         <Alert className="border-amber-500/40 bg-amber-500/5 py-2">
           <Info className="size-4 text-amber-600" />
           <AlertDescription className="text-foreground">
-            Estás viendo la lista publicada v{publicada.numero} del{" "}
-            {formatoFechaCorta(publicada.publicada_en ?? publicada.creada_en)}. Es un
-            registro histórico y no puede modificarse.
+            {escenarioVista ? (
+              <>
+                Estás viendo el escenario <strong>v{versionVista.numero} ·{" "}
+                {versionVista.nombre}</strong>, guardado el{" "}
+                {formatoFechaCorta(versionVista.creada_en)} con{" "}
+                {versionVista.unidades_incluidas.length} unidades por{" "}
+                {formatoMoneda(versionVista.valor_total)}. Es una foto de la
+                configuración de ese momento: no se edita y no cambia si mueves el motor.
+                {versionVista.notas ? ` Nota: ${versionVista.notas}` : ""}
+              </>
+            ) : (
+              <>
+                Estás viendo la lista publicada v{versionVista.numero} del{" "}
+                {formatoFechaCorta(versionVista.publicada_en ?? versionVista.creada_en)}. Es
+                un registro histórico y no puede modificarse.
+              </>
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -779,7 +839,7 @@ function TablaPrecios() {
                 <Encabezado clave="precio_m2_calc" titulo="$/m² Calc." alineado="right" />
                 <Encabezado clave="precio_actual" titulo="Precio Actual" alineado="right" />
                 <Encabezado clave="precio_m2_actual" titulo="$/m² Actual" alineado="right" />
-                {modoVersion === "borrador" && publicada && (
+                {!enPublicada && publicada && (
                   <>
                     <Encabezado clave="precio_publicado" titulo="Precio publicado" alineado="right" />
                     <Encabezado clave="delta_vs_publicado" titulo="Δ vs. publicado" alineado="right" />
@@ -999,7 +1059,7 @@ function TablaPrecios() {
                         ? "—"
                         : formatoMoneda(f.propiedad.precio_lista_actual / d.area_ponderada)}
                     </Celda>
-                    {modoVersion === "borrador" && publicada && (() => {
+                    {!enPublicada && publicada && (() => {
                       const excluidaPub = excluidosPublicada.has(f.propiedad.id_propiedad);
                       const pv = preciosPublicados[f.propiedad.id_propiedad];
                       const precioPub = pv?.precio_lista ?? null;

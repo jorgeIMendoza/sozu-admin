@@ -57,6 +57,15 @@ interface EstadoLista {
   metricaPlano: MetricaPlano;
   torrePlano: string;
   modoVersion: ModoVersion;
+  /**
+   * Escenario guardado que se está viendo, o `null` para el borrador vivo.
+   *
+   * Va aparte de `modoVersion` porque no es un modo más: es "cuál de los N
+   * escenarios". Cuando tiene valor manda sobre el modo, y elegir Borrador o
+   * Publicada lo limpia, para que nunca haya dos controles peleándose por
+   * decir qué lista se muestra.
+   */
+  idEscenarioVista: string | null;
 
 }
 
@@ -132,6 +141,7 @@ const estadoInicial: EstadoLista = {
   metricaPlano: "precio_m2",
   torrePlano: "todas",
   modoVersion: "borrador",
+  idEscenarioVista: null,
 };
 
 
@@ -158,6 +168,8 @@ interface AccionesLista {
   setMetricaPlano: (m: MetricaPlano) => void;
   setTorrePlano: (t: string) => void;
   setModoVersion: (m: ModoVersion) => void;
+  /** Ver un escenario guardado, o `null` para volver al borrador vivo. */
+  setEscenarioVista: (id: string | null) => void;
 
   reset: () => void;
 }
@@ -290,6 +302,16 @@ export const useListaStore = create<EstadoLista & AccionesLista>()(
         set((s) => ({
           ...s,
           modoVersion: m,
+          // Volver al borrador o a la publicada sale de cualquier escenario.
+          idEscenarioVista: null,
+          seleccion: [],
+        })),
+
+      setEscenarioVista: (id) =>
+        set((s) => ({
+          ...s,
+          idEscenarioVista: id,
+          // Un escenario es una foto: no se edita ni se opera sobre él.
           seleccion: [],
         })),
 
