@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { estatusBloqueaReprecio } from "@/features/precios/engine/pricing";
 
 import { Archive, Copy, Download, Plus } from "lucide-react";
@@ -48,7 +48,7 @@ function EscenariosProyecto() {
     resultados,
     tasaMes,
   } = useEsquemasVPN();
-  const { propiedades, desgloses } = usePreciosProyecto();
+  const { propiedades, desgloses, indices } = usePreciosProyecto();
 
   const escenarios = useEscenariosProyectoStore(
     (s) => s.escenariosPorProyecto[idProyecto] ?? SIN_ESCENARIOS,
@@ -124,78 +124,187 @@ function EscenariosProyecto() {
   const unidades = disponibles.length;
   const precioPromedio = unidades > 0 ? valorLista / unidades : 0;
 
-  const mix = escenario?.mix ?? {};
+  /*
+   * El inventario vendible agrupado por modelo.
+   *
+   * La proyección usaba un solo precio promedio para todo el desarrollo, que
+   * mezcla un estudio con un penthouse. Agrupando por modelo cada cohorte de
+   * ventas se valúa con el precio de lo que de verdad se vendió.
+   */
+  const porModelo = useMemo(() => {
+    const propPorId = new Map(propiedades.map((p) => [p.id_propiedad, p]));
+    const acum = new Map<string, { unidades: number; valor: number }>();
+    for (const d of disponibles) {
+      const p = propPorId.get(d.id_propiedad);
+      if (!p) continue;
+      const a = acum.get(p.id_modelo) ?? { unidades: 0, valor: 0 };
+      a.unidades += 1;
+      a.valor += d.precio_lista;
+      acum.set(p.id_modelo, a);
+    }
+    return [...acum.entries()]
+      .map(([id, v]) => ({
+        id_modelo: id,
+        nombre: indices?.modelosPorId[id]?.nombre ?? id,
+        unidades: v.unidades,
+        valor: v.valor,
+        precioPromedio: v.valor / v.unidades,
+      }))
+      .sort((a, b) => b.unidades - a.unidades);
+  }, [disponibles, propiedades, indices]);
+
+  const mix = useMemo(() => escenario?.mix ?? {}, [escenario]);
   const sumaMix = ejecutables.reduce((a, e) => a + (mix[e.id_esquema] ?? 0), 0);
   const mixOk = Math.abs(sumaMix - 1) <= 0.0005;
 
-  const factorDe = (id: string) =>
-    porTorre[id]?.ponderado ?? resultados[id]?.factor_vpn ?? 0;
+  const mixPorModelo = useMemo(() => escenario?.mixPorModelo ?? {}, [escenario]);
+  /** La mezcla que le toca a un modelo: la suya si la tiene, si no la del proyecto. */
+  const mixDe = useCallback(
+    (idModelo: string) => mixPorModelo[idModelo] ?? mix,
+    [mixPorModelo, mix],
+  );
+  const sumaMixDe = (idModelo: string) =>
+    ejecutables.reduce((a, e) => a + (mixDe(idModelo)[e.id_esquema] ?? 0), 0);
+
+  /*
+   * Un modelo con mezcla propia que no suma 100% no se puede proyectar, igual
+   * que el mix del proyecto. Se bloquea la proyección entera en vez de
+   * proyectar ese modelo con lo que sea: un total que sale de una mezcla
+   * incompleta parece correcto y no lo es.
+   */
+  const modelosConMixRoto = porModelo
+    .filter((m) => mixPorModelo[m.id_modelo])
+    .filter((m) => Math.abs(sumaMixDe(m.id_modelo) - 1) > 0.0005);
+  const mixModelosOk = modelosConMixRoto.length === 0;
+
+  const fijarMixModelo = (idModelo: string, idEsquema: string, valor: number) => {
+    if (!escenario) return;
+    actualizar(idProyecto, escenario.id_escenario, {
+      mixPorModelo: {
+        ...mixPorModelo,
+        [idModelo]: { ...mixDe(idModelo), [idEsquema]: valor },
+      },
+    });
+  };
+
+  /** Devuelve el modelo a la mezcla del proyecto quitando su excepción. */
+  const soltarMixModelo = (idModelo: string) => {
+    if (!escenario) return;
+    const resto = { ...mixPorModelo };
+    delete resto[idModelo];
+    actualizar(idProyecto, escenario.id_escenario, { mixPorModelo: resto });
+  };
+
+  const factorDe = useCallback(
+    (id: string) => porTorre[id]?.ponderado ?? resultados[id]?.factor_vpn ?? 0,
+    [porTorre, resultados],
+  );
+
   /**
    * El referente sin brecha depende del régimen: un esquema de post-entrega
    * no se mide contra la base de preventa. Antes se usaba una sola base para
    * todo el mix, lo que inflaba la brecha y a veces le cambiaba el signo.
    */
-  const factorBaseDe = (tipo: TipoEsquema) => {
-    const b = basePorRegimen[tipo];
-    return b ? factorDe(b.id_esquema) : esquemaBase ? factorDe(esquemaBase.id_esquema) : 1;
-  };
+  const factorBaseDe = useCallback(
+    (tipo: TipoEsquema) => {
+      const b = basePorRegimen[tipo];
+      return b ? factorDe(b.id_esquema) : esquemaBase ? factorDe(esquemaBase.id_esquema) : 1;
+    },
+    [basePorRegimen, esquemaBase, factorDe],
+  );
 
+  /*
+   * La proyección se arma modelo por modelo y se suma.
+   *
+   * Cada modelo aporta su propia curva de absorción sobre sus unidades, su
+   * precio promedio y su mezcla de esquemas. El resultado mensual conserva la
+   * forma de antes —mes, unidades, nominal, vp, vp acumulado— para que la
+   * gráfica, la tabla y el CSV sigan funcionando sin enterarse.
+   *
+   * Con todos los modelos usando la mezcla del proyecto, el total ya no es
+   * idéntico al de antes: antes cada unidad valía el promedio del desarrollo y
+   * ahora vale el promedio de su modelo. La diferencia es el error que
+   * promediar introducía.
+   */
   const proyeccion = useMemo(() => {
-    if (!escenario || !mixOk) return null;
+    if (!escenario || !mixOk || !mixModelosOk) return null;
 
-    const ventas = curvaAbsorcion(unidades, escenario.meses_absorcion, escenario.forma);
+    const n = Math.max(1, Math.round(escenario.meses_absorcion));
+    const acumMes = Array.from({ length: n }, () => ({
+      unidades: 0,
+      nominal: 0,
+      vp: 0,
+      vpSinBrecha: 0,
+    }));
 
-    // Valor presente de una unidad promedio bajo el mix, sin descontar la espera.
-    const vpUnidadMix = ejecutables.reduce(
-      (a, e) =>
-        a +
-        (mix[e.id_esquema] ?? 0) *
-          precioPromedio *
-          (1 + e.pct_ajuste_manual) *
-          factorDe(e.id_esquema),
-      0,
-    );
-    const vpUnidadSinBrecha = ejecutables.reduce(
-      (a, e) =>
-        a + (mix[e.id_esquema] ?? 0) * precioPromedio * factorBaseDe(e.tipo_esquema),
-      0,
-    );
+    const detalle = porModelo.map((m) => {
+      const mm = mixDe(m.id_modelo);
+      // Valor presente de una unidad del modelo bajo su mezcla, sin descontar
+      // todavía la espera hasta el mes en que se vende.
+      const vpUnidad = ejecutables.reduce(
+        (a, e) =>
+          a +
+          (mm[e.id_esquema] ?? 0) *
+            m.precioPromedio *
+            (1 + e.pct_ajuste_manual) *
+            factorDe(e.id_esquema),
+        0,
+      );
+      const vpUnidadSinBrecha = ejecutables.reduce(
+        (a, e) =>
+          a + (mm[e.id_esquema] ?? 0) * m.precioPromedio * factorBaseDe(e.tipo_esquema),
+        0,
+      );
+
+      const ventas = curvaAbsorcion(m.unidades, n, escenario.forma);
+      let vpModelo = 0;
+      ventas.forEach((u, i) => {
+        const desc = 1 / Math.pow(1 + tasaMes, i);
+        acumMes[i]!.unidades += u;
+        acumMes[i]!.nominal += u * m.precioPromedio;
+        acumMes[i]!.vp += u * vpUnidad * desc;
+        acumMes[i]!.vpSinBrecha += u * vpUnidadSinBrecha * desc;
+        vpModelo += u * vpUnidad * desc;
+      });
+
+      return { ...m, vpUnidad, vp: vpModelo, propio: !!mixPorModelo[m.id_modelo] };
+    });
 
     let acumulado = 0;
     let acumuladoSinBrecha = 0;
-    const meses = ventas.map((u, i) => {
-      const desc = 1 / Math.pow(1 + tasaMes, i);
-      const vp = u * vpUnidadMix * desc;
-      acumulado += vp;
-      acumuladoSinBrecha += u * vpUnidadSinBrecha * desc;
+    const meses = acumMes.map((x, i) => {
+      acumulado += x.vp;
+      acumuladoSinBrecha += x.vpSinBrecha;
       return {
         mes: i,
-        unidades: u,
-        nominal: u * precioPromedio,
-        vp,
+        unidades: x.unidades,
+        nominal: x.nominal,
+        vp: x.vp,
         vpAcumulado: acumulado,
       };
     });
 
     return {
       meses,
+      detalle,
       total: acumulado,
       totalSinBrecha: acumuladoSinBrecha,
       totalNominal: valorLista,
-      vpUnidadMix,
+      vpUnidadMix: unidades > 0 ? acumulado / unidades : 0,
     };
   }, [
     escenario,
     mixOk,
+    mixModelosOk,
+    porModelo,
+    mixPorModelo,
+    mixDe,
+    factorDe,
+    factorBaseDe,
     unidades,
     ejecutables,
-    mix,
-    precioPromedio,
-    basePorRegimen,
     tasaMes,
     valorLista,
-    porTorre,
-    resultados,
   ]);
 
   const exportar = () => {
@@ -326,6 +435,124 @@ function EscenariosProyecto() {
         </p>
       </Card>
 
+      <Card className="space-y-3 p-4">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Mix por modelo</h3>
+          <p className="text-xs text-muted-foreground">
+            Un estudio y un penthouse no se colocan con el mismo esquema. Cada modelo
+            arranca con la mezcla del proyecto; al capturarle un porcentaje se separa y
+            proyecta con la suya.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  Modelo
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Unidades
+                </th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Precio prom.
+                </th>
+                {ejecutables.map((e) => (
+                  <th
+                    key={e.id_esquema}
+                    className="px-3 py-2 text-right font-medium text-muted-foreground"
+                  >
+                    {e.nombre}
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                  Suma
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground" />
+              </tr>
+            </thead>
+            <tbody>
+              {porModelo.map((m) => {
+                const propio = !!mixPorModelo[m.id_modelo];
+                const suma = sumaMixDe(m.id_modelo);
+                const sumaOk = Math.abs(suma - 1) <= 0.0005;
+                return (
+                  <tr
+                    key={m.id_modelo}
+                    className="border-t border-border transition-colors hover:bg-muted/40"
+                  >
+                    <td className="px-3 py-1.5 font-medium text-foreground">
+                      {m.nombre}
+                      {propio ? (
+                        <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:text-amber-400">
+                          mix propio
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {m.unidades}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                      {formatoMoneda(m.precioPromedio)}
+                    </td>
+                    {ejecutables.map((e) => (
+                      <td key={e.id_esquema} className="px-3 py-1.5">
+                        <Input
+                          aria-label={`${m.nombre} · ${e.nombre}`}
+                          className="w-20 text-right tabular-nums"
+                          value={((mixDe(m.id_modelo)[e.id_esquema] ?? 0) * 100).toFixed(0)}
+                          onChange={(ev) => {
+                            const n = Number.parseFloat(ev.target.value.replace(",", "."));
+                            fijarMixModelo(
+                              m.id_modelo,
+                              e.id_esquema,
+                              Number.isFinite(n) ? n / 100 : 0,
+                            );
+                          }}
+                        />
+                      </td>
+                    ))}
+                    <td
+                      className={cn(
+                        "whitespace-nowrap px-3 py-1.5 text-right tabular-nums",
+                        sumaOk ? "text-muted-foreground" : "text-red-600",
+                      )}
+                    >
+                      {pct2(suma)}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {propio ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => soltarMixModelo(m.id_modelo)}
+                        >
+                          Usar el del proyecto
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          usa el del proyecto
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {mixModelosOk ? null : (
+          <p className="text-xs text-red-600">
+            {modelosConMixRoto.map((m) => m.nombre).join(", ")}
+            {modelosConMixRoto.length === 1 ? " tiene" : " tienen"} un mix propio que no suma
+            100%. La proyección se detiene: un total que sale de una mezcla incompleta
+            parece correcto y no lo es.
+          </p>
+        )}
+      </Card>
+
       <Card className="flex flex-wrap items-end gap-4 p-4">
         <div className="space-y-1.5">
           <Label className="text-xs">Meses de absorción</Label>
@@ -416,6 +643,71 @@ function EscenariosProyecto() {
               Curva de absorción y valor presente acumulado
             </h3>
             <GraficoAbsorcion meses={proyeccion.meses} />
+
+            <div className="mt-4 overflow-x-auto rounded-md border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                      Modelo
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      Unidades
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      Valor de lista
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      VP por unidad
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      Valor presente
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      Del total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proyeccion.detalle.map((m) => (
+                    <tr
+                      key={m.id_modelo}
+                      className="border-t border-border transition-colors hover:bg-muted/40"
+                    >
+                      <td className="px-3 py-1.5 font-medium text-foreground">
+                        {m.nombre}
+                        {m.propio ? (
+                          <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:text-amber-400">
+                            mix propio
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                        {m.unidades}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                        {formatoMoneda(m.valor)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                        {formatoMoneda(m.vpUnidad)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums font-medium text-foreground">
+                        {formatoMoneda(m.vp)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                        {proyeccion.total > 0 ? pct2(m.vp / proyeccion.total) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              El <strong>VP por unidad</strong> es lo que vale hoy una unidad de ese modelo
+              con su mezcla, antes de descontar la espera hasta el mes en que se vende; el
+              <strong> valor presente</strong> ya la descuenta. Un modelo puede aportar menos
+              de lo que sugiere su valor de lista si su mezcla carga el pago al final.
+            </p>
           </Card>
 
           <Card className="overflow-x-auto p-0">
