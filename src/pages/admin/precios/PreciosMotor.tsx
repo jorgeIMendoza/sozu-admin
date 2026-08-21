@@ -34,6 +34,7 @@ import { useMotorAuditado } from "@/features/precios/hooks/useMotorAuditado";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
 import { TablaFactores } from "@/features/precios/components/TablaFactores";
 import {
+  calcularAreaPonderada,
   calcularFactorNivel,
   calcularFactorTamano,
 } from "@/features/precios/engine/pricing";
@@ -204,6 +205,7 @@ function PantallaMotor() {
     usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
+  const [confirmarTamano, setConfirmarTamano] = useState(false);
   const [dialogoCalibrado, setDialogoCalibrado] = useState(false);
   const [filtros, setFiltros] = useState({
     torre: SIN_FILTRO,
@@ -505,6 +507,113 @@ function PantallaMotor() {
     }));
   }, [propiedadesFiltradas, desglosesFiltrados, modeloCurvaVigente]);
 
+  /*
+   * Las áreas que el proyecto tiene de verdad, modelo por modelo.
+   *
+   * La tabla de esta sección mostraba tres áreas inventadas —el m² de
+   * referencia por 0.7, 1.0 y 1.6—, que sirven para entender la forma de la
+   * curva pero no para decidir nada: no dicen a qué modelo del desarrollo le
+   * pega ni cuánto.
+   */
+  const areasPorModelo = useMemo(() => {
+    const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const acum = new Map<
+      string,
+      { unidades: number; min: number; max: number; suma: number; exento: number }
+    >();
+    for (const p of propiedadesFiltradas) {
+      const area = calcularAreaPonderada(p, motor);
+      if (area <= 0) continue;
+      const a = acum.get(p.id_modelo) ?? {
+        unidades: 0,
+        min: Number.POSITIVE_INFINITY,
+        max: 0,
+        suma: 0,
+        exento: 0,
+      };
+      a.unidades++;
+      a.min = Math.min(a.min, area);
+      a.max = Math.max(a.max, area);
+      a.suma += area;
+      // El exento es la parte del precio que escala con el factor del modelo;
+      // cajones y bodegas van por fuera y no entran en este reparto.
+      a.exento += porId.get(p.id_propiedad)?.componente_exento ?? 0;
+      acum.set(p.id_modelo, a);
+    }
+    return acum;
+  }, [propiedadesFiltradas, desglosesFiltrados, motor]);
+
+  /**
+   * Área donde la curva de tamaño vale 1.0000.
+   *
+   * No es el promedio simple de las áreas. Con el promedio, aplicar la curva
+   * arrastra el valor del proyecto hacia abajo —medido sobre Monócolo, hasta
+   * -1.08% con θ = 0.15— porque los modelos grandes pesan más en el valor que
+   * en el conteo y son justo los que reciben factor menor que 1. Un botón que
+   * dice "reparte" y de paso recorta un punto porcentual del desarrollo es una
+   * trampa.
+   *
+   * Así que el pivote se despeja de la condición de neutralidad: se busca la P
+   * tal que `Σ (P/aₘ)^θ · Wₘ = Σ fₘ · Wₘ`, donde `Wₘ` es lo que cada modelo
+   * aporta por área. Como `Eₘ = base · fₘ · Wₘ`, la P se despeja en forma
+   * cerrada:
+   *
+   *     P = [ Σ Eₘ / Σ (Eₘ · aₘ^(−θ) / fₘ) ] ^ (1/θ)
+   *
+   * Con θ = 0 la ecuación no tiene solución útil —todos los factores quedan en
+   * 1 valga lo que valga P— y ahí sí se devuelve el promedio simple: el pivote
+   * no influye, y aplanar los modelos es lo que θ = 0 significa.
+   */
+  const areaPivote = useMemo(() => {
+    const theta = motor.tamano.theta;
+    const bases_ = motor.bases_modelo ?? [];
+
+    let sumaArea = 0;
+    let unidades = 0;
+    let numerador = 0;
+    let denominador = 0;
+    for (const [idModelo, v] of areasPorModelo) {
+      sumaArea += v.suma;
+      unidades += v.unidades;
+      const area = v.suma / v.unidades;
+      const factor = bases_.find((b) => b.id_modelo === idModelo)?.factor_modelo ?? 1;
+      if (area <= 0 || factor <= 0 || v.exento <= 0) continue;
+      numerador += v.exento;
+      denominador += (v.exento * Math.pow(area, -theta)) / factor;
+    }
+
+    const promedio = unidades > 0 ? sumaArea / unidades : m2RefPreview;
+    if (theta <= 1e-9 || numerador <= 0 || denominador <= 0) return promedio;
+    const p = Math.pow(numerador / denominador, 1 / theta);
+    return Number.isFinite(p) && p > 0 ? p : promedio;
+  }, [areasPorModelo, motor.tamano.theta, motor.bases_modelo, m2RefPreview]);
+
+  /** Factor que la curva de tamaño le asignaría a un modelo por su área. */
+  const factorDeTamanoDelModelo = (idModelo: string) => {
+    const a = areasPorModelo.get(idModelo);
+    if (!a || a.unidades === 0) return 1;
+    return calcularFactorTamano(a.suma / a.unidades, areaPivote, motor.tamano.theta);
+  };
+
+  /*
+   * Escribe en los factores de modelo lo que dice la curva.
+   *
+   * No es automático a propósito. El factor de un modelo puede venir de precios
+   * de mercado capturados, y que moverse un slider lo pisara sin aviso sería
+   * perder ese trabajo sin manera de recuperarlo. Con el botón queda además una
+   * entrada por modelo en la bitácora.
+   */
+  const aplicarCurvaTamanoAModelos = () => {
+    for (const b of bases) {
+      actualizarBaseModelo(
+        b.id_modelo,
+        "factor_modelo",
+        +factorDeTamanoDelModelo(b.id_modelo).toFixed(6),
+      );
+    }
+    toast.success("Los factores de modelo quedaron alineados con la curva de tamaño.");
+  };
+
   const nivelesPreview = [1, 3, 5, 8, 10, 14, 18];
 
   const puntosNivel = Array.from({ length: 20 }, (_, i) => ({
@@ -518,13 +627,27 @@ function PantallaMotor() {
     y: 1 + 0.005 * (i + 1 - motor.ancla.nivel),
   }));
 
-  const puntosTamano = Array.from({ length: 21 }, (_, i) => {
-    const area = m2RefPreview * (0.6 + i * 0.05);
-    return {
-      x: Math.round(area * 100) / 100,
-      y: calcularFactorTamano(area, m2RefPreview, motor.tamano.theta),
-    };
-  });
+  /** La curva se dibuja sobre el rango de áreas que el proyecto realmente tiene. */
+  const puntosTamano = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY;
+    let max = 0;
+    for (const v of areasPorModelo.values()) {
+      min = Math.min(min, v.min);
+      max = Math.max(max, v.max);
+    }
+    if (!Number.isFinite(min) || max <= min) {
+      min = m2RefPreview * 0.6;
+      max = m2RefPreview * 1.6;
+    }
+    const salto = (max - min) / 20;
+    return Array.from({ length: 21 }, (_, i) => {
+      const area = min + salto * i;
+      return {
+        x: Math.round(area * 100) / 100,
+        y: calcularFactorTamano(area, areaPivote, motor.tamano.theta),
+      };
+    });
+  }, [areasPorModelo, areaPivote, motor.tamano.theta, m2RefPreview]);
 
   const recalcular = () => {
     toast.success(
@@ -817,6 +940,134 @@ function PantallaMotor() {
               </TabsContent>
             ))}
           </Tabs>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">Curva de Tamaño</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6">
+            <div className="space-y-2">
+              <Label className="text-[13px] font-medium text-muted-foreground">Theta (θ)</Label>
+              <div className="flex items-center gap-3">
+                <Slider
+                  value={[motor.tamano.theta]}
+                  min={0}
+                  max={0.15}
+                  step={0.005}
+                  onValueChange={([v]) => actualizarConfigTamano(v ?? 0)}
+                  className="flex-1"
+                />
+                <Input
+                  type="number"
+                  step={0.005}
+                  value={motor.tamano.theta}
+                  onChange={(e) => actualizarConfigTamano(Number(e.target.value))}
+                  className="w-28 tabular-nums"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Controla qué tan rápido baja el precio por m² conforme crece la unidad. Con θ =
+                0 el precio por m² es constante y todos los modelos valen igual por m².
+              </p>
+            </div>
+          </div>
+
+          <GraficoCurva
+            puntos={puntosTamano}
+            etiquetaX="Área ponderada (m²)"
+            etiquetaY="Multiplicador de tamaño"
+          />
+
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Modelo
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Unidades
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Área promedio
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Rango de áreas
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Multiplicador de tamaño
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Factor s/ base actual
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {basesOrdenadas.map((b) => {
+                  const a = areasPorModelo.get(b.id_modelo);
+                  const propuesto = factorDeTamanoDelModelo(b.id_modelo);
+                  const igual = Math.abs(propuesto - (b.factor_modelo ?? 1)) < 5e-5;
+                  return (
+                    <tr key={b.id_modelo} className="border-t border-border">
+                      <td className="px-3 py-1.5 font-medium text-foreground">
+                        {b.nombre_modelo}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                        {a?.unidades ?? 0}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums">
+                        {a ? formatoM2(a.suma / a.unidades) : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                        {a ? `${a.min.toFixed(2)} – ${a.max.toFixed(2)} m²` : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                        {formatoMultiplicador(propuesto)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-1.5 tabular-nums",
+                          igual ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400",
+                        )}
+                      >
+                        {formatoMultiplicador(b.factor_modelo ?? 1)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" onClick={() => setConfirmarTamano(true)}>
+              <Equal className="size-4" />
+              Aplicar a los factores de modelo
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Escribe el multiplicador de cada modelo en su <strong>Factor s/ base</strong>,
+              en la sección de abajo. Sobrescribe lo que haya capturado ahí.
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            El multiplicador sale del área promedio de cada modelo contra el área pivote del
+            desarrollo ({formatoM2(areaPivote)}), que es donde la curva vale 1.0000. Los
+            modelos más chicos que el pivote quedan por encima de 1 y los más grandes por
+            debajo. El pivote no es el promedio simple: se despeja para que aplicar la curva
+            reparta sin mover el valor total del desarrollo, porque los modelos grandes pesan
+            más en el valor que en el conteo y con el promedio simple el total se iría hacia
+            abajo.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            El <strong>factor s/ base actual</strong> se marca en ámbar cuando no coincide
+            con lo que dice la curva. Que difiera no es un error: ese factor puede venir de
+            precios de mercado capturados, que saben cosas que el tamaño solo no explica.
+            Por eso el botón es explícito y no se aplica al mover θ.
+          </p>
         </CardContent>
       </Card>
 
@@ -1252,74 +1503,6 @@ function PantallaMotor() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl font-semibold">Curva de Tamaño</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-6">
-            <div className="space-y-2">
-              <Label className="text-[13px] font-medium text-muted-foreground">Theta (θ)</Label>
-              <div className="flex items-center gap-3">
-                <Slider
-                  value={[motor.tamano.theta]}
-                  min={0}
-                  max={0.15}
-                  step={0.005}
-                  onValueChange={([v]) => actualizarConfigTamano(v ?? 0)}
-                  className="flex-1"
-                />
-                <Input
-                  type="number"
-                  step={0.005}
-                  value={motor.tamano.theta}
-                  onChange={(e) => actualizarConfigTamano(Number(e.target.value))}
-                  className="w-28 tabular-nums"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Controla qué tan rápido baja el precio por m² conforme crece la unidad. Con θ =
-                0 el precio por m² es constante.
-              </p>
-            </div>
-          </div>
-
-          <GraficoCurva
-            puntos={puntosTamano}
-            etiquetaX="Área ponderada (m²)"
-            etiquetaY="Multiplicador de tamaño"
-          />
-
-          <div className="max-w-md overflow-hidden rounded-md border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Área ponderada
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Multiplicador
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {[0.7, 1.0, 1.6].map((k) => {
-                  const area = m2RefPreview * k;
-                  return (
-                    <tr key={k} className="border-t border-border">
-                      <td className="px-3 py-1.5 tabular-nums">{area.toFixed(2)} m²</td>
-                      <td className="px-3 py-1.5 tabular-nums">
-                        {formatoMultiplicador(calcularFactorTamano(area, m2RefPreview, motor.tamano.theta))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-xl font-semibold">Accesorios</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 md:grid-cols-3">
@@ -1413,6 +1596,31 @@ function PantallaMotor() {
           </span>
         </div>
       </div>
+
+      <AlertDialog open={confirmarTamano} onOpenChange={setConfirmarTamano}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Aplicar la curva de tamaño a los modelos</AlertDialogTitle>
+            <AlertDialogDescription>
+              El factor s/ base de cada modelo pasa a ser el multiplicador que le toca por su
+              área. Los {bases.length} modelos del proyecto se reescriben, incluidos los que
+              tengan un factor capturado a mano. Con θ mayor que cero el valor total del
+              desarrollo no cambia: se reparte entre modelos. Con θ = 0 todos quedan en
+              1.0000, que sí mueve el total si venían de otro lado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Los precios de las unidades cambian en consecuencia. Cada modelo queda como una
+            entrada aparte en la bitácora, así que se puede ver después qué tenía antes.
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={aplicarCurvaTamanoAModelos}>
+              Aplicar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmarPuntoBase} onOpenChange={setConfirmarPuntoBase}>
         <AlertDialogContent>
