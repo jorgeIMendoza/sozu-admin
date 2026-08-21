@@ -57,9 +57,9 @@ function conPrecioBaseDeProyecto(m: MotorPrecio): MotorPrecio {
   };
 }
 
-/** Torres del proyecto activo, para reanclar contra el inventario real. */
-function torresDe(idProyecto: string) {
-  return useInventarioStore.getState().inventarioDe(idProyecto).torres;
+/** Inventario del proyecto activo, para reanclar contra datos reales. */
+function inventarioDe(idProyecto: string) {
+  return useInventarioStore.getState().inventarioDe(idProyecto);
 }
 
 type CampoNumerico =
@@ -93,6 +93,15 @@ interface AccionesMotor {
     campo: "precio_base_m2" | "factor_modelo" | "m2_referencia",
     valor: number,
   ) => void;
+  /**
+   * Deja el motor plano: cada unidad pasa a valer el precio por m² base del
+   * proyecto por su área interior, sin ninguna diferenciación.
+   *
+   * NO es neutral —los precios cambian, y bastante—: es el punto de partida
+   * para mover una variable a la vez y ver qué mueve. El precio por m² base
+   * del proyecto es lo único que se conserva, porque es la escala.
+   */
+  ponerEnPuntoBase: () => void;
   /** Reexpresa la escala contra un ancla nueva. Neutral: ningún precio cambia. */
   setAncla: (ancla: Omit<AnclaProyecto, "descripcion">) => void;
   actualizarFactor: (idFactor: string, valor: number) => void;
@@ -260,8 +269,44 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
             }),
           })),
 
+        ponerEnPuntoBase: () =>
+          mutarMotor((m) => ({
+            ...m,
+            // El área ponderada queda en puro interior: sin supuestos sobre
+            // cuánto vale un m² de balcón o de loft.
+            k_ext: 0,
+            k_loft: 0,
+            tasa_descuento_anual: 0,
+            nivel: { coef_a: 0, coef_b: 0 },
+            tamano: { theta: 0 },
+            precio_cajon: 0,
+            factor_cajon_tandem: 0,
+            precio_m2_bodega: 0,
+            // Los extras SUMAN, no multiplican: su neutro es 0, no 1.
+            factores: m.factores.map((f) => ({
+              ...f,
+              valor: f.tipo_factor === "extras" ? 0 : 1,
+            })),
+            // `precio_base_m2` es lo que lee el motor, así que no basta con
+            // poner el factor en 1: hay que rehacer el precio efectivo.
+            bases_modelo: m.bases_modelo.map((b) => ({
+              ...b,
+              factor_modelo: 1,
+              precio_base_m2: r2(m.precio_base_m2_proyecto),
+            })),
+            // Un motor plano no está calibrado, diga lo que diga la etiqueta
+            // anterior: sostenerla sería afirmar una estructura que ya no existe.
+            estado_calibracion: "sin_calibrar" as const,
+            fecha_calibracion: null,
+          })),
+
         setAncla: (ancla) =>
-          mutarMotor((m) => reanclarMotor(m, ancla, torresDe(m.id_proyecto)), false),
+          mutarMotor((m) => {
+            // El modelo ancla necesita las áreas para poder volver al promedio
+            // del desarrollo, así que se pasa el inventario completo.
+            const inv = inventarioDe(m.id_proyecto);
+            return reanclarMotor(m, ancla, inv.torres, inv.modelos, inv.propiedades);
+          }, false),
 
         actualizarFactor: (idFactor, valor) =>
           mutarFactores((fs) =>
