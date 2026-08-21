@@ -251,7 +251,14 @@ function PantallaMotor() {
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const acum = new Map<
       string,
-      { unidades: number; conDesglose: number; area: number; precio: number }
+      {
+        unidades: number;
+        conDesglose: number;
+        area: number;
+        precio: number;
+        ventaUnidades: number;
+        ventaValor: number;
+      }
     >();
     for (const p of propiedades) {
       const a = acum.get(p.id_modelo) ?? {
@@ -259,6 +266,8 @@ function PantallaMotor() {
         conDesglose: 0,
         area: 0,
         precio: 0,
+        ventaUnidades: 0,
+        ventaValor: 0,
       };
       a.unidades++;
       const d = porId.get(p.id_propiedad);
@@ -266,6 +275,12 @@ function PantallaMotor() {
         a.conDesglose++;
         a.area += d.area_ponderada;
         a.precio += d.precio_calculado;
+        // El valor vendible del modelo: los promedios no distinguen entre un
+        // modelo agotado y otro con la mitad del inventario vivo.
+        if (ESTATUS_A_LA_VENTA.has(p.estatus)) {
+          a.ventaUnidades++;
+          a.ventaValor += d.precio_calculado;
+        }
       }
       acum.set(p.id_modelo, a);
     }
@@ -844,6 +859,9 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Precio promedio calculado por unidad
                   </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Inventario a la venta
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1051,6 +1069,19 @@ function PantallaMotor() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+                    <td className="px-3 py-1.5 tabular-nums text-foreground">
+                      {calc && calc.ventaUnidades > 0 ? (
+                        <>
+                          {formatoMoneda(calc.ventaValor)}
+                          <span className="text-xs text-muted-foreground">
+                            {" · "}
+                            {calc.ventaUnidades} u.
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                   </tr>
                   );
                 })}
@@ -1063,7 +1094,13 @@ function PantallaMotor() {
             son la misma cifra vista de dos formas y el otro se recalcula solo.
           </p>
           <p className="text-xs text-muted-foreground">
-            Las tres primeras columnas se capturan; las dos últimas las calcula el motor
+            <strong>Inventario a la venta</strong> es la suma del precio de venta de las
+            unidades del modelo que siguen en estatus Disponible, valuadas con el motor de
+            este momento. Un modelo puede tener el promedio por unidad más alto del
+            desarrollo y casi nada que vender; la suma lo distingue y el promedio no.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Las tres primeras columnas se capturan; las dos siguientes las calcula el motor
             sobre las unidades reales del modelo, ya con su torre, vista, nivel, tamaño y
             extras encima. Por eso se mueven al tocar cualquier factor multiplicativo
             aunque el precio base del modelo no cambie: desde el punto base, subir el

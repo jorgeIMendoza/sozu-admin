@@ -25,6 +25,7 @@ import { useIndicesActivos } from "../hooks/useInventarioActivo";
 import type { IndicesProyecto } from "../stores/inventarioStore";
 import { useMotorAuditado } from "../hooks/useMotorAuditado";
 import { usePreciosProyecto } from "../hooks/usePreciosProyecto";
+import { ESTATUS_A_LA_VENTA } from "../services/inventarioReal";
 import { formatoMoneda } from "../lib/formato";
 
 /** ¿La unidad cae en esta categoría del factor? */
@@ -105,12 +106,25 @@ export function TablaFactores({
    *
    * Los promedios se calculan también para los factores inactivos: sus unidades
    * siguen existiendo y teniendo precio, solo que sin este multiplicador encima.
+   *
+   * - `venta`: el valor del inventario que esa categoría todavía puede vender.
+   *   Los promedios dicen a cuánto queda el m², pero no cuánto dinero hay
+   *   detrás: una torre con 4 unidades vivas y otra con 54 se leen igual en el
+   *   promedio y muy distinto en la cartera. Cuenta solo `Disponible`, el mismo
+   *   criterio que el Forecast de Ingresos.
    */
   const metricas = useMemo(() => {
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const salida: Record<
       string,
-      { unidades: number; impacto: number; porM2: number; porUnidad: number }
+      {
+        unidades: number;
+        impacto: number;
+        porM2: number;
+        porUnidad: number;
+        ventaUnidades: number;
+        ventaValor: number;
+      }
     > = {};
 
     for (const f of factores) {
@@ -119,6 +133,8 @@ export function TablaFactores({
       let impacto = 0;
       let precio = 0;
       let area = 0;
+      let ventaUnidades = 0;
+      let ventaValor = 0;
 
       for (const p of propiedades) {
         if (!perteneceAlFactor(tipo, f.clave, p, indices)) continue;
@@ -129,6 +145,10 @@ export function TablaFactores({
         conDesglose++;
         precio += d.precio_calculado;
         area += d.area_ponderada;
+        if (ESTATUS_A_LA_VENTA.has(p.estatus)) {
+          ventaUnidades++;
+          ventaValor += d.precio_calculado;
+        }
 
         if (!f.activo) continue;
         if (esExtra) {
@@ -145,6 +165,8 @@ export function TablaFactores({
         impacto,
         porM2: area > 0 ? precio / area : 0,
         porUnidad: conDesglose > 0 ? precio / conDesglose : 0,
+        ventaUnidades,
+        ventaValor,
       };
     }
     return salida;
@@ -184,6 +206,7 @@ export function TablaFactores({
               <TableHead className="w-32">Efecto</TableHead>
               <TableHead className="w-44">Precio promedio ponderado por m²</TableHead>
               <TableHead className="w-44">Precio promedio ponderado</TableHead>
+              <TableHead className="w-48">Inventario a la venta</TableHead>
               <TableHead className="w-40">Impacto ($)</TableHead>
               <TableHead className="w-40">Unidades afectadas</TableHead>
               <TableHead className="w-28">Estado</TableHead>
@@ -222,6 +245,19 @@ export function TablaFactores({
                     <span className="text-muted-foreground">—</span>
                   ) : (
                     formatoMoneda(metricas[f.id_factor]?.porUnidad ?? 0)
+                  )}
+                </TableCell>
+                <TableCell className="tabular-nums text-foreground">
+                  {(metricas[f.id_factor]?.ventaUnidades ?? 0) === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <>
+                      {formatoMoneda(metricas[f.id_factor]?.ventaValor ?? 0)}
+                      <span className="text-xs text-muted-foreground">
+                        {" · "}
+                        {metricas[f.id_factor]?.ventaUnidades} u.
+                      </span>
+                    </>
                   )}
                 </TableCell>
                 <TableCell
@@ -265,6 +301,13 @@ export function TablaFactores({
         vigente del motor: al mover el multiplicador se mueven en el acto, junto con los
         promedios del proyecto y los totales del pie. El chip de efecto dice el porcentaje
         en abstracto; estas dos columnas dicen a cuánto queda el m² y a cuánto la unidad.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        <strong>Inventario a la venta</strong> es lo que esa categoría todavía puede
+        vender, valuado con el motor de este momento: solo las unidades en estatus
+        Disponible, el mismo criterio que el Forecast de Ingresos. Es la columna que dice
+        cuánto dinero mueve de verdad tocar ese multiplicador, porque un promedio alto
+        sobre inventario ya vendido no cambia la cartera.
       </p>
 
       <Dialog open={abierto} onOpenChange={setAbierto}>
