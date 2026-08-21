@@ -1800,11 +1800,12 @@ export const EditProjectDialog = ({ projectId, onProjectUpdated, trigger, trigge
                                   <FormItem>
                                     <FormLabel>Número de mensualidades</FormLabel>
                                     <FormControl>
-                                      <Input type="number" step="1" min="0" max="600" placeholder="35" {...field} />
+                                      <Input type="number" step="1" min="0" max="600" placeholder="36" {...field} />
                                     </FormControl>
                                     <FormDescription>
-                                      Solo las mensualidades. El pago a escrituración va aparte:
-                                      35 aquí = 36 meses de plan.
+                                      Solo las mensualidades. El pago contra escritura va
+                                      aparte: 36 aquí = 36 mensualidades + el pago a la
+                                      escritura.
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>

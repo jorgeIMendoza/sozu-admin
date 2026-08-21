@@ -794,7 +794,7 @@ const AgentUnidadesProyecto = () => {
                               )}
                               {amounts.porcentajeEntrega > 0 && (
                                 <span className="inline-flex items-baseline gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                  <span className="font-semibold text-foreground">{amounts.porcentajeEntrega.toFixed(1)}%</span> Entrega
+                                  <span className="font-semibold text-foreground">{amounts.porcentajeEntrega.toFixed(1)}%</span> Escritura
                                 </span>
                               )}
                               {amounts.numMensualidades > 0 && (
@@ -822,7 +822,7 @@ const AgentUnidadesProyecto = () => {
                                 )}
                                 {amounts.entrega > 0 && (
                                   <div className="space-y-0.5">
-                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Entrega</p>
+                                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Escritura</p>
                                     <p className="text-xs font-semibold text-foreground">{formatPrice(amounts.entrega)}</p>
                                   </div>
                                 )}

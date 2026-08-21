@@ -2853,6 +2853,8 @@ export function CrmDealDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
 
+  // Logger de auditoría arriba (doDelete lo usa; evita depender del orden de inicialización).
+  const { logActualizar, logEliminar } = useCrmLogger();
   const doDelete = async () => {
     setDeleting(true);
     const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", Number(dealId));
@@ -2908,7 +2910,6 @@ export function CrmDealDetail() {
     },
   });
   const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
-  const { logActualizar, logEliminar } = useCrmLogger();
   const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("tarea", null, { id, estatus: "completada" }); toast.success("Tarea completada"); invalidateActivity(); };
   const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } logEliminar("tarea", { id }); toast.success("Tarea eliminada"); invalidateActivity(); };
   const updateTask = async (id: number, patch: Record<string, any>) => { const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("tarea", null, { id, ...patch }); invalidateActivity(); };
