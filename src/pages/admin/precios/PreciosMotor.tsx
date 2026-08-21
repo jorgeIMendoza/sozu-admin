@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { Equal, Info, RefreshCw, RotateCcw, TriangleAlert, X } from "lucide-react";
+import { Equal, Info, RefreshCw, RotateCcw, Save, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useMotorStore } from "@/features/precios/stores/motorStore";
+import { useVersionesStore } from "@/features/precios/stores/versionesStore";
+import { construirDatosVersion } from "@/features/precios/lib/versiones";
+import { registrarEvento } from "@/features/precios/services/auditoria";
 import { useMotorAuditado } from "@/features/precios/hooks/useMotorAuditado";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
 import { TablaFactores } from "@/features/precios/components/TablaFactores";
@@ -40,6 +43,7 @@ import {
 } from "@/features/precios/engine/pricing";
 import {
   formatoFecha,
+  formatoFechaCorta,
   formatoM2,
   formatoMoneda,
   formatoMultiplicador,
@@ -161,6 +165,8 @@ function PantallaMotor() {
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
+  const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
+  const crearBorrador = useVersionesStore((s) => s.crearBorrador);
   const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
@@ -174,6 +180,9 @@ function PantallaMotor() {
    * obligaría a reacomodar toda la pantalla en cada paso.
    */
   const [justificacion, setJustificacion] = useState("");
+  const [guardandoEscenario, setGuardandoEscenario] = useState(false);
+  const [nombreEscenario, setNombreEscenario] = useState("");
+  const [notasEscenario, setNotasEscenario] = useState("");
   const [modeloCurva, setModeloCurva] = useState("");
 
 
@@ -251,7 +260,14 @@ function PantallaMotor() {
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const acum = new Map<
       string,
-      { unidades: number; conDesglose: number; area: number; precio: number }
+      {
+        unidades: number;
+        conDesglose: number;
+        area: number;
+        precio: number;
+        ventaUnidades: number;
+        ventaValor: number;
+      }
     >();
     for (const p of propiedades) {
       const a = acum.get(p.id_modelo) ?? {
@@ -259,6 +275,8 @@ function PantallaMotor() {
         conDesglose: 0,
         area: 0,
         precio: 0,
+        ventaUnidades: 0,
+        ventaValor: 0,
       };
       a.unidades++;
       const d = porId.get(p.id_propiedad);
@@ -266,6 +284,12 @@ function PantallaMotor() {
         a.conDesglose++;
         a.area += d.area_ponderada;
         a.precio += d.precio_calculado;
+        // El valor vendible del modelo: los promedios no distinguen entre un
+        // modelo agotado y otro con la mitad del inventario vivo.
+        if (ESTATUS_A_LA_VENTA.has(p.estatus)) {
+          a.ventaUnidades++;
+          a.ventaValor += d.precio_calculado;
+        }
       }
       acum.set(p.id_modelo, a);
     }
@@ -539,6 +563,53 @@ function PantallaMotor() {
     });
   }, [areasPorModelo, areaPivote, motor.tamano.theta, m2RefPreview]);
 
+  /*
+   * Congela la lista que produce el motor de este momento como un escenario.
+   *
+   * Es para lo que existe el motor: mover variables no sirve de nada si no se
+   * puede guardar el resultado y ponerlo al lado del anterior. El escenario
+   * guarda el motor completo y el precio de cada unidad, así que se puede
+   * abrir meses después y ver exactamente con qué configuración salió.
+   *
+   * Nace como borrador, nunca publicado: guardar una hipótesis no puede tener
+   * el mismo peso que decidir el precio con el que se vende.
+   */
+  const guardarEscenario = () => {
+    const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
+    const entradas = propiedades
+      .map((p) => ({ propiedad: p, desglose: porId.get(p.id_propiedad)! }))
+      .filter((e) => e.desglose);
+    const datos = construirDatosVersion({
+      idProyecto: idProyectoActivo,
+      nombre: nombreEscenario.trim(),
+      motor,
+      entradas,
+      notas: notasEscenario.trim(),
+    });
+    const version = crearBorrador(datos);
+    registrarEvento({
+      id_proyecto: idProyectoActivo,
+      tipo: "version.creada",
+      entidad: {
+        tipo: "version",
+        id: version.id_version,
+        etiqueta: `v${version.numero} · ${version.nombre}`,
+      },
+      antes: null,
+      despues: {
+        unidades: version.unidades_incluidas.length,
+        valor_total: version.valor_total,
+        estado_calibracion: motor.estado_calibracion,
+      },
+    });
+    setGuardandoEscenario(false);
+    setNombreEscenario("");
+    setNotasEscenario("");
+    toast.success(
+      `Escenario v${version.numero} guardado con ${version.unidades_incluidas.length} unidades. Ábrelo en la Tabla de Precios para verlo en lista o en plano.`,
+    );
+  };
+
   const recalcular = () => {
     toast.success(
       `Se recalcularon ${totales.unidades} propiedades. ${totales.desviadas} con desviación mayor a 5%.`,
@@ -551,6 +622,15 @@ function PantallaMotor() {
         <span className="mr-auto text-xs text-muted-foreground tabular-nums">
           Última actualización: {formatoFecha(motor.actualizado_en)}
         </span>
+        <Button
+          onClick={() => {
+            setNombreEscenario(`Escenario · ${formatoFechaCorta(new Date().toISOString())}`);
+            setGuardandoEscenario(true);
+          }}
+        >
+          <Save className="size-4" />
+          Guardar como escenario
+        </Button>
         <Button variant="outline" onClick={() => setConfirmarPuntoBase(true)}>
           <Equal className="size-4" />
           Llevar a punto base
@@ -812,8 +892,9 @@ function PantallaMotor() {
 
           <GraficoCurva
             puntos={puntosTamano}
-            etiquetaX="Área ponderada (m²)"
+            etiquetaX="Área"
             etiquetaY="Multiplicador de tamaño"
+            formatoX={(v) => `${v.toFixed(1)} m²`}
           />
 
           <div className="overflow-x-auto rounded-md border border-border">
@@ -823,26 +904,29 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Modelo
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Unidades
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Área promedio ↓
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Rango de áreas
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Rango
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Multiplicador de tamaño
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Multiplicador
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Factor s/ base actual
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Factor actual
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por m²
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / m²
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por unidad
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / unidad
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Inventario a la venta
                   </th>
                 </tr>
               </thead>
@@ -853,20 +937,20 @@ function PantallaMotor() {
                   const propuesto = factorDeTamanoDelModelo(b.id_modelo);
                   const igual = Math.abs(propuesto - (b.factor_modelo ?? 1)) < 5e-5;
                   return (
-                    <tr key={b.id_modelo} className="border-t border-border">
+                    <tr key={b.id_modelo} className="border-t border-border transition-colors hover:bg-muted/40">
                       <td className="px-3 py-1.5 font-medium text-foreground">
                         {b.nombre_modelo}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                         {a?.unidades ?? 0}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
                         {a ? formatoM2(a.suma / a.unidades) : "—"}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                         {a ? `${a.min.toFixed(2)} – ${a.max.toFixed(2)} m²` : "—"}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                         {formatoMultiplicador(propuesto)}
                       </td>
                       <td
@@ -877,7 +961,7 @@ function PantallaMotor() {
                       >
                         {formatoMultiplicador(b.factor_modelo ?? 1)}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums text-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
                         {calc && calc.area > 0 ? (
                           <>
                             {formatoMoneda(calc.precio / calc.area)}
@@ -887,9 +971,21 @@ function PantallaMotor() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                         {calc && calc.conDesglose > 0 ? (
                           formatoMoneda(calc.precio / calc.conDesglose)
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
+                        {calc && calc.ventaUnidades > 0 ? (
+                          <>
+                            {formatoMoneda(calc.ventaValor)}
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              {calc.ventaUnidades} unidades
+                            </span>
+                          </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -948,23 +1044,26 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Modelo
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Unidades
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Factor s/ base
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio por m² resultante
+                    Precio por m²
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     M² de referencia
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por m²
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / m²
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio calculado por unidad
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Precio prom. / unidad
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Inventario a la venta
                   </th>
                 </tr>
               </thead>
@@ -975,7 +1074,7 @@ function PantallaMotor() {
                   const porUnidad =
                     calc && calc.conDesglose > 0 ? calc.precio / calc.conDesglose : 0;
                   return (
-                  <tr key={b.id_modelo} className="border-t border-border">
+                  <tr key={b.id_modelo} className="border-t border-border transition-colors hover:bg-muted/40">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
                       {/* Una curva propia es una excepción a la política del
@@ -987,7 +1086,7 @@ function PantallaMotor() {
                         </span>
                       ) : null}
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                       {unidadesPorModelo.get(b.id_modelo) ?? 0}
                     </td>
                     <td className="px-3 py-1.5">
@@ -1034,7 +1133,7 @@ function PantallaMotor() {
                     </td>
                     {/* Estas dos salen del cálculo vigente, no de la captura:
                         por eso se mueven al tocar cualquier factor. */}
-                    <td className="px-3 py-1.5 tabular-nums text-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
                       {porM2 > 0 ? (
                         <>
                           {formatoMoneda(porM2)}
@@ -1044,9 +1143,21 @@ function PantallaMotor() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                       {porUnidad > 0 ? (
                         formatoMoneda(porUnidad)
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
+                      {calc && calc.ventaUnidades > 0 ? (
+                        <>
+                          {formatoMoneda(calc.ventaValor)}
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {calc.ventaUnidades} unidades
+                          </span>
+                        </>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -1063,7 +1174,13 @@ function PantallaMotor() {
             son la misma cifra vista de dos formas y el otro se recalcula solo.
           </p>
           <p className="text-xs text-muted-foreground">
-            Las tres primeras columnas se capturan; las dos últimas las calcula el motor
+            <strong>Inventario a la venta</strong> es la suma del precio de venta de las
+            unidades del modelo que siguen en estatus Disponible, valuadas con el motor de
+            este momento. Un modelo puede tener el promedio por unidad más alto del
+            desarrollo y casi nada que vender; la suma lo distingue y el promedio no.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Las tres primeras columnas se capturan; las dos siguientes las calcula el motor
             sobre las unidades reales del modelo, ya con su torre, vista, nivel, tamaño y
             extras encima. Por eso se mueven al tocar cualquier factor multiplicativo
             aunque el precio base del modelo no cambie: desde el punto base, subir el
@@ -1194,7 +1311,7 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Nivel
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Multiplicador
                   </th>
                 </tr>
@@ -1203,9 +1320,9 @@ function PantallaMotor() {
                 {nivelesPreview.map((n) => {
                   const f = calcularFactorNivel(n, motor.nivel);
                   return (
-                    <tr key={n} className="border-t border-border">
-                      <td className="px-3 py-1.5 tabular-nums">{n}</td>
-                      <td className="px-3 py-1.5 tabular-nums">
+                    <tr key={n} className="border-t border-border transition-colors hover:bg-muted/40">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">{n}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
                         {formatoMultiplicador(f)}{" "}
                         <span className="text-muted-foreground">
                           ({formatoPorcentaje((f - 1) * 100, 2)})
@@ -1382,6 +1499,7 @@ function PantallaMotor() {
                       etiquetaX="Nivel"
                       etiquetaY="Precio por m²"
                       formatoValor={formatoPesosCompacto}
+                      formatoDetalle={formatoMoneda}
                       lineaBase={null}
                     />
                   </div>
@@ -1394,6 +1512,7 @@ function PantallaMotor() {
                       etiquetaX="Nivel"
                       etiquetaY="Precio final de venta"
                       formatoValor={formatoPesosCompacto}
+                      formatoDetalle={formatoMoneda}
                       lineaBase={null}
                     />
                   </div>
@@ -1406,40 +1525,40 @@ function PantallaMotor() {
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                           Nivel
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                           Unidades
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          M² promedio
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                          M² prom.
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          Precio por metro cuadrado
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                          Precio / m²
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          Precio final de venta
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                          Precio final
                         </th>
-                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                           Variación vs. nivel {nivelesDelModelo[0]?.nivel ?? "—"}
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {nivelesDelModelo.map((n) => (
-                        <tr key={n.nivel} className="border-t border-border">
-                          <td className="px-3 py-1.5 tabular-nums">{n.nivel}</td>
-                          <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                        <tr key={n.nivel} className="border-t border-border transition-colors hover:bg-muted/40">
+                          <td className="px-3 py-1.5 font-medium text-foreground">{n.nivel}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-muted-foreground">
                             {n.unidades}
                           </td>
-                          <td className="px-3 py-1.5 tabular-nums">{formatoM2(n.m2)}</td>
-                          <td className="px-3 py-1.5 tabular-nums">
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">{formatoM2(n.m2)}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums">
                             {formatoMoneda(n.precio_m2)}
                           </td>
-                          <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                          <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums font-medium text-foreground">
                             {formatoMoneda(n.precio_depto)}
                           </td>
                           <td
                             className={cn(
-                              "px-3 py-1.5 tabular-nums",
+                              "px-3 py-1.5 whitespace-nowrap text-right tabular-nums",
                               Math.abs(n.varPct) < 0.005
                                 ? "text-muted-foreground"
                                 : n.varPct > 0
@@ -1448,8 +1567,7 @@ function PantallaMotor() {
                             )}
                           >
                             {formatoPorcentaje(n.varPct, 2)}
-                            <span className="text-xs text-muted-foreground">
-                              {" "}
+                            <span className="block text-xs font-normal text-muted-foreground">
                               {formatoMoneda(n.varMonto)}
                             </span>
                           </td>
@@ -1580,6 +1698,64 @@ function PantallaMotor() {
           </span>
         </div>
       </div>
+
+      <AlertDialog open={guardandoEscenario} onOpenChange={setGuardandoEscenario}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Guardar como escenario</AlertDialogTitle>
+            <AlertDialogDescription>
+              Congela la lista de precios que produce el motor en este momento: la
+              configuración completa y el precio de cada una de las {totales.unidades}
+              {" "}unidades. Después puedes seguir moviendo variables sin perder esto y
+              comparar los dos escenarios.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[13px] text-muted-foreground">Nombre</Label>
+              <Input
+                value={nombreEscenario}
+                onChange={(e) => setNombreEscenario(e.target.value)}
+                placeholder="Cómo reconocerlo después"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[13px] text-muted-foreground">
+                Qué se probó (opcional)
+              </Label>
+              <Input
+                value={notasEscenario}
+                onChange={(e) => setNotasEscenario(e.target.value)}
+                placeholder="Ej.: pendiente por piso al 1.2% y torre VITA en 1.05"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Meses después, el nombre y esta nota son lo único que explica por qué este
+                escenario existe. La configuración queda guardada, pero no dice qué se
+                estaba buscando.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">
+              Queda como <strong>borrador</strong>, no como lista publicada: guardar una
+              hipótesis no puede pesar lo mismo que decidir el precio con el que se vende.
+              Publicar sigue siendo un paso aparte, en Auditoría · Versiones.
+            </p>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={nombreEscenario.trim().length < 3 || totales.unidades === 0}
+              onClick={guardarEscenario}
+            >
+              Guardar escenario
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmarTamano} onOpenChange={setConfirmarTamano}>
         <AlertDialogContent>
