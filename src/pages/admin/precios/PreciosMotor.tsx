@@ -913,6 +913,18 @@ function PantallaMotor() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap text-right tabular-nums text-foreground">
+                        {calc && calc.ventaUnidades > 0 ? (
+                          <>
+                            {formatoMoneda(calc.ventaValor)}
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              {calc.ventaUnidades} unidades
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -984,6 +996,9 @@ function PantallaMotor() {
                   </th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">
                     Precio prom. / unidad
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Inventario a la venta
                   </th>
                 </tr>
               </thead>
