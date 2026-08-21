@@ -362,10 +362,47 @@ function PantallaMotor() {
 
 
   const bases = motor.bases_modelo ?? [];
-  const unidadesPorModelo = new Map<string, number>();
-  for (const p of propiedadesFiltradas) {
-    unidadesPorModelo.set(p.id_modelo, (unidadesPorModelo.get(p.id_modelo) ?? 0) + 1);
-  }
+
+  /*
+   * Lo que el motor calcula HOY para las unidades de cada modelo.
+   *
+   * Las tres primeras columnas de la tabla son configuración: el factor del
+   * modelo y su precio por m² son dos vistas del mismo dato capturado, y no se
+   * mueven solos. Pero el precio real de una unidad lleva encima su torre, su
+   * vista, su nivel, su tamaño y sus extras, así que tocar cualquier factor
+   * multiplicativo cambia lo que valen los modelos aunque su base no cambie.
+   * Sin estas dos columnas la tabla se quedaba quieta mientras el inventario
+   * se movía, que es justo lo que no debe pasar en una pantalla de simulación.
+   */
+  const porModelo = useMemo(() => {
+    const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const acum = new Map<
+      string,
+      { unidades: number; conDesglose: number; area: number; precio: number }
+    >();
+    for (const p of propiedadesFiltradas) {
+      const a = acum.get(p.id_modelo) ?? {
+        unidades: 0,
+        conDesglose: 0,
+        area: 0,
+        precio: 0,
+      };
+      a.unidades++;
+      const d = porId.get(p.id_propiedad);
+      if (d && d.area_ponderada > 0) {
+        a.conDesglose++;
+        a.area += d.area_ponderada;
+        a.precio += d.precio_calculado;
+      }
+      acum.set(p.id_modelo, a);
+    }
+    return acum;
+  }, [propiedadesFiltradas, desglosesFiltrados]);
+
+  const unidadesPorModelo = useMemo(
+    () => new Map([...porModelo].map(([id, v]) => [id, v.unidades])),
+    [porModelo],
+  );
 
   /*
    * Con un filtro puesto, los modelos que no aparecen en el subconjunto se
@@ -774,12 +811,20 @@ function PantallaMotor() {
                     M² de referencia
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Precio promedio ponderado
+                    Precio promedio calculado por m²
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Precio promedio calculado por unidad
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {basesOrdenadas.map((b) => (
+                {basesOrdenadas.map((b) => {
+                  const calc = porModelo.get(b.id_modelo);
+                  const porM2 = calc && calc.area > 0 ? calc.precio / calc.area : 0;
+                  const porUnidad =
+                    calc && calc.conDesglose > 0 ? calc.precio / calc.conDesglose : 0;
+                  return (
                   <tr key={b.id_modelo} className="border-t border-border">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
@@ -829,14 +874,28 @@ function PantallaMotor() {
                         className="w-32 tabular-nums"
                       />
                     </td>
-                    {/* Precio de una unidad de referencia del modelo. Es
-                        derivado —precio por m² x m² de referencia— y se mueve
-                        al capturar cualquiera de los dos. */}
+                    {/* Estas dos salen del cálculo vigente, no de la captura:
+                        por eso se mueven al tocar cualquier factor. */}
+                    <td className="px-3 py-1.5 tabular-nums text-foreground">
+                      {porM2 > 0 ? (
+                        <>
+                          {formatoMoneda(porM2)}
+                          <span className="text-xs text-muted-foreground"> /m²</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
-                      {formatoMoneda(b.precio_base_m2 * b.m2_referencia)}
+                      {porUnidad > 0 ? (
+                        formatoMoneda(porUnidad)
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -846,11 +905,17 @@ function PantallaMotor() {
             son la misma cifra vista de dos formas y el otro se recalcula solo.
           </p>
           <p className="text-xs text-muted-foreground">
+            Las tres primeras columnas se capturan; las dos últimas las calcula el motor
+            sobre las unidades reales del modelo, ya con su torre, vista, nivel, tamaño y
+            extras encima. Por eso se mueven al tocar cualquier factor multiplicativo
+            aunque el precio base del modelo no cambie: desde el punto base, subir el
+            factor de una torre sube el promedio de los modelos que tienen unidades ahí, y
+            deja igual a los que no.
+          </p>
+          <p className="text-xs text-muted-foreground">
             Los modelos van de mayor a menor número de unidades. El <strong>m² de
             referencia</strong> es el promedio de las unidades del modelo, no el metraje de
-            una sola: dentro de un mismo modelo el área varía. El <strong>precio promedio
-            ponderado</strong> es lo que cuesta esa unidad de referencia —precio por m² × m²
-            de referencia— y al sembrar reproduce el precio promedio real del modelo.
+            una sola: dentro de un mismo modelo el área varía.
           </p>
         </CardContent>
       </Card>
