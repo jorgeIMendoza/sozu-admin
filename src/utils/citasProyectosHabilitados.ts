@@ -3,10 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 /**
  * Proyectos que aceptan citas.
  *
- * Regla: solo un proyecto activo (`activo = true`) y publicado (`publicar = true`)
- * ofrece horarios. Un desarrollo dado de baja o despublicado deja de aparecer al
- * agendar aunque su configuración de cita siga viva en
- * `configuracion_citas_usuarios` (segundo check: `activo` de la configuración).
+ * Regla: solo un proyecto activo (`activo = true`) ofrece horarios. Un desarrollo
+ * dado de baja deja de aparecer al agendar aunque su configuración de cita siga
+ * viva en `configuracion_citas_usuarios`.
+ *
+ * `publicar` NO participa: es la bandera de publicación en el sitio público, no
+ * de citas. Un desarrollo en preventa (ej. Monócolo) necesita capacitación y
+ * showroom para los agentes antes de publicarse. El control de citas es el switch
+ * "Citas habilitadas" por configuración (segundo check: `activo` de la
+ * configuración).
  */
 export async function fetchProyectosConCitasHabilitadas(ids: number[]): Promise<Set<number>> {
   const unicos = [...new Set(ids)].filter((id) => Number.isFinite(id));
@@ -16,8 +21,7 @@ export async function fetchProyectosConCitasHabilitadas(ids: number[]): Promise<
     .from("proyectos")
     .select("id")
     .in("id", unicos)
-    .eq("activo", true)
-    .eq("publicar", true);
+    .eq("activo", true);
 
   if (error) throw error;
   return new Set((data || []).map((p: any) => p.id as number));

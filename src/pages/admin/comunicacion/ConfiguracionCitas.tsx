@@ -125,31 +125,35 @@ export default function ConfiguracionCitas() {
     enabled: isSuperAdmin,
   });
 
-  // Fetch published projects
-  const { data: proyectosPublicados = [] } = useQuery({
-    queryKey: ["proyectos-publicados"],
+  // Desarrollos vinculables: activos, publicados o no. `publicar` es la bandera
+  // del sitio público; un desarrollo en preventa igual necesita citas internas.
+  const { data: proyectosVinculables = [] } = useQuery({
+    queryKey: ["proyectos-citas-vinculables"],
     queryFn: async () => {
-      const query = supabase.from("proyectos").select("id, nombre").eq("activo", true);
-      const { data, error } = await (query as any).eq("publicar", true).order("nombre");
+      const { data, error } = await supabase
+        .from("proyectos")
+        .select("id, nombre")
+        .eq("activo", true)
+        .order("nombre");
       if (error) throw error;
       return (data || []) as { id: number; nombre: string }[];
     },
   });
 
-  // Desarrollos vinculados a la config que ya no aceptan citas
-  // (dados de baja o despublicados). Se avisan pero no se pueden re-seleccionar.
+  // Desarrollos vinculados a la config que ya no aceptan citas (dados de baja).
+  // Se avisan pero no se pueden re-seleccionar.
   const { data: proyectosNoDisponibles = [] } = useQuery({
-    queryKey: ["config-citas-proyectos-no-disponibles", selectedProyectoIds, proyectosPublicados.map((p) => p.id)],
+    queryKey: ["config-citas-proyectos-no-disponibles", selectedProyectoIds, proyectosVinculables.map((p) => p.id)],
     queryFn: async () => {
-      const publicadosIds = new Set(proyectosPublicados.map((p) => p.id));
-      const faltantes = selectedProyectoIds.filter((id) => !publicadosIds.has(id));
+      const vinculablesIds = new Set(proyectosVinculables.map((p) => p.id));
+      const faltantes = selectedProyectoIds.filter((id) => !vinculablesIds.has(id));
       if (faltantes.length === 0) return [];
       const { data, error } = await supabase
         .from("proyectos")
-        .select("id, nombre, activo, publicar")
+        .select("id, nombre, activo")
         .in("id", faltantes);
       if (error) throw error;
-      return (data || []) as { id: number; nombre: string; activo: boolean; publicar: boolean }[];
+      return (data || []) as { id: number; nombre: string; activo: boolean }[];
     },
     enabled: selectedProyectoIds.length > 0,
   });
@@ -1071,7 +1075,7 @@ export default function ConfiguracionCitas() {
                           <div className="space-y-2">
                             <Label>Desarrollos vinculados</Label>
                             <div className="flex flex-wrap gap-1.5">
-                              {proyectosPublicados.map((p: any) => {
+                              {proyectosVinculables.map((p: any) => {
                                 const isLinked = selectedProyectoIds.includes(p.id);
                                 return (
                                   <button
@@ -1097,12 +1101,10 @@ export default function ConfiguracionCitas() {
                                 <p className="text-xs text-amber-800 flex items-center gap-1.5">
                                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                   Sin citas disponibles:{" "}
-                                  {proyectosNoDisponibles
-                                    .map((p) => `${p.nombre} (${!p.activo ? "dado de baja" : "no publicado"})`)
-                                    .join(", ")}
+                                  {proyectosNoDisponibles.map((p) => `${p.nombre} (dado de baja)`).join(", ")}
                                 </p>
                                 <p className="text-xs text-amber-700">
-                                  Solo los desarrollos activos y publicados ofrecen horarios, aunque sigan vinculados aquí.
+                                  Solo los desarrollos activos ofrecen horarios, aunque sigan vinculados aquí.
                                 </p>
                               </div>
                             )}
@@ -1120,7 +1122,7 @@ export default function ConfiguracionCitas() {
                               </p>
                               <div className="space-y-2">
                                 {selectedProyectoIds.map((pid) => {
-                                  const proj = proyectosPublicados.find((p: any) => p.id === pid);
+                                  const proj = proyectosVinculables.find((p: any) => p.id === pid);
                                   if (!proj) return null;
                                   // Get location options for this specific project
                                   const projOptions = locationOptions.filter((o) => o.proyecto === proj.nombre);
