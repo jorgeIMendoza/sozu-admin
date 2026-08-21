@@ -63,7 +63,51 @@ export interface ChecklistCategoria {
   estatus: string;
   total_items: number;
   items_completos: number;
+  // Defaults de categoría (herencia lógica — NUNCA se propagan a los ítems).
+  // NULL cuando el DDL de 20260819_entregas_categoria_tecnico_supervisor.md
+  // aún no fue ejecutado en el ambiente (ver probe en EntregaDetalle.tsx).
+  id_tecnico_default_er: number | null;
+  id_supervisor_default_er: number | null;
   items: ChecklistItem[];
+}
+
+// ── Resolución de responsable efectivo (herencia categoría → ítem) ───────────
+// Fuente única de verdad para "quién es el técnico/supervisor de este ítem".
+// Usado por ChecklistConcepto.tsx y VoBoPanel.tsx — no duplicar esta lógica.
+
+export type OrigenResponsable = 'INDIVIDUAL' | 'HEREDADO' | null;
+
+export interface ResponsableEfectivo {
+  entidad: EntidadER | null;
+  origen: OrigenResponsable;
+}
+
+export function resolverTecnicoEfectivo(
+  item: Pick<ChecklistItem, 'id_tecnico_er'>,
+  categoria: Pick<ChecklistCategoria, 'id_tecnico_default_er'>,
+  tecnicos: EntidadER[],
+): ResponsableEfectivo {
+  if (item.id_tecnico_er !== null) {
+    return { entidad: tecnicos.find(t => t.id === item.id_tecnico_er) ?? null, origen: 'INDIVIDUAL' };
+  }
+  if (categoria.id_tecnico_default_er !== null) {
+    return { entidad: tecnicos.find(t => t.id === categoria.id_tecnico_default_er) ?? null, origen: 'HEREDADO' };
+  }
+  return { entidad: null, origen: null };
+}
+
+export function resolverSupervisorEfectivo(
+  item: Pick<ChecklistItem, 'id_supervisor_er'>,
+  categoria: Pick<ChecklistCategoria, 'id_supervisor_default_er'>,
+  supervisores: EntidadER[],
+): ResponsableEfectivo {
+  if (item.id_supervisor_er !== null) {
+    return { entidad: supervisores.find(s => s.id === item.id_supervisor_er) ?? null, origen: 'INDIVIDUAL' };
+  }
+  if (categoria.id_supervisor_default_er !== null) {
+    return { entidad: supervisores.find(s => s.id === categoria.id_supervisor_default_er) ?? null, origen: 'HEREDADO' };
+  }
+  return { entidad: null, origen: null };
 }
 
 export interface ObservacionRow {

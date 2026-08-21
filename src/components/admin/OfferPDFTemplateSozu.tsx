@@ -651,7 +651,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
                                       </div>
                                     )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                      <span style={{ color: '#000000' }}>A la entrega:</span>
+                                      <span style={{ color: '#000000' }}>A la escritura:</span>
                                       <span style={{ color: '#000000', fontWeight: 'bold' }}>
                                         {amounts.porcentajeEntrega.toFixed(1)}% {montoEntregaTexto}
                                       </span>
@@ -681,7 +681,7 @@ export const OfferPDFTemplateSozu = forwardRef<HTMLDivElement, OfferPDFTemplateS
 
                                   {amounts.porcentajeEntrega > 0 && (
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                      <span style={{ color: '#000000' }}>A la entrega:</span>
+                                      <span style={{ color: '#000000' }}>A la escritura:</span>
                                       <span style={{ color: '#000000', fontWeight: 'bold' }}>
                                         {amounts.porcentajeEntrega.toFixed(1)}% {formatCurrency(amounts.entrega)}
                                       </span>

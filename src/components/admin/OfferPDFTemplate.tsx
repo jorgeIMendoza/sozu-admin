@@ -399,7 +399,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
                                     <p className="text-xs text-muted-foreground">hasta {fechaFinalStr}</p>
                                   </div>
                                   <div className="text-center">
-                                    <p className="text-xs text-muted-foreground">Monto a la entrega</p>
+                                    <p className="text-xs text-muted-foreground">Monto a la escritura</p>
                                     <p className="font-bold text-xs">{montoEntregaTexto}</p>
                                   </div>
                                 </>
@@ -418,7 +418,7 @@ export const OfferPDFTemplate = forwardRef<HTMLDivElement, OfferPDFTemplateProps
 
                                 {scheme.porcentaje_entrega > 0 && (
                                   <div className="text-center">
-                                    <p className="text-xs text-muted-foreground">A escrituración</p>
+                                    <p className="text-xs text-muted-foreground">A la escritura</p>
                                     <p className="font-bold text-xs">{formatCurrency(calculation.entrega)}</p>
                                     <p className="text-xs text-muted-foreground">({calculation.porcentajeEntrega.toFixed(1)}%)</p>
                                   </div>

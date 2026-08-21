@@ -47,7 +47,7 @@ const PaymentPlansComparatorSection = ({
       highlight: true,
     },
     {
-      label: "A la entrega",
+      label: "A la escritura",
       getValue: (p) => `${formatMxn(p.finalPaymentAmount)} (${p.finalPaymentPct}%)`,
       highlight: false,
     },

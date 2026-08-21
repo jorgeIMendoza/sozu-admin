@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
  * `propiedades.mensualidades_fijas` y `proyectos.mensualidades_fijas` son columnas
  * `integer NULL`: NULL = modo dinámico (meses de hoy a la entrega menos 1, la regla
  * histórica); un número = modo fijo, esas mensualidades sin importar la fecha de
- * entrega. El pago a escrituración NO se cuenta ahí — 35 fijas = 36 meses de plan.
+ * entrega. El pago a la escritura NO se cuenta ahí — 36 fijas = 36 mensualidades más ese pago.
  *
  * La unidad gana sobre el proyecto. Quien manda de verdad es el RPC
  * `get_oferta_financials`; esto es el espejo en TS para las vistas que no lo consumen

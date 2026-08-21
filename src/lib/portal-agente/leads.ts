@@ -21,6 +21,8 @@ export interface EstatusLead {
   clave: string;
   nombre: string;
   color: string | null;
+  /** true = el lead se cerró/descartó. Lo declara el catálogo, no el front. */
+  es_descarte: boolean;
 }
 
 export interface ProyectoLead {
@@ -53,13 +55,31 @@ export interface ProspectoRow {
  * los selects vacíos mientras el CRM sí los mostraba.
  */
 export async function fetchEstatusLead(): Promise<EstatusLead[]> {
-  const { data, error } = await (supabase as any)
+  // `es_descarte` marca los estados de cierre (asesor inmobiliario, registro por error…).
+  // Si la columna aún no existe se reintenta sin ella: todos quedan como activos.
+  const conFlag = await (supabase as any)
     .from("crm_estados_lead")
-    .select("id, clave, nombre, color, orden")
+    .select("id, clave, nombre, color, orden, es_descarte")
     .eq("activo", true)
     .order("orden");
 
-  if (!error && data && data.length > 0) return data as EstatusLead[];
+  const res = conFlag.error
+    ? await (supabase as any)
+        .from("crm_estados_lead")
+        .select("id, clave, nombre, color, orden")
+        .eq("activo", true)
+        .order("orden")
+    : conFlag;
+
+  if (!res.error && res.data && res.data.length > 0) {
+    return (res.data as any[]).map((e) => ({
+      id: e.id,
+      clave: e.clave,
+      nombre: e.nombre,
+      color: e.color ?? null,
+      es_descarte: e.es_descarte === true,
+    }));
+  }
 
   // Respaldo: ids negativos para no confundirlos con los del catálogo real.
   return META_LEAD_STATUSES.map((e, i) => ({
@@ -67,6 +87,7 @@ export async function fetchEstatusLead(): Promise<EstatusLead[]> {
     clave: e.value,
     nombre: e.label,
     color: e.color ?? null,
+    es_descarte: false,
   }));
 }
 
@@ -143,6 +164,8 @@ interface Args {
   search?: string | null;
   estatus?: number | null;
   proyecto?: number | null;
+  /** true = oculta los estados marcados como descarte en el catálogo. */
+  soloActivos?: boolean;
   /** Tamaño de página. */
   limit?: number;
   offset?: number;
@@ -153,6 +176,8 @@ export interface ProspectosPagina {
   /** Prospectos que cumplen el filtro **en la base**, no los de esta página. */
   total: number;
   viaRpc: boolean;
+  /** false = la RPC de la base todavía no sabe ocultar descartes (migración 06 pendiente). */
+  soloActivosSoportado: boolean;
 }
 
 /** Desarrollo con prospectos del agente, para poblar el filtro sin depender de la página. */
@@ -169,19 +194,29 @@ export interface ProyectoFaceta {
  */
 export async function fetchAgenteProspectosFacetas(
   authUserId: string | null,
+  soloActivos = false,
 ): Promise<ProyectoFaceta[] | null> {
   if (!authUserId) return [];
 
-  const rpc = await (supabase as any).rpc("get_agente_prospectos_facetas", {
-    p_auth_user_id: authUserId,
-  });
-  if (!rpc.error && Array.isArray(rpc.data)) {
-    return (rpc.data as any[]).map((r) => ({
+  const mapear = (data: any[]): ProyectoFaceta[] =>
+    data.map((r) => ({
       id_proyecto: r.id_proyecto ?? null,
       proyecto: r.proyecto ?? "Sin desarrollo",
       prospectos: Number(r.prospectos ?? 0),
     }));
-  }
+
+  // Los conteos del filtro tienen que usar el mismo corte que la lista, o no cuadran.
+  const conCorte = await (supabase as any).rpc("get_agente_prospectos_facetas", {
+    p_auth_user_id: authUserId,
+    p_solo_activos: soloActivos,
+  });
+  if (!conCorte.error && Array.isArray(conCorte.data)) return mapear(conCorte.data);
+
+  // Firma vieja (1 argumento): sin corte, pero mejor eso que un selector vacío.
+  const sinCorte = await (supabase as any).rpc("get_agente_prospectos_facetas", {
+    p_auth_user_id: authUserId,
+  });
+  if (!sinCorte.error && Array.isArray(sinCorte.data)) return mapear(sinCorte.data);
   return null;
 }
 
@@ -194,7 +229,13 @@ export const PROYECTO_SIN_DESARROLLO = -1;
 /** Mismos filtros que la RPC, para el camino de transición (que lee sin paginar). */
 function aplicarFiltros(
   rows: ProspectoRow[],
-  { search, estatus, proyecto }: { search?: string | null; estatus?: number | null; proyecto?: number | null },
+  { search, estatus, proyecto, descartes }: {
+    search?: string | null;
+    estatus?: number | null;
+    proyecto?: number | null;
+    /** ids de estado a ocultar; vacío = no ocultar nada. */
+    descartes?: Set<number>;
+  },
 ): ProspectoRow[] {
   const q = (search ?? "").trim().toLowerCase();
   return rows.filter((p) => {
@@ -210,6 +251,12 @@ function aplicarFiltros(
       const coincide = p.proyectos.some((pr) =>
         sinDesarrollo ? pr.id_proyecto == null : pr.id_proyecto === proyecto);
       if (!coincide) return false;
+    }
+    // Sin estado = sigue en juego, nunca se oculta.
+    if (descartes?.size) {
+      const vivo = p.proyectos.some(
+        (pr) => pr.id_estatus_lead == null || !descartes.has(pr.id_estatus_lead));
+      if (!vivo) return false;
     }
     return true;
   });
@@ -231,12 +278,13 @@ export async function fetchAgenteProspectos({
   search = null,
   estatus = null,
   proyecto = null,
+  soloActivos = false,
   limit = 25,
   offset = 0,
 }: Args): Promise<ProspectosPagina> {
   // Sin identidad efectiva no se lee nada: devolver "todo" sería exponer la cartera
   // ajena (es justo lo que pasaba al impersonar a un usuario sin cuenta auth).
-  if (!authUserId && !personaId) return { rows: [], total: 0, viaRpc: false };
+  if (!authUserId && !personaId) return { rows: [], total: 0, viaRpc: false, soloActivosSoportado: true };
 
   // ── Camino definitivo: la RPC filtra por dueño del lado de la base ──
   // `p_auth_user_id` = agente a consultar. Va SIEMPRE explícito: cuando un admin
@@ -244,14 +292,27 @@ export async function fetchAgenteProspectos({
   // del admin dentro del Portal Agente. `fn_agente_actual` valida el permiso de
   // impersonación en la base antes de aceptar un uid distinto al de la sesión.
   const termino = (search ?? "").trim();
-  const rpc = await (supabase as any).rpc("get_agente_prospectos", {
+  const params: Record<string, unknown> = {
     p_search: termino || null,
     p_estatus: estatus ?? null,
     p_proyecto: proyecto ?? null,
     p_auth_user_id: authUserId ?? null,
     p_limit: limit,
     p_offset: offset,
-  });
+  };
+
+  // El corte de descartes se resuelve en la base, como la paginación: filtrarlo aquí
+  // volvería a mentir en el total y en el número de páginas.
+  let soloActivosSoportado = true;
+  let rpc = soloActivos
+    ? await (supabase as any).rpc("get_agente_prospectos", { ...params, p_solo_activos: true })
+    : await (supabase as any).rpc("get_agente_prospectos", params);
+
+  // Firma vieja (6 argumentos, migración 06 sin aplicar): se pide sin el corte y la UI avisa.
+  if (soloActivos && rpc.error) {
+    soloActivosSoportado = false;
+    rpc = await (supabase as any).rpc("get_agente_prospectos", params);
+  }
 
   if (!rpc.error && Array.isArray(rpc.data)) {
     const rows: ProspectoRow[] = (rpc.data as any[]).map((r) => {
@@ -290,7 +351,7 @@ export async function fetchAgenteProspectos({
     });
     // `total_personas` viene de un count(*) OVER () previo al LIMIT: es el universo, no la página.
     const total = Number((rpc.data as any[])[0]?.total_personas ?? rows.length);
-    return { rows, total, viaRpc: true };
+    return { rows, total, viaRpc: true, soloActivosSoportado };
   }
 
   // ── Camino de transición: unión de los dos modelos de propiedad del lead ──
@@ -324,7 +385,7 @@ export async function fetchAgenteProspectos({
 
   const ers = new Map<number, any>();
   [...(porDuenaLead.data ?? []), ...porAtribucion].forEach((er: any) => ers.set(er.id, er));
-  if (ers.size === 0) return { rows: [], total: 0, viaRpc: false };
+  if (ers.size === 0) return { rows: [], total: 0, viaRpc: false, soloActivosSoportado: true };
 
   const lista = [...ers.values()];
   const personaIds = [...new Set(lista.map((e) => e.id_persona).filter(Boolean))] as number[];
@@ -403,8 +464,16 @@ export async function fetchAgenteProspectos({
 
   // Este camino ya trajo todo a memoria, así que filtra y recorta aquí para exponer la
   // misma forma que la RPC: la UI pagina igual con o sin ella.
-  const filtradas = aplicarFiltros(rows, { search, estatus, proyecto });
-  return { rows: filtradas.slice(offset, offset + limit), total: filtradas.length, viaRpc: false };
+  const descartes = soloActivos
+    ? new Set((catalogo as EstatusLead[]).filter((e) => e.es_descarte).map((e) => e.id))
+    : undefined;
+  const filtradas = aplicarFiltros(rows, { search, estatus, proyecto, descartes });
+  return {
+    rows: filtradas.slice(offset, offset + limit),
+    total: filtradas.length,
+    viaRpc: false,
+    soloActivosSoportado: true,
+  };
 }
 
 /* ─────────────────────────── Reasignación de leads ─────────────────────────── */

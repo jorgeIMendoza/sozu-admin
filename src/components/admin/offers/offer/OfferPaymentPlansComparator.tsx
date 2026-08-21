@@ -148,7 +148,7 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
             <div
               className="h-full bg-foreground/70"
               style={{ width: `${selectedPlan.finalPaymentPct}%` }}
-              title={`Entrega ${selectedPlan.finalPaymentPct}%`}
+              title={`A la escritura ${selectedPlan.finalPaymentPct}%`}
             />
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
@@ -156,7 +156,7 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
             {selectedPlan.installmentsPct > 0 && (
               <LegendItem color="bg-primary/40" label="Mensualidades" pct={selectedPlan.installmentsPct} />
             )}
-            <LegendItem color="bg-foreground/70" label="A la entrega" pct={selectedPlan.finalPaymentPct} />
+            <LegendItem color="bg-foreground/70" label="A la escritura" pct={selectedPlan.finalPaymentPct} />
           </div>
         </div>
 
@@ -179,8 +179,8 @@ const OfferPaymentPlansComparator = ({ offerId, plans, listPrice }: Props) => {
           )}
           <FlowRow
             icon={KeyRound}
-            label="Pago a la entrega"
-            sublabel={`${selectedPlan.finalPaymentPct}% al recibir las llaves`}
+            label="Pago a la escritura"
+            sublabel={`${selectedPlan.finalPaymentPct}% contra escritura`}
             amount={selectedPlan.finalPaymentAmount}
           />
           {selectedPlan.discountAmount > 0 && (
