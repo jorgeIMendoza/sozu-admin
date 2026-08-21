@@ -633,6 +633,8 @@ const AgentPerfil = () => {
   })();
 
   // Desarrollos ASIGNADOS al agente (solo los suyos, nunca el catálogo completo).
+  // Sin filtro `publicar`: un desarrollo en preventa ya está asignado y el agente
+  // debe verlo (mismo criterio que las citas).
   const { accessibleProjectIds } = useProjectAccess();
   const { data: misDesarrollos = [] } = useQuery({
     queryKey: ['agent-perfil-desarrollos', accessibleProjectIds],
@@ -642,7 +644,6 @@ const AgentPerfil = () => {
         .from('proyectos')
         .select('nombre')
         .eq('activo', true)
-        .eq('publicar', true)
         .in('id', accessibleProjectIds)
         .order('nombre');
       return (data || []).map((p: any) => p.nombre).filter(Boolean);
