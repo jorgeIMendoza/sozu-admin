@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { estatusBloqueaReprecio } from "@/features/precios/engine/pricing";
 
-import { Archive, Copy, Download, Plus } from "lucide-react";
+import { Archive, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,11 @@ import { cn } from "@/lib/utils";
 import { GraficoAbsorcion } from "@/features/precios/components/GraficoAbsorcion";
 import { useEsquemasVPN } from "@/features/precios/hooks/useEsquemasVPN";
 import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
+import {
+  useEscenariosFlujoStore,
+  type EscenarioFlujo,
+} from "@/features/precios/stores/escenariosFlujoStore";
+import { registrarEvento } from "@/features/precios/services/auditoria";
 import { esInejecutable } from "@/features/precios/engine/npv";
 import { conAuditoria } from "@/features/precios/services/auditoria";
 import type { TipoEsquema } from "@/features/precios/types/dominio";
@@ -27,7 +32,7 @@ import {
   type FormaAbsorcion,
 } from "@/features/precios/stores/escenariosProyectoStore";
 import { descargarCSV } from "@/features/precios/lib/csv";
-import { formatoMoneda } from "@/features/precios/lib/formato";
+import { formatoFechaCorta, formatoMoneda } from "@/features/precios/lib/formato";
 import { pct2 } from "@/features/precios/lib/formatoVpn";
 
 const SIN_ESCENARIOS: EscenarioProyecto[] = [];
@@ -38,6 +43,9 @@ const FORMAS: Array<[FormaAbsorcion, string]> = [
   ["lenta", "Lenta al inicio"],
 ];
 
+/** Referencia estable para proyectos sin escenarios de flujo guardados. */
+const VACIO: EscenarioFlujo[] = [];
+
 function EscenariosProyecto() {
   const {
     idProyecto,
@@ -47,6 +55,7 @@ function EscenariosProyecto() {
     porTorre,
     resultados,
     tasaMes,
+    tasaAnual,
   } = useEsquemasVPN();
   const { propiedades, desgloses, indices } = usePreciosProyecto();
 
@@ -306,6 +315,78 @@ function EscenariosProyecto() {
     tasaMes,
     valorLista,
   ]);
+
+  const flujos = useEscenariosFlujoStore((s) => s.flujosPorProyecto)[idProyecto] ?? VACIO;
+  const guardarFlujo = useEscenariosFlujoStore((s) => s.guardarFlujo);
+  const eliminarFlujo = useEscenariosFlujoStore((s) => s.eliminarFlujo);
+  const [nombreFlujo, setNombreFlujo] = useState("");
+
+  /*
+   * Congela la configuracion completa: precios, esquemas y absorcion.
+   *
+   * Guarda el resultado Y los supuestos. Solo el resultado dejaria un numero sin
+   * defensa —meses despues nadie sabria si esos millones salieron de vender todo
+   * a contado en seis meses o de un mix realista en tres anos— y solo los
+   * supuestos obligaria a recalcular con un motor que ya cambio, que daria otra
+   * cifra. Los esquemas se copian, no se referencian: se pueden editar o dar de
+   * baja despues y el escenario dejaria de poder explicarse.
+   */
+  const guardarEscenarioFlujo = () => {
+    if (!proyeccion || !escenario) return;
+    const guardado = guardarFlujo({
+      id_proyecto: idProyecto,
+      nombre: nombreFlujo.trim() || escenario.nombre,
+      notas: "",
+      unidades,
+      valor_lista: valorLista,
+      tasa_anual: tasaAnual,
+      meses_absorcion: escenario.meses_absorcion,
+      forma: escenario.forma,
+      mix: { ...mix },
+      mixPorModelo: structuredClone(mixPorModelo),
+      esquemas: ejecutables.map((e) => ({
+        id_esquema: e.id_esquema,
+        nombre: e.nombre,
+        pct_ajuste_manual: e.pct_ajuste_manual,
+        participacion: mix[e.id_esquema] ?? 0,
+      })),
+      vp_total: proyeccion.total,
+      vp_sin_brecha: proyeccion.totalSinBrecha,
+      meses: proyeccion.meses.map((m) => ({
+        mes: m.mes,
+        unidades: m.unidades,
+        nominal: m.nominal,
+        vp: m.vp,
+      })),
+      modelos: proyeccion.detalle.map((m) => ({
+        id_modelo: m.id_modelo,
+        nombre: m.nombre,
+        unidades: m.unidades,
+        valor: m.valor,
+        vp: m.vp,
+        propio: m.propio,
+      })),
+    });
+    setNombreFlujo("");
+    registrarEvento({
+      id_proyecto: idProyecto,
+      tipo: "escenario.guardado",
+      entidad: { tipo: "escenario_flujo", id: guardado.id_flujo, etiqueta: guardado.nombre },
+      antes: null,
+      despues: {
+        unidades: guardado.unidades,
+        valor_lista: guardado.valor_lista,
+        vp_total: guardado.vp_total,
+        meses_absorcion: guardado.meses_absorcion,
+      },
+    });
+  };
+
+  /** De mayor a menor ingreso esperado: la pregunta es cuál rinde más. */
+  const flujosOrdenados = useMemo(
+    () => [...flujos].sort((a, b) => b.vp_total - a.vp_total),
+    [flujos],
+  );
 
   const exportar = () => {
     if (!proyeccion || !escenario) return;
@@ -599,16 +680,22 @@ function EscenariosProyecto() {
           {formatoMoneda(precioPromedio)}
           <span className="ml-2 rounded-full bg-muted px-2 py-0.5">Libro: Comercial</span>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto"
-          disabled={!proyeccion}
-          onClick={exportar}
-        >
-          <Download className="mr-1.5 size-4" />
-          Exportar proyección
-        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Input
+            className="w-56"
+            placeholder="Nombre del escenario de flujo"
+            value={nombreFlujo}
+            onChange={(e) => setNombreFlujo(e.target.value)}
+          />
+          <Button size="sm" disabled={!proyeccion} onClick={guardarEscenarioFlujo}>
+            <Save className="mr-1.5 size-4" />
+            Guardar escenario de flujo
+          </Button>
+          <Button variant="outline" size="sm" disabled={!proyeccion} onClick={exportar}>
+            <Download className="mr-1.5 size-4" />
+            Exportar proyección
+          </Button>
+        </div>
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -752,6 +839,112 @@ function EscenariosProyecto() {
             </table>
           </Card>
         </>
+      ) : null}
+
+      {flujos.length > 0 ? (
+        <Card className="space-y-3 p-4">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">
+              Escenarios de flujo guardados
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Cada uno congela una configuración completa —precios, esquemas y absorción— con
+              el resultado que produjo. Se comparan por ingreso esperado.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Escenario
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Unidades
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Valor de lista
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Ingreso esperado
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Recuperación
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Absorción
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    vs. el mejor
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground" />
+                </tr>
+              </thead>
+              <tbody>
+                {flujosOrdenados.map((f, i) => (
+                  <tr
+                    key={f.id_flujo}
+                    className="border-t border-border transition-colors hover:bg-muted/40"
+                  >
+                    <td className="px-3 py-1.5 font-medium text-foreground">
+                      {f.nombre}
+                      {i === 0 ? (
+                        <span className="ml-2 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary">
+                          mejor
+                        </span>
+                      ) : null}
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {formatoFechaCorta(f.creado_en)} · tasa {pct2(f.tasa_anual)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {f.unidades}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                      {formatoMoneda(f.valor_lista)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums font-medium text-foreground">
+                      {formatoMoneda(f.vp_total)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {f.valor_lista > 0 ? pct2(f.vp_total / f.valor_lista) : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {f.meses_absorcion} meses
+                    </td>
+                    <td
+                      className={cn(
+                        "whitespace-nowrap px-3 py-1.5 text-right tabular-nums",
+                        i === 0 ? "text-muted-foreground" : "text-red-600",
+                      )}
+                    >
+                      {i === 0
+                        ? "—"
+                        : formatoMoneda(f.vp_total - (flujosOrdenados[0]?.vp_total ?? 0))}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => eliminarFlujo(idProyecto, f.id_flujo)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            La <strong>recuperación</strong> es el ingreso esperado sobre el valor de lista:
+            cuánto del precio de catálogo se convierte en valor presente después del
+            financiamiento y de la espera. Comparar dos escenarios solo tiene sentido si la
+            tasa de descuento es la misma; se muestra junto a la fecha por eso.
+          </p>
+        </Card>
       ) : null}
 
       <p className="text-xs text-muted-foreground">
