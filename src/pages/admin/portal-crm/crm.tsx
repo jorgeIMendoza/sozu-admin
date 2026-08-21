@@ -91,7 +91,7 @@ import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, PRIORIDAD_PILL, firePurchaseIfWon,
+  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, DealCotizaciones, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -2853,6 +2853,8 @@ export function CrmDealDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
 
+  // Logger de auditoría arriba (doDelete lo usa; evita depender del orden de inicialización).
+  const { logActualizar, logEliminar } = useCrmLogger();
   const doDelete = async () => {
     setDeleting(true);
     const { error } = await (supabase as any).from("crm_negocios").update({ activo: false }).eq("id", Number(dealId));
@@ -2908,7 +2910,6 @@ export function CrmDealDetail() {
     },
   });
   const invalidateActivity = () => qc.invalidateQueries({ queryKey: ["deal-activity", erId] });
-  const { logActualizar, logEliminar } = useCrmLogger();
   const completeTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ estatus: "completada" }).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("tarea", null, { id, estatus: "completada" }); toast.success("Tarea completada"); invalidateActivity(); };
   const deleteTask = async (id: number) => { const { error } = await (supabase as any).from("crm_tareas").update({ activo: false }).eq("id", id); if (error) { toast.error(error.message); return; } logEliminar("tarea", { id }); toast.success("Tarea eliminada"); invalidateActivity(); };
   const updateTask = async (id: number, patch: Record<string, any>) => { const { error } = await (supabase as any).from("crm_tareas").update(patch).eq("id", id); if (error) { toast.error(error.message); return; } logActualizar("tarea", null, { id, ...patch }); invalidateActivity(); };
@@ -3195,12 +3196,7 @@ export function CrmDealDetail() {
               </AccordionTrigger>
               <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin empresas asociadas</p></AccordionContent>
             </AccordionItem>
-            <AccordionItem value="cotizaciones" className="border-b-0">
-              <AccordionTrigger className="text-sm font-semibold hover:no-underline hover:text-primary transition-colors py-3">
-                <span className="flex items-center gap-2">Cotizaciones <span className="text-xs text-muted-foreground font-normal">0</span></span>
-              </AccordionTrigger>
-              <AccordionContent><p className="text-xs text-muted-foreground py-2">Sin cotizaciones asociadas</p></AccordionContent>
-            </AccordionItem>
+            <DealCotizaciones deal={deal} />
           </Accordion>
         </aside>
       </div>

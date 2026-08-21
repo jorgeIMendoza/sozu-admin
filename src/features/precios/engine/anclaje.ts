@@ -55,9 +55,57 @@ export function valorFactor(
 export function describirAncla(
   ancla: Omit<AnclaProyecto, "descripcion">,
   torres: Torre[],
+  modelos: Modelo[] = [],
 ): string {
   const torre = torres.find((t) => t.id_torre === ancla.id_torre);
-  return `Torre ${torre?.nombre ?? ancla.id_torre} · Nivel ${ancla.nivel} · Vista ${ancla.clave_vista} · Orientación ${ancla.clave_orientacion}`;
+  const modelo = modelos.find((m) => m.id_modelo === ancla.id_modelo);
+  // Sin modelo ancla se dice explícitamente: la ausencia no es un dato que
+  // falte, es que el base expresa el desarrollo completo.
+  const queModelo = ancla.id_modelo
+    ? `Modelo ${modelo?.nombre ?? ancla.id_modelo}`
+    : "Promedio de modelos";
+  return `Torre ${torre?.nombre ?? ancla.id_torre} · Nivel ${ancla.nivel} · Vista ${ancla.clave_vista} · Orientación ${ancla.clave_orientacion} · ${queModelo}`;
+}
+
+/**
+ * Cuánto hay que reexpresar el precio base para que el modelo ancla valga
+ * 1.0000 —o, sin modelo ancla, para que el promedio ponderado de los factores
+ * vuelva a valer 1, que es la definición con la que nace la semilla.
+ *
+ * Que sea el mismo escalar en los dos casos es lo que hace la operación
+ * reversible: se puede entrar y salir de un modelo ancla sin perder nada.
+ */
+function escalaDelModeloAncla(
+  idModelo: string | undefined,
+  bases: BaseModelo[],
+  propiedades: Propiedad[],
+  motor: MotorPrecio,
+): number {
+  if (idModelo) {
+    const b = bases.find((x) => x.id_modelo === idModelo);
+    return b && b.factor_modelo > 0 ? b.factor_modelo : 1;
+  }
+
+  const porId = new Map(bases.map((b) => [b.id_modelo, b]));
+  let sumaFactorArea = 0;
+  let sumaArea = 0;
+  for (const p of propiedades) {
+    if (!p.activo) continue;
+    const b = porId.get(p.id_modelo);
+    if (!b || !(b.factor_modelo > 0)) continue;
+    const area = calcularAreaPonderada(p, motor);
+    if (area <= 0) continue;
+    sumaFactorArea += b.factor_modelo * area;
+    sumaArea += area;
+  }
+  if (sumaArea > 0) return sumaFactorArea / sumaArea;
+
+  // Sin inventario a la mano se cae al promedio simple de los modelos
+  // activos, que es lo que ya hace la migración del formato anterior.
+  const activos = bases.filter((b) => b.activo && b.factor_modelo > 0);
+  return activos.length
+    ? activos.reduce((a, b) => a + b.factor_modelo, 0) / activos.length
+    : 1;
 }
 
 /**
@@ -93,6 +141,8 @@ export function reanclarMotor(
   motor: MotorPrecio,
   nueva: Omit<AnclaProyecto, "descripcion">,
   torres: Torre[],
+  modelos: Modelo[] = [],
+  propiedades: Propiedad[] = [],
 ): MotorPrecio {
   const torreNueva = torres.find((t) => t.id_torre === nueva.id_torre);
   const claveTorre = torreNueva?.nombre ?? nueva.id_torre;
@@ -118,19 +168,34 @@ export function reanclarMotor(
   const rn = reanclarNivel(motor.nivel, motor.ancla?.nivel ?? 1, nueva.nivel);
   compensacion *= rn.factorBase;
 
+  // Torre, vista, orientación y nivel mueven toda la escala: su compensación
+  // multiplica por igual el base del proyecto y el precio por m² de cada
+  // modelo, así que los factores de modelo —que son razones— no cambian.
+  const escalados = motor.bases_modelo.map((b) => ({
+    ...b,
+    precio_base_m2: b.precio_base_m2 * compensacion,
+  }));
+
+  /*
+   * El modelo se ancla aparte, porque no mueve la escala: solo reparte
+   * distinto entre el precio base y los factores. El base pasa a ser el precio
+   * por m² del modelo elegido y su factor queda en 1.0000; el precio por m² de
+   * cada modelo no se mueve un centavo, y por eso el reanclaje es exacto y no
+   * aproximado: `precio_base_m2` es lo que lee el motor.
+   */
+  const k = escalaDelModeloAncla(nueva.id_modelo, escalados, propiedades, motor);
+
   return {
     ...motor,
     nivel: rn.nivel,
     factores,
-    // El precio base del proyecto se reexpresa igual que los de modelo: los
-    // factores por modelo son razones y no cambian, así que ningún precio se
-    // mueve. Dejar el base sin compensar rompería `base × factor = efectivo`.
-    precio_base_m2_proyecto: (motor.precio_base_m2_proyecto ?? 0) * compensacion,
-    bases_modelo: motor.bases_modelo.map((b) => ({
+    precio_base_m2_proyecto: (motor.precio_base_m2_proyecto ?? 0) * compensacion * k,
+    bases_modelo: escalados.map((b) => ({
       ...b,
-      precio_base_m2: b.precio_base_m2 * compensacion,
+      factor_modelo:
+        k > 0 ? +((b.factor_modelo ?? 1) / k).toFixed(6) : (b.factor_modelo ?? 1),
     })),
-    ancla: { ...nueva, descripcion: describirAncla(nueva, torres) },
+    ancla: { ...nueva, descripcion: describirAncla(nueva, torres, modelos) },
   };
 }
 

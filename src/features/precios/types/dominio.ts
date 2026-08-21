@@ -99,6 +99,13 @@ export interface AnclaProyecto {
   nivel: number;
   clave_vista: string;
   clave_orientacion: string;
+  /**
+   * Modelo del ancla. Opcional a propósito: sin él, el precio base expresa el
+   * promedio ponderado del desarrollo, que es como nace la semilla. Al elegir
+   * uno, el base pasa a ser el precio por m² de ese modelo y su factor queda
+   * en 1.0000.
+   */
+  id_modelo?: string;
   /** Texto legible generado. */
   descripcion: string;
 }
@@ -120,6 +127,15 @@ export interface BaseModelo {
    */
   factor_modelo: number;
   m2_referencia: number;
+  /**
+   * Curva de nivel propia del modelo. Ausente = usa la del proyecto.
+   *
+   * No todos los modelos ganan lo mismo por subir de piso: un penthouse y un
+   * estudio interior responden distinto a la vista y a la altura. Es opcional
+   * a propósito, para que un proyecto con una sola política siga teniendo un
+   * solo lugar donde cambiarla.
+   */
+  nivel?: ConfiguracionNivel;
   activo: boolean;
 }
 
@@ -280,6 +296,8 @@ export type TipoEvento =
   | "motor.factor_actualizado"
   | "motor.factor_desactivado"
   | "motor.factor_reactivado"
+  | "motor.nivel_modelo"
+  | "motor.punto_base"
   | "motor.restablecido"
   // Calibración
   | "calibracion.ejecutada"

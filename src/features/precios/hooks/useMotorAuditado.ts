@@ -1,6 +1,6 @@
 import { useMotorStore } from "../stores/motorStore";
 import { registrarEvento } from "../services/auditoria";
-import type { TipoFactor } from "../types/dominio";
+import type { ConfiguracionNivel, TipoFactor } from "../types/dominio";
 
 const ETIQUETA_CAMPO: Record<string, string> = {
   precio_base_m2: "Precio base por m²",
@@ -110,6 +110,77 @@ export function useMotorAuditado() {
     });
   };
 
+  /**
+   * Curva de nivel propia de un modelo, o `null` para volver a la del proyecto.
+   *
+   * Queda en bitácora porque es una excepción a la política del desarrollo: sin
+   * registro, meses después nadie sabría por qué un modelo sube distinto que
+   * los demás.
+   */
+  const definirNivelModelo = (idModelo: string, nivel: ConfiguracionNivel | null) => {
+    const antes = motorActual();
+    const b = (antes.bases_modelo ?? []).find((x) => x.id_modelo === idModelo);
+    if (!b) return;
+    const previo = b.nivel ?? null;
+    if (
+      previo?.coef_a === nivel?.coef_a &&
+      previo?.coef_b === nivel?.coef_b
+    ) {
+      return;
+    }
+    store.definirNivelModelo(idModelo, nivel);
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.nivel_modelo",
+      entidad: {
+        tipo: "base_modelo",
+        id: idModelo,
+        etiqueta: `${b.nombre_modelo} · Curva de nivel`,
+      },
+      antes: previo ?? { hereda_del_proyecto: true },
+      despues: nivel ?? { hereda_del_proyecto: true },
+    });
+  };
+
+  /**
+   * Aplana el motor para volver a un punto de partida comparable.
+   *
+   * Queda en bitácora con el estado anterior completo —factores, curvas y
+   * parámetros— porque la acción no tiene reversa: es la única forma de
+   * reconstruir después qué había antes de aplanar.
+   */
+  const ponerEnPuntoBase = () => {
+    const antes = motorActual();
+    store.ponerEnPuntoBase();
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.punto_base",
+      entidad: { tipo: "motor", id: antes.id_motor, etiqueta: antes.nombre },
+      antes: {
+        k_ext: antes.k_ext,
+        k_loft: antes.k_loft,
+        tasa_descuento_anual: antes.tasa_descuento_anual,
+        nivel: antes.nivel,
+        tamano: antes.tamano,
+        precio_cajon: antes.precio_cajon,
+        factor_cajon_tandem: antes.factor_cajon_tandem,
+        precio_m2_bodega: antes.precio_m2_bodega,
+        estado_calibracion: antes.estado_calibracion,
+        factores: antes.factores.map((f) => ({
+          tipo: f.tipo_factor,
+          clave: f.clave,
+          valor: f.valor,
+        })),
+        bases_modelo: (antes.bases_modelo ?? []).map((b) => ({
+          modelo: b.nombre_modelo,
+          factor_modelo: b.factor_modelo,
+          precio_base_m2: b.precio_base_m2,
+        })),
+      },
+      despues: { punto_base: true, precio_base_m2_proyecto: antes.precio_base_m2_proyecto },
+    });
+  };
+
   const declararCalibradoManualmente = (justificacion: string) => {
     const antes = motorActual();
     store.declararCalibradoManualmente(justificacion);
@@ -199,6 +270,8 @@ export function useMotorAuditado() {
     actualizarConfigNivel,
     actualizarConfigTamano,
     actualizarBaseModelo,
+    definirNivelModelo,
+    ponerEnPuntoBase,
     declararCalibradoManualmente,
     actualizarFactor,
     agregarFactor,

@@ -295,13 +295,13 @@ const CalculadoraResultado = ({
             <div className="flex items-center gap-1.5 mb-1.5">
               <Calculator className="w-3.5 h-3.5 text-muted-foreground" />
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                A la entrega
+                A la escritura
               </p>
             </div>
             <p className="text-base font-bold text-foreground tabular-nums mb-1">
               {formatMxn(recommended.plan.finalPaymentAmount)}
             </p>
-            <p className="text-[10px] text-muted-foreground">Al recibir las llaves</p>
+            <p className="text-[10px] text-muted-foreground">Contra escritura</p>
           </div>
         </div>
       </div>

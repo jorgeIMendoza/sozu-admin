@@ -25,30 +25,30 @@ import { useIndicesActivos } from "../hooks/useInventarioActivo";
 import type { IndicesProyecto } from "../stores/inventarioStore";
 import { useMotorAuditado } from "../hooks/useMotorAuditado";
 import { usePreciosProyecto } from "../hooks/usePreciosProyecto";
+import { ESTATUS_A_LA_VENTA } from "../services/inventarioReal";
 import { formatoMoneda } from "../lib/formato";
 
-function contarUnidades(
+/** ¿La unidad cae en esta categoría del factor? */
+function perteneceAlFactor(
   tipo: TipoFactor,
   clave: string,
-  props: Propiedad[],
+  p: Propiedad,
   indices: IndicesProyecto,
-): number {
-  return props.filter((p) => {
-    switch (tipo) {
-      case "torre":
-        return indices.torresPorId[p.id_torre]?.nombre === clave;
-      case "vista":
-        return p.vista === clave;
-      case "orientacion":
-        return p.orientacion === clave;
-      case "plano":
-        return indices.modelosPorId[p.id_modelo]?.nombre === clave;
-      case "extras":
-        return p.caracteristicas_extra.includes(clave);
-      default:
-        return false;
-    }
-  }).length;
+): boolean {
+  switch (tipo) {
+    case "torre":
+      return indices.torresPorId[p.id_torre]?.nombre === clave;
+    case "vista":
+      return p.vista === clave;
+    case "orientacion":
+      return p.orientacion === clave;
+    case "plano":
+      return indices.modelosPorId[p.id_modelo]?.nombre === clave;
+    case "extras":
+      return p.caracteristicas_extra.includes(clave);
+    default:
+      return false;
+  }
 }
 
 function ChipEfecto({ valor, esExtra }: { valor: number; esExtra: boolean }) {
@@ -93,43 +93,81 @@ export function TablaFactores({
   const [etiqueta, setEtiqueta] = useState("");
   const [valor, setValor] = useState(esExtra ? "0.0000" : "1.0000");
 
-  const conteos = useMemo(
-    () =>
-      Object.fromEntries(
-        factores.map((f) => [f.id_factor, contarUnidades(tipo, f.clave, propiedades, indices)]),
-      ),
-    [factores, tipo, propiedades, indices],
-  );
-
   /**
-   * Cuánto dinero aporta cada factor sobre el inventario afectado: la diferencia
-   * entre el componente exento actual y el que habría si el factor fuera neutro.
-   * Un multiplicador sin unidades detrás no mueve nada, y eso debe verse.
+   * Todo lo que se muestra por renglón, en un solo recorrido del inventario.
+   *
+   * - `impacto`: cuánto dinero aporta el factor sobre las unidades que afecta,
+   *   o sea la diferencia contra el escenario en que ese factor fuera neutro.
+   *   Un multiplicador sin unidades detrás no mueve nada, y eso debe verse.
+   * - `porM2` y `porUnidad`: los promedios ponderados de esas mismas unidades
+   *   con el cálculo vigente. Son la variación que se busca al mover el
+   *   multiplicador: el chip de efecto dice el porcentaje en abstracto, esto
+   *   dice a cuánto queda el m² y a cuánto la unidad.
+   *
+   * Los promedios se calculan también para los factores inactivos: sus unidades
+   * siguen existiendo y teniendo precio, solo que sin este multiplicador encima.
+   *
+   * - `venta`: el valor del inventario que esa categoría todavía puede vender.
+   *   Los promedios dicen a cuánto queda el m², pero no cuánto dinero hay
+   *   detrás: una torre con 4 unidades vivas y otra con 54 se leen igual en el
+   *   promedio y muy distinto en la cartera. Cuenta solo `Disponible`, el mismo
+   *   criterio que el Forecast de Ingresos.
    */
-  const impactos = useMemo(() => {
+  const metricas = useMemo(() => {
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
-    const salida: Record<string, number> = {};
-    for (const f of factores) {
-      if (!f.activo) {
-        salida[f.id_factor] = 0;
-        continue;
+    const salida: Record<
+      string,
+      {
+        unidades: number;
+        impacto: number;
+        porM2: number;
+        porUnidad: number;
+        ventaUnidades: number;
+        ventaValor: number;
       }
-      let total = 0;
+    > = {};
+
+    for (const f of factores) {
+      let unidades = 0;
+      let conDesglose = 0;
+      let impacto = 0;
+      let precio = 0;
+      let area = 0;
+      let ventaUnidades = 0;
+      let ventaValor = 0;
+
       for (const p of propiedades) {
+        if (!perteneceAlFactor(tipo, f.clave, p, indices)) continue;
+        unidades++;
+
         const d = porId.get(p.id_propiedad);
         if (!d) continue;
+        conDesglose++;
+        precio += d.precio_calculado;
+        area += d.area_ponderada;
+        if (ESTATUS_A_LA_VENTA.has(p.estatus)) {
+          ventaUnidades++;
+          ventaValor += d.precio_calculado;
+        }
+
+        if (!f.activo) continue;
         if (esExtra) {
-          if (!p.caracteristicas_extra.includes(f.clave)) continue;
           if (d.f_extras <= 0) continue;
           const sin = Math.max(d.f_extras - f.valor, 0.0001);
-          total += d.componente_exento * (1 - sin / d.f_extras);
-        } else {
-          if (contarUnidades(tipo, f.clave, [p], indices) === 0) continue;
-          if (f.valor <= 0) continue;
-          total += d.componente_exento * (1 - 1 / f.valor);
+          impacto += d.componente_exento * (1 - sin / d.f_extras);
+        } else if (f.valor > 0) {
+          impacto += d.componente_exento * (1 - 1 / f.valor);
         }
       }
-      salida[f.id_factor] = total;
+
+      salida[f.id_factor] = {
+        unidades,
+        impacto,
+        porM2: area > 0 ? precio / area : 0,
+        porUnidad: conDesglose > 0 ? precio / conDesglose : 0,
+        ventaUnidades,
+        ventaValor,
+      };
     }
     return salida;
   }, [factores, propiedades, desgloses, tipo, esExtra, indices]);
@@ -164,11 +202,14 @@ export function TablaFactores({
           <TableHeader>
             <TableRow>
               <TableHead>Clave</TableHead>
-              <TableHead className="w-40">{esExtra ? "Incremento" : "Multiplicador"}</TableHead>
-              <TableHead className="w-32">Efecto</TableHead>
-              <TableHead className="w-40">Impacto ($)</TableHead>
-              <TableHead className="w-40">Unidades afectadas</TableHead>
-              <TableHead className="w-28">Estado</TableHead>
+              <TableHead className="w-36">{esExtra ? "Incremento" : "Multiplicador"}</TableHead>
+              <TableHead className="w-28">Efecto</TableHead>
+              <TableHead className="w-36 text-right">Precio prom. / m²</TableHead>
+              <TableHead className="w-36 text-right">Precio prom. / unidad</TableHead>
+              <TableHead className="w-44 text-right">Inventario a la venta</TableHead>
+              <TableHead className="w-36 text-right">Impacto</TableHead>
+              <TableHead className="w-24 text-right">Unidades</TableHead>
+              <TableHead className="w-24">Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -189,20 +230,49 @@ export function TablaFactores({
                 <TableCell>
                   <ChipEfecto valor={f.valor} esExtra={esExtra} />
                 </TableCell>
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-foreground">
+                  {(metricas[f.id_factor]?.unidades ?? 0) === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <>
+                      {formatoMoneda(metricas[f.id_factor]?.porM2 ?? 0)}
+                      <span className="text-xs text-muted-foreground"> /m²</span>
+                    </>
+                  )}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-foreground">
+                  {(metricas[f.id_factor]?.unidades ?? 0) === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    formatoMoneda(metricas[f.id_factor]?.porUnidad ?? 0)
+                  )}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-foreground">
+                  {(metricas[f.id_factor]?.ventaUnidades ?? 0) === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <>
+                      {formatoMoneda(metricas[f.id_factor]?.ventaValor ?? 0)}
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {metricas[f.id_factor]?.ventaUnidades} unidades
+                      </span>
+                    </>
+                  )}
+                </TableCell>
                 <TableCell
                   className={cn(
-                    "tabular-nums",
-                    (impactos[f.id_factor] ?? 0) > 0.5
+                    "whitespace-nowrap text-right tabular-nums",
+                    (metricas[f.id_factor]?.impacto ?? 0) > 0.5
                       ? "text-primary"
-                      : (impactos[f.id_factor] ?? 0) < -0.5
+                      : (metricas[f.id_factor]?.impacto ?? 0) < -0.5
                         ? "text-destructive"
                         : "text-muted-foreground",
                   )}
                 >
-                  {formatoMoneda(impactos[f.id_factor] ?? 0)}
+                  {formatoMoneda(metricas[f.id_factor]?.impacto ?? 0)}
                 </TableCell>
-                <TableCell className="text-muted-foreground tabular-nums">
-                  {conteos[f.id_factor] ?? 0}
+                <TableCell className="whitespace-nowrap text-right text-muted-foreground tabular-nums">
+                  {metricas[f.id_factor]?.unidades ?? 0}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -224,6 +294,20 @@ export function TablaFactores({
           </TableBody>
         </Table>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        Los dos precios promedio son de las unidades que ese factor afecta, con el cálculo
+        vigente del motor: al mover el multiplicador se mueven en el acto, junto con los
+        promedios del proyecto y los totales del pie. El chip de efecto dice el porcentaje
+        en abstracto; estas dos columnas dicen a cuánto queda el m² y a cuánto la unidad.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        <strong>Inventario a la venta</strong> es lo que esa categoría todavía puede
+        vender, valuado con el motor de este momento: solo las unidades en estatus
+        Disponible, el mismo criterio que el Forecast de Ingresos. Es la columna que dice
+        cuánto dinero mueve de verdad tocar ese multiplicador, porque un promedio alto
+        sobre inventario ya vendido no cambia la cartera.
+      </p>
 
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogContent>
