@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, Info, Plus, TriangleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,6 +9,7 @@ import { ModalEsquema } from "@/features/precios/components/ModalEsquema";
 import { useEsquemasVPN } from "@/features/precios/hooks/useEsquemasVPN";
 import { esInejecutable } from "@/features/precios/engine/npv";
 import { useEsquemasStore } from "@/features/precios/stores/esquemasStore";
+import { soportaCamposDeMotor } from "@/features/precios/services/esquemasReales";
 import { registrarEvento } from "@/features/precios/services/auditoria";
 import type {
   EsquemaFinanciamiento,
@@ -30,6 +31,24 @@ function PantallaEsquemas() {
     tasaAnual,
     tasaMes,
   } = useEsquemasVPN();
+
+  const errorEscritura = useEsquemasStore((s) => s.errorEscritura);
+
+  /*
+   * Si el DDL de los campos del motor no se ha aplicado, el regimen, el mes de
+   * inicio y la marca de esquema base no tienen donde guardarse. Se avisa en vez
+   * de dejar que se capturen y desaparezcan al recargar.
+   */
+  const [camposCompletos, setCamposCompletos] = useState(true);
+  useEffect(() => {
+    let vigente = true;
+    void soportaCamposDeMotor().then((ok) => {
+      if (vigente) setCamposCompletos(ok);
+    });
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   const crearEsquema = useEsquemasStore((s) => s.crearEsquema);
   const reemplazarEsquema = useEsquemasStore((s) => s.reemplazarEsquema);
@@ -87,6 +106,39 @@ function PantallaEsquemas() {
 
   return (
     <div className="space-y-5">
+      {errorEscritura ? (
+        <Alert variant="destructive">
+          <TriangleAlert className="size-4" />
+          <AlertTitle>No se guardo el cambio</AlertTitle>
+          <AlertDescription>
+            {errorEscritura} Los esquemas que ves siguen siendo los de la base, asi que lo
+            que intentaste no quedo a medias.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {camposCompletos ? null : (
+        <Alert className="border-amber-500/40 bg-amber-500/5">
+          <Info className="size-4 text-amber-600" />
+          <AlertTitle className="text-foreground">
+            Faltan columnas en la base para guardar todo
+          </AlertTitle>
+          <AlertDescription className="text-foreground">
+            El nombre, los porcentajes, el numero de mensualidades, el ajuste y los tramos
+            si se guardan. El <strong>regimen</strong> (preventa o post-entrega), el
+            <strong> mes de inicio de mensualidades</strong>, el
+            <strong> modo de escalonamiento</strong>, el
+            <strong> factor de crecimiento</strong> y la marca de
+            <strong> esquema base</strong> no: esas columnas todavia no existen, se derivan
+            al leer y se pierden al recargar. Aplica{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+              Ejecuciones_manuales/20260821_esquemas_pago_campos_motor_precios.md
+            </code>{" "}
+            y empiezan a persistirse sin tocar el codigo.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground tabular-nums">
