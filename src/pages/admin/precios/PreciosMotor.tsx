@@ -116,47 +116,6 @@ function formatoPesosCompacto(valor: number): string {
  * completos —una vista que ningún departamento tiene solo estorba— y por eso
  * las opciones salen del inventario y no de una constante.
  */
-function FiltroInventario({
-  etiqueta,
-  etiquetaTodos,
-  valor,
-  onChange,
-  opciones,
-  todos,
-}: {
-  etiqueta: string;
-  etiquetaTodos: string;
-  valor: string;
-  onChange: (v: string) => void;
-  opciones: Array<{ id: string; nombre: string; unidades: number }>;
-  todos: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-[13px] font-medium text-muted-foreground">{etiqueta}</Label>
-      {/* Con una sola opción no hay nada que discriminar: elegirla devuelve el
-          mismo universo. Pasa de verdad —hay proyectos sin vista capturada, donde
-          las 320 unidades caen en "Sin vista"— y dejarlo activo invita a un clic
-          que no cambia nada. */}
-      <Select value={valor} onValueChange={onChange} disabled={opciones.length <= 1}>
-        <SelectTrigger className="w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={todos}>{etiquetaTodos}</SelectItem>
-          {opciones.map((o) => (
-            <SelectItem key={o.id} value={o.id}>
-              {o.nombre} · {o.unidades} u.
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
-
-/** Una cifra del tablero de inventario: dato grande arriba, contexto abajo. */
 function Cifra({
   etiqueta,
   valor,
@@ -179,7 +138,7 @@ function Cifra({
   );
 }
 
-/** Opción neutra de los filtros: no acota nada. */
+/** Opción del selector de modelo que no acota: la curva se ve con todos juntos. */
 const SIN_FILTRO = "__todos__";
 
 const SUB_PESTANAS: Array<{ valor: TipoFactor; titulo: string }> = [
@@ -196,24 +155,17 @@ function PantallaMotor() {
     actualizarConfigTamano,
     actualizarPrecioBaseProyecto,
     actualizarBaseModelo,
+    definirNivelModelo,
     ponerEnPuntoBase,
     declararCalibradoManualmente,
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
-  const { motor, propiedades, desgloses, totales, indices, alertasPorUnidad } =
-    usePreciosProyecto();
+  const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
   const [confirmarTamano, setConfirmarTamano] = useState(false);
   const [dialogoCalibrado, setDialogoCalibrado] = useState(false);
-  const [filtros, setFiltros] = useState({
-    torre: SIN_FILTRO,
-    modelo: SIN_FILTRO,
-    vista: SIN_FILTRO,
-    estatus: SIN_FILTRO,
-  });
-  const [justificacion, setJustificacion] = useState("");
   /**
    * Modelo que se inspecciona en la curva de nivel, aparte del filtro global.
    *
@@ -221,100 +173,9 @@ function PantallaMotor() {
    * cómo responde cada uno a la pendiente, y hacerlo desde el filtro de arriba
    * obligaría a reacomodar toda la pantalla en cada paso.
    */
+  const [justificacion, setJustificacion] = useState("");
   const [modeloCurva, setModeloCurva] = useState("");
 
-  /*
-   * Opciones de los filtros: solo lo que el inventario del proyecto usa, con
-   * su conteo. Se calculan sobre el inventario COMPLETO y no en cascada: si
-   * las opciones de Modelo dependieran de la Torre elegida, cambiar de torre
-   * dejaría un modelo seleccionado que ya no existe en la lista y el filtro
-   * se quedaría mostrando cero unidades sin decir por qué.
-   */
-  const opcionesFiltro = useMemo(() => {
-    const cuenta = <T,>(clave: (p: (typeof propiedades)[number]) => T | null) => {
-      const m = new Map<T, number>();
-      for (const p of propiedades) {
-        const k = clave(p);
-        if (k === null || k === "") continue;
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-      return m;
-    };
-    const listar = (m: Map<string, number>, nombre: (id: string) => string) =>
-      [...m.entries()]
-        .map(([id, unidades]) => ({ id, nombre: nombre(id), unidades }))
-        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-
-    return {
-      torres: listar(cuenta((p) => p.id_torre), (id) =>
-        indices?.torresPorId[id]?.nombre ?? id,
-      ),
-      modelos: listar(cuenta((p) => p.id_modelo), (id) =>
-        indices?.modelosPorId[id]?.nombre ?? id,
-      ),
-      vistas: listar(cuenta((p) => p.vista), (id) => id),
-      estatus: listar(cuenta((p) => p.estatus), (id) => id),
-    };
-  }, [propiedades, indices]);
-
-  const hayFiltro = Object.values(filtros).some((v) => v !== SIN_FILTRO);
-
-  const propiedadesFiltradas = useMemo(
-    () =>
-      !hayFiltro
-        ? propiedades
-        : propiedades.filter(
-            (p) =>
-              (filtros.torre === SIN_FILTRO || p.id_torre === filtros.torre) &&
-              (filtros.modelo === SIN_FILTRO || p.id_modelo === filtros.modelo) &&
-              (filtros.vista === SIN_FILTRO || p.vista === filtros.vista) &&
-              (filtros.estatus === SIN_FILTRO || p.estatus === filtros.estatus),
-          ),
-    [propiedades, filtros, hayFiltro],
-  );
-
-  const desglosesFiltrados = useMemo(() => {
-    if (!hayFiltro) return desgloses;
-    const ids = new Set(propiedadesFiltradas.map((p) => p.id_propiedad));
-    return desgloses.filter((d) => ids.has(d.id_propiedad));
-  }, [desgloses, propiedadesFiltradas, hayFiltro]);
-
-  /*
-   * Totales del subconjunto. Se recalculan aquí en vez de pedírselos al hook
-   * porque el filtro es de esta pantalla: el resto del módulo sigue viendo el
-   * proyecto completo, y mover ese cálculo al hook cambiaría lo que ven la
-   * Tabla de Precios y la Calibración.
-   */
-  const totalesFiltrados = useMemo(() => {
-    if (!hayFiltro) return totales;
-    const totalCalculado = desglosesFiltrados.reduce((a, d) => a + d.precio_lista, 0);
-    const totalActual = propiedadesFiltradas.reduce((a, p) => a + p.precio_lista_actual, 0);
-    return {
-      unidades: propiedadesFiltradas.length,
-      totalCalculado,
-      totalActual,
-      delta: totalCalculado - totalActual,
-      deltaPct: totalActual > 0 ? ((totalCalculado - totalActual) / totalActual) * 100 : 0,
-      conAlertas: desglosesFiltrados.filter((d) =>
-        (alertasPorUnidad[d.id_propiedad] ?? []).some((a) => a.severidad !== "informativa"),
-      ).length,
-      desviadas: desglosesFiltrados.filter((d) =>
-        d.alertas.some((a) => a.codigo === "DELTA_ALTO"),
-      ).length,
-      bloqueadas: desglosesFiltrados.filter((d) => d.bloqueada_para_reprecio).length,
-    };
-  }, [hayFiltro, totales, desglosesFiltrados, propiedadesFiltradas, alertasPorUnidad]);
-
-  const limpiarFiltros = () =>
-    setFiltros({
-      torre: SIN_FILTRO,
-      modelo: SIN_FILTRO,
-      vista: SIN_FILTRO,
-      estatus: SIN_FILTRO,
-    });
-
-  /** El usuario eligió un estatus a mano: su elección manda sobre la nuestra. */
-  const estatusExplicito = filtros.estatus !== SIN_FILTRO;
 
   /*
    * Precio comercial de hoy: los promedios ponderados de lo que TODAVÍA se
@@ -334,14 +195,14 @@ function PantallaMotor() {
    * en esta pantalla los mueve.
    */
   const aLaVenta = useMemo(() => {
-    const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     let precio = 0;
     let area = 0;
     let areaInterior = 0;
     let lista = 0;
     let unidades = 0;
-    for (const p of propiedadesFiltradas) {
-      if (!estatusExplicito && !ESTATUS_A_LA_VENTA.has(p.estatus)) continue;
+    for (const p of propiedades) {
+      if (!ESTATUS_A_LA_VENTA.has(p.estatus)) continue;
       const d = porId.get(p.id_propiedad);
       if (!d || d.area_ponderada <= 0) continue;
       precio += d.precio_calculado;
@@ -361,7 +222,7 @@ function PantallaMotor() {
       porM2: area > 0 ? precio / area : 0,
       porUnidad: unidades > 0 ? precio / unidades : 0,
     };
-  }, [propiedadesFiltradas, desglosesFiltrados, estatusExplicito]);
+  }, [propiedades, desgloses]);
 
   const brechaBase =
     motor.precio_base_m2_proyecto > 0 && aLaVenta.porM2 > 0
@@ -371,7 +232,9 @@ function PantallaMotor() {
       : 0;
 
 
-  const bases = motor.bases_modelo ?? [];
+  // Memoizado porque ahora es dependencia de otros memos: el `?? []`
+  // devolveria un arreglo nuevo en cada render y los invalidaria siempre.
+  const bases = useMemo(() => motor.bases_modelo ?? [], [motor.bases_modelo]);
 
   /*
    * Lo que el motor calcula HOY para las unidades de cada modelo.
@@ -385,12 +248,12 @@ function PantallaMotor() {
    * se movía, que es justo lo que no debe pasar en una pantalla de simulación.
    */
   const porModelo = useMemo(() => {
-    const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const acum = new Map<
       string,
       { unidades: number; conDesglose: number; area: number; precio: number }
     >();
-    for (const p of propiedadesFiltradas) {
+    for (const p of propiedades) {
       const a = acum.get(p.id_modelo) ?? {
         unidades: 0,
         conDesglose: 0,
@@ -407,21 +270,13 @@ function PantallaMotor() {
       acum.set(p.id_modelo, a);
     }
     return acum;
-  }, [propiedadesFiltradas, desglosesFiltrados]);
+  }, [propiedades, desgloses]);
 
   const unidadesPorModelo = useMemo(
     () => new Map([...porModelo].map(([id, v]) => [id, v.unidades])),
     [porModelo],
   );
 
-  /*
-   * Con un filtro puesto, los modelos que no aparecen en el subconjunto se
-   * ocultan: dejarlos en 0 unidades haría creer que el filtro no funcionó.
-   * Sin filtro se muestran todos, incluidos los que aún no tienen inventario.
-   */
-  const basesVisibles = hayFiltro
-    ? bases.filter((b) => (unidadesPorModelo.get(b.id_modelo) ?? 0) > 0)
-    : bases;
 
   /*
    * De mayor a menor inventario. Los modelos llegan en el orden del catálogo,
@@ -430,7 +285,7 @@ function PantallaMotor() {
    * arriba las decisiones que mueven más dinero. Empate: por nombre, para que
    * la tabla no baile entre renders.
    */
-  const basesOrdenadas = [...basesVisibles].sort((a, b) => {
+  const basesOrdenadas = [...bases].sort((a, b) => {
     const ua = unidadesPorModelo.get(a.id_modelo) ?? 0;
     const ub = unidadesPorModelo.get(b.id_modelo) ?? 0;
     return ub - ua || a.nombre_modelo.localeCompare(b.nombre_modelo, "es");
@@ -466,15 +321,29 @@ function PantallaMotor() {
     const presentes = basesOrdenadas.map((b) => b.id_modelo);
     if (modeloCurva === SIN_FILTRO) return SIN_FILTRO;
     if (modeloCurva && presentes.includes(modeloCurva)) return modeloCurva;
-    if (filtros.modelo !== SIN_FILTRO) return filtros.modelo;
     return presentes[0] ?? SIN_FILTRO;
-  }, [modeloCurva, filtros.modelo, basesOrdenadas]);
+  }, [modeloCurva, basesOrdenadas]);
+
+  /*
+   * La curva que de verdad se le aplica al modelo elegido.
+   *
+   * Si el modelo tiene una propia, es esa; si no, la del proyecto. Los campos
+   * muestran siempre valores reales, así que al editarlos partiendo de la
+   * general no hay que teclear desde cero: se toma lo que ya estaba y se ajusta.
+   */
+  const baseModeloCurva = useMemo(
+    () =>
+      (motor.bases_modelo ?? []).find((b) => b.id_modelo === modeloCurvaVigente) ?? null,
+    [motor.bases_modelo, modeloCurvaVigente],
+  );
+  const tieneNivelPropio = !!baseModeloCurva?.nivel;
+  const nivelDelModelo = baseModeloCurva?.nivel ?? motor.nivel;
 
   const nivelesDelModelo = useMemo(() => {
-    const desglosePorId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const desglosePorId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const acum = new Map<number, { unidades: number; area: number; precio: number }>();
 
-    for (const p of propiedadesFiltradas) {
+    for (const p of propiedades) {
       if (modeloCurvaVigente !== SIN_FILTRO && p.id_modelo !== modeloCurvaVigente) continue;
       const d = desglosePorId.get(p.id_propiedad);
       if (!d || d.area_ponderada <= 0) continue;
@@ -505,7 +374,7 @@ function PantallaMotor() {
         : 0,
       varMonto: piso ? f.precio_depto - piso.precio_depto : 0,
     }));
-  }, [propiedadesFiltradas, desglosesFiltrados, modeloCurvaVigente]);
+  }, [propiedades, desgloses, modeloCurvaVigente]);
 
   /*
    * Las áreas que el proyecto tiene de verdad, modelo por modelo.
@@ -516,12 +385,12 @@ function PantallaMotor() {
    * pega ni cuánto.
    */
   const areasPorModelo = useMemo(() => {
-    const porId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
+    const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const acum = new Map<
       string,
       { unidades: number; min: number; max: number; suma: number; exento: number }
     >();
-    for (const p of propiedadesFiltradas) {
+    for (const p of propiedades) {
       const area = calcularAreaPonderada(p, motor);
       if (area <= 0) continue;
       const a = acum.get(p.id_modelo) ?? {
@@ -541,7 +410,7 @@ function PantallaMotor() {
       acum.set(p.id_modelo, a);
     }
     return acum;
-  }, [propiedadesFiltradas, desglosesFiltrados, motor]);
+  }, [propiedades, desgloses, motor]);
 
   /**
    * Área donde la curva de tamaño vale 1.0000.
@@ -602,12 +471,12 @@ function PantallaMotor() {
       const a = areasPorModelo.get(idModelo);
       return a && a.unidades > 0 ? a.suma / a.unidades : -1;
     };
-    return [...basesVisibles].sort(
+    return [...bases].sort(
       (a, b) =>
         areaDe(b.id_modelo) - areaDe(a.id_modelo) ||
         a.nombre_modelo.localeCompare(b.nombre_modelo, "es"),
     );
-  }, [basesVisibles, areasPorModelo]);
+  }, [bases, areasPorModelo]);
 
   /** Factor que la curva de tamaño le asignaría a un modelo por su área. */
   const factorDeTamanoDelModelo = (idModelo: string) => {
@@ -725,58 +594,6 @@ function PantallaMotor() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardContent className="space-y-3 pt-6">
-          <div className="flex flex-wrap items-end gap-3">
-            <FiltroInventario
-              etiqueta="Torre"
-              etiquetaTodos="Todas las torres"
-              valor={filtros.torre}
-              onChange={(v) => setFiltros((x) => ({ ...x, torre: v }))}
-              opciones={opcionesFiltro.torres}
-              todos={SIN_FILTRO}
-            />
-            <FiltroInventario
-              etiqueta="Modelo"
-              etiquetaTodos="Todos los modelos"
-              valor={filtros.modelo}
-              onChange={(v) => setFiltros((x) => ({ ...x, modelo: v }))}
-              opciones={opcionesFiltro.modelos}
-              todos={SIN_FILTRO}
-            />
-            <FiltroInventario
-              etiqueta="Vista"
-              etiquetaTodos="Todas las vistas"
-              valor={filtros.vista}
-              onChange={(v) => setFiltros((x) => ({ ...x, vista: v }))}
-              opciones={opcionesFiltro.vistas}
-              todos={SIN_FILTRO}
-            />
-            <FiltroInventario
-              etiqueta="Estatus"
-              etiquetaTodos="Todos los estatus"
-              valor={filtros.estatus}
-              onChange={(v) => setFiltros((x) => ({ ...x, estatus: v }))}
-              opciones={opcionesFiltro.estatus}
-              todos={SIN_FILTRO}
-            />
-            {hayFiltro ? (
-              <Button variant="ghost" onClick={limpiarFiltros} className="mb-0.5">
-                <X className="size-4" />
-                Limpiar filtros
-              </Button>
-            ) : null}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {hayFiltro
-              ? `${totalesFiltrados.unidades} de ${totales.unidades} unidades.`
-              : `${totales.unidades} unidades en el proyecto.`}{" "}
-            Los filtros cambian lo que se ve —conteos, promedios por modelo, curvas y
-            totales—, no lo que se guarda: cualquier valor que captures aquí sigue
-            aplicando a todo el desarrollo.
-          </p>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -790,9 +607,9 @@ function PantallaMotor() {
         <CardContent className="space-y-3">
           {aLaVenta.unidades === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {estatusExplicito
-                ? `Ninguna unidad del filtro actual tiene precio calculado.`
-                : "Este proyecto no tiene ninguna unidad en estatus Disponible. Si esperabas ver inventario aquí, revisa si está capturado como Inventario: ese estatus no cuenta como a la venta, igual que en el Forecast de Ingresos."}
+              Este proyecto no tiene ninguna unidad en estatus Disponible. Si esperabas ver
+              inventario aquí, revisa si está capturado como Inventario: ese estatus no
+              cuenta como a la venta, igual que en el Forecast de Ingresos.
             </p>
           ) : (
             <>
@@ -800,7 +617,7 @@ function PantallaMotor() {
                 <Cifra
                   etiqueta="Unidades"
                   valor={String(aLaVenta.unidades)}
-                  nota={`de ${totalesFiltrados.unidades} en el proyecto`}
+                  nota={`de ${totales.unidades} en el proyecto`}
                 />
                 <Cifra
                   etiqueta="Área ponderada"
@@ -842,9 +659,9 @@ function PantallaMotor() {
                 sostiene, no que el motor esté mal.
               </p>
               <p className="text-xs text-muted-foreground">
-                {estatusExplicito
-                  ? `Cuenta las unidades en ${filtros.estatus}, por el filtro de Estatus de arriba.`
-                  : "Cuenta solo las unidades en estatus Disponible, el mismo criterio que el Forecast de Ingresos de Alta Dirección, para que las dos pantallas den la misma cifra. Un filtro de Estatus arriba manda sobre este criterio."}
+                Cuenta solo las unidades en estatus Disponible, el mismo criterio que el
+                Forecast de Ingresos de Alta Dirección, para que las dos pantallas den la
+                misma cifra.
               </p>
             </>
           )}
@@ -901,7 +718,7 @@ function PantallaMotor() {
             </div>
             <div className="rounded-md border border-border p-3">
               <p className="text-xs text-muted-foreground">
-                Precio promedio ponderado {hayFiltro ? "del subconjunto" : "de todo el proyecto"}
+                Precio promedio ponderado de todo el proyecto
               </p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
                 {aLaVenta.unidades === 0 ? (
@@ -911,9 +728,7 @@ function PantallaMotor() {
                 )}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {estatusExplicito
-                  ? `Por unidad, sobre ${aLaVenta.unidades} unidades en ${filtros.estatus}.`
-                  : `Por unidad, sobre ${aLaVenta.unidades} de ${totalesFiltrados.unidades} unidades: las que siguen a la venta.`}
+                {`Por unidad, sobre ${aLaVenta.unidades} de ${totales.unidades} unidades: las que siguen a la venta.`}
               </p>
             </div>
           </div>
@@ -928,8 +743,7 @@ function PantallaMotor() {
           <p className="text-xs text-muted-foreground">
             Por eso no tienen por qué coincidir con el precio base ni recién sembrado el
             motor: el base se calcula con todo el inventario que tiene precio, vendido
-            incluido, y estas dos solo con el remanente. Si pones un filtro de Estatus
-            arriba, manda ese y estas cifras dejan de acotarse por su cuenta.
+            incluido, y estas dos solo con el remanente.
           </p>
           <p className="text-xs text-muted-foreground">
             El precio por m² de una unidad nunca es el base a secas: es base × factor de su
@@ -956,7 +770,7 @@ function PantallaMotor() {
                 <TablaFactores
                   tipo={s.valor}
                   factores={motor.factores.filter((f) => f.tipo_factor === s.valor)}
-                  propiedades={propiedadesFiltradas}
+                  propiedades={propiedades}
                 />
               </TabsContent>
             ))}
@@ -1164,6 +978,14 @@ function PantallaMotor() {
                   <tr key={b.id_modelo} className="border-t border-border">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
+                      {/* Una curva propia es una excepción a la política del
+                          desarrollo: si no se marca aquí, solo se descubre
+                          entrando a la sección de Curva de Nivel. */}
+                      {b.nivel ? (
+                        <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:text-amber-400">
+                          curva propia
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
                       {unidadesPorModelo.get(b.id_modelo) ?? 0}
@@ -1406,8 +1228,9 @@ function PantallaMotor() {
                   Efecto sobre el inventario
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Cómo cambia el precio de las unidades del modelo piso por piso. Mueve la
-                  pendiente o el amortiguamiento y todo se recalcula al instante.
+                  Cómo cambia el precio de las unidades del modelo piso por piso. Cada modelo
+                  puede llevar su propia pendiente y amortiguamiento, porque no todos ganan
+                  lo mismo por subir de piso.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1432,6 +1255,116 @@ function PantallaMotor() {
                 </Select>
               </div>
             </div>
+
+            {baseModeloCurva ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Curva propia de {baseModeloCurva.nombre_modelo}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[11px]",
+                        tieneNivelPropio
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {tieneNivelPropio ? "Curva propia" : "Usa la general"}
+                    </span>
+                    {tieneNivelPropio ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => definirNivelModelo(baseModeloCurva.id_modelo, null)}
+                      >
+                        <X className="size-4" />
+                        Volver a la general
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-[13px] font-medium text-muted-foreground">
+                      Pendiente por piso (a)
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Slider
+                        value={[nivelDelModelo.coef_a]}
+                        min={0}
+                        max={0.025}
+                        step={0.0005}
+                        onValueChange={([v]) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: v ?? 0,
+                            coef_b: nivelDelModelo.coef_b,
+                          })
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        step={0.0005}
+                        value={nivelDelModelo.coef_a}
+                        onChange={(e) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: Number(e.target.value),
+                            coef_b: nivelDelModelo.coef_b,
+                          })
+                        }
+                        className="w-28 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[13px] font-medium text-muted-foreground">
+                      Amortiguamiento (b)
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Slider
+                        value={[nivelDelModelo.coef_b]}
+                        min={0}
+                        max={0.0005}
+                        step={0.00001}
+                        onValueChange={([v]) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: nivelDelModelo.coef_a,
+                            coef_b: v ?? 0,
+                          })
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        step={0.00001}
+                        value={nivelDelModelo.coef_b}
+                        onChange={(e) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: nivelDelModelo.coef_a,
+                            coef_b: Number(e.target.value),
+                          })
+                        }
+                        className="w-28 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {tieneNivelPropio
+                    ? "Este modelo ya no sigue la curva del proyecto: mover la pendiente general no lo mueve. La gráfica y la tabla de multiplicadores de arriba siguen mostrando la general; los precios de abajo usan esta."
+                    : "Tocar cualquiera de los dos le crea una curva propia a este modelo, partiendo de los valores de la general. Los demás modelos no se enteran."}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  El nivel donde la curva vale 1.0000 sigue siendo el del proyecto, igual para
+                  todos los modelos: si cada uno arrancara en un piso distinto, sus curvas no
+                  serían comparables.
+                </p>
+              </div>
+            ) : null}
 
             {nivelesDelModelo.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -1620,30 +1553,30 @@ function PantallaMotor() {
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
           <span className="tabular-nums">
             <span className="text-muted-foreground">Unidades: </span>
-            {hayFiltro ? `${totalesFiltrados.unidades} de ${totales.unidades}` : totales.unidades}
+            {totales.unidades}
           </span>
           <span className="tabular-nums">
             <span className="text-muted-foreground">Valor total calculado: </span>
-            {formatoMoneda(totalesFiltrados.totalCalculado)}{" "}
+            {formatoMoneda(totales.totalCalculado)}{" "}
             <span className="text-xs text-muted-foreground">Libro: Comercial</span>
           </span>
           <span className="tabular-nums">
             <span className="text-muted-foreground">Valor total actual: </span>
-            {formatoMoneda(totalesFiltrados.totalActual)}
+            {formatoMoneda(totales.totalActual)}
           </span>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-xs tabular-nums",
-              totalesFiltrados.delta >= 0
+              totales.delta >= 0
                 ? "bg-primary/10 text-primary"
                 : "bg-destructive/10 text-destructive",
             )}
           >
-            {formatoPorcentaje(totalesFiltrados.deltaPct)} · {formatoMoneda(totalesFiltrados.delta)}
+            {formatoPorcentaje(totales.deltaPct)} · {formatoMoneda(totales.delta)}
           </span>
           <span className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
             <TriangleAlert className="size-4" />
-            Alertas: {totalesFiltrados.conAlertas}
+            Alertas: {totales.conAlertas}
           </span>
         </div>
       </div>

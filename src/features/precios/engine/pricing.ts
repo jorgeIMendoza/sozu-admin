@@ -89,6 +89,8 @@ export function calcularFactorTamano(
 export interface BaseResuelta {
   precio_base_m2: number;
   m2_referencia: number;
+  /** Curva de nivel propia del modelo, o `null` si usa la del proyecto. */
+  nivel: ConfiguracionNivel | null;
   encontrado: boolean;
 }
 
@@ -109,6 +111,7 @@ export function resolverBaseModelo(
     return {
       precio_base_m2: b.precio_base_m2,
       m2_referencia: b.m2_referencia,
+      nivel: b.nivel ?? null,
       encontrado: true,
     };
   }
@@ -118,10 +121,12 @@ export function resolverBaseModelo(
     return {
       precio_base_m2: legado * fPlano,
       m2_referencia: motor.tamano.m2_referencia ?? 0,
+      // Los motores en formato anterior no tienen curva por modelo.
+      nivel: null,
       encontrado: true,
     };
   }
-  return { precio_base_m2: 0, m2_referencia: 0, encontrado: false };
+  return { precio_base_m2: 0, m2_referencia: 0, nivel: null, encontrado: false };
 }
 
 /**
@@ -258,7 +263,14 @@ export function calcularPrecio(
     });
   }
 
-  const f_nivel = calcularFactorNivel(prop.nivel, motor.nivel, motor.ancla?.nivel ?? 1);
+  // La curva del modelo manda sobre la del proyecto cuando existe. El nivel
+  // ancla no se toca: sigue siendo el del proyecto, para que todas las curvas
+  // valgan 1.0000 en el mismo piso y sigan siendo comparables entre sí.
+  const f_nivel = calcularFactorNivel(
+    prop.nivel,
+    base.nivel ?? motor.nivel,
+    motor.ancla?.nivel ?? 1,
+  );
   const f_tamano = calcularFactorTamano(area_ponderada, base.m2_referencia, motor.tamano.theta);
   const f_extras = calcularFactorExtras(prop, motor);
 

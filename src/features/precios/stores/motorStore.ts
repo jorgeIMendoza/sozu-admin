@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { AnclaProyecto, FactorPrecio, MotorPrecio, TipoFactor } from "../types/dominio";
+import type {
+  AnclaProyecto,
+  ConfiguracionNivel,
+  FactorPrecio,
+  MotorPrecio,
+  TipoFactor,
+} from "../types/dominio";
 import { esMotorAnclado, reanclarMotor } from "../engine/anclaje";
 import { construirMotorSemilla } from "../engine/semilla";
 import { useInventarioStore } from "./inventarioStore";
@@ -93,6 +99,11 @@ interface AccionesMotor {
     campo: "precio_base_m2" | "factor_modelo" | "m2_referencia",
     valor: number,
   ) => void;
+  /**
+   * Curva de nivel propia de un modelo. `null` la borra y el modelo vuelve a
+   * usar la del proyecto.
+   */
+  definirNivelModelo: (idModelo: string, nivel: ConfiguracionNivel | null) => void;
   /**
    * Deja el motor plano: cada unidad pasa a valer el precio por m² base del
    * proyecto por su área interior, sin ninguna diferenciación.
@@ -269,6 +280,21 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
             }),
           })),
 
+        definirNivelModelo: (idModelo, nivel) =>
+          mutarMotor((m) => ({
+            ...m,
+            bases_modelo: m.bases_modelo.map((b) => {
+              if (b.id_modelo !== idModelo) return b;
+              if (nivel === null) {
+                // Se borra la propiedad, no se guarda en cero: cero es una curva
+                // plana explícita y eso no es lo mismo que "usa la general".
+                const { nivel: _, ...resto } = b;
+                return resto;
+              }
+              return { ...b, nivel };
+            }),
+          })),
+
         ponerEnPuntoBase: () =>
           mutarMotor((m) => ({
             ...m,
@@ -289,11 +315,16 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
             })),
             // `precio_base_m2` es lo que lee el motor, así que no basta con
             // poner el factor en 1: hay que rehacer el precio efectivo.
-            bases_modelo: m.bases_modelo.map((b) => ({
-              ...b,
-              factor_modelo: 1,
-              precio_base_m2: r2(m.precio_base_m2_proyecto),
-            })),
+            bases_modelo: m.bases_modelo.map((b) => {
+              // Las curvas por modelo también se van: el punto base es una sola
+              // política plana, y dejar excepciones vivas lo volvería mentira.
+              const { nivel: _, ...resto } = b;
+              return {
+                ...resto,
+                factor_modelo: 1,
+                precio_base_m2: r2(m.precio_base_m2_proyecto),
+              };
+            }),
             // Un motor plano no está calibrado, diga lo que diga la etiqueta
             // anterior: sostenerla sería afirmar una estructura que ya no existe.
             estado_calibracion: "sin_calibrar" as const,
