@@ -1024,11 +1024,18 @@ function PantallaMotor() {
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Factor s/ base actual
                   </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Precio promedio calculado por m²
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                    Precio promedio calculado por unidad
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {basesPorArea.map((b) => {
                   const a = areasPorModelo.get(b.id_modelo);
+                  const calc = porModelo.get(b.id_modelo);
                   const propuesto = factorDeTamanoDelModelo(b.id_modelo);
                   const igual = Math.abs(propuesto - (b.factor_modelo ?? 1)) < 5e-5;
                   return (
@@ -1056,6 +1063,23 @@ function PantallaMotor() {
                       >
                         {formatoMultiplicador(b.factor_modelo ?? 1)}
                       </td>
+                      <td className="px-3 py-1.5 tabular-nums text-foreground">
+                        {calc && calc.area > 0 ? (
+                          <>
+                            {formatoMoneda(calc.precio / calc.area)}
+                            <span className="text-xs text-muted-foreground"> /m²</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
+                        {calc && calc.conDesglose > 0 ? (
+                          formatoMoneda(calc.precio / calc.conDesglose)
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -1082,6 +1106,12 @@ function PantallaMotor() {
             reparta sin mover el valor total del desarrollo, porque los modelos grandes pesan
             más en el valor que en el conteo y con el promedio simple el total se iría hacia
             abajo.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Las dos últimas columnas son el precio que el motor calcula hoy para las
+            unidades de cada modelo, con todo encima: no solo el tamaño, también su torre,
+            vista, nivel y extras. Sirven para ver si el reparto por tamaño deja precios
+            que tienen sentido, no solo multiplicadores ordenados.
           </p>
           <p className="text-xs text-muted-foreground">
             El <strong>factor s/ base actual</strong> se marca en ámbar cuando no coincide
