@@ -212,6 +212,14 @@ function PantallaMotor() {
     estatus: SIN_FILTRO,
   });
   const [justificacion, setJustificacion] = useState("");
+  /**
+   * Modelo que se inspecciona en la curva de nivel, aparte del filtro global.
+   *
+   * Aquí sí conviene un control propio: se recorre modelo por modelo para ver
+   * cómo responde cada uno a la pendiente, y hacerlo desde el filtro de arriba
+   * obligaría a reacomodar toda la pantalla en cada paso.
+   */
+  const [modeloCurva, setModeloCurva] = useState("");
 
   /*
    * Opciones de los filtros: solo lo que el inventario del proyecto usa, con
@@ -446,11 +454,26 @@ function PantallaMotor() {
    * justo lo que no responde a la curva, y dejarlo dentro aplanaría el efecto
    * que se está tratando de ver.
    */
+  /*
+   * El modelo elegido a mano manda, pero solo mientras siga existiendo en lo
+   * filtrado: si arriba se filtra por otra torre, el que estaba seleccionado
+   * puede quedarse sin unidades y la sección se veria vacía sin decir por qué.
+   * En ese caso cae al del filtro global, y si no hay, al de más inventario.
+   */
+  const modeloCurvaVigente = useMemo(() => {
+    const presentes = basesOrdenadas.map((b) => b.id_modelo);
+    if (modeloCurva === SIN_FILTRO) return SIN_FILTRO;
+    if (modeloCurva && presentes.includes(modeloCurva)) return modeloCurva;
+    if (filtros.modelo !== SIN_FILTRO) return filtros.modelo;
+    return presentes[0] ?? SIN_FILTRO;
+  }, [modeloCurva, filtros.modelo, basesOrdenadas]);
+
   const nivelesDelModelo = useMemo(() => {
     const desglosePorId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
     const acum = new Map<number, { unidades: number; area: number; precio: number }>();
 
     for (const p of propiedadesFiltradas) {
+      if (modeloCurvaVigente !== SIN_FILTRO && p.id_modelo !== modeloCurvaVigente) continue;
       const d = desglosePorId.get(p.id_propiedad);
       if (!d || d.area_ponderada <= 0) continue;
       const a = acum.get(p.nivel) ?? { unidades: 0, area: 0, precio: 0 };
@@ -460,7 +483,7 @@ function PantallaMotor() {
       acum.set(p.nivel, a);
     }
 
-    return [...acum.entries()]
+    const filas = [...acum.entries()]
       .map(([nivel, a]) => ({
         nivel,
         unidades: a.unidades,
@@ -469,7 +492,18 @@ function PantallaMotor() {
         precio_depto: a.precio / a.unidades,
       }))
       .sort((a, b) => a.nivel - b.nivel);
-  }, [propiedadesFiltradas, desglosesFiltrados]);
+
+    // Variación contra el nivel más bajo del modelo: es lo que se busca al
+    // mover la pendiente, y en pesos absolutos no se alcanza a ver.
+    const piso = filas[0];
+    return filas.map((f) => ({
+      ...f,
+      varPct: piso && piso.precio_depto > 0
+        ? ((f.precio_depto - piso.precio_depto) / piso.precio_depto) * 100
+        : 0,
+      varMonto: piso ? f.precio_depto - piso.precio_depto : 0,
+    }));
+  }, [propiedadesFiltradas, desglosesFiltrados, modeloCurvaVigente]);
 
   const nivelesPreview = [1, 3, 5, 8, 10, 14, 18];
 
@@ -1070,9 +1104,30 @@ function PantallaMotor() {
                   Efecto sobre el inventario
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Precios reales por nivel de lo que esté filtrado arriba. Mueve la
-                  pendiente o el amortiguamiento y las cuatro columnas se recalculan.
+                  Cómo cambia el precio de las unidades del modelo piso por piso. Mueve la
+                  pendiente o el amortiguamiento y todo se recalcula al instante.
                 </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="modelo-curva"
+                  className="text-[13px] font-medium text-muted-foreground"
+                >
+                  Modelo
+                </Label>
+                <Select value={modeloCurvaVigente} onValueChange={setModeloCurva}>
+                  <SelectTrigger id="modelo-curva" className="w-60">
+                    <SelectValue placeholder="Elige un modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_FILTRO}>Todos los modelos</SelectItem>
+                    {basesOrdenadas.map((b) => (
+                      <SelectItem key={b.id_modelo} value={b.id_modelo}>
+                        {b.nombre_modelo} · {unidadesPorModelo.get(b.id_modelo) ?? 0} u.
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -1085,7 +1140,7 @@ function PantallaMotor() {
                 <div className="grid gap-6 md:grid-cols-2">
                   <div>
                     <p className="mb-1 text-xs font-medium text-muted-foreground">
-                      Precio promedio ponderado por m²
+                      Precio por metro cuadrado
                     </p>
                     <GraficoCurva
                       puntos={nivelesDelModelo.map((n) => ({ x: n.nivel, y: n.precio_m2 }))}
@@ -1097,12 +1152,12 @@ function PantallaMotor() {
                   </div>
                   <div>
                     <p className="mb-1 text-xs font-medium text-muted-foreground">
-                      Precio promedio ponderado del departamento
+                      Precio final de venta
                     </p>
                     <GraficoCurva
                       puntos={nivelesDelModelo.map((n) => ({ x: n.nivel, y: n.precio_depto }))}
                       etiquetaX="Nivel"
-                      etiquetaY="Precio del departamento"
+                      etiquetaY="Precio final de venta"
                       formatoValor={formatoPesosCompacto}
                       lineaBase={null}
                     />
@@ -1123,10 +1178,13 @@ function PantallaMotor() {
                           M² promedio
                         </th>
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          Precio promedio por m²
+                          Precio por metro cuadrado
                         </th>
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                          Precio promedio del departamento
+                          Precio final de venta
+                        </th>
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                          Variación vs. nivel {nivelesDelModelo[0]?.nivel ?? "—"}
                         </th>
                       </tr>
                     </thead>
@@ -1144,6 +1202,22 @@ function PantallaMotor() {
                           <td className="px-3 py-1.5 tabular-nums font-medium text-foreground">
                             {formatoMoneda(n.precio_depto)}
                           </td>
+                          <td
+                            className={cn(
+                              "px-3 py-1.5 tabular-nums",
+                              Math.abs(n.varPct) < 0.005
+                                ? "text-muted-foreground"
+                                : n.varPct > 0
+                                  ? "text-primary"
+                                  : "text-destructive",
+                            )}
+                          >
+                            {formatoPorcentaje(n.varPct, 2)}
+                            <span className="text-xs text-muted-foreground">
+                              {" "}
+                              {formatoMoneda(n.varMonto)}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1152,17 +1226,21 @@ function PantallaMotor() {
 
                 <p className="text-xs text-muted-foreground">
                   Cada renglón promedia las unidades de ese nivel: el precio por m² es la suma
-                  de precios entre la suma de m², y el del departamento es ese precio por el m²
-                  promedio del nivel. Dos niveles pueden diferir aunque la curva sea plana,
-                  porque el metraje no es idéntico piso por piso. Se grafica el precio que
-                  calcula el motor, no el de lista: un precio forzado a mano no responde a la
-                  curva y taparía justo lo que se quiere ver.
-                  {filtros.modelo === SIN_FILTRO ? (
+                  de precios entre la suma de m², y el precio final de venta es ese precio por
+                  el m² promedio del nivel. La <strong>variación</strong> compara contra el
+                  nivel más bajo del modelo, que es donde la curva vale 1.0000. Dos niveles
+                  pueden diferir aunque la curva esté plana, porque el metraje no es idéntico
+                  piso por piso.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Se grafica el precio que calcula el motor, no el de lista: un precio forzado
+                  a mano no responde a la curva y taparía justo lo que se quiere ver.
+                  {modeloCurvaVigente === SIN_FILTRO ? (
                     <>
                       {" "}
                       Con todos los modelos juntos, un brinco entre niveles puede venir de que
-                      arriba haya modelos distintos y no de los coeficientes: filtra por Modelo
-                      para aislar uno.
+                      arriba haya modelos distintos y no de los coeficientes: elige un modelo
+                      para aislarlo.
                     </>
                   ) : null}
                 </p>
