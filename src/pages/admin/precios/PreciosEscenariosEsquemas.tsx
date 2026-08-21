@@ -4,6 +4,7 @@ import { ChevronDown, Info, Plus, TriangleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { TarjetaEsquema } from "@/features/precios/components/TarjetaEsquema";
 import { ModalEsquema } from "@/features/precios/components/ModalEsquema";
 import { useEsquemasVPN } from "@/features/precios/hooks/useEsquemasVPN";
@@ -62,19 +63,42 @@ function PantallaEsquemas() {
   const [infoVisible, setInfoVisible] = useState(true);
   const [infoAbierta, setInfoAbierta] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState<TipoEsquema | "todos">("todos");
+  /*
+   * Arranca en los que se ofrecen.
+   *
+   * Los dados de baja se conservan —una oferta pudo cotizarse con ellos— pero en
+   * un proyecto con historia son mayoría: en Monócolo, 8 de 13. Verlos primero
+   * hace parecer que hay trece políticas comerciales vigentes. El contador dice
+   * cuántos hay para que se sepa que existen.
+   */
+  const [filtroEstado, setFiltroEstado] = useState<"activos" | "inactivos" | "todos">(
+    "activos",
+  );
 
   const conteo = {
     todos: esquemas.length,
     preventa: esquemas.filter((e) => e.tipo_esquema !== "post_entrega").length,
     post_entrega: esquemas.filter((e) => e.tipo_esquema === "post_entrega").length,
   };
-  const visibles = esquemas.filter((e) =>
-    filtroTipo === "todos"
-      ? true
-      : filtroTipo === "post_entrega"
-        ? e.tipo_esquema === "post_entrega"
-        : e.tipo_esquema !== "post_entrega",
-  );
+  const conteoEstado = {
+    todos: esquemas.length,
+    activos: esquemas.filter((e) => e.activo).length,
+    inactivos: esquemas.filter((e) => !e.activo).length,
+  };
+
+  const visibles = esquemas
+    .filter((e) =>
+      filtroTipo === "todos"
+        ? true
+        : filtroTipo === "post_entrega"
+          ? e.tipo_esquema === "post_entrega"
+          : e.tipo_esquema !== "post_entrega",
+    )
+    .filter((e) =>
+      filtroEstado === "todos" ? true : filtroEstado === "activos" ? e.activo : !e.activo,
+    )
+    // Los que se ofrecen, primero: es lo que se está decidiendo.
+    .sort((a, b) => Number(b.activo) - Number(a.activo));
 
   /**
    * Un esquema de preventa deja de poder venderse cuando ya no cabe su calendario
@@ -103,6 +127,44 @@ function PantallaEsquemas() {
   }, [esquemas, horizontesPorTorre]);
 
   const hoy = new Date();
+
+  /*
+   * Una fila por esquema, no una por esquema y torre.
+   *
+   * Con 5 esquemas y 3 torres eran 15 renglones que casi siempre dicen lo mismo,
+   * porque las torres suelen entregarse el mismo mes. Se muestra la fecha más
+   * apretada —la que manda— y el detalle por torre solo cuando difieren.
+   */
+  const caducidadPorEsquema = useMemo(() => {
+    const g = new Map<
+      string,
+      {
+        esquema: EsquemaFinanciamiento;
+        meses: number;
+        peor: Date;
+        torres: Array<{ torre: string; fecha: Date }>;
+      }
+    >();
+    for (const f of caducidades) {
+      const g0 = g.get(f.esquema.id_esquema) ?? {
+        esquema: f.esquema,
+        meses: f.meses,
+        peor: f.fecha,
+        torres: [] as Array<{ torre: string; fecha: Date }>,
+      };
+      g0.torres.push({ torre: f.torre, fecha: f.fecha });
+      if (f.fecha.getTime() < g0.peor.getTime()) g0.peor = f.fecha;
+      g.set(f.esquema.id_esquema, g0);
+    }
+    return [...g.values()].sort((a, b) => a.peor.getTime() - b.peor.getTime());
+  }, [caducidades]);
+
+  const vencidos = caducidadPorEsquema.filter(
+    (c) => c.peor.getTime() < hoy.getTime(),
+  ).length;
+
+  const fechaCorta = (d: Date) =>
+    d.toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "2-digit" });
 
   return (
     <div className="space-y-5">
@@ -179,12 +241,23 @@ function PantallaEsquemas() {
       {caducidades.length > 0 ? (
         <div className="rounded-lg border border-border">
           <div className="border-b border-border px-4 py-2.5">
-            <h3 className="text-sm font-semibold text-foreground">
-              Caducidad de esquemas
-            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Caducidad de esquemas
+              </h3>
+              {vencidos > 0 ? (
+                <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+                  {vencidos} de {caducidadPorEsquema.length} ya vencieron
+                </span>
+              ) : (
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  los {caducidadPorEsquema.length} vigentes
+                </span>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Último día en que el calendario todavía cabe antes de la entrega de cada
-              torre. Después de esa fecha el esquema ya no es vendible en esa torre.
+              Último día en que el calendario todavía cabe antes de la entrega de la torre.
+              Después de esa fecha el esquema ya no es vendible ahí.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -192,45 +265,78 @@ function PantallaEsquemas() {
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Esquema</th>
-                  <th className="px-4 py-2 text-left font-medium">Torre</th>
-                  <th className="px-4 py-2 text-left font-medium">Largo del plan</th>
-                  <th className="px-4 py-2 text-left font-medium">Caduca</th>
+                  <th className="px-4 py-2 text-right font-medium">Largo del plan</th>
+                  <th className="px-4 py-2 text-right font-medium">Caduca</th>
+                  <th className="px-4 py-2 text-left font-medium">Torres</th>
+                  <th className="px-4 py-2 text-left font-medium" />
                 </tr>
               </thead>
               <tbody>
-                {caducidades.map((c, i) => {
-                  const vencido = c.fecha.getTime() < hoy.getTime();
+                {caducidadPorEsquema.map((c) => {
+                  const vencido = c.peor.getTime() < hoy.getTime();
+                  // Con todas las torres entregando el mismo mes, listarlas una por
+                  // una no agrega nada; solo se detallan cuando difieren.
+                  const distintas = new Set(c.torres.map((t) => t.fecha.getTime())).size > 1;
                   return (
                     <tr
-                      key={`${c.esquema.id_esquema}-${c.torre}-${i}`}
-                      className="border-t border-border"
+                      key={c.esquema.id_esquema}
+                      className="border-t border-border transition-colors hover:bg-muted/40"
                     >
-                      <td className="px-4 py-1.5 font-medium text-foreground">
+                      <td className="px-4 py-2 font-medium text-foreground">
                         {c.esquema.nombre}
                       </td>
-                      <td className="px-4 py-1.5 text-muted-foreground">{c.torre}</td>
-                      <td className="px-4 py-1.5 tabular-nums text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-muted-foreground">
                         {c.meses} meses
                       </td>
                       <td
-                        className={
-                          vencido
-                            ? "px-4 py-1.5 tabular-nums text-destructive"
-                            : "px-4 py-1.5 tabular-nums text-foreground"
-                        }
+                        className={cn(
+                          "whitespace-nowrap px-4 py-2 text-right tabular-nums",
+                          vencido ? "text-destructive" : "text-foreground",
+                        )}
                       >
-                        {c.fecha.toLocaleDateString("es-MX", {
-                          year: "numeric",
-                          month: "short",
-                          day: "2-digit",
-                        })}
-                        {vencido ? " · ya vencido" : ""}
+                        {fechaCorta(c.peor)}
+                        {vencido ? (
+                          <span className="block text-xs font-medium">ya vencido</span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">
+                        {distintas
+                          ? c.torres
+                              .map((t) => `${t.torre}: ${fechaCorta(t.fecha)}`)
+                              .join(" · ")
+                          : `${c.torres.map((t) => t.torre).join(", ")} · misma fecha`}
+                      </td>
+                      <td className="px-4 py-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditando(c.esquema);
+                            setModal(true);
+                          }}
+                        >
+                          Acortar el plan
+                        </Button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="border-t border-border px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">
+              La fecha no se captura: es la entrega de la torre menos el largo del plan
+              —enganche + mes de inicio + mensualidades—. Se mueve por dos lados:
+              <strong> acortando el plan</strong> del esquema, aquí mismo, o corrigiendo la
+              <strong> fecha de entrega de la torre</strong> en Inventarios → Proyectos →
+              Editar Proyecto → Espacios.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Un esquema vencido no se bloquea solo: sigue apareciendo en el comparador y en
+              el cotizador. Si ya no se piensa ofrecer, hay que darlo de baja con el
+              interruptor de su tarjeta.
+            </p>
           </div>
         </div>
       ) : null}
@@ -294,6 +400,29 @@ function PantallaEsquemas() {
             onClick={() => setFiltroTipo(v)}
             className={
               filtroTipo === v
+                ? "rounded bg-muted px-3 py-1 text-[13px] font-medium"
+                : "rounded px-3 py-1 text-[13px] text-muted-foreground"
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="inline-flex gap-1 rounded-md border border-border p-1">
+        {(
+          [
+            ["activos", `Se ofrecen (${conteoEstado.activos})`],
+            ["inactivos", `Dados de baja (${conteoEstado.inactivos})`],
+            ["todos", `Todos (${conteoEstado.todos})`],
+          ] as Array<["activos" | "inactivos" | "todos", string]>
+        ).map(([v, t]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setFiltroEstado(v)}
+            className={
+              filtroEstado === v
                 ? "rounded bg-muted px-3 py-1 text-[13px] font-medium"
                 : "rounded px-3 py-1 text-[13px] text-muted-foreground"
             }
