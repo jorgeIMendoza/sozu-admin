@@ -99,6 +99,13 @@ export interface AnclaProyecto {
   nivel: number;
   clave_vista: string;
   clave_orientacion: string;
+  /**
+   * Modelo del ancla. Opcional a propósito: sin él, el precio base expresa el
+   * promedio ponderado del desarrollo, que es como nace la semilla. Al elegir
+   * uno, el base pasa a ser el precio por m² de ese modelo y su factor queda
+   * en 1.0000.
+   */
+  id_modelo?: string;
   /** Texto legible generado. */
   descripcion: string;
 }
@@ -280,6 +287,7 @@ export type TipoEvento =
   | "motor.factor_actualizado"
   | "motor.factor_desactivado"
   | "motor.factor_reactivado"
+  | "motor.punto_base"
   | "motor.restablecido"
   // Calibración
   | "calibracion.ejecutada"
