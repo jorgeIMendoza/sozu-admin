@@ -588,6 +588,27 @@ function PantallaMotor() {
     return Number.isFinite(p) && p > 0 ? p : promedio;
   }, [areasPorModelo, motor.tamano.theta, motor.bases_modelo, m2RefPreview]);
 
+  /**
+   * Los modelos ordenados por área promedio, de mayor a menor.
+   *
+   * El resto de la pantalla ordena por número de unidades, que es lo que pesa
+   * al decidir precios. Aquí no: la variable de esta sección es el área, y
+   * ordenada se lee como una progresión —el multiplicador sube monótonamente
+   * conforme baja el metraje— en vez de como una lista de números sueltos.
+   * Los modelos sin unidades en lo filtrado se van al final.
+   */
+  const basesPorArea = useMemo(() => {
+    const areaDe = (idModelo: string) => {
+      const a = areasPorModelo.get(idModelo);
+      return a && a.unidades > 0 ? a.suma / a.unidades : -1;
+    };
+    return [...basesVisibles].sort(
+      (a, b) =>
+        areaDe(b.id_modelo) - areaDe(a.id_modelo) ||
+        a.nombre_modelo.localeCompare(b.nombre_modelo, "es"),
+    );
+  }, [basesVisibles, areasPorModelo]);
+
   /** Factor que la curva de tamaño le asignaría a un modelo por su área. */
   const factorDeTamanoDelModelo = (idModelo: string) => {
     const a = areasPorModelo.get(idModelo);
@@ -992,7 +1013,7 @@ function PantallaMotor() {
                     Unidades
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                    Área promedio
+                    Área promedio ↓
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                     Rango de áreas
@@ -1006,7 +1027,7 @@ function PantallaMotor() {
                 </tr>
               </thead>
               <tbody>
-                {basesOrdenadas.map((b) => {
+                {basesPorArea.map((b) => {
                   const a = areasPorModelo.get(b.id_modelo);
                   const propuesto = factorDeTamanoDelModelo(b.id_modelo);
                   const igual = Math.abs(propuesto - (b.factor_modelo ?? 1)) < 5e-5;
