@@ -577,7 +577,7 @@ function PantallaMotor() {
             <p className="text-sm text-muted-foreground">
               {estatusExplicito
                 ? `Ninguna unidad del filtro actual tiene precio calculado.`
-                : "Este proyecto no tiene unidades a la venta: todas están comprometidas con un comprador."}
+                : "Este proyecto no tiene ninguna unidad en estatus Disponible. Si esperabas ver inventario aquí, revisa si está capturado como Inventario: ese estatus no cuenta como a la venta, igual que en el Forecast de Ingresos."}
             </p>
           ) : (
             <>
@@ -629,7 +629,7 @@ function PantallaMotor() {
               <p className="text-xs text-muted-foreground">
                 {estatusExplicito
                   ? `Cuenta las unidades en ${filtros.estatus}, por el filtro de Estatus de arriba.`
-                  : "Cuenta solo Disponible e Inventario: lo que no está comprometido con un comprador. Un filtro de Estatus arriba manda sobre este criterio."}
+                  : "Cuenta solo las unidades en estatus Disponible, el mismo criterio que el Forecast de Ingresos de Alta Dirección, para que las dos pantallas den la misma cifra. Un filtro de Estatus arriba manda sobre este criterio."}
               </p>
             </>
           )}
@@ -707,9 +707,8 @@ function PantallaMotor() {
             Las dos cifras salen del cálculo vigente del motor, así que cualquier variable
             que muevas en esta pantalla —factores, curvas, precio base o el factor de un
             modelo— las mueve. Son el precio comercial de hoy: cuentan solo las unidades en
-            <strong> Disponible</strong> o <strong>Inventario</strong>, las que no están
-            comprometidas con un comprador. Una unidad vendida hace meses no dice a cuánto
-            se vende hoy.
+            estatus <strong>Disponible</strong>, el mismo criterio que el Forecast de
+            Ingresos. Una unidad vendida hace meses no dice a cuánto se vende hoy.
           </p>
           <p className="text-xs text-muted-foreground">
             Por eso no tienen por qué coincidir con el precio base ni recién sembrado el

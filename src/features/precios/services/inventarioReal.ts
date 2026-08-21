@@ -79,17 +79,23 @@ export const SIN_VISTA = "Sin vista";
 export const SIN_ORIENTACION = "Sin dato";
 
 /**
- * Estatus de una unidad que todavía se puede vender.
+ * Estatus de una unidad que está a la venta: `Disponible` (2) del catálogo
+ * `estatus_disponibilidad`, y nada más.
  *
- * Son los dos del catálogo `estatus_disponibilidad` que no implican un
- * comprador: `Inventario` (1, alta inicial) y `Disponible` (2, en venta).
- * Apartado, Asignado, Vendido, Escrituración, Entregado, Pagada completamente,
- * En demanda y Dación en pago ya tienen dueño o proceso encima.
+ * Es la MISMA definición que usa el Forecast de Ingresos de Alta Dirección
+ * (`ESTATUS_DISPONIBLE` en useForecastIngresos), y tiene que serlo: dos
+ * pantallas que dicen "inventario disponible" y dan cifras distintas no se
+ * pueden conciliar, y la de Alta Dirección es la que se reporta.
  *
- * Se comparan por nombre y no por id porque es lo que `Propiedad.estatus`
+ * `Inventario` (1) queda FUERA aunque no tenga comprador. En el forecast es
+ * un estatus de cuenta de cobranza —va en `ESTATUS_FORECAST_CUENTA`—, no
+ * inventario a la venta; contarlo aquí sumaba unidades que allá se cuentan
+ * por otro camino. En Monócolo eran 44 unidades y $677,271,760.27.
+ *
+ * Se compara por nombre y no por id porque es lo que `Propiedad.estatus`
  * guarda: el motor trabaja con el nombre resuelto del catálogo.
  */
-export const ESTATUS_A_LA_VENTA = new Set(["Disponible", "Inventario"]);
+export const ESTATUS_A_LA_VENTA = new Set(["Disponible"]);
 
 /** Estacionamiento en tándem: los demás tipos cuentan como cajón independiente. */
 const TIPO_ESTACIONAMIENTO_TANDEM = 2;
