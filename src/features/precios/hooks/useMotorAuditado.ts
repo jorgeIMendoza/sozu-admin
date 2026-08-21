@@ -1,6 +1,6 @@
 import { useMotorStore } from "../stores/motorStore";
 import { registrarEvento } from "../services/auditoria";
-import type { TipoFactor } from "../types/dominio";
+import type { ConfiguracionNivel, TipoFactor } from "../types/dominio";
 
 const ETIQUETA_CAMPO: Record<string, string> = {
   precio_base_m2: "Precio base por m²",
@@ -107,6 +107,38 @@ export function useMotorAuditado() {
       },
       antes: { [campo]: b[campo] },
       despues: { [campo]: valor },
+    });
+  };
+
+  /**
+   * Curva de nivel propia de un modelo, o `null` para volver a la del proyecto.
+   *
+   * Queda en bitácora porque es una excepción a la política del desarrollo: sin
+   * registro, meses después nadie sabría por qué un modelo sube distinto que
+   * los demás.
+   */
+  const definirNivelModelo = (idModelo: string, nivel: ConfiguracionNivel | null) => {
+    const antes = motorActual();
+    const b = (antes.bases_modelo ?? []).find((x) => x.id_modelo === idModelo);
+    if (!b) return;
+    const previo = b.nivel ?? null;
+    if (
+      previo?.coef_a === nivel?.coef_a &&
+      previo?.coef_b === nivel?.coef_b
+    ) {
+      return;
+    }
+    store.definirNivelModelo(idModelo, nivel);
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.nivel_modelo",
+      entidad: {
+        tipo: "base_modelo",
+        id: idModelo,
+        etiqueta: `${b.nombre_modelo} · Curva de nivel`,
+      },
+      antes: previo ?? { hereda_del_proyecto: true },
+      despues: nivel ?? { hereda_del_proyecto: true },
     });
   };
 
@@ -238,6 +270,7 @@ export function useMotorAuditado() {
     actualizarConfigNivel,
     actualizarConfigTamano,
     actualizarBaseModelo,
+    definirNivelModelo,
     ponerEnPuntoBase,
     declararCalibradoManualmente,
     actualizarFactor,
