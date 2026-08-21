@@ -196,6 +196,7 @@ function PantallaMotor() {
     actualizarConfigTamano,
     actualizarPrecioBaseProyecto,
     actualizarBaseModelo,
+    definirNivelModelo,
     ponerEnPuntoBase,
     declararCalibradoManualmente,
     restablecer,
@@ -469,6 +470,21 @@ function PantallaMotor() {
     if (filtros.modelo !== SIN_FILTRO) return filtros.modelo;
     return presentes[0] ?? SIN_FILTRO;
   }, [modeloCurva, filtros.modelo, basesOrdenadas]);
+
+  /*
+   * La curva que de verdad se le aplica al modelo elegido.
+   *
+   * Si el modelo tiene una propia, es esa; si no, la del proyecto. Los campos
+   * muestran siempre valores reales, así que al editarlos partiendo de la
+   * general no hay que teclear desde cero: se toma lo que ya estaba y se ajusta.
+   */
+  const baseModeloCurva = useMemo(
+    () =>
+      (motor.bases_modelo ?? []).find((b) => b.id_modelo === modeloCurvaVigente) ?? null,
+    [motor.bases_modelo, modeloCurvaVigente],
+  );
+  const tieneNivelPropio = !!baseModeloCurva?.nivel;
+  const nivelDelModelo = baseModeloCurva?.nivel ?? motor.nivel;
 
   const nivelesDelModelo = useMemo(() => {
     const desglosePorId = new Map(desglosesFiltrados.map((d) => [d.id_propiedad, d]));
@@ -1164,6 +1180,14 @@ function PantallaMotor() {
                   <tr key={b.id_modelo} className="border-t border-border">
                     <td className="px-3 py-1.5 font-medium text-foreground">
                       {b.nombre_modelo}
+                      {/* Una curva propia es una excepción a la política del
+                          desarrollo: si no se marca aquí, solo se descubre
+                          entrando a la sección de Curva de Nivel. */}
+                      {b.nivel ? (
+                        <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:text-amber-400">
+                          curva propia
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
                       {unidadesPorModelo.get(b.id_modelo) ?? 0}
@@ -1406,8 +1430,9 @@ function PantallaMotor() {
                   Efecto sobre el inventario
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Cómo cambia el precio de las unidades del modelo piso por piso. Mueve la
-                  pendiente o el amortiguamiento y todo se recalcula al instante.
+                  Cómo cambia el precio de las unidades del modelo piso por piso. Cada modelo
+                  puede llevar su propia pendiente y amortiguamiento, porque no todos ganan
+                  lo mismo por subir de piso.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1432,6 +1457,116 @@ function PantallaMotor() {
                 </Select>
               </div>
             </div>
+
+            {baseModeloCurva ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Curva propia de {baseModeloCurva.nombre_modelo}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[11px]",
+                        tieneNivelPropio
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {tieneNivelPropio ? "Curva propia" : "Usa la general"}
+                    </span>
+                    {tieneNivelPropio ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => definirNivelModelo(baseModeloCurva.id_modelo, null)}
+                      >
+                        <X className="size-4" />
+                        Volver a la general
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-[13px] font-medium text-muted-foreground">
+                      Pendiente por piso (a)
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Slider
+                        value={[nivelDelModelo.coef_a]}
+                        min={0}
+                        max={0.025}
+                        step={0.0005}
+                        onValueChange={([v]) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: v ?? 0,
+                            coef_b: nivelDelModelo.coef_b,
+                          })
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        step={0.0005}
+                        value={nivelDelModelo.coef_a}
+                        onChange={(e) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: Number(e.target.value),
+                            coef_b: nivelDelModelo.coef_b,
+                          })
+                        }
+                        className="w-28 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[13px] font-medium text-muted-foreground">
+                      Amortiguamiento (b)
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Slider
+                        value={[nivelDelModelo.coef_b]}
+                        min={0}
+                        max={0.0005}
+                        step={0.00001}
+                        onValueChange={([v]) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: nivelDelModelo.coef_a,
+                            coef_b: v ?? 0,
+                          })
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        step={0.00001}
+                        value={nivelDelModelo.coef_b}
+                        onChange={(e) =>
+                          definirNivelModelo(baseModeloCurva.id_modelo, {
+                            coef_a: nivelDelModelo.coef_a,
+                            coef_b: Number(e.target.value),
+                          })
+                        }
+                        className="w-28 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {tieneNivelPropio
+                    ? "Este modelo ya no sigue la curva del proyecto: mover la pendiente general no lo mueve. La gráfica y la tabla de multiplicadores de arriba siguen mostrando la general; los precios de abajo usan esta."
+                    : "Tocar cualquiera de los dos le crea una curva propia a este modelo, partiendo de los valores de la general. Los demás modelos no se enteran."}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  El nivel donde la curva vale 1.0000 sigue siendo el del proyecto, igual para
+                  todos los modelos: si cada uno arrancara en un piso distinto, sus curvas no
+                  serían comparables.
+                </p>
+              </div>
+            ) : null}
 
             {nivelesDelModelo.length === 0 ? (
               <p className="text-sm text-muted-foreground">
