@@ -78,6 +78,16 @@ export function TarjetaEsquema({
   const suma = esquema.pct_enganche + esquema.pct_mensualidades + esquema.pct_entrega;
   const sumaOk = Math.abs(suma - 1) <= 0.0001;
   const maxDesc = Math.max(0, vpn.descuento_max_autorizable);
+
+  /*
+   * El precio que se cobra con este esquema, y su valor presente en pesos.
+   *
+   * Los porcentajes del calendario son del precio FINAL, no del de lista: un
+   * esquema con -2% cobra 98 y reparte sobre 98. El valor presente ya trae el
+   * ajuste dentro de `factor_vpn_con_ajuste`, asi que no se vuelve a aplicar.
+   */
+  const precioFinal = referencia ? referencia.precio * (1 + esquema.pct_ajuste_manual) : 0;
+  const valorPresente = referencia ? referencia.precio * vpn.factor_vpn_con_ajuste : 0;
   const inejecutable = esInejecutable(vpn);
   const multi = (detalleTorres?.length ?? 0) > 1;
 
@@ -141,7 +151,7 @@ export function TarjetaEsquema({
           <p className="text-xs text-muted-foreground">
             Con {referencia.etiqueta} · {formatoMoneda(referencia.precio)}
           </p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Cifra
               titulo="Precio final"
               valor={formatoMoneda(referencia.precio * (1 + esquema.pct_ajuste_manual))}
@@ -182,6 +192,11 @@ export function TarjetaEsquema({
                 referencia.precio * (1 + esquema.pct_ajuste_manual) * esquema.pct_entrega,
               )}
               nota={`${pct2(esquema.pct_entrega)} al escriturar`}
+            />
+            <Cifra
+              titulo="Valor presente"
+              valor={formatoMoneda(valorPresente)}
+              nota={`${factor4(vpn.factor_vpn_con_ajuste)} por peso de lista`}
             />
           </div>
           {esquema.escalonadas && esquema.num_mensualidades > 0 ? (
@@ -341,6 +356,9 @@ export function TarjetaEsquema({
                   <th className="py-1.5 pr-2 font-medium">Mes</th>
                   <th className="py-1.5 pr-2 font-medium">Concepto</th>
                   <th className="py-1.5 pr-2 text-right font-medium">% del precio</th>
+                  {referencia ? (
+                    <th className="py-1.5 pr-2 text-right font-medium">Monto</th>
+                  ) : null}
                   <th className="py-1.5 pr-2 text-right font-medium">Factor</th>
                   <th className="py-1.5 text-right font-medium">Valor presente</th>
                 </tr>
@@ -353,6 +371,11 @@ export function TarjetaEsquema({
                       <td className="py-1.5 pr-2">{f.mes}</td>
                       <td className="py-1.5 pr-2 capitalize">{f.concepto}</td>
                       <td className="py-1.5 pr-2 text-right">{pct2(f.pct)}</td>
+                      {referencia ? (
+                        <td className="whitespace-nowrap py-1.5 pr-2 text-right font-medium text-foreground">
+                          {formatoMoneda(precioFinal * f.pct)}
+                        </td>
+                      ) : null}
                       <td className="py-1.5 pr-2 text-right">
                         {(f.factor_descuento ?? 0).toFixed(6)}
                       </td>
@@ -368,6 +391,11 @@ export function TarjetaEsquema({
                   <td className="py-1.5 pr-2 text-right">
                     {pct2(vpn.flujos.reduce((a, f) => a + f.pct, 0))}
                   </td>
+                  {referencia ? (
+                    <td className="whitespace-nowrap py-1.5 pr-2 text-right">
+                      {formatoMoneda(precioFinal)}
+                    </td>
+                  ) : null}
                   <td />
                   <td className="py-1.5 text-right">{vpn.factor_vpn.toFixed(6)}</td>
                 </tr>
@@ -375,6 +403,14 @@ export function TarjetaEsquema({
             </table>
           </div>
           <GraficoCalendario flujos={vpn.flujos} horizonte={vpn.horizonte_meses} />
+          {referencia ? (
+            <p className="text-[11px] text-muted-foreground lg:col-span-2">
+              Los montos son sobre {referencia.etiqueta.toLowerCase()} y ya traen aplicado el
+              ajuste del esquema. El <strong>factor</strong> es cuanto vale hoy un peso que
+              entra ese mes, y el <strong>valor presente</strong> de cada renglon es su monto
+              descontado: por eso el total del valor presente es menor que el precio.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </Card>
