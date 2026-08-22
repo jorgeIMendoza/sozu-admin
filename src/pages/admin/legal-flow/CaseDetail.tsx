@@ -982,6 +982,16 @@ function FormaPagoDrawer({
   const fmtDate = (d?: string | null) =>
     d ? new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
+  // La plantilla del esquema y el cronograma real casi nunca coinciden en los
+  // esquemas escalonados/manuales. Cuando difieren se anota la plantilla al pie
+  // para que el abogado no crea que el desglose está mal calculado.
+  const plantillaDifiere =
+    !!forma?.esquema &&
+    !!forma?.desglose?.derivadoDeCronograma &&
+    (Math.abs(forma.esquema.porcentajeEnganche - forma.desglose.porcentajeEnganche) > 0.01 ||
+      Math.abs(forma.esquema.porcentajeMensualidades - forma.desglose.porcentajeMensualidades) > 0.01 ||
+      Math.abs(forma.esquema.porcentajeEntrega - forma.desglose.porcentajeEntrega) > 0.01);
+
   return (
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent className="sm:max-w-[520px] p-0 overflow-y-auto">
@@ -1020,35 +1030,68 @@ function FormaPagoDrawer({
                 </div>
               </div>
 
-              {/* Esquema seleccionado */}
-              {forma.esquema ? (
+              {/* Esquema seleccionado. Los montos y porcentajes se derivan del
+                  cronograma real (ver useOfferPaymentMethod): la plantilla del
+                  esquema suele traer las mensualidades en 0% con todo el resto
+                  cargado a contra entrega. */}
+              {forma.desglose ? (
                 <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Esquema</p>
-                    {forma.esquema.esManual && (
+                    {forma.esquema?.esManual && (
                       <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Manual</span>
                     )}
                   </div>
-                  <p className="text-[13px] font-semibold">{forma.esquema.nombre}</p>
+                  <p className="text-[13px] font-semibold">
+                    {forma.esquema?.nombre ?? 'Sin esquema seleccionado'}
+                  </p>
                   <div className="grid grid-cols-3 gap-2 mt-2">
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Enganche</p>
-                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeEnganche.toFixed(2)}%</p>
-                      <p className="text-[10px] text-muted-foreground/60">{forma.esquema.numeroPagosEnganche} pagos</p>
+                      <p className="text-[12px] font-mono">{forma.desglose.porcentajeEnganche.toFixed(2)}%</p>
+                      <p className="text-[11px] font-mono tabular-nums text-muted-foreground">{fmt(forma.desglose.montoEnganche)}</p>
+                      <p className="text-[10px] text-muted-foreground/60">{forma.desglose.pagosEnganche} pagos</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Mensualidades</p>
-                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeMensualidades.toFixed(2)}%</p>
-                      <p className="text-[10px] text-muted-foreground/60">{forma.esquema.numeroMensualidades} meses</p>
+                      <p className="text-[12px] font-mono">{forma.desglose.porcentajeMensualidades.toFixed(2)}%</p>
+                      <p className="text-[11px] font-mono tabular-nums text-muted-foreground">{fmt(forma.desglose.montoMensualidades)}</p>
+                      <p className="text-[10px] text-muted-foreground/60">
+                        {forma.desglose.numeroMensualidades} {forma.desglose.derivadoDeCronograma ? 'parcialidades' : 'meses'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground uppercase">Contra entrega</p>
-                      <p className="text-[12px] font-mono">{forma.esquema.porcentajeEntrega.toFixed(2)}%</p>
-                      {forma.esquema.porcentajeDescuentoAumento !== 0 && (
-                        <p className="text-[10px] text-muted-foreground/60">{forma.esquema.porcentajeDescuentoAumento.toFixed(2)}% desc/aum</p>
+                      <p className="text-[12px] font-mono">{forma.desglose.porcentajeEntrega.toFixed(2)}%</p>
+                      <p className="text-[11px] font-mono tabular-nums text-muted-foreground">{fmt(forma.desglose.montoEntrega)}</p>
+                      {forma.desglose.entregaEsResidual && (
+                        <p className="text-[10px] text-muted-foreground/60">saldo estimado</p>
                       )}
                     </div>
                   </div>
+                  {forma.desglose.montoOtros > 0 && (
+                    <div className="flex items-center justify-between border-t pt-2 text-[11px] text-muted-foreground">
+                      <span>Otros conceptos ({forma.desglose.porcentajeOtros.toFixed(2)}%)</span>
+                      <span className="font-mono tabular-nums">{fmt(forma.desglose.montoOtros)}</span>
+                    </div>
+                  )}
+                  {!!forma.esquema && forma.esquema.porcentajeDescuentoAumento !== 0 && (
+                    <p className="text-[10px] text-muted-foreground/60">
+                      {forma.esquema.porcentajeDescuentoAumento.toFixed(2)}% desc/aum sobre lista
+                    </p>
+                  )}
+                  {forma.desglose.derivadoDeCronograma ? (
+                    <p className="text-[10px] text-muted-foreground/60 leading-snug">
+                      Calculado sobre {fmt(forma.desglose.base)} con el cronograma real de la cuenta.
+                      {plantillaDifiere && forma.esquema && (
+                        <> La plantilla «{forma.esquema.nombre}» declara {forma.esquema.porcentajeEnganche.toFixed(2)}% / {forma.esquema.porcentajeMensualidades.toFixed(2)}% / {forma.esquema.porcentajeEntrega.toFixed(2)}%.</>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground/60 leading-snug">
+                      Porcentajes de la plantilla del esquema: la cuenta todavía no tiene cronograma de pagos.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="text-[12px] text-muted-foreground italic">Sin esquema de pago seleccionado en la oferta.</p>
