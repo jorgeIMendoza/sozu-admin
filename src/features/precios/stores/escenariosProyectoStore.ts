@@ -10,6 +10,19 @@ export interface EscenarioProyecto {
   nombre: string;
   /** Participación de cada esquema en las ventas, 0 a 1. */
   mix: Record<string, number>;
+  /**
+   * Mezcla propia de un modelo, cuando no vende como el resto del proyecto.
+   *
+   * Un estudio de 45 m² y un penthouse no se venden con el mismo esquema: el
+   * primero se coloca con enganches bajos y plazos largos, el segundo suele ir
+   * a contado. Con una sola mezcla para todo, el flujo proyectado promedia dos
+   * comportamientos que en la realidad no se parecen.
+   *
+   * Opcional a propósito: el modelo que no aparece aquí usa la mezcla del
+   * proyecto, y un desarrollo con una sola política sigue teniendo un solo
+   * lugar donde cambiarla.
+   */
+  mixPorModelo?: Record<string, Record<string, number>>;
   meses_absorcion: number;
   forma: FormaAbsorcion;
   creado_en: string;
