@@ -171,7 +171,7 @@ function UsersTable({
                       isCurrentUser ? 'bg-primary/20' : 'bg-primary/10'
                     }`}>
                       <span className="text-primary font-semibold text-sm">
-                        {usuario.nombre?.charAt(0).toUpperCase() || 'U'}
+                        {usuario.nombre?.trim().charAt(0).toUpperCase() || 'U'}
                       </span>
                     </div>
                     <div>

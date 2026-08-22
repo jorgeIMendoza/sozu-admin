@@ -515,7 +515,7 @@ export default function UsuariosDirectivos() {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
                       <span className="text-primary font-semibold text-sm">
-                        {usuario.nombre?.charAt(0).toUpperCase() || 'U'}
+                        {usuario.nombre?.trim().charAt(0).toUpperCase() || 'U'}
                       </span>
                     </div>
                     <div>
