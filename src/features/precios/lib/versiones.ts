@@ -57,7 +57,7 @@ export function construirDatosVersion(opciones: {
   return {
     id_proyecto: opciones.idProyecto,
     nombre: opciones.nombre,
-    creada_por: ACTOR_ACTUAL,
+    creada_por: { ...ACTOR_ACTUAL },
     snapshot_motor: structuredClone(opciones.motor),
     precios,
     unidades_incluidas: incluidas.map((e) => e.propiedad.id_propiedad),

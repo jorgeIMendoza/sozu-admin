@@ -1,6 +1,6 @@
 import { useMotorStore } from "../stores/motorStore";
 import { registrarEvento } from "../services/auditoria";
-import type { ConfiguracionNivel, TipoFactor } from "../types/dominio";
+import type { ConfiguracionNivel, MotorPrecio, TipoFactor } from "../types/dominio";
 
 const ETIQUETA_CAMPO: Record<string, string> = {
   precio_base_m2: "Precio base por m²",
@@ -143,6 +143,34 @@ export function useMotorAuditado() {
   };
 
   /**
+   * Retoma un escenario guardado como configuración viva.
+   *
+   * Queda en bitácora con lo que había antes, porque sustituye el motor entero
+   * y sin registro no habría forma de saber qué se descartó al hacerlo.
+   */
+  const retomarEscenario = (motor: MotorPrecio, etiqueta: string) => {
+    const antes = motorActual();
+    store.retomarEscenario(motor);
+    registrarEvento({
+      id_proyecto: antes.id_proyecto,
+      tipo: "motor.escenario_retomado",
+      entidad: { tipo: "version", id: etiqueta, etiqueta },
+      antes: {
+        precio_base_m2_proyecto: antes.precio_base_m2_proyecto,
+        nivel: antes.nivel,
+        tamano: antes.tamano,
+        estado_calibracion: antes.estado_calibracion,
+      },
+      despues: {
+        precio_base_m2_proyecto: motor.precio_base_m2_proyecto,
+        nivel: motor.nivel,
+        tamano: motor.tamano,
+        estado_calibracion: motor.estado_calibracion,
+      },
+    });
+  };
+
+  /**
    * Aplana el motor para volver a un punto de partida comparable.
    *
    * Queda en bitácora con el estado anterior completo —factores, curvas y
@@ -271,6 +299,7 @@ export function useMotorAuditado() {
     actualizarConfigTamano,
     actualizarBaseModelo,
     definirNivelModelo,
+    retomarEscenario,
     ponerEnPuntoBase,
     declararCalibradoManualmente,
     actualizarFactor,

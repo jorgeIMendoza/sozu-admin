@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { EsquemaFinanciamiento, ResultadoVPN } from "../types/dominio";
 import { claseBrecha, factor4, pct2, pctFirmado, puntos } from "../lib/formatoVpn";
+import { formatoMoneda } from "../lib/formato";
 import { GraficoCalendario } from "./GraficoCalendario";
 import { esInejecutable } from "../engine/npv";
 
@@ -51,6 +53,7 @@ export function TarjetaEsquema({
   detalleTorres,
   factorPonderadoProyecto,
   ponderadoParcial,
+  referencia,
 }: {
   esquema: EsquemaFinanciamiento;
   vpn: ResultadoVPN;
@@ -58,6 +61,14 @@ export function TarjetaEsquema({
   detalleTorres?: DetalleTorre[] | undefined;
   factorPonderadoProyecto?: number | undefined;
   ponderadoParcial?: boolean | undefined;
+  /**
+   * Precio contra el que traducir el esquema a pesos.
+   *
+   * Sin esto la tarjeta habla en porcentajes y factores, que sirven para comparar
+   * esquemas entre sí pero no para saber qué se le va a cobrar a alguien. Es
+   * opcional porque el proyecto puede no tener inventario disponible con precio.
+   */
+  referencia?: { etiqueta: string; precio: number; unidades: number } | undefined;
   onMarcarBase: () => void;
   onDuplicar: () => void;
   onAlternarActivo: () => void;
@@ -67,6 +78,16 @@ export function TarjetaEsquema({
   const suma = esquema.pct_enganche + esquema.pct_mensualidades + esquema.pct_entrega;
   const sumaOk = Math.abs(suma - 1) <= 0.0001;
   const maxDesc = Math.max(0, vpn.descuento_max_autorizable);
+
+  /*
+   * El precio que se cobra con este esquema, y su valor presente en pesos.
+   *
+   * Los porcentajes del calendario son del precio FINAL, no del de lista: un
+   * esquema con -2% cobra 98 y reparte sobre 98. El valor presente ya trae el
+   * ajuste dentro de `factor_vpn_con_ajuste`, asi que no se vuelve a aplicar.
+   */
+  const precioFinal = referencia ? referencia.precio * (1 + esquema.pct_ajuste_manual) : 0;
+  const valorPresente = referencia ? referencia.precio * vpn.factor_vpn_con_ajuste : 0;
   const inejecutable = esInejecutable(vpn);
   const multi = (detalleTorres?.length ?? 0) > 1;
 
@@ -79,7 +100,7 @@ export function TarjetaEsquema({
         !esquema.activo && "opacity-60",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">{esquema.nombre}</h3>
           {esquema.es_base ? <Chip clase="bg-emerald-50 text-emerald-700 border-emerald-200">Base</Chip> : null}
@@ -90,7 +111,24 @@ export function TarjetaEsquema({
           {inejecutable ? (
             <Chip clase="border-red-200 bg-red-50 text-red-700">No ejecutable</Chip>
           ) : null}
-          {!esquema.activo ? <Chip>Inactivo</Chip> : null}
+        </div>
+        {/* El activo/inactivo estaba enterrado en el menú de tres puntos, que es
+            donde va lo que se usa poco. Es lo contrario: es la decisión de si el
+            esquema se ofrece o no, y se toma seguido. Va a la vista. */}
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-xs",
+              esquema.activo ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {esquema.activo ? "Se ofrece" : "No se ofrece"}
+          </span>
+          <Switch
+            checked={esquema.activo}
+            onCheckedChange={onAlternarActivo}
+            aria-label={`${esquema.activo ? "Dejar de ofrecer" : "Volver a ofrecer"} ${esquema.nombre}`}
+          />
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -104,12 +142,71 @@ export function TarjetaEsquema({
               Marcar como base
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onDuplicar}>Duplicar</DropdownMenuItem>
-            <DropdownMenuItem onClick={onAlternarActivo}>
-              {esquema.activo ? "Desactivar" : "Reactivar"}
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {referencia && referencia.precio > 0 ? (
+        <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">
+            Con {referencia.etiqueta} · {formatoMoneda(referencia.precio)}
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Cifra
+              titulo="Precio final"
+              valor={formatoMoneda(referencia.precio * (1 + esquema.pct_ajuste_manual))}
+              nota={
+                esquema.pct_ajuste_manual === 0
+                  ? "igual al de lista"
+                  : `${pct2(esquema.pct_ajuste_manual)} sobre lista`
+              }
+            />
+            <Cifra
+              titulo="Enganche"
+              valor={formatoMoneda(
+                referencia.precio * (1 + esquema.pct_ajuste_manual) * esquema.pct_enganche,
+              )}
+              nota={`${pct2(esquema.pct_enganche)} en ${esquema.meses_enganche} exhibición${esquema.meses_enganche === 1 ? "" : "es"}`}
+            />
+            <Cifra
+              titulo="Mensualidad"
+              valor={
+                esquema.num_mensualidades > 0
+                  ? formatoMoneda(
+                      (referencia.precio *
+                        (1 + esquema.pct_ajuste_manual) *
+                        esquema.pct_mensualidades) /
+                        esquema.num_mensualidades,
+                    )
+                  : "—"
+              }
+              nota={
+                esquema.num_mensualidades > 0
+                  ? `${esquema.num_mensualidades} meses${esquema.escalonadas ? " · escalonadas" : ""}`
+                  : "sin mensualidades"
+              }
+            />
+            <Cifra
+              titulo="Pago a entrega"
+              valor={formatoMoneda(
+                referencia.precio * (1 + esquema.pct_ajuste_manual) * esquema.pct_entrega,
+              )}
+              nota={`${pct2(esquema.pct_entrega)} al escriturar`}
+            />
+            <Cifra
+              titulo="Valor presente"
+              valor={formatoMoneda(valorPresente)}
+              nota={`${factor4(vpn.factor_vpn_con_ajuste)} por peso de lista`}
+            />
+          </div>
+          {esquema.escalonadas && esquema.num_mensualidades > 0 ? (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              La mensualidad mostrada es el promedio: al ser escalonadas, las primeras son
+              menores y las últimas mayores.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-6 md:grid-cols-3">
         <div>
@@ -259,6 +356,9 @@ export function TarjetaEsquema({
                   <th className="py-1.5 pr-2 font-medium">Mes</th>
                   <th className="py-1.5 pr-2 font-medium">Concepto</th>
                   <th className="py-1.5 pr-2 text-right font-medium">% del precio</th>
+                  {referencia ? (
+                    <th className="py-1.5 pr-2 text-right font-medium">Monto</th>
+                  ) : null}
                   <th className="py-1.5 pr-2 text-right font-medium">Factor</th>
                   <th className="py-1.5 text-right font-medium">Valor presente</th>
                 </tr>
@@ -271,6 +371,11 @@ export function TarjetaEsquema({
                       <td className="py-1.5 pr-2">{f.mes}</td>
                       <td className="py-1.5 pr-2 capitalize">{f.concepto}</td>
                       <td className="py-1.5 pr-2 text-right">{pct2(f.pct)}</td>
+                      {referencia ? (
+                        <td className="whitespace-nowrap py-1.5 pr-2 text-right font-medium text-foreground">
+                          {formatoMoneda(precioFinal * f.pct)}
+                        </td>
+                      ) : null}
                       <td className="py-1.5 pr-2 text-right">
                         {(f.factor_descuento ?? 0).toFixed(6)}
                       </td>
@@ -286,6 +391,11 @@ export function TarjetaEsquema({
                   <td className="py-1.5 pr-2 text-right">
                     {pct2(vpn.flujos.reduce((a, f) => a + f.pct, 0))}
                   </td>
+                  {referencia ? (
+                    <td className="whitespace-nowrap py-1.5 pr-2 text-right">
+                      {formatoMoneda(precioFinal)}
+                    </td>
+                  ) : null}
                   <td />
                   <td className="py-1.5 text-right">{vpn.factor_vpn.toFixed(6)}</td>
                 </tr>
@@ -293,6 +403,14 @@ export function TarjetaEsquema({
             </table>
           </div>
           <GraficoCalendario flujos={vpn.flujos} horizonte={vpn.horizonte_meses} />
+          {referencia ? (
+            <p className="text-[11px] text-muted-foreground lg:col-span-2">
+              Los montos son sobre {referencia.etiqueta.toLowerCase()} y ya traen aplicado el
+              ajuste del esquema. El <strong>factor</strong> es cuanto vale hoy un peso que
+              entra ese mes, y el <strong>valor presente</strong> de cada renglon es su monto
+              descontado: por eso el total del valor presente es menor que el precio.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </Card>
@@ -309,6 +427,25 @@ function Chip({ children, clase }: { children: React.ReactNode; clase?: string }
     >
       {children}
     </span>
+  );
+}
+
+/** Un dato del bloque en pesos: monto grande, contexto abajo. */
+function Cifra({
+  titulo,
+  valor,
+  nota,
+}: {
+  titulo: string;
+  valor: string;
+  nota?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground">{titulo}</p>
+      <p className="text-base font-semibold tabular-nums text-foreground">{valor}</p>
+      {nota ? <p className="text-[11px] text-muted-foreground">{nota}</p> : null}
+    </div>
   );
 }
 

@@ -4,17 +4,34 @@ import { ChevronDown, Info, Plus, TriangleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { TarjetaEsquema } from "@/features/precios/components/TarjetaEsquema";
 import { ModalEsquema } from "@/features/precios/components/ModalEsquema";
 import { useEsquemasVPN } from "@/features/precios/hooks/useEsquemasVPN";
 import { esInejecutable } from "@/features/precios/engine/npv";
 import { useEsquemasStore } from "@/features/precios/stores/esquemasStore";
+import { useVersionesStore } from "@/features/precios/stores/versionesStore";
+import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
+import { ESTATUS_A_LA_VENTA } from "@/features/precios/services/inventarioReal";
+import { formatoMoneda } from "@/features/precios/lib/formato";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { soportaCamposDeMotor } from "@/features/precios/services/esquemasReales";
 import { registrarEvento } from "@/features/precios/services/auditoria";
 import type {
   EsquemaFinanciamiento,
   TipoEsquema,
+  VersionLista,
 } from "@/features/precios/types/dominio";
+
+/** Referencia estable para proyectos sin escenarios guardados. */
+const SIN_VERSIONES: VersionLista[] = [];
 import { pct2 } from "@/features/precios/lib/formatoVpn";
 
 function PantallaEsquemas() {
@@ -62,19 +79,120 @@ function PantallaEsquemas() {
   const [infoVisible, setInfoVisible] = useState(true);
   const [infoAbierta, setInfoAbierta] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState<TipoEsquema | "todos">("todos");
+  /*
+   * Arranca en los que se ofrecen.
+   *
+   * Los dados de baja se conservan —una oferta pudo cotizarse con ellos— pero en
+   * un proyecto con historia son mayoría: en Monócolo, 8 de 13. Verlos primero
+   * hace parecer que hay trece políticas comerciales vigentes. El contador dice
+   * cuántos hay para que se sepa que existen.
+   */
+  const [filtroEstado, setFiltroEstado] = useState<"activos" | "inactivos" | "todos">(
+    "activos",
+  );
+
+  const { propiedades, desgloses, indices } = usePreciosProyecto();
+  const versionesProyecto =
+    useVersionesStore((s) => s.versionesPorProyecto)[idProyecto] ?? SIN_VERSIONES;
+
+  /** `""` = el borrador vivo; si no, el escenario guardado que se está mirando. */
+  const [idEscenarioRef, setIdEscenarioRef] = useState("");
+  /** `""` = el promedio del proyecto; si no, un modelo. */
+  const [idModeloRef, setIdModeloRef] = useState("");
+
+  const escenarioRef = idEscenarioRef
+    ? (versionesProyecto.find((v) => v.id_version === idEscenarioRef) ?? null)
+    : null;
+
+  /*
+   * El precio de cada unidad según el escenario elegido.
+   *
+   * Del borrador vivo salen los desgloses que el motor calcula ahora; de un
+   * escenario guardado, su snapshot. Es la diferencia entre "cuánto cobraría hoy
+   * con este esquema" y "cuánto habría cobrado con la lista que guardé el martes".
+   */
+  const precioDeUnidad = useMemo(() => {
+    const m = new Map<string, number>();
+    if (escenarioRef) {
+      for (const [id, p] of Object.entries(escenarioRef.precios)) {
+        m.set(id, (p as { precio_lista: number }).precio_lista);
+      }
+      return m;
+    }
+    for (const d of desgloses) m.set(d.id_propiedad, d.precio_lista);
+    return m;
+  }, [escenarioRef, desgloses]);
+
+  /*
+   * Precio promedio ponderado del inventario DISPONIBLE, por modelo.
+   *
+   * Disponible y no todo el inventario: un esquema se le ofrece a quien todavía
+   * puede comprar, y el promedio de lo ya vendido describe el pasado. Es el mismo
+   * criterio que el Forecast de Ingresos y que Configuración del Motor, para que
+   * las tres pantallas hablen del mismo número.
+   */
+  const referencias = useMemo(() => {
+    const acum = new Map<string, { unidades: number; suma: number }>();
+    let unidadesTotal = 0;
+    let sumaTotal = 0;
+    for (const p of propiedades) {
+      if (!ESTATUS_A_LA_VENTA.has(p.estatus)) continue;
+      const precio = precioDeUnidad.get(p.id_propiedad);
+      if (!precio || precio <= 0) continue;
+      const a = acum.get(p.id_modelo) ?? { unidades: 0, suma: 0 };
+      a.unidades += 1;
+      a.suma += precio;
+      acum.set(p.id_modelo, a);
+      unidadesTotal += 1;
+      sumaTotal += precio;
+    }
+    const modelos = [...acum.entries()]
+      .map(([id, v]) => ({
+        id,
+        nombre: indices?.modelosPorId[id]?.nombre ?? id,
+        unidades: v.unidades,
+        precio: v.suma / v.unidades,
+      }))
+      .sort((a, b) => b.unidades - a.unidades);
+    return {
+      modelos,
+      proyecto: {
+        id: "",
+        nombre: "Promedio del proyecto",
+        unidades: unidadesTotal,
+        precio: unidadesTotal > 0 ? sumaTotal / unidadesTotal : 0,
+      },
+    };
+  }, [propiedades, precioDeUnidad, indices]);
+
+  const referencia = idModeloRef
+    ? (referencias.modelos.find((m) => m.id === idModeloRef) ?? referencias.proyecto)
+    : referencias.proyecto;
 
   const conteo = {
     todos: esquemas.length,
     preventa: esquemas.filter((e) => e.tipo_esquema !== "post_entrega").length,
     post_entrega: esquemas.filter((e) => e.tipo_esquema === "post_entrega").length,
   };
-  const visibles = esquemas.filter((e) =>
-    filtroTipo === "todos"
-      ? true
-      : filtroTipo === "post_entrega"
-        ? e.tipo_esquema === "post_entrega"
-        : e.tipo_esquema !== "post_entrega",
-  );
+  const conteoEstado = {
+    todos: esquemas.length,
+    activos: esquemas.filter((e) => e.activo).length,
+    inactivos: esquemas.filter((e) => !e.activo).length,
+  };
+
+  const visibles = esquemas
+    .filter((e) =>
+      filtroTipo === "todos"
+        ? true
+        : filtroTipo === "post_entrega"
+          ? e.tipo_esquema === "post_entrega"
+          : e.tipo_esquema !== "post_entrega",
+    )
+    .filter((e) =>
+      filtroEstado === "todos" ? true : filtroEstado === "activos" ? e.activo : !e.activo,
+    )
+    // Los que se ofrecen, primero: es lo que se está decidiendo.
+    .sort((a, b) => Number(b.activo) - Number(a.activo));
 
   /**
    * Un esquema de preventa deja de poder venderse cuando ya no cabe su calendario
@@ -103,6 +221,44 @@ function PantallaEsquemas() {
   }, [esquemas, horizontesPorTorre]);
 
   const hoy = new Date();
+
+  /*
+   * Una fila por esquema, no una por esquema y torre.
+   *
+   * Con 5 esquemas y 3 torres eran 15 renglones que casi siempre dicen lo mismo,
+   * porque las torres suelen entregarse el mismo mes. Se muestra la fecha más
+   * apretada —la que manda— y el detalle por torre solo cuando difieren.
+   */
+  const caducidadPorEsquema = useMemo(() => {
+    const g = new Map<
+      string,
+      {
+        esquema: EsquemaFinanciamiento;
+        meses: number;
+        peor: Date;
+        torres: Array<{ torre: string; fecha: Date }>;
+      }
+    >();
+    for (const f of caducidades) {
+      const g0 = g.get(f.esquema.id_esquema) ?? {
+        esquema: f.esquema,
+        meses: f.meses,
+        peor: f.fecha,
+        torres: [] as Array<{ torre: string; fecha: Date }>,
+      };
+      g0.torres.push({ torre: f.torre, fecha: f.fecha });
+      if (f.fecha.getTime() < g0.peor.getTime()) g0.peor = f.fecha;
+      g.set(f.esquema.id_esquema, g0);
+    }
+    return [...g.values()].sort((a, b) => a.peor.getTime() - b.peor.getTime());
+  }, [caducidades]);
+
+  const vencidos = caducidadPorEsquema.filter(
+    (c) => c.peor.getTime() < hoy.getTime(),
+  ).length;
+
+  const fechaCorta = (d: Date) =>
+    d.toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "2-digit" });
 
   return (
     <div className="space-y-5">
@@ -179,12 +335,23 @@ function PantallaEsquemas() {
       {caducidades.length > 0 ? (
         <div className="rounded-lg border border-border">
           <div className="border-b border-border px-4 py-2.5">
-            <h3 className="text-sm font-semibold text-foreground">
-              Caducidad de esquemas
-            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Caducidad de esquemas
+              </h3>
+              {vencidos > 0 ? (
+                <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+                  {vencidos} de {caducidadPorEsquema.length} ya vencieron
+                </span>
+              ) : (
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  los {caducidadPorEsquema.length} vigentes
+                </span>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Último día en que el calendario todavía cabe antes de la entrega de cada
-              torre. Después de esa fecha el esquema ya no es vendible en esa torre.
+              Último día en que el calendario todavía cabe antes de la entrega de la torre.
+              Después de esa fecha el esquema ya no es vendible ahí.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -192,45 +359,78 @@ function PantallaEsquemas() {
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Esquema</th>
-                  <th className="px-4 py-2 text-left font-medium">Torre</th>
-                  <th className="px-4 py-2 text-left font-medium">Largo del plan</th>
-                  <th className="px-4 py-2 text-left font-medium">Caduca</th>
+                  <th className="px-4 py-2 text-right font-medium">Largo del plan</th>
+                  <th className="px-4 py-2 text-right font-medium">Caduca</th>
+                  <th className="px-4 py-2 text-left font-medium">Torres</th>
+                  <th className="px-4 py-2 text-left font-medium" />
                 </tr>
               </thead>
               <tbody>
-                {caducidades.map((c, i) => {
-                  const vencido = c.fecha.getTime() < hoy.getTime();
+                {caducidadPorEsquema.map((c) => {
+                  const vencido = c.peor.getTime() < hoy.getTime();
+                  // Con todas las torres entregando el mismo mes, listarlas una por
+                  // una no agrega nada; solo se detallan cuando difieren.
+                  const distintas = new Set(c.torres.map((t) => t.fecha.getTime())).size > 1;
                   return (
                     <tr
-                      key={`${c.esquema.id_esquema}-${c.torre}-${i}`}
-                      className="border-t border-border"
+                      key={c.esquema.id_esquema}
+                      className="border-t border-border transition-colors hover:bg-muted/40"
                     >
-                      <td className="px-4 py-1.5 font-medium text-foreground">
+                      <td className="px-4 py-2 font-medium text-foreground">
                         {c.esquema.nombre}
                       </td>
-                      <td className="px-4 py-1.5 text-muted-foreground">{c.torre}</td>
-                      <td className="px-4 py-1.5 tabular-nums text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-muted-foreground">
                         {c.meses} meses
                       </td>
                       <td
-                        className={
-                          vencido
-                            ? "px-4 py-1.5 tabular-nums text-destructive"
-                            : "px-4 py-1.5 tabular-nums text-foreground"
-                        }
+                        className={cn(
+                          "whitespace-nowrap px-4 py-2 text-right tabular-nums",
+                          vencido ? "text-destructive" : "text-foreground",
+                        )}
                       >
-                        {c.fecha.toLocaleDateString("es-MX", {
-                          year: "numeric",
-                          month: "short",
-                          day: "2-digit",
-                        })}
-                        {vencido ? " · ya vencido" : ""}
+                        {fechaCorta(c.peor)}
+                        {vencido ? (
+                          <span className="block text-xs font-medium">ya vencido</span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">
+                        {distintas
+                          ? c.torres
+                              .map((t) => `${t.torre}: ${fechaCorta(t.fecha)}`)
+                              .join(" · ")
+                          : `${c.torres.map((t) => t.torre).join(", ")} · misma fecha`}
+                      </td>
+                      <td className="px-4 py-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditando(c.esquema);
+                            setModal(true);
+                          }}
+                        >
+                          Acortar el plan
+                        </Button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="border-t border-border px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">
+              La fecha no se captura: es la entrega de la torre menos el largo del plan
+              —enganche + mes de inicio + mensualidades—. Se mueve por dos lados:
+              <strong> acortando el plan</strong> del esquema, aquí mismo, o corrigiendo la
+              <strong> fecha de entrega de la torre</strong> en Inventarios → Proyectos →
+              Editar Proyecto → Espacios.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Un esquema vencido no se bloquea solo: sigue apareciendo en el comparador y en
+              el cotizador. Si ya no se piensa ofrecer, hay que darlo de baja con el
+              interruptor de su tarjeta.
+            </p>
           </div>
         </div>
       ) : null}
@@ -303,6 +503,96 @@ function PantallaEsquemas() {
         ))}
       </div>
 
+      <div className="rounded-lg border border-border p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-[13px] font-medium text-muted-foreground">
+              Modelo de referencia
+            </Label>
+            <Select value={idModeloRef || "__proyecto__"} onValueChange={(v) => setIdModeloRef(v === "__proyecto__" ? "" : v)}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__proyecto__">
+                  Promedio del proyecto · {referencias.proyecto.unidades} u.
+                </SelectItem>
+                {referencias.modelos.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre} · {m.unidades} u.
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[13px] font-medium text-muted-foreground">
+              Escenario de precios
+            </Label>
+            <Select value={idEscenarioRef || "__vivo__"} onValueChange={(v) => setIdEscenarioRef(v === "__vivo__" ? "" : v)}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__vivo__">Borrador vivo</SelectItem>
+                {[...versionesProyecto]
+                  .sort((a, b) => b.numero - a.numero)
+                  .map((v) => (
+                    <SelectItem key={v.id_version} value={v.id_version}>
+                      v{v.numero} · {v.nombre}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="pb-1">
+            <p className="text-[11px] text-muted-foreground">Precio de referencia</p>
+            <p className="text-lg font-semibold tabular-nums text-foreground">
+              {referencia.precio > 0 ? formatoMoneda(referencia.precio) : "—"}
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-2 text-xs text-muted-foreground">
+          Es el precio promedio ponderado del inventario <strong>disponible a la venta</strong>
+          {" "}de {referencia.nombre.toLowerCase()}, con{" "}
+          {escenarioRef ? `el escenario v${escenarioRef.numero}` : "el borrador vivo"}. Cada
+          esquema traduce ese precio a enganche, mensualidad y pago a entrega. Se excluye lo
+          ya vendido: un esquema se le ofrece a quien todavía puede comprar.
+        </p>
+        {referencia.unidades === 0 ? (
+          <p className="mt-1 text-xs text-destructive">
+            No hay unidades disponibles con precio en esta selección, así que las tarjetas
+            solo muestran porcentajes y factores.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="inline-flex gap-1 rounded-md border border-border p-1">
+        {(
+          [
+            ["activos", `Se ofrecen (${conteoEstado.activos})`],
+            ["inactivos", `Dados de baja (${conteoEstado.inactivos})`],
+            ["todos", `Todos (${conteoEstado.todos})`],
+          ] as Array<["activos" | "inactivos" | "todos", string]>
+        ).map(([v, t]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setFiltroEstado(v)}
+            className={
+              filtroEstado === v
+                ? "rounded bg-muted px-3 py-1 text-[13px] font-medium"
+                : "rounded px-3 py-1 text-[13px] text-muted-foreground"
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-4">
         {visibles.map((e) => {
           const vpn = resultados[e.id_esquema];
@@ -328,6 +618,15 @@ function PantallaEsquemas() {
               detalleTorres={detalle}
               factorPonderadoProyecto={bloque?.ponderado}
               ponderadoParcial={bloque?.parcial}
+              referencia={
+                referencia.precio > 0
+                  ? {
+                      etiqueta: referencia.nombre,
+                      precio: referencia.precio,
+                      unidades: referencia.unidades,
+                    }
+                  : undefined
+              }
               onEditar={() => {
                 setEditando(e);
                 setModal(true);

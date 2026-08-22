@@ -826,6 +826,188 @@ const htmlToPlain = (h?: string | null) =>
     .replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#39;/g, "'").replace(/&quot;/gi, '"')
     .replace(/\s+/g, " ").trim();
 
+// Reporte semanal de seguimientos (Fase 3, ticket #1050). Botón en el tablero de Negocios: junta los
+// negocios de un vendedor (opcionalmente filtrados por proyecto) con la ÚLTIMA nota de cada cliente,
+// los manda a la Edge Function reporte-semanal-negocios (Claude) y muestra un reporte ejecutivo
+// agrupado por probabilidad de cierre, listo para copiar. Match/armado respeta RLS.
+export function ReporteSemanalDialog({ owners }: { owners: any[] }) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [vendedor, setVendedor] = useState<string>("");
+  const [proyecto, setProyecto] = useState<string>("all");
+  const [loading, setLoading] = useState(false);
+  const [reporte, setReporte] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{ clientes: number } | null>(null);
+
+  useEffect(() => { if (open && !vendedor && user?.id) setVendedor(user.id); }, [open, user, vendedor]);
+
+  const { data: proyectos } = useQuery({
+    queryKey: ["reporte-proyectos"],
+    enabled: open,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("proyectos").select("id, nombre").eq("activo", true).order("nombre");
+      return (data ?? []) as { id: number; nombre: string }[];
+    },
+  });
+
+  const generar = async () => {
+    if (!vendedor) { toast.error("Elige un vendedor."); return; }
+    setLoading(true); setReporte(null); setMeta(null);
+    try {
+      // 1) Negocios activos del vendedor (con contacto).
+      const { data: negs } = await (supabase as any).from("crm_negocios")
+        .select("id, nombre, id_entidad_relacionada, fecha_creacion")
+        .eq("id_usuario_propietario", vendedor).eq("activo", true);
+      const list = (((negs ?? []) as any[])).filter((n) => n.id_entidad_relacionada);
+      if (!list.length) { toast.error("Ese vendedor no tiene negocios activos."); setLoading(false); return; }
+      const erIds = Array.from(new Set(list.map((n) => n.id_entidad_relacionada)));
+      // 2) Entidad → persona.
+      const { data: ers } = await (supabase as any).from("entidades_relacionadas").select("id, id_persona").in("id", erIds);
+      const erToPersona = new Map(((ers ?? []) as any[]).map((e) => [e.id, e.id_persona]));
+      const personaIds = Array.from(new Set(((ers ?? []) as any[]).map((e) => e.id_persona).filter(Boolean)));
+      // 3) Personas (nombre).
+      const { data: personas } = personaIds.length
+        ? await (supabase as any).from("personas").select("id, nombre_legal, nombre_comercial").in("id", personaIds)
+        : { data: [] };
+      const personaById = new Map(((personas ?? []) as any[]).map((p) => [p.id, p]));
+      // 4) Última nota por entidad (orden desc → primera por entidad = la más reciente).
+      const { data: notas } = await (supabase as any).from("crm_notas")
+        .select("id_entidad_relacionada, contenido, fecha_creacion")
+        .in("id_entidad_relacionada", erIds).eq("activo", true).order("fecha_creacion", { ascending: false });
+      const ultimaByEr = new Map<number, any>();
+      for (const n of ((notas ?? []) as any[])) if (!ultimaByEr.has(n.id_entidad_relacionada)) ultimaByEr.set(n.id_entidad_relacionada, n);
+      // 5) Unidades + proyecto por persona (waterfall batched vía ofertas).
+      const { data: ofertas } = personaIds.length
+        ? await (supabase as any).from("ofertas").select("id_persona_lead, id_propiedad").eq("activo", true).in("id_persona_lead", personaIds)
+        : { data: [] };
+      const propIds = Array.from(new Set(((ofertas ?? []) as any[]).map((o) => o.id_propiedad).filter(Boolean)));
+      const { data: props } = propIds.length
+        ? await (supabase as any).from("propiedades").select("id, numero_propiedad, id_edificio_modelo").in("id", propIds)
+        : { data: [] };
+      const propById = new Map(((props ?? []) as any[]).map((p) => [p.id, p]));
+      const emIds = Array.from(new Set(((props ?? []) as any[]).map((p) => p.id_edificio_modelo).filter(Boolean)));
+      const { data: ems } = emIds.length
+        ? await (supabase as any).from("edificios_modelos").select("id, id_edificio").in("id", emIds)
+        : { data: [] };
+      const emById = new Map(((ems ?? []) as any[]).map((e) => [e.id, e]));
+      const edIds = Array.from(new Set(((ems ?? []) as any[]).map((e) => e.id_edificio).filter(Boolean)));
+      const { data: eds } = edIds.length
+        ? await (supabase as any).from("edificios").select("id, id_proyecto").in("id", edIds)
+        : { data: [] };
+      const edById = new Map(((eds ?? []) as any[]).map((e) => [e.id, e]));
+      const prIds = Array.from(new Set(((eds ?? []) as any[]).map((e) => e.id_proyecto).filter(Boolean)));
+      const { data: prs } = prIds.length
+        ? await (supabase as any).from("proyectos").select("id, nombre").in("id", prIds)
+        : { data: [] };
+      const prById = new Map(((prs ?? []) as any[]).map((p) => [p.id, p]));
+      const unitsByPersona = new Map<number, { unidades: Set<string>; proyectos: Set<string> }>();
+      for (const o of ((ofertas ?? []) as any[])) {
+        const p = propById.get(o.id_propiedad); if (!p) continue;
+        const em = emById.get(p.id_edificio_modelo); const ed = em ? edById.get(em.id_edificio) : null; const pr = ed ? prById.get(ed.id_proyecto) : null;
+        if (!unitsByPersona.has(o.id_persona_lead)) unitsByPersona.set(o.id_persona_lead, { unidades: new Set(), proyectos: new Set() });
+        const entry = unitsByPersona.get(o.id_persona_lead)!;
+        if (p.numero_propiedad) entry.unidades.add(String(p.numero_propiedad));
+        if (pr?.nombre) entry.proyectos.add(pr.nombre);
+      }
+      // 6) Arma la lista de clientes (dedup por persona; solo con nota de seguimiento; filtro por proyecto).
+      const proyectoNombre = proyecto === "all" ? null : ((proyectos ?? []).find((p) => String(p.id) === String(proyecto))?.nombre ?? null);
+      const seen = new Set<number>();
+      const clientes: any[] = [];
+      for (const n of list) {
+        const persona = erToPersona.get(n.id_entidad_relacionada);
+        if (!persona || seen.has(persona)) continue;
+        const nota = ultimaByEr.get(n.id_entidad_relacionada);
+        if (!nota) continue; // el reporte es de seguimientos: se necesita al menos una nota
+        const info = unitsByPersona.get(persona);
+        const proyectosCliente = info ? Array.from(info.proyectos) : [];
+        if (proyectoNombre && !proyectosCliente.includes(proyectoNombre)) continue;
+        seen.add(persona);
+        const p = personaById.get(persona);
+        clientes.push({
+          cliente: (p?.nombre_legal || p?.nombre_comercial || n.nombre || "Sin nombre").trim(),
+          proyecto: proyectoNombre || proyectosCliente[0] || null,
+          unidades: info ? Array.from(info.unidades) : [],
+          ultima_nota: htmlToPlain(nota.contenido).slice(0, 800),
+          fecha_nota: nota.fecha_creacion ? String(nota.fecha_creacion).split("T")[0] : null,
+        });
+      }
+      if (!clientes.length) {
+        toast.error(`No hay clientes con notas de seguimiento${proyectoNombre ? " en ese proyecto." : "."}`);
+        setLoading(false); return;
+      }
+      const vendedorNombre = owners.find((o) => o.id === vendedor)?.full_name || "Vendedor";
+      const { data, error } = await (supabase as any).functions.invoke("reporte-semanal-negocios", {
+        body: { vendedor_nombre: vendedorNombre, proyecto: proyectoNombre, clientes },
+      });
+      if (error) throw new Error(error.message || "Error al invocar la IA");
+      if (!data?.ok) throw new Error(data?.error || "No se pudo generar el reporte");
+      setReporte(data.resultado?.reporte || "");
+      setMeta({ clientes: clientes.length });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al generar el reporte");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copiar = () => {
+    if (!reporte) return;
+    try { navigator.clipboard.writeText(reporte); toast.success("Reporte copiado"); }
+    catch { toast.error("No se pudo copiar"); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setReporte(null); setMeta(null); } }}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline"><Calendar className="h-4 w-4 mr-1" />Reporte semanal</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" />Reporte semanal de seguimientos</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Vendedor</Label>
+              <Select value={vendedor} onValueChange={setVendedor}>
+                <SelectTrigger><SelectValue placeholder="Elige vendedor" /></SelectTrigger>
+                <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.full_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Proyecto (opcional)</Label>
+              <Select value={proyecto} onValueChange={setProyecto}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los proyectos</SelectItem>
+                  {(proyectos ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">La IA estima el % de cada cliente desde su última nota y los agrupa por probabilidad.</p>
+            <Button size="sm" onClick={generar} disabled={loading || !vendedor} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              {loading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Generando…</> : <><Sparkles className="h-4 w-4 mr-1.5" />Generar reporte</>}
+            </Button>
+          </div>
+          {reporte && (
+            <section className="border border-border rounded-lg">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                <span className="text-xs text-muted-foreground">{meta ? `${meta.clientes} cliente(s)` : ""}</span>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={copiar}><Copy className="h-3.5 w-3.5 mr-1" />Copiar</Button>
+              </div>
+              <div className="p-3 max-h-[50vh] overflow-y-auto">
+                <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{reporte}</pre>
+              </div>
+            </section>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // Pestaña "Asistente IA". El asesor captura el contexto de la cita y, además, la IA recibe
 // automáticamente el historial ya registrado del negocio (perfil, notas, citas, tareas) →
 // Claude (Edge Function analizar-negocio-ia) integra ambos y devuelve perfil, % de cierre,
@@ -965,10 +1147,9 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
     if (!erId) { toast.error("El negocio no tiene contacto asociado para guardar la nota."); return; }
     if (!result) return;
     setSavingNote(true);
-    const prob = result.probabilidad_cierre;
-    const html = `<p><strong>Análisis IA — probabilidad de cierre: ${prob ?? "?"}%</strong> · Perfil: ${result.perfil_cliente || "—"}</p>`
-      + `<p>${(result.nota_bitacora || "").replace(/\n/g, "<br/>")}</p>`
-      + (result.justificacion ? `<p><em>${result.justificacion.replace(/\n/g, "<br/>")}</em></p>` : "");
+    // La IA ya devuelve la nota con su estructura completa (título, estatus, %, perfil,
+    // unidades, diagnóstico, próximo paso). Se guarda tal cual; solo saltos de línea → <br/>.
+    const html = `<p>${(result.nota_bitacora || "").replace(/\n/g, "<br/>")}</p>`;
     const { error } = await (supabase as any).from("crm_notas").insert({
       id_entidad_relacionada: Number(erId), id_usuario: user?.id ?? null, contenido: html,
       fecha_actividad: new Date().toISOString().split("T")[0],

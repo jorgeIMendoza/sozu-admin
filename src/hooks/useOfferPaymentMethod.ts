@@ -11,13 +11,23 @@ import { supabase } from "@/integrations/supabase/client";
  * Pipeline:
  *  1) `cuentas_cobranza` → id_oferta, precio_final, iva_incluido
  *  2) `ofertas` → id_esquema_pago_seleccionado
- *  3) `esquemas_pago` → porcentajes + número de mensualidades
+ *  3) `esquemas_pago` → nombre del esquema y porcentajes de la plantilla
  *  4) `acuerdos_pago` por id_cuenta_cobranza → cronograma de pagos
  *  5) `conceptos_pago` para traducir id_concepto a nombre legible
+ *
+ * IMPORTANTE — los porcentajes de `esquemas_pago` describen la PLANTILLA, no la
+ * operación: los esquemas escalonados/manuales suelen guardar
+ * `porcentaje_mensualidades = 0` y cargar todo el resto en `porcentaje_entrega`
+ * aunque el cronograma sí tenga parcialidades mensuales (p. ej. esquema
+ * "Escalonado" 6/0/94 con 35 parcialidades de $25,000 → el real es 6/16.97/77.03).
+ * Por eso el desglose que se muestra se DERIVA sumando `acuerdos_pago` por
+ * concepto (`desglose`); la plantilla solo se usa de respaldo cuando la cuenta
+ * todavía no tiene cronograma.
  */
 
 export interface AcuerdoPagoRow {
   id: number;
+  idConcepto: number | null;
   conceptoNombre: string;
   monto: number;
   orden: number;
@@ -37,12 +47,48 @@ export interface EsquemaPagoInfo {
   esManual: boolean;
 }
 
+/**
+ * Agrupación de conceptos de `acuerdos_pago` para el desglose
+ * enganche / mensualidades / contra entrega. Ids de `conceptos_pago`.
+ */
+const CONCEPTOS_ENGANCHE = [1, 2]; // Apartado, Enganche
+const CONCEPTOS_MENSUALIDADES = [5]; // Parcialidad
+const CONCEPTOS_ENTREGA = [3]; // Pago a contra entrega
+
+/**
+ * Desglose real de la operación. Los montos se derivan del cronograma y los
+ * porcentajes se calculan sobre `base` (precio final; si no hay, la suma del
+ * cronograma). El monto de contra entrega se toma del acuerdo de concepto 3 y,
+ * si la cuenta aún no lo tiene, se obtiene como residual:
+ * `base - enganche - mensualidades - otros`.
+ */
+export interface DesgloseFormaPago {
+  base: number;
+  montoEnganche: number;
+  montoMensualidades: number;
+  montoEntrega: number;
+  /** Conceptos fuera del plan de venta (pago especial, cesión, asignación…). */
+  montoOtros: number;
+  porcentajeEnganche: number;
+  porcentajeMensualidades: number;
+  porcentajeEntrega: number;
+  porcentajeOtros: number;
+  pagosEnganche: number;
+  numeroMensualidades: number;
+  /** true = calculado del cronograma; false = tomado de la plantilla del esquema. */
+  derivadoDeCronograma: boolean;
+  /** true = no hay acuerdo de contra entrega y el monto es el residual del precio. */
+  entregaEsResidual: boolean;
+}
+
 export interface FormaPagoOferta {
   idCuentaCobranza: number;
   idOferta: number | null;
   precioFinal: number;
   ivaIncluido: boolean;
   esquema: EsquemaPagoInfo | null;
+  /** Desglose a mostrar. Derivado del cronograma; respaldo = plantilla del esquema. */
+  desglose: DesgloseFormaPago | null;
   acuerdos: AcuerdoPagoRow[];
   // Sumatorias calculadas para mostrar avance.
   totalAcuerdos: number;
@@ -133,6 +179,7 @@ async function fetchFormaPago(idCuentaCobranza: number): Promise<FormaPagoOferta
 
   const acuerdos: AcuerdoPagoRow[] = acuerdosRaw.map((a) => ({
     id: a.id as number,
+    idConcepto: a.id_concepto != null ? Number(a.id_concepto) : null,
     conceptoNombre: conceptoMap.get(a.id_concepto) ?? `Concepto ${a.id_concepto}`,
     monto: Number(a.monto ?? 0),
     orden: Number(a.orden ?? 0),
@@ -143,16 +190,105 @@ async function fetchFormaPago(idCuentaCobranza: number): Promise<FormaPagoOferta
   const totalAcuerdos = acuerdos.reduce((s, a) => s + a.monto, 0);
   const totalPagado = acuerdos.filter((a) => a.pagoCompletado).reduce((s, a) => s + a.monto, 0);
   const totalPendiente = totalAcuerdos - totalPagado;
+  const precioFinal = Number(cc.precio_final ?? 0);
 
   return {
     idCuentaCobranza,
     idOferta: cc.id_oferta ?? null,
-    precioFinal: Number(cc.precio_final ?? 0),
+    precioFinal,
     ivaIncluido: !!cc.iva_incluido,
     esquema,
+    desglose: calcularDesglose(acuerdos, precioFinal, totalAcuerdos, esquema),
     acuerdos,
     totalAcuerdos,
     totalPagado,
     totalPendiente,
+  };
+}
+
+/**
+ * Desglose enganche / mensualidades / contra entrega a partir del cronograma.
+ *
+ * Los porcentajes de `esquemas_pago` no sirven para esto: la plantilla del
+ * esquema puede traer `porcentaje_mensualidades = 0` con todo el resto en
+ * `porcentaje_entrega` mientras el cronograma tiene N parcialidades. Aquí se
+ * suman los `acuerdos_pago` por concepto y se saca el porcentaje sobre el
+ * precio final (o sobre la suma del cronograma si no hay precio capturado).
+ *
+ * Solo se cae a la plantilla del esquema cuando la cuenta todavía no tiene
+ * cronograma (o el cronograma no tiene monto), porque ahí no hay nada que sumar.
+ */
+function calcularDesglose(
+  acuerdos: AcuerdoPagoRow[],
+  precioFinal: number,
+  totalAcuerdos: number,
+  esquema: EsquemaPagoInfo | null,
+): DesgloseFormaPago | null {
+  const base = precioFinal > 0 ? precioFinal : totalAcuerdos;
+
+  // Sin cronograma con montos no hay nada que derivar: se muestra la plantilla.
+  if (totalAcuerdos <= 0) {
+    if (!esquema) return null;
+    const pct = (p: number) => (base > 0 ? (base * p) / 100 : 0);
+    return {
+      base,
+      montoEnganche: pct(esquema.porcentajeEnganche),
+      montoMensualidades: pct(esquema.porcentajeMensualidades),
+      montoEntrega: pct(esquema.porcentajeEntrega),
+      montoOtros: 0,
+      porcentajeEnganche: esquema.porcentajeEnganche,
+      porcentajeMensualidades: esquema.porcentajeMensualidades,
+      porcentajeEntrega: esquema.porcentajeEntrega,
+      porcentajeOtros: 0,
+      pagosEnganche: esquema.numeroPagosEnganche,
+      numeroMensualidades: esquema.numeroMensualidades,
+      derivadoDeCronograma: false,
+      entregaEsResidual: false,
+    };
+  }
+
+  const enGrupo = (a: AcuerdoPagoRow, ids: number[]) =>
+    a.idConcepto != null && ids.includes(a.idConcepto);
+  const sumar = (ids: number[]) =>
+    acuerdos.filter((a) => enGrupo(a, ids)).reduce((s, a) => s + a.monto, 0);
+  const contar = (ids: number[]) => acuerdos.filter((a) => enGrupo(a, ids)).length;
+
+  const montoEnganche = sumar(CONCEPTOS_ENGANCHE);
+  const montoMensualidades = sumar(CONCEPTOS_MENSUALIDADES);
+  const acuerdosEntrega = acuerdos.filter((a) => enGrupo(a, CONCEPTOS_ENTREGA));
+  const montoOtros = acuerdos
+    .filter(
+      (a) =>
+        !enGrupo(a, CONCEPTOS_ENGANCHE) &&
+        !enGrupo(a, CONCEPTOS_MENSUALIDADES) &&
+        !enGrupo(a, CONCEPTOS_ENTREGA),
+    )
+    .reduce((s, a) => s + a.monto, 0);
+
+  // Contra entrega = lo que queda del precio una vez descontado enganche,
+  // mensualidades y otros. Si ya existe el acuerdo de concepto 3 se usa su
+  // monto (es el dato firme); si no, se muestra el residual.
+  const entregaEsResidual = acuerdosEntrega.length === 0;
+  const residual = Math.max(0, base - montoEnganche - montoMensualidades - montoOtros);
+  const montoEntrega = entregaEsResidual
+    ? residual
+    : acuerdosEntrega.reduce((s, a) => s + a.monto, 0);
+
+  const pctDe = (monto: number) => (base > 0 ? (monto / base) * 100 : 0);
+
+  return {
+    base,
+    montoEnganche,
+    montoMensualidades,
+    montoEntrega,
+    montoOtros,
+    porcentajeEnganche: pctDe(montoEnganche),
+    porcentajeMensualidades: pctDe(montoMensualidades),
+    porcentajeEntrega: pctDe(montoEntrega),
+    porcentajeOtros: pctDe(montoOtros),
+    pagosEnganche: contar(CONCEPTOS_ENGANCHE),
+    numeroMensualidades: contar(CONCEPTOS_MENSUALIDADES),
+    derivadoDeCronograma: true,
+    entregaEsResidual,
   };
 }
