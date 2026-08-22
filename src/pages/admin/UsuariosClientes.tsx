@@ -357,10 +357,14 @@ export default function UsuariosClientes() {
                   )}
                 </TableCell>
                 <TableCell>
+                  {/* "Temporal" mentia: el flag solo dice que falta el cambio
+                      obligatorio, no que la contrasena sea la temporal. Un usuario
+                      que puso la suya y luego pidio reset por la app sale aqui con
+                      el flag en true y su propia contrasena vigente. */}
                   {usuario.debe_cambiar_password ? (
                     <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
                       <Key className="h-3 w-3 mr-1" />
-                      Temporal
+                      Cambio pendiente
                     </Badge>
                   ) : (
                     <span className="text-muted-foreground text-sm">Personalizada</span>
@@ -385,7 +389,12 @@ export default function UsuariosClientes() {
                           Reenviar Confirmación
                         </Button>
                       )}
-                      {usuario.auth_user_id && !usuario.debe_cambiar_password && (
+                      {/* NO se condiciona a `debe_cambiar_password`: el propio reset
+                          levanta ese flag, asi que esconder el boton cuando esta
+                          en true dejaba sin reintento al usuario cuyo correo de
+                          confirmacion nunca llego (rebote de Postmark), que es
+                          justo cuando hay que reintentar. */}
+                      {usuario.auth_user_id && (
                         <Button
                           variant="outline"
                           size="sm"

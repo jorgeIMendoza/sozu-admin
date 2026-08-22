@@ -247,7 +247,7 @@ function UsersTable({
                     {usuario.debe_cambiar_password ? (
                       <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
                         <Key className="h-3 w-3 mr-1" />
-                        Temporal
+                        Cambio pendiente
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground text-sm">Personalizada</span>
@@ -326,19 +326,19 @@ function UsersTable({
                           )
                         ) : (
                           <>
-                            {/* Only show reset button when password is NOT temporary (personalizada) */}
-                            {!usuario.debe_cambiar_password && (
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => onResetPassword(usuario.email)}
-                                title="Resetear contraseña"
-                                className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
-                              >
-                                <RotateCcw className="h-3 w-3 mr-1" />
-                                Resetear
-                              </Button>
-                            )}
+                            {/* Sin condicionar a `debe_cambiar_password`: el reset
+                                levanta ese flag, y esconder el boton por eso deja
+                                sin reintento al usuario que nunca recibio el correo. */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onResetPassword(usuario.email)}
+                              title="Resetear contraseña"
+                              className="hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600"
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Resetear
+                            </Button>
                             {puedeAdministrarCuenta && (
                               <Button
                                 variant="outline"
