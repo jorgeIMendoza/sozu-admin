@@ -965,10 +965,9 @@ export function DealAsistenteIA({ deal }: { deal: any }) {
     if (!erId) { toast.error("El negocio no tiene contacto asociado para guardar la nota."); return; }
     if (!result) return;
     setSavingNote(true);
-    const prob = result.probabilidad_cierre;
-    const html = `<p><strong>Análisis IA — probabilidad de cierre: ${prob ?? "?"}%</strong> · Perfil: ${result.perfil_cliente || "—"}</p>`
-      + `<p>${(result.nota_bitacora || "").replace(/\n/g, "<br/>")}</p>`
-      + (result.justificacion ? `<p><em>${result.justificacion.replace(/\n/g, "<br/>")}</em></p>` : "");
+    // La IA ya devuelve la nota con su estructura completa (título, estatus, %, perfil,
+    // unidades, diagnóstico, próximo paso). Se guarda tal cual; solo saltos de línea → <br/>.
+    const html = `<p>${(result.nota_bitacora || "").replace(/\n/g, "<br/>")}</p>`;
     const { error } = await (supabase as any).from("crm_notas").insert({
       id_entidad_relacionada: Number(erId), id_usuario: user?.id ?? null, contenido: html,
       fecha_actividad: new Date().toISOString().split("T")[0],
