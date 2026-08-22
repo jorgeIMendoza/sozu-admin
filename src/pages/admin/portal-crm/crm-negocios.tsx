@@ -834,18 +834,18 @@ export function ReporteSemanalDialog({ owners }: { owners: any[] }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [vendedor, setVendedor] = useState<string>("");
-  const [proyecto, setProyecto] = useState<string>("all");
+  const [pipeline, setPipeline] = useState<string>("all");
   const [loading, setLoading] = useState(false);
   const [reporte, setReporte] = useState<string | null>(null);
   const [meta, setMeta] = useState<{ clientes: number } | null>(null);
 
   useEffect(() => { if (open && !vendedor && user?.id) setVendedor(user.id); }, [open, user, vendedor]);
 
-  const { data: proyectos } = useQuery({
-    queryKey: ["reporte-proyectos"],
+  const { data: pipelines } = useQuery({
+    queryKey: ["reporte-pipelines"],
     enabled: open,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("proyectos").select("id, nombre").eq("activo", true).order("nombre");
+      const { data } = await (supabase as any).from("crm_pipelines").select("id, nombre").eq("activo", true).order("nombre");
       return (data ?? []) as { id: number; nombre: string }[];
     },
   });
@@ -856,9 +856,9 @@ export function ReporteSemanalDialog({ owners }: { owners: any[] }) {
     try {
       // 1) Negocios activos del vendedor (con contacto).
       const { data: negs } = await (supabase as any).from("crm_negocios")
-        .select("id, nombre, id_entidad_relacionada, fecha_creacion")
+        .select("id, nombre, id_entidad_relacionada, id_pipeline, fecha_creacion")
         .eq("id_usuario_propietario", vendedor).eq("activo", true);
-      const list = (((negs ?? []) as any[])).filter((n) => n.id_entidad_relacionada);
+      const list = (((negs ?? []) as any[])).filter((n) => n.id_entidad_relacionada && (pipeline === "all" || String(n.id_pipeline) === pipeline));
       if (!list.length) { toast.error("Ese vendedor no tiene negocios activos."); setLoading(false); return; }
       const erIds = Array.from(new Set(list.map((n) => n.id_entidad_relacionada)));
       // 2) Entidad → persona.
@@ -910,7 +910,7 @@ export function ReporteSemanalDialog({ owners }: { owners: any[] }) {
         if (pr?.nombre) entry.proyectos.add(pr.nombre);
       }
       // 6) Arma la lista de clientes (dedup por persona; solo con nota de seguimiento; filtro por proyecto).
-      const proyectoNombre = proyecto === "all" ? null : ((proyectos ?? []).find((p) => String(p.id) === String(proyecto))?.nombre ?? null);
+      const pipelineNombre = pipeline === "all" ? null : ((pipelines ?? []).find((p) => String(p.id) === pipeline)?.nombre ?? null);
       const seen = new Set<number>();
       const clientes: any[] = [];
       for (const n of list) {
@@ -920,24 +920,23 @@ export function ReporteSemanalDialog({ owners }: { owners: any[] }) {
         if (!nota) continue; // el reporte es de seguimientos: se necesita al menos una nota
         const info = unitsByPersona.get(persona);
         const proyectosCliente = info ? Array.from(info.proyectos) : [];
-        if (proyectoNombre && !proyectosCliente.includes(proyectoNombre)) continue;
         seen.add(persona);
         const p = personaById.get(persona);
         clientes.push({
           cliente: (p?.nombre_legal || p?.nombre_comercial || n.nombre || "Sin nombre").trim(),
-          proyecto: proyectoNombre || proyectosCliente[0] || null,
+          proyecto: proyectosCliente[0] || null,
           unidades: info ? Array.from(info.unidades) : [],
           ultima_nota: htmlToPlain(nota.contenido).slice(0, 800),
           fecha_nota: nota.fecha_creacion ? String(nota.fecha_creacion).split("T")[0] : null,
         });
       }
       if (!clientes.length) {
-        toast.error(`No hay clientes con notas de seguimiento${proyectoNombre ? " en ese proyecto." : "."}`);
+        toast.error(`No hay clientes con notas de seguimiento${pipelineNombre ? " en ese pipeline." : "."}`);
         setLoading(false); return;
       }
       const vendedorNombre = owners.find((o) => o.id === vendedor)?.full_name || "Vendedor";
       const { data, error } = await (supabase as any).functions.invoke("reporte-semanal-negocios", {
-        body: { vendedor_nombre: vendedorNombre, proyecto: proyectoNombre, clientes },
+        body: { vendedor_nombre: vendedorNombre, pipeline: pipelineNombre, clientes },
       });
       if (error) throw new Error(error.message || "Error al invocar la IA");
       if (!data?.ok) throw new Error(data?.error || "No se pudo generar el reporte");
@@ -975,12 +974,12 @@ export function ReporteSemanalDialog({ owners }: { owners: any[] }) {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Proyecto (opcional)</Label>
-              <Select value={proyecto} onValueChange={setProyecto}>
+              <Label className="text-xs">Pipeline (opcional)</Label>
+              <Select value={pipeline} onValueChange={setPipeline}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos los proyectos</SelectItem>
-                  {(proyectos ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+                  <SelectItem value="all">Todos los pipelines</SelectItem>
+                  {(pipelines ?? []).map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
