@@ -12,6 +12,8 @@ import { useMotorStore } from "@/features/precios/stores/motorStore";
 import type { VersionLista } from "@/features/precios/types/dominio";
 import { useInventarioStore } from "@/features/precios/stores/inventarioStore";
 import { useEsquemasStore } from "@/features/precios/stores/esquemasStore";
+import { establecerActorSesion } from "@/features/precios/services/auditoria";
+import { useAuth } from "@/contexts/AuthContext";
 import { pendientesDelBorrador } from "@/features/precios/engine/semilla";
 import { useVersionesStore } from "@/features/precios/stores/versionesStore";
 import { construirDatosVersion } from "@/features/precios/lib/versiones";
@@ -49,6 +51,21 @@ function PreciosContenido() {
   const cargarProyectos = useInventarioStore((s) => s.cargarProyectos);
   const cargarInventario = useInventarioStore((s) => s.cargarInventario);
   const cargarEsquemas = useEsquemasStore((s) => s.cargarEsquemas);
+  const { profile } = useAuth();
+
+  /*
+   * Quien firma lo que se hace en el modulo es quien tiene la sesion abierta.
+   * Sin esto, la bitacora y el autor de cada escenario salian con un nombre
+   * cableado, que es peor que no tener autor: parece un dato y no lo es.
+   */
+  useEffect(() => {
+    if (!profile) return;
+    establecerActorSesion({
+      id_persona: profile.id_persona ? String(profile.id_persona) : profile.email,
+      nombre: profile.nombre,
+      rol: profile.rol_nombre,
+    });
+  }, [profile]);
   const porProyecto = useInventarioStore((s) => s.porProyecto);
   const errorInventario = useInventarioStore((s) => s.error);
 

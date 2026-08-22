@@ -127,6 +127,15 @@ interface AccionesMotor {
   marcarCalibrado: (fecha?: string) => void;
   /** Camino declarado y auditable: calibración afirmada sin regresión. */
   declararCalibradoManualmente: (justificacion: string) => void;
+  /**
+   * Carga en el motor vivo la configuración de un escenario guardado.
+   *
+   * No lo marca calibrado: se respeta el estado que traía el escenario. Un
+   * borrador plano retomado sigue siendo un borrador plano, y afirmar lo
+   * contrario haría que la Tabla de Precios dejara de advertir que las
+   * desviaciones son esperadas.
+   */
+  retomarEscenario: (motor: MotorPrecio) => void;
   /** Sustituye por completo el motor del proyecto activo y lo marca calibrado. */
   aplicarMotorCalibrado: (motor: MotorPrecio) => void;
   /** Copia curvas y factores de mercado desde otro proyecto (sin precio base). */
@@ -386,6 +395,11 @@ export const useMotorStore = create<EstadoMotor & AccionesMotor>()(
             }),
             false,
           ),
+
+        retomarEscenario: (motor) =>
+          // `invalida` en false: retomar no ensucia la calibración, la reemplaza
+          // por la que el escenario tenía guardada.
+          mutarMotor(() => structuredClone(motor), false),
 
         aplicarMotorCalibrado: (motor) =>
           mutarMotor(

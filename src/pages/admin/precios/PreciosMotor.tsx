@@ -50,7 +50,7 @@ import {
   formatoPorcentaje,
 } from "@/features/precios/lib/formato";
 import { ESTATUS_A_LA_VENTA } from "@/features/precios/services/inventarioReal";
-import type { TipoFactor } from "@/features/precios/types/dominio";
+import type { TipoFactor, VersionLista } from "@/features/precios/types/dominio";
 
 /**
  * Campo numérico que muestra pesos formateados en reposo y number crudo al editar.
@@ -175,12 +175,16 @@ function PantallaMotor() {
     actualizarBaseModelo,
     definirNivelModelo,
     ponerEnPuntoBase,
+    retomarEscenario,
     declararCalibradoManualmente,
     restablecer,
   } = useMotorAuditado();
   const errorMigracion = useMotorStore((s) => s.errorMigracion);
   const idProyectoActivo = useMotorStore((s) => s.idProyectoActivo);
   const crearBorrador = useVersionesStore((s) => s.crearBorrador);
+  const actualizarBorrador = useVersionesStore((s) => s.actualizarBorrador);
+  const archivarVersion = useVersionesStore((s) => s.archivar);
+  const versionesPorProyecto = useVersionesStore((s) => s.versionesPorProyecto);
   const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
@@ -197,6 +201,16 @@ function PantallaMotor() {
   const [guardandoEscenario, setGuardandoEscenario] = useState(false);
   const [nombreEscenario, setNombreEscenario] = useState("");
   const [notasEscenario, setNotasEscenario] = useState("");
+  /**
+   * Escenario que se retomó y se está editando, si lo hay.
+   *
+   * Permite volver a guardarlo encima en vez de dejar una copia nueva cada vez
+   * que se ajusta algo. Solo aplica a borradores: una lista publicada es
+   * inmutable y el store lo rechaza.
+   */
+  const [retomado, setRetomado] = useState<{ id: string; etiqueta: string } | null>(null);
+  const [confirmarRetomar, setConfirmarRetomar] = useState<VersionLista | null>(null);
+  const [sobrescribir, setSobrescribir] = useState(false);
   const [modeloCurva, setModeloCurva] = useState("");
 
 
@@ -600,6 +614,21 @@ function PantallaMotor() {
       entradas,
       notas: notasEscenario.trim(),
     });
+    if (sobrescribir && retomado) {
+      const ok = actualizarBorrador(idProyectoActivo, retomado.id, {
+        ...datos,
+        nombre: nombreEscenario.trim(),
+      });
+      setGuardandoEscenario(false);
+      setSobrescribir(false);
+      toast[ok ? "success" : "error"](
+        ok
+          ? `Escenario ${retomado.etiqueta} actualizado con la configuración de ahora.`
+          : "No se pudo actualizar: una lista publicada es inmutable.",
+      );
+      return;
+    }
+
     const version = crearBorrador(datos);
     registrarEvento({
       id_proyecto: idProyectoActivo,
@@ -621,6 +650,31 @@ function PantallaMotor() {
     setNotasEscenario("");
     toast.success(
       `Escenario v${version.numero} guardado con ${version.unidades_incluidas.length} unidades. Ábrelo en la Tabla de Precios para verlo en lista o en plano.`,
+    );
+  };
+
+  /*
+   * Los escenarios del proyecto, del más nuevo al más viejo.
+   *
+   * Viven en el navegador de quien los creó: `versionesStore` persiste en
+   * localStorage. Se muestra el autor de cada uno porque el tipo ya lo guarda y
+   * porque, el día que los escenarios sean compartidos, es la columna que
+   * distingue el trabajo de cada quien.
+   */
+  const escenariosGuardados = useMemo(
+    () =>
+      [...(versionesPorProyecto[idProyectoActivo] ?? [])].sort(
+        (a, b) => b.numero - a.numero,
+      ),
+    [versionesPorProyecto, idProyectoActivo],
+  );
+
+  const aplicarRetomar = (v: VersionLista) => {
+    retomarEscenario(v.snapshot_motor, `v${v.numero} · ${v.nombre}`);
+    setRetomado(v.estado === "borrador" ? { id: v.id_version, etiqueta: `v${v.numero}` } : null);
+    setConfirmarRetomar(null);
+    toast.success(
+      `Retomaste v${v.numero}. El motor quedó con su configuración; ajústalo y vuelve a guardar.`,
     );
   };
 
@@ -688,6 +742,112 @@ function PantallaMotor() {
         </Alert>
       ) : null}
 
+
+      {escenariosGuardados.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl font-semibold">Escenarios guardados</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Retoma cualquiera para seguir trabajando sobre su configuración.
+              {retomado ? ` Ahora mismo estás sobre ${retomado.etiqueta}.` : ""}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                      Escenario
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                      Autor
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      Unidades
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                      Valor total
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                      Estado
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {escenariosGuardados.map((v) => (
+                    <tr
+                      key={v.id_version}
+                      className={cn(
+                        "border-t border-border transition-colors hover:bg-muted/40",
+                        retomado?.id === v.id_version && "bg-primary/5",
+                      )}
+                    >
+                      <td className="px-3 py-1.5 font-medium text-foreground">
+                        v{v.numero} · {v.nombre}
+                        {v.notas ? (
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {v.notas}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-1.5 text-muted-foreground">
+                        {v.creada_por.nombre}
+                        <span className="block text-xs">
+                          {formatoFechaCorta(v.creada_en)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                        {v.unidades_incluidas.length}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                        {formatoMoneda(v.valor_total)}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[11px]",
+                            v.estado === "publicada"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-border text-muted-foreground",
+                          )}
+                        >
+                          {v.estado}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmarRetomar(v)}
+                        >
+                          <RotateCcw className="size-4" />
+                          Retomar
+                        </Button>
+                        {v.estado === "borrador" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => archivarVersion(idProyectoActivo, v.id_version)}
+                          >
+                            Archivar
+                          </Button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Los escenarios se guardan en <strong>este navegador</strong>: hoy no se
+              comparten entre usuarios. La columna de autor ya está porque el escenario
+              guarda quién lo creó; el día que vivan en la base, ahí se verán los de todos.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -1716,6 +1876,37 @@ function PantallaMotor() {
         </div>
       </div>
 
+      <AlertDialog
+        open={confirmarRetomar !== null}
+        onOpenChange={(v) => !v && setConfirmarRetomar(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Retomar v{confirmarRetomar?.numero} · {confirmarRetomar?.nombre}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              El motor toma la configuración completa de ese escenario: factores, curvas,
+              precio base, factores por modelo, parámetros y accesorios. Lo que tengas
+              ahora sin guardar se pierde.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <p className="text-sm text-muted-foreground">
+            El escenario no se toca: sigue guardado tal como está. Esto solo carga su
+            configuración para seguir trabajando desde ahí, y queda en la bitácora con lo
+            que había antes.
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmarRetomar && aplicarRetomar(confirmarRetomar)}
+            >
+              Retomar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={guardandoEscenario} onOpenChange={setGuardandoEscenario}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1754,6 +1945,22 @@ function PantallaMotor() {
             </div>
           </div>
 
+          {retomado ? (
+            <label className="flex items-start gap-2 rounded-md border border-border p-3">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={sobrescribir}
+                onChange={(e) => setSobrescribir(e.target.checked)}
+              />
+              <span className="text-xs text-muted-foreground">
+                Actualizar <strong>{retomado.etiqueta}</strong> en vez de crear uno nuevo.
+                Sin esto queda una copia y el original se conserva, que es lo que conviene
+                si vas a compararlos.
+              </span>
+            </label>
+          ) : null}
+
           <div className="rounded-md border border-border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">
               Queda como <strong>borrador</strong>, no como lista publicada: guardar una
@@ -1768,7 +1975,9 @@ function PantallaMotor() {
               disabled={nombreEscenario.trim().length < 3 || totales.unidades === 0}
               onClick={guardarEscenario}
             >
-              Guardar escenario
+              {sobrescribir && retomado
+                ? `Actualizar ${retomado.etiqueta}`
+                : "Guardar escenario"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
