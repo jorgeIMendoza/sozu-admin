@@ -96,7 +96,9 @@ export function interpretarReconciliacion(fila: FilaReconciliacion | null): Resu
         // Una cuenta de producto (paquete amueblado, bodega, estacionamiento) no aparece
         // en el contrato de compraventa —ese solo cubre la propiedad—, así que mandar a
         // "revisar contra el contrato" no aplica ahí: su precio sale de la oferta.
-        ? 'La cuenta está liquidada: todos sus acuerdos ya están pagados, así que el ajuste automático no puede tocarlos. Si la diferencia es de centavos por redondeo, se cuadra con cuadrar_centavos_cuenta; si es un monto de negocio, se revisa contra el documento que fija el precio (el contrato en una propiedad, la oferta en un producto).'
+        // No se nombra la RPC: el usuario no ejecuta SQL. La salida es el botón
+        // "Sobrante sin acuerdo abierto", que abre el diálogo de cuadre.
+        ? 'La cuenta está liquidada: todos sus acuerdos ya están pagados, así que este ajuste no puede tocarlos. Usa «Sobrante sin acuerdo abierto» para revisar el cuadre del plan; ahí se resuelve el residuo de redondeo y, si la diferencia es un monto de negocio, se valida antes contra el documento que fija el precio (el contrato en una propiedad, la oferta en un producto).'
         : fila.motivo === 'quedaria_negativo'
           ? 'El ajuste dejaría el último acuerdo en negativo. Hay que revisarlo a mano.'
           : 'No se pudo ajustar automáticamente; revisar a mano.',

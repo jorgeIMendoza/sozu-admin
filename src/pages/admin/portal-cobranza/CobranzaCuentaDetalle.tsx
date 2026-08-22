@@ -29,7 +29,7 @@ import type { PagoRecord } from '@/hooks/useRelacionPagos';
 import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
 import { CuentaDetallePropiedad } from './CuentaDetallePropiedad';
 import { CuentaDetalleProducto } from './CuentaDetalleProducto';
-import { difiereEnDinero, sumarDinero } from '@/utils/dinero';
+import { difiereEnDinero, sumarDinero, diferenciaDinero, aCentavos } from '@/utils/dinero';
 import { calcularDesgloseDescuento } from '@/utils/descuentoEsquema';
 
 // ── fetch ───────────────────────────────────────────────────────────────────────
@@ -697,6 +697,13 @@ export default function CobranzaCuentaDetalle() {
   // quedaba encendido para siempre (CC-000847) — ver utils/dinero.ts.
   const sumaPagosReales = sumarDinero(pagos, (p: any) => p.monto);
   const hayDiscrepanciaAplicaciones = pagos.length > 0 && difiereEnDinero(sumaPagosReales, totalAplicacionesAll);
+  // `saldoPendiente` se mide contra el PLAN (aplicaciones_pago), así que cuando el plan
+  // nació corto por redondeo exhibe un saldo que el cliente no debe: la CC-000069 mostraba
+  // $0.12 en rojo con los $2,673,946.20 ya cobrados. Lo que responde "¿me debe?" es el
+  // dinero recibido, no el reparto interno. En centavos: un peso de deuda es deuda, un
+  // residuo de flotante no.
+  const deudaRealCliente = Math.max(0, diferenciaDinero(precio_final, sumaPagosReales));
+  const clientePagoTodo = precio_final > 0 && aCentavos(sumaPagosReales) >= aCentavos(precio_final);
   const ultimoPagoSTP = pagos.find((p: any) => p.clave_rastreo) ?? null;
   const selectedPago = pagos.find((p: any) => p.id === selectedPagoId) ?? null;
 
@@ -791,6 +798,7 @@ export default function CobranzaCuentaDetalle() {
     proyectoNombre, edificioNombre, modeloNombre, numero_propiedad, productoNombre, tipo,
     m2Interiores, m2Exteriores, precioM2, estatusPropiedad,
     totalPagado, saldoPendiente, montoVencido, parcialidadesVencidas, pagadoEfectivo,
+    deudaRealCliente, clientePagoTodo,
     acuerdos, pagos, aplicacionesList,
     docs, docsLoading,
     limiteEfectivo, aunPermitido, acuerdosPendientes,

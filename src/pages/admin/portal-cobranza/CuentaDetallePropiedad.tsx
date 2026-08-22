@@ -19,14 +19,16 @@ import {
   type InfoTab, type ActivityTab, type CuentaDetalleCtx,
 } from './cuentaDetalleShared';
 import { CuentaDocumentosExpediente } from '@/components/admin/CuentaDocumentosExpediente';
+import { CuadrarCentavosDialog } from './CuadrarCentavosDialog';
 import { formatPorcentajeDescuento } from '@/utils/descuentoEsquema';
 
 export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
+  const [cuadrarDialog, setCuadrarDialog] = useState(false);
   const [infoTab, setInfoTab] = useState<InfoTab>('resumen');
   const [activityTab, setActivityTab] = useState<ActivityTab>('acuerdos');
 
   const {
-    cuentaId, precio_final, totalPagado, saldoPendiente, parcialidadesVencidas,
+    cuentaId, precio_final, totalPagado, saldoPendiente, deudaRealCliente, clientePagoTodo, parcialidadesVencidas,
     montoVencido, pagadoEfectivo, limiteEfectivo, aunPermitido, acuerdosPendientes,
     porcentajePagado, montoValidado, montoSinValidar,
     acuerdos, aplicacionesList,
@@ -152,9 +154,13 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
         />
         <KpiCard
           label="Saldo Pendiente"
-          value={fmtCurrency(saldoPendiente)}
-          sub={acuerdosPendientes > 0 ? `${acuerdosPendientes} acuerdo${acuerdosPendientes !== 1 ? 's' : ''} pendiente${acuerdosPendientes !== 1 ? 's' : ''}` : undefined}
-          accent={saldoPendiente <= 0 ? 'success' : 'danger'}
+          value={fmtCurrency(clientePagoTodo ? 0 : saldoPendiente)}
+          sub={acuerdosPendientes > 0
+            ? `${acuerdosPendientes} acuerdo${acuerdosPendientes !== 1 ? 's' : ''} pendiente${acuerdosPendientes !== 1 ? 's' : ''}`
+            : (clientePagoTodo && saldoPendiente > 0
+              ? `Pagado por completo · ${fmtCurrency(saldoPendiente)} sin aplicar en el plan`
+              : undefined)}
+          accent={clientePagoTodo || saldoPendiente <= 0 ? 'success' : 'danger'}
         />
         <KpiCard label="Pago en efectivo" value="">
           <div className="space-y-1 mt-1">
@@ -206,15 +212,27 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <CreditCard className="size-3.5" />Agregar Pago
           </button>
         )}
-        {!isEnDemanda && (
+        {!isEnDemanda && acuerdosPendientes > 0 && (
           <RecalcularDispersionButton
             show={hayDiscrepanciaAplicaciones}
             loading={recalculandoAplic}
             onClick={handleRecalcularAplicaciones}
-            hayAcuerdosAbiertos={acuerdosPendientes > 0}
+            hayAcuerdosAbiertos
           />
         )}
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
+        {/* Sin acuerdo abierto no hay dispersión que recalcular: el sobrante se
+            resuelve cuadrando el plan. Va de este lado de la botonera porque no es
+            una acción de cobro sino de corrección del plan. */}
+        {!isEnDemanda && acuerdosPendientes === 0 && (
+          <RecalcularDispersionButton
+            show={hayDiscrepanciaAplicaciones}
+            loading={false}
+            onClick={() => {}}
+            hayAcuerdosAbiertos={false}
+            onCuadrarCentavos={() => setCuadrarDialog(true)}
+          />
+        )}
         <button
           onClick={handleEstadoCuenta}
           disabled={generatingPDF}
@@ -231,7 +249,10 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             <Pencil className="size-3.5" />Editar Cuenta
           </button>
         )}
-        {!isEnDemanda && saldoPendiente > 0 && (
+        {/* Se demanda por lo que el cliente NO ha pagado. `saldoPendiente` mide el
+            reparto del plan y puede traer el residuo de un redondeo: la CC-000069
+            ofrecía demandar por $0.12 con el precio íntegro ya cobrado. */}
+        {!isEnDemanda && deudaRealCliente > 0 && (
           <button
             onClick={() => setDemandaDialog(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-background text-[12px] font-medium text-amber-600 hover:bg-amber-50 transition-colors"
@@ -488,8 +509,8 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
                   <p className="text-[17px] font-bold tabular-nums text-emerald-600 leading-none">{fmtCurrency(montoValidado)}</p>
                 </div>
                 <div className="text-center">
-                  <p className={cn('text-[9px] font-semibold uppercase tracking-wider mb-1', saldoPendiente > 0 ? 'text-red-500' : 'text-muted-foreground')}>Pendiente</p>
-                  <p className={cn('text-[17px] font-bold tabular-nums leading-none', saldoPendiente > 0 ? 'text-red-600' : 'text-muted-foreground')}>{fmtCurrency(saldoPendiente)}</p>
+                  <p className={cn('text-[9px] font-semibold uppercase tracking-wider mb-1', deudaRealCliente > 0 ? 'text-red-500' : 'text-muted-foreground')}>Pendiente</p>
+                  <p className={cn('text-[17px] font-bold tabular-nums leading-none', deudaRealCliente > 0 ? 'text-red-600' : 'text-muted-foreground')}>{fmtCurrency(clientePagoTodo ? 0 : saldoPendiente)}</p>
                 </div>
                 <div className="text-center">
                   <p className={cn('text-[9px] font-semibold uppercase tracking-wider mb-1', montoSinValidar > 0 ? 'text-amber-500' : 'text-muted-foreground')}>Sin validar</p>
@@ -814,6 +835,13 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
           />
         )}
       </div>
+
+      <CuadrarCentavosDialog
+        open={cuadrarDialog}
+        onOpenChange={setCuadrarDialog}
+        cuentaId={cuentaId}
+        onAplicado={() => window.location.reload()}
+      />
     </>
   );
 }

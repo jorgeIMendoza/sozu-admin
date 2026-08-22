@@ -313,23 +313,38 @@ export function TabBar<T extends string>({
 // no queda dónde poner el sobrante y el botón no haría nada (CC 1248, 1140, 988…).
 // Reconciliar tampoco: `fn_reconciliar_acuerdos_cuenta` solo ajusta el último
 // acuerdo ABIERTO. En ese caso se muestra el motivo, no un botón muerto.
-export function RecalcularDispersionButton({ show, loading, onClick, hayAcuerdosAbiertos = true }: {
+export function RecalcularDispersionButton({ show, loading, onClick, hayAcuerdosAbiertos = true, onCuadrarCentavos }: {
   show: boolean;
   loading: boolean;
   onClick: () => void;
   hayAcuerdosAbiertos?: boolean;
+  /** Abre el diálogo de cuadre. Sin esto el chip queda informativo, como antes. */
+  onCuadrarCentavos?: () => void;
 }) {
   if (!show) return null;
 
   if (!hayAcuerdosAbiertos) {
+    const titulo = 'El plan de pagos ya está liquidado, así que el sobrante no tiene acuerdo al cual aplicarse y recalcular la dispersión no lo movería. Revisa el cuadre para resolverlo.';
+    if (!onCuadrarCentavos) {
+      return (
+        <span
+          title={titulo}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-medium text-amber-700 cursor-default select-none"
+        >
+          <AlertTriangle className="size-3.5" />
+          Sobrante sin acuerdo abierto
+        </span>
+      );
+    }
     return (
-      <span
-        title="El plan de pagos ya está liquidado por completo, así que el sobrante no tiene acuerdo al cual aplicarse y recalcular no lo movería. Si son centavos de redondeo se cuadra con cuadrar_centavos_cuenta; si es un monto de negocio, se revisa contra el documento que fija el precio (el contrato en una propiedad, la oferta en un producto)."
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-medium text-amber-700 cursor-default select-none"
+      <button
+        onClick={onCuadrarCentavos}
+        title={titulo}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[12px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
       >
         <AlertTriangle className="size-3.5" />
         Sobrante sin acuerdo abierto
-      </span>
+      </button>
     );
   }
 
@@ -377,7 +392,16 @@ export interface CuentaDetalleCtx {
   precioM2: number | null;
   estatusPropiedad: string;
   totalPagado: number;
+  /** Precio final menos lo APLICADO en el plan. Mide el reparto, no la deuda. */
   saldoPendiente: number;
+  /**
+   * Lo que el cliente realmente debe: precio final menos el dinero recibido
+   * (`pagos`), al centavo. Es lo que decide si se cobra o se demanda — `saldoPendiente`
+   * puede traer el residuo de un plan mal redondeado y ese residuo no es deuda.
+   */
+  deudaRealCliente: number;
+  /** `true` si el dinero recibido ya cubre el precio final. */
+  clientePagoTodo: boolean;
   montoVencido: number;
   parcialidadesVencidas: number;
   pagadoEfectivo: number;
