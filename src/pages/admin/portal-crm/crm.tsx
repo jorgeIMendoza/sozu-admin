@@ -91,7 +91,7 @@ import { useCrmLogger } from "@/hooks/useCrmLogger";
 import { ActivityPanel, Timeline, DealActivityFeed } from "./crm-actividad";
 import {
   DealsCard, DealMetric, BoardColumn, DealBoardCard, DealActionsMenu,
-  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, DealCotizaciones, PRIORIDAD_PILL, firePurchaseIfWon,
+  NewDealDialog, EditDealDialog, DealContactsSection, DealPerfilComprador, DealAsistenteIA, DealCotizaciones, ReporteSemanalDialog, PRIORIDAD_PILL, firePurchaseIfWon,
 } from "./crm-negocios";
 import { CargaMasivaDialog } from "./crm-carga-masiva";
 import { TicketsCard } from "./crm-tickets";
@@ -2547,6 +2547,7 @@ export function CrmDeals() {
         actions={
         <div className="flex items-center gap-2">
           {viewToggle}
+          <ReporteSemanalDialog owners={owners ?? []} />
           <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             <Plus className="h-4 w-4 mr-1" />Crear negocio
           </Button>
