@@ -51,6 +51,7 @@ function PreciosContenido() {
   const cargarProyectos = useInventarioStore((s) => s.cargarProyectos);
   const cargarInventario = useInventarioStore((s) => s.cargarInventario);
   const cargarEsquemas = useEsquemasStore((s) => s.cargarEsquemas);
+  const cargarVersiones = useVersionesStore((s) => s.cargarVersiones);
   const { profile } = useAuth();
 
   /*
@@ -97,6 +98,14 @@ function PreciosContenido() {
     if (idProyectoActivo) void cargarEsquemas(idProyectoActivo);
   }, [idProyectoActivo, cargarEsquemas]);
 
+  /*
+   * Los escenarios compartidos. Si la tabla todavia no existe, la carga no hace
+   * nada y el modulo sigue trabajando contra localStorage: la pantalla lo dice.
+   */
+  useEffect(() => {
+    if (idProyectoActivo) void cargarVersiones(idProyectoActivo);
+  }, [idProyectoActivo, cargarVersiones]);
+
   // Con el inventario en memoria se siembra el motor del proyecto. Es
   // idempotente: solo actúa la primera vez que se abre cada desarrollo.
   useEffect(() => {
@@ -141,7 +150,7 @@ function PreciosContenido() {
     // escribe en localStorage: si algo falla ahí, no debe impedir que la
     // pantalla se use. La lista de trabajo funciona igual sin la versión.
     try {
-      crearBorrador({
+      void crearBorrador({
         ...construirDatosVersion({
           idProyecto: idProyectoActivo,
           nombre: "",

@@ -185,6 +185,7 @@ function PantallaMotor() {
   const actualizarBorrador = useVersionesStore((s) => s.actualizarBorrador);
   const archivarVersion = useVersionesStore((s) => s.archivar);
   const versionesPorProyecto = useVersionesStore((s) => s.versionesPorProyecto);
+  const escenariosCompartidos = useVersionesStore((s) => s.compartidas);
   const { motor, propiedades, desgloses, totales } = usePreciosProyecto();
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPuntoBase, setConfirmarPuntoBase] = useState(false);
@@ -602,7 +603,7 @@ function PantallaMotor() {
    * Nace como borrador, nunca publicado: guardar una hipótesis no puede tener
    * el mismo peso que decidir el precio con el que se vende.
    */
-  const guardarEscenario = () => {
+  const guardarEscenario = async () => {
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const entradas = propiedades
       .map((p) => ({ propiedad: p, desglose: porId.get(p.id_propiedad)! }))
@@ -615,7 +616,7 @@ function PantallaMotor() {
       notas: notasEscenario.trim(),
     });
     if (sobrescribir && retomado) {
-      const ok = actualizarBorrador(idProyectoActivo, retomado.id, {
+      const ok = await actualizarBorrador(idProyectoActivo, retomado.id, {
         ...datos,
         nombre: nombreEscenario.trim(),
       });
@@ -629,7 +630,7 @@ function PantallaMotor() {
       return;
     }
 
-    const version = crearBorrador(datos);
+    const version = await crearBorrador(datos);
     registrarEvento({
       id_proyecto: idProyectoActivo,
       tipo: "version.creada",
@@ -841,9 +842,9 @@ function PantallaMotor() {
               </table>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Los escenarios se guardan en <strong>este navegador</strong>: hoy no se
-              comparten entre usuarios. La columna de autor ya está porque el escenario
-              guarda quién lo creó; el día que vivan en la base, ahí se verán los de todos.
+              {escenariosCompartidos
+                ? "Estos son los escenarios de todo el equipo: cada quien ve los de todos, y solo su autor o un Super Administrador puede editarlos. Una lista publicada no se edita, ni desde aquí ni desde ninguna otra pantalla."
+                : "Los escenarios se guardan en este navegador: hoy no se comparten entre usuarios. Para que todo el equipo los vea hay que aplicar el DDL 20260821_versiones_lista_escenarios_compartidos.md; el módulo empieza a usarlos sin ningún cambio en el código."}
             </p>
           </CardContent>
         </Card>
@@ -1973,7 +1974,7 @@ function PantallaMotor() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               disabled={nombreEscenario.trim().length < 3 || totales.unidades === 0}
-              onClick={guardarEscenario}
+              onClick={() => void guardarEscenario()}
             >
               {sobrescribir && retomado
                 ? `Actualizar ${retomado.etiqueta}`
