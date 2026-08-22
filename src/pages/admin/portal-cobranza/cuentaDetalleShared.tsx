@@ -324,7 +324,7 @@ export function RecalcularDispersionButton({ show, loading, onClick, hayAcuerdos
   if (!show) return null;
 
   if (!hayAcuerdosAbiertos) {
-    const titulo = 'El plan de pagos ya está liquidado, así que el sobrante no tiene acuerdo al cual aplicarse y recalcular la dispersión no lo movería. Revisa el cuadre para resolverlo.';
+    const titulo = 'Hay dinero cobrado que no está aplicado a ningún acuerdo, y el plan ya está liquidado: no queda acuerdo abierto que lo reciba. Revisa el cuadre para resolverlo.';
     if (!onCuadrarCentavos) {
       return (
         <span
@@ -360,6 +360,29 @@ export function RecalcularDispersionButton({ show, loading, onClick, hayAcuerdos
     </button>
   );
 }
+
+// ── Umbrales de dinero para los avisos ─────────────────────────────────────────
+//
+// Un plan de pagos se arma dividiendo el precio entre N parcialidades y redondeando
+// cada una a dos decimales. El residuo (hasta N centavos) queda arriba o abajo del
+// precio segun como caiga el redondeo, y el cliente termina pagando unos centavos de
+// mas o de menos que el precio. Eso NO es un descuadre de negocio: es aritmetica, y
+// nadie va a cobrar ni devolver tres centavos.
+//
+// Encender el aviso al centavo dejaba 127 cuentas con banner de "discrepancia" de las
+// cuales 88 eran de centavos. El ruido escondia las 39 que si importan.
+//
+// Cuidado: esto NO es tolerancia para comparar dinero. Las sumas y los cuadres siguen
+// en centavos enteros con tolerancia cero (utils/dinero.ts). Este umbral solo decide
+// que se le ENSEÑA al usuario.
+export const UMBRAL_AVISO_CENTAVOS = 100;   // $1.00
+
+// Un sobrepago material es otra cosa: el cliente puso mas dinero del que costaba la
+// cuenta. Puede ser interes moratorio no registrado, un descuento aplicado tarde, un
+// pago duplicado o dinero por devolver — y a partir de cierto monto es un asunto de
+// prevencion de lavado. Eso si se avisa, y con su propio texto: al 2026-08-22 hay 38
+// cuentas con sobrepago mayor a $1,000 y ninguna lo exhibia en pantalla.
+export const UMBRAL_SOBREPAGO_CENTAVOS = 100000;   // $1,000.00
 
 // ── CuentaDetalleCtx ───────────────────────────────────────────────────────────
 
@@ -402,6 +425,12 @@ export interface CuentaDetalleCtx {
   deudaRealCliente: number;
   /** `true` si el dinero recibido ya cubre el precio final. */
   clientePagoTodo: boolean;
+  /**
+   * Dinero recibido por ENCIMA del precio final, cuando pasa de
+   * `UMBRAL_SOBREPAGO_CENTAVOS`. 0 si no hay sobrepago material. Los centavos de
+   * redondeo no cuentan: no son un sobrepago, son el residuo del plan.
+   */
+  sobrepagoMaterial: number;
   montoVencido: number;
   parcialidadesVencidas: number;
   pagadoEfectivo: number;

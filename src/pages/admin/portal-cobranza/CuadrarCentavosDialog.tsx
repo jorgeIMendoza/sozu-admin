@@ -64,26 +64,26 @@ const MOTIVOS: Record<string, { titulo: string; detalle: string; salida: string 
   sin_dinero_para_cubrir_la_diferencia: {
     titulo: 'No hay dinero cobrado que cubra la diferencia',
     detalle:
-      'El plan quedó por debajo del precio, pero no existe dinero recibido sin aplicar para cerrar el hueco. Eso significa que la diferencia es saldo que el cliente todavía no ha pagado, no un residuo de redondeo.',
+      'La diferencia es saldo que el cliente no ha pagado, no un residuo.',
     salida:
-      'No se cuadra desde aquí: registra el pago faltante o ajusta el precio de la cuenta si el importe correcto es el del plan.',
+      'Registra el pago faltante, o ajusta el precio si el correcto es el del plan.',
   },
   plan_excede_precio: {
     titulo: 'El plan pide más de lo que vale la cuenta',
     detalle:
-      'La suma de los acuerdos supera el precio final. Este cuadre solo sabe subir el último acuerdo, nunca bajarlo: reducirlo podría dejar pagos aplicados por encima de su acuerdo.',
+      'El plan suma más que el precio. Este cuadre solo sube el último acuerdo, nunca lo baja.',
     salida:
-      'Se resuelve revisando el precio de la cuenta contra el contrato o la oferta, y corrigiendo el que esté mal.',
+      'Revisa el precio contra el contrato o la oferta y corrige el que esté mal.',
   },
   usar_reconciliacion_normal: {
     titulo: 'La cuenta todavía tiene acuerdos abiertos',
-    detalle: 'Con un acuerdo abierto el ajuste normal sí puede absorber la diferencia.',
-    salida: 'Usa «Reconciliar acuerdos» en lugar de este cuadre.',
+    detalle: 'Con un acuerdo abierto el ajuste normal la absorbe.',
+    salida: 'Usa «Reconciliar acuerdos».',
   },
   sin_plan: {
     titulo: 'La cuenta no tiene plan de pagos',
-    detalle: 'No hay acuerdos que ajustar porque el plan nunca se generó.',
-    salida: 'Genera el plan con «Reconciliar acuerdos» antes de intentar cuadrar.',
+    detalle: 'El plan nunca se generó.',
+    salida: 'Cobranza tiene que asignarle un plan.',
   },
   ya_cuadra: {
     titulo: 'La cuenta ya está cuadrada',
@@ -92,18 +92,18 @@ const MOTIVOS: Record<string, { titulo: string; detalle: string; salida: string 
   },
   cuenta_hija: {
     titulo: 'Es una cuenta de mantenimiento',
-    detalle: 'Su plan es recurrente y por diseño no se compara contra un precio final.',
-    salida: 'No aplica el cuadre.',
+    detalle: 'Su plan es recurrente y no se compara contra un precio.',
+    salida: 'No aplica.',
   },
   precio_final_invalido: {
     titulo: 'El precio de la cuenta no es válido',
-    detalle: 'Está en cero o vacío, así que no hay contra qué cuadrar el plan.',
-    salida: 'Captura el precio correcto en «Editar Cuenta».',
+    detalle: 'Está en cero o vacío.',
+    salida: 'Captúralo en «Editar Cuenta».',
   },
   cuenta_inexistente_o_cancelada: {
     titulo: 'La cuenta está cancelada',
     detalle: 'No se modifican planes de cuentas canceladas.',
-    salida: 'No aplica el cuadre.',
+    salida: 'No aplica.',
   },
 };
 
@@ -133,13 +133,13 @@ export function CuadrarCentavosDialog({ open, onOpenChange, cuentaId, onAplicado
       if (!vivo) return;
       setCargando(false);
       if (e) {
-        // 42883 = la RPC no existe en este ambiente; 42501 = falta el GRANT.
+        // 42501 = falta el GRANT; 42883 = la RPC no existe en este ambiente. El codigo
+        // va al logger, nunca a la pantalla.
+        console.error('[cobranza] simular cuadre', e);
         setError(
           e.code === '42501' || /permission denied/i.test(e.message ?? '')
-            ? 'Tu usuario no tiene permiso para ejecutar el cuadre. Pídele a un administrador que lo habilite.'
-            : e.code === '42883' || /does not exist/i.test(e.message ?? '')
-              ? 'El cuadre aún no está habilitado en este ambiente.'
-              : (e.message ?? 'No se pudo simular el cuadre.'),
+            ? 'No tienes permiso para cuadrar. Pídelo a un administrador.'
+            : 'No se pudo revisar el cuadre.',
         );
         return;
       }
@@ -156,13 +156,14 @@ export function CuadrarCentavosDialog({ open, onOpenChange, cuentaId, onAplicado
     });
     setAplicando(false);
     if (e) {
-      toast.error('No se pudo aplicar el cuadre', { description: e.message });
+      console.error('[cobranza] cuadrar centavos', e);
+      toast.error('No se pudo aplicar el cuadre');
       return;
     }
     const r = data as Cuadre;
     if (r.accion === 'cuadrada') {
       toast.success('Cuenta cuadrada', {
-        description: `Se ajustó el acuerdo por ${fmtCurrency(r.diferencia ?? 0)} y se aplicó el dinero ya cobrado.`,
+        description: `Se aplicaron ${fmtCurrency(r.diferencia ?? 0)}.`,
       });
       onAplicado();
       onOpenChange(false);
@@ -170,8 +171,8 @@ export function CuadrarCentavosDialog({ open, onOpenChange, cuentaId, onAplicado
     }
     // La base rechazó en firme: se muestra su motivo en vez de un éxito falso.
     setCuadre(r);
-    toast.error('El cuadre no se aplicó', {
-      description: MOTIVOS[r.motivo ?? '']?.titulo ?? r.motivo ?? 'La base rechazó el ajuste.',
+    toast.error('No se aplicó el cuadre', {
+      description: MOTIVOS[r.motivo ?? '']?.titulo ?? '',
     });
   };
 
@@ -231,8 +232,7 @@ export function CuadrarCentavosDialog({ open, onOpenChange, cuentaId, onAplicado
                 <div className="flex gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-[12.5px] text-emerald-900">
                   <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
                   <p>
-                    La diferencia cabe en el redondeo del plan y hay dinero cobrado que la cubre:
-                    es un residuo, no un cobro pendiente. El cliente no debe nada.
+                    Es un residuo de redondeo y el dinero ya está cobrado. El cliente no debe nada.
                   </p>
                 </div>
                 {cuadre.monto_actual != null && (
@@ -269,9 +269,8 @@ export function CuadrarCentavosDialog({ open, onOpenChange, cuentaId, onAplicado
                     Revisé el documento que fija el precio y confirmo que el de la cuenta es correcto
                   </span>
                   <span className="text-muted-foreground">
-                    Al aplicar, el último acuerdo del plan cambia de importe y queda registrado.
-                    Si el precio de la cuenta fuera el equivocado, el plan quedaría alineado a un
-                    monto incorrecto y el cliente lo vería en su estado de cuenta.
+                    Al aplicar cambia el importe del último acuerdo. Con un precio equivocado, el
+                    cliente lo vería así en su estado de cuenta.
                   </span>
                 </span>
               </label>
