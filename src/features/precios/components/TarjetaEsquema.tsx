@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,7 +80,7 @@ export function TarjetaEsquema({
         !esquema.activo && "opacity-60",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">{esquema.nombre}</h3>
           {esquema.es_base ? <Chip clase="bg-emerald-50 text-emerald-700 border-emerald-200">Base</Chip> : null}
@@ -90,7 +91,24 @@ export function TarjetaEsquema({
           {inejecutable ? (
             <Chip clase="border-red-200 bg-red-50 text-red-700">No ejecutable</Chip>
           ) : null}
-          {!esquema.activo ? <Chip>Inactivo</Chip> : null}
+        </div>
+        {/* El activo/inactivo estaba enterrado en el menú de tres puntos, que es
+            donde va lo que se usa poco. Es lo contrario: es la decisión de si el
+            esquema se ofrece o no, y se toma seguido. Va a la vista. */}
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-xs",
+              esquema.activo ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {esquema.activo ? "Se ofrece" : "No se ofrece"}
+          </span>
+          <Switch
+            checked={esquema.activo}
+            onCheckedChange={onAlternarActivo}
+            aria-label={`${esquema.activo ? "Dejar de ofrecer" : "Volver a ofrecer"} ${esquema.nombre}`}
+          />
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -104,9 +122,6 @@ export function TarjetaEsquema({
               Marcar como base
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onDuplicar}>Duplicar</DropdownMenuItem>
-            <DropdownMenuItem onClick={onAlternarActivo}>
-              {esquema.activo ? "Desactivar" : "Reactivar"}
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
