@@ -29,14 +29,29 @@
  */
 
 import { create } from "zustand";
+import {
+  actualizarVersionReal,
+  archivarVersionReal,
+  crearVersionReal,
+  listarVersiones,
+  publicarVersionReal,
+  soportaVersionesCompartidas,
+} from "../services/versionesReales";
 import { persist } from "zustand/middleware";
 import type { ActorEvento, VersionLista } from "../types/dominio";
 
 interface EstadoVersiones {
   versionesPorProyecto: Record<string, VersionLista[]>;
+  /** `true` cuando los escenarios se comparten; `false` mientras sean locales. */
+  compartidas: boolean;
+  errorRemoto: string | null;
 }
 
-const estadoInicial: EstadoVersiones = { versionesPorProyecto: {} };
+const estadoInicial: EstadoVersiones = {
+  versionesPorProyecto: {},
+  compartidas: false,
+  errorRemoto: null,
+};
 
 export type DatosVersion = Omit<
   VersionLista,
@@ -46,7 +61,18 @@ export type DatosVersion = Omit<
 interface AccionesVersiones {
   getVersiones: (idProyecto: string) => VersionLista[];
   getPublicada: (idProyecto: string) => VersionLista | null;
-  crearBorrador: (datos: DatosVersion) => VersionLista;
+  /**
+   * Trae los escenarios del proyecto desde `versiones_lista`.
+   *
+   * Reemplaza lo que hubiera en memoria para ese proyecto: la base es la
+   * versión compartida y mezclarla con lo local dejaría escenarios que solo
+   * este navegador conoce, indistinguibles de los que ve todo el equipo.
+   *
+   * Si la tabla no existe todavía no hace nada y el módulo sigue contra
+   * localStorage.
+   */
+  cargarVersiones: (idProyecto: string) => Promise<void>;
+  crearBorrador: (datos: DatosVersion) => Promise<VersionLista>;
   /**
    * Reemplaza el contenido de un borrador. Una versión publicada es inmutable
    * por diseño: cualquier intento de editarla es un error de programación,
@@ -56,21 +82,26 @@ interface AccionesVersiones {
     idProyecto: string,
     idVersion: string,
     cambios: Partial<DatosVersion>,
-  ) => boolean;
+  ) => Promise<boolean>;
   publicar: (
     idProyecto: string,
     idVersion: string,
     actor: ActorEvento,
     notas: string,
-  ) => boolean;
+  ) => Promise<boolean>;
   /** Única transición permitida a partir de 'publicada'. */
-  archivar: (idProyecto: string, idVersion: string) => boolean;
+  archivar: (idProyecto: string, idVersion: string) => Promise<boolean>;
   reset: () => void;
 }
 
 function normalizar(estado: unknown): EstadoVersiones {
   const s = (estado ?? {}) as Partial<EstadoVersiones>;
-  return { versionesPorProyecto: s.versionesPorProyecto ?? {} };
+  return {
+    versionesPorProyecto: s.versionesPorProyecto ?? {},
+    // No se restaura: se resuelve preguntándole a la base en cada sesión.
+    compartidas: false,
+    errorRemoto: null,
+  };
 }
 
 export const useVersionesStore = create<EstadoVersiones & AccionesVersiones>()(
@@ -110,7 +141,43 @@ export const useVersionesStore = create<EstadoVersiones & AccionesVersiones>()(
             : null;
         },
 
-        crearBorrador: (datos) => {
+        cargarVersiones: async (idProyecto) => {
+          if (!idProyecto) return;
+          const compartidas = await soportaVersionesCompartidas();
+          set((st) => ({ ...st, compartidas }));
+          if (!compartidas) return;
+          try {
+            const lista = await listarVersiones(idProyecto);
+            set((st) => ({
+              ...st,
+              versionesPorProyecto: { ...st.versionesPorProyecto, [idProyecto]: lista },
+              errorRemoto: null,
+            }));
+          } catch (e) {
+            set((st) => ({
+              ...st,
+              errorRemoto:
+                e instanceof Error ? e.message : "No se pudieron cargar los escenarios.",
+            }));
+          }
+        },
+
+        crearBorrador: async (datos) => {
+          if (get().compartidas) {
+            const version = await crearVersionReal(datos);
+            set((s) => ({
+              ...s,
+              versionesPorProyecto: {
+                ...s.versionesPorProyecto,
+                [datos.id_proyecto]: [
+                  ...(s.versionesPorProyecto[datos.id_proyecto] ?? []),
+                  version,
+                ],
+              },
+            }));
+            return version;
+          }
+
           const lista = get().versionesPorProyecto[datos.id_proyecto] ?? [];
           const numero = lista.reduce((m, v) => Math.max(m, v.numero), 0) + 1;
           const version: VersionLista = {
@@ -132,18 +199,21 @@ export const useVersionesStore = create<EstadoVersiones & AccionesVersiones>()(
           return version;
         },
 
-        actualizarBorrador: (idProyecto, idVersion, cambios) =>
-          mutar(idProyecto, idVersion, (v) => {
+        actualizarBorrador: async (idProyecto, idVersion, cambios) => {
+          if (get().compartidas) await actualizarVersionReal(idVersion, cambios);
+          return mutar(idProyecto, idVersion, (v) => {
             if (v.estado === "publicada") {
               throw new Error(
                 `La versión v${v.numero} está publicada y es inmutable: no puede editarse.`,
               );
             }
             return { ...v, ...cambios };
-          }),
+          });
+        },
 
-        publicar: (idProyecto, idVersion, actor, notas) =>
-          mutar(idProyecto, idVersion, (v) => {
+        publicar: async (idProyecto, idVersion, actor, notas) => {
+          if (get().compartidas) await publicarVersionReal(idVersion, actor, notas);
+          return mutar(idProyecto, idVersion, (v) => {
             if (v.estado !== "borrador") {
               throw new Error(
                 `Solo un borrador puede publicarse. La versión v${v.numero} está en estado '${v.estado}'.`,
@@ -156,10 +226,13 @@ export const useVersionesStore = create<EstadoVersiones & AccionesVersiones>()(
               publicada_por: actor,
               notas,
             };
-          }),
+          });
+        },
 
-        archivar: (idProyecto, idVersion) =>
-          mutar(idProyecto, idVersion, (v) => ({ ...v, estado: "archivada" })),
+        archivar: async (idProyecto, idVersion) => {
+          if (get().compartidas) await archivarVersionReal(idVersion);
+          return mutar(idProyecto, idVersion, (v) => ({ ...v, estado: "archivada" }));
+        },
 
         reset: () => set(structuredClone(estadoInicial)),
       };

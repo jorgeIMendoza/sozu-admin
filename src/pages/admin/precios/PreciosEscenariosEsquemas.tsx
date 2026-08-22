@@ -4,18 +4,34 @@ import { ChevronDown, Info, Plus, TriangleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { TarjetaEsquema } from "@/features/precios/components/TarjetaEsquema";
 import { ModalEsquema } from "@/features/precios/components/ModalEsquema";
 import { useEsquemasVPN } from "@/features/precios/hooks/useEsquemasVPN";
 import { esInejecutable } from "@/features/precios/engine/npv";
 import { useEsquemasStore } from "@/features/precios/stores/esquemasStore";
+import { useVersionesStore } from "@/features/precios/stores/versionesStore";
+import { usePreciosProyecto } from "@/features/precios/hooks/usePreciosProyecto";
+import { ESTATUS_A_LA_VENTA } from "@/features/precios/services/inventarioReal";
+import { formatoMoneda } from "@/features/precios/lib/formato";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { soportaCamposDeMotor } from "@/features/precios/services/esquemasReales";
 import { registrarEvento } from "@/features/precios/services/auditoria";
 import type {
   EsquemaFinanciamiento,
   TipoEsquema,
+  VersionLista,
 } from "@/features/precios/types/dominio";
+
+/** Referencia estable para proyectos sin escenarios guardados. */
+const SIN_VERSIONES: VersionLista[] = [];
 import { pct2 } from "@/features/precios/lib/formatoVpn";
 
 function PantallaEsquemas() {
@@ -74,6 +90,84 @@ function PantallaEsquemas() {
   const [filtroEstado, setFiltroEstado] = useState<"activos" | "inactivos" | "todos">(
     "activos",
   );
+
+  const { propiedades, desgloses, indices } = usePreciosProyecto();
+  const versionesProyecto =
+    useVersionesStore((s) => s.versionesPorProyecto)[idProyecto] ?? SIN_VERSIONES;
+
+  /** `""` = el borrador vivo; si no, el escenario guardado que se está mirando. */
+  const [idEscenarioRef, setIdEscenarioRef] = useState("");
+  /** `""` = el promedio del proyecto; si no, un modelo. */
+  const [idModeloRef, setIdModeloRef] = useState("");
+
+  const escenarioRef = idEscenarioRef
+    ? (versionesProyecto.find((v) => v.id_version === idEscenarioRef) ?? null)
+    : null;
+
+  /*
+   * El precio de cada unidad según el escenario elegido.
+   *
+   * Del borrador vivo salen los desgloses que el motor calcula ahora; de un
+   * escenario guardado, su snapshot. Es la diferencia entre "cuánto cobraría hoy
+   * con este esquema" y "cuánto habría cobrado con la lista que guardé el martes".
+   */
+  const precioDeUnidad = useMemo(() => {
+    const m = new Map<string, number>();
+    if (escenarioRef) {
+      for (const [id, p] of Object.entries(escenarioRef.precios)) {
+        m.set(id, (p as { precio_lista: number }).precio_lista);
+      }
+      return m;
+    }
+    for (const d of desgloses) m.set(d.id_propiedad, d.precio_lista);
+    return m;
+  }, [escenarioRef, desgloses]);
+
+  /*
+   * Precio promedio ponderado del inventario DISPONIBLE, por modelo.
+   *
+   * Disponible y no todo el inventario: un esquema se le ofrece a quien todavía
+   * puede comprar, y el promedio de lo ya vendido describe el pasado. Es el mismo
+   * criterio que el Forecast de Ingresos y que Configuración del Motor, para que
+   * las tres pantallas hablen del mismo número.
+   */
+  const referencias = useMemo(() => {
+    const acum = new Map<string, { unidades: number; suma: number }>();
+    let unidadesTotal = 0;
+    let sumaTotal = 0;
+    for (const p of propiedades) {
+      if (!ESTATUS_A_LA_VENTA.has(p.estatus)) continue;
+      const precio = precioDeUnidad.get(p.id_propiedad);
+      if (!precio || precio <= 0) continue;
+      const a = acum.get(p.id_modelo) ?? { unidades: 0, suma: 0 };
+      a.unidades += 1;
+      a.suma += precio;
+      acum.set(p.id_modelo, a);
+      unidadesTotal += 1;
+      sumaTotal += precio;
+    }
+    const modelos = [...acum.entries()]
+      .map(([id, v]) => ({
+        id,
+        nombre: indices?.modelosPorId[id]?.nombre ?? id,
+        unidades: v.unidades,
+        precio: v.suma / v.unidades,
+      }))
+      .sort((a, b) => b.unidades - a.unidades);
+    return {
+      modelos,
+      proyecto: {
+        id: "",
+        nombre: "Promedio del proyecto",
+        unidades: unidadesTotal,
+        precio: unidadesTotal > 0 ? sumaTotal / unidadesTotal : 0,
+      },
+    };
+  }, [propiedades, precioDeUnidad, indices]);
+
+  const referencia = idModeloRef
+    ? (referencias.modelos.find((m) => m.id === idModeloRef) ?? referencias.proyecto)
+    : referencias.proyecto;
 
   const conteo = {
     todos: esquemas.length,
@@ -409,6 +503,73 @@ function PantallaEsquemas() {
         ))}
       </div>
 
+      <div className="rounded-lg border border-border p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-[13px] font-medium text-muted-foreground">
+              Modelo de referencia
+            </Label>
+            <Select value={idModeloRef || "__proyecto__"} onValueChange={(v) => setIdModeloRef(v === "__proyecto__" ? "" : v)}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__proyecto__">
+                  Promedio del proyecto · {referencias.proyecto.unidades} u.
+                </SelectItem>
+                {referencias.modelos.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre} · {m.unidades} u.
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[13px] font-medium text-muted-foreground">
+              Escenario de precios
+            </Label>
+            <Select value={idEscenarioRef || "__vivo__"} onValueChange={(v) => setIdEscenarioRef(v === "__vivo__" ? "" : v)}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__vivo__">Borrador vivo</SelectItem>
+                {[...versionesProyecto]
+                  .sort((a, b) => b.numero - a.numero)
+                  .map((v) => (
+                    <SelectItem key={v.id_version} value={v.id_version}>
+                      v{v.numero} · {v.nombre}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="pb-1">
+            <p className="text-[11px] text-muted-foreground">Precio de referencia</p>
+            <p className="text-lg font-semibold tabular-nums text-foreground">
+              {referencia.precio > 0 ? formatoMoneda(referencia.precio) : "—"}
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-2 text-xs text-muted-foreground">
+          Es el precio promedio ponderado del inventario <strong>disponible a la venta</strong>
+          {" "}de {referencia.nombre.toLowerCase()}, con{" "}
+          {escenarioRef ? `el escenario v${escenarioRef.numero}` : "el borrador vivo"}. Cada
+          esquema traduce ese precio a enganche, mensualidad y pago a entrega. Se excluye lo
+          ya vendido: un esquema se le ofrece a quien todavía puede comprar.
+        </p>
+        {referencia.unidades === 0 ? (
+          <p className="mt-1 text-xs text-destructive">
+            No hay unidades disponibles con precio en esta selección, así que las tarjetas
+            solo muestran porcentajes y factores.
+          </p>
+        ) : null}
+      </div>
+
       <div className="inline-flex gap-1 rounded-md border border-border p-1">
         {(
           [
@@ -457,6 +618,15 @@ function PantallaEsquemas() {
               detalleTorres={detalle}
               factorPonderadoProyecto={bloque?.ponderado}
               ponderadoParcial={bloque?.parcial}
+              referencia={
+                referencia.precio > 0
+                  ? {
+                      etiqueta: referencia.nombre,
+                      precio: referencia.precio,
+                      unidades: referencia.unidades,
+                    }
+                  : undefined
+              }
               onEditar={() => {
                 setEditando(e);
                 setModal(true);

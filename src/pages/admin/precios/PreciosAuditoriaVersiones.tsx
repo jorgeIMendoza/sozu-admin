@@ -94,13 +94,13 @@ function Versiones() {
     return out.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
   }, [comparacion, filtroDelta]);
 
-  const crear = () => {
+  const crear = async () => {
     const porId = new Map(desgloses.map((d) => [d.id_propiedad, d]));
     const entradas = propiedades
       .map((p) => ({ propiedad: p, desglose: porId.get(p.id_propiedad)! }))
       .filter((e) => e.desglose);
     const datos = construirDatosVersion({ idProyecto, nombre: "", motor, entradas });
-    const version = crearBorrador({ ...datos, nombre: `Borrador · ${formatoFechaCorta(new Date().toISOString())}` });
+    const version = await crearBorrador({ ...datos, nombre: `Borrador · ${formatoFechaCorta(new Date().toISOString())}` });
     registrarEvento({
       id_proyecto: idProyecto,
       tipo: "version.creada",
@@ -111,7 +111,7 @@ function Versiones() {
   };
 
   const archivarVersion = (v: VersionLista) => {
-    archivar(idProyecto, v.id_version);
+    void archivar(idProyecto, v.id_version);
     registrarEvento({
       id_proyecto: idProyecto,
       tipo: "version.archivada",
@@ -175,7 +175,7 @@ function Versiones() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={crear}>
+          <Button variant="outline" onClick={() => void crear()}>
             <FilePlus2 className="size-4" />
             Crear borrador
           </Button>

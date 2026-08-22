@@ -27,12 +27,29 @@ import type { ActorEvento, EventoAuditoria, TipoEvento } from "../types/dominio"
 import { useBitacoraStore } from "../stores/bitacoraStore";
 import { descargarCSV } from "../lib/csv";
 
-/** Actor de la sesión. SWAP POINT: vendrá de la sesión autenticada. */
+/**
+ * Actor de la sesión.
+ *
+ * Estaba cableado a un nombre. Todo lo que el módulo firma —cada entrada de la
+ * bitácora y el autor de cada escenario— salía con esa persona sin importar
+ * quién estuviera trabajando, lo que vuelve inservible la columna de autor en
+ * cuanto hay más de un usuario.
+ *
+ * Se muta en lugar de reasignarse para que quien ya lo importó siga viendo el
+ * valor vigente; por eso quien lo guarda debe copiarlo, no referenciarlo.
+ */
 export const ACTOR_ACTUAL: ActorEvento = {
-  id_persona: "per-ramon-escobar",
-  nombre: "Ramón Escobar",
-  rol: "Super Administrador",
+  id_persona: "sin-sesion",
+  nombre: "Usuario sin identificar",
+  rol: "—",
 };
+
+/** Fija el actor con los datos del perfil autenticado. */
+export function establecerActorSesion(actor: Partial<ActorEvento>): void {
+  if (actor.id_persona) ACTOR_ACTUAL.id_persona = actor.id_persona;
+  if (actor.nombre) ACTOR_ACTUAL.nombre = actor.nombre;
+  if (actor.rol) ACTOR_ACTUAL.rol = actor.rol;
+}
 
 export interface DatosEvento {
   id_proyecto: string;
@@ -63,7 +80,7 @@ export function registrarEvento(datos: DatosEvento): Promise<EventoAuditoria | n
   const siguiente = cola.then(() =>
     useBitacoraStore
       .getState()
-      .registrar({ ...datos, actor: datos.actor ?? ACTOR_ACTUAL })
+      .registrar({ ...datos, actor: datos.actor ?? { ...ACTOR_ACTUAL } })
       .catch((e) => {
         console.error("No se pudo registrar el evento de auditoría", e);
         return null;
@@ -124,6 +141,7 @@ export const ETIQUETA_EVENTO: Record<TipoEvento, string> = {
   "motor.factor_desactivado": "Factor desactivado",
   "motor.factor_reactivado": "Factor reactivado",
   "motor.nivel_modelo": "Curva de nivel de un modelo",
+  "motor.escenario_retomado": "Escenario retomado en el motor",
   "motor.punto_base": "Motor llevado al punto base",
   "motor.restablecido": "Motor restablecido",
   "calibracion.ejecutada": "Calibración ejecutada",

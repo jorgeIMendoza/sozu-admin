@@ -297,6 +297,7 @@ export type TipoEvento =
   | "motor.factor_desactivado"
   | "motor.factor_reactivado"
   | "motor.nivel_modelo"
+  | "motor.escenario_retomado"
   | "motor.punto_base"
   | "motor.restablecido"
   // Calibración

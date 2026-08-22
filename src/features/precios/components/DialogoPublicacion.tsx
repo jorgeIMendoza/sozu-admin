@@ -150,11 +150,11 @@ export function DialogoPublicacion({
       notas,
     });
 
-  const publicarVersion = (excluidas: { id_propiedad: string; motivo: string }[]) => {
+  const publicarVersion = async (excluidas: { id_propiedad: string; motivo: string }[]) => {
     const datos = construirDatos(excluidas);
     let version = encontrarBorradorReutilizable(listaProyecto, datos);
     if (!version) {
-      version = crearBorrador(datos);
+      version = await crearBorrador(datos);
       registrarEvento({
         id_proyecto: idProyecto,
         tipo: "version.creada",
@@ -172,7 +172,7 @@ export function DialogoPublicacion({
         impacto_pesos: null,
       });
     }
-    publicar(idProyecto, version.id_version, datos.creada_por, notas);
+    await publicar(idProyecto, version.id_version, datos.creada_por, notas);
     registrarEvento({
       id_proyecto: idProyecto,
       tipo: "version.publicada",

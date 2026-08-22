@@ -12,6 +12,8 @@ import { useMotorStore } from "@/features/precios/stores/motorStore";
 import type { VersionLista } from "@/features/precios/types/dominio";
 import { useInventarioStore } from "@/features/precios/stores/inventarioStore";
 import { useEsquemasStore } from "@/features/precios/stores/esquemasStore";
+import { establecerActorSesion } from "@/features/precios/services/auditoria";
+import { useAuth } from "@/contexts/AuthContext";
 import { pendientesDelBorrador } from "@/features/precios/engine/semilla";
 import { useVersionesStore } from "@/features/precios/stores/versionesStore";
 import { construirDatosVersion } from "@/features/precios/lib/versiones";
@@ -49,6 +51,22 @@ function PreciosContenido() {
   const cargarProyectos = useInventarioStore((s) => s.cargarProyectos);
   const cargarInventario = useInventarioStore((s) => s.cargarInventario);
   const cargarEsquemas = useEsquemasStore((s) => s.cargarEsquemas);
+  const cargarVersiones = useVersionesStore((s) => s.cargarVersiones);
+  const { profile } = useAuth();
+
+  /*
+   * Quien firma lo que se hace en el modulo es quien tiene la sesion abierta.
+   * Sin esto, la bitacora y el autor de cada escenario salian con un nombre
+   * cableado, que es peor que no tener autor: parece un dato y no lo es.
+   */
+  useEffect(() => {
+    if (!profile) return;
+    establecerActorSesion({
+      id_persona: profile.id_persona ? String(profile.id_persona) : profile.email,
+      nombre: profile.nombre,
+      rol: profile.rol_nombre,
+    });
+  }, [profile]);
   const porProyecto = useInventarioStore((s) => s.porProyecto);
   const errorInventario = useInventarioStore((s) => s.error);
 
@@ -79,6 +97,14 @@ function PreciosContenido() {
   useEffect(() => {
     if (idProyectoActivo) void cargarEsquemas(idProyectoActivo);
   }, [idProyectoActivo, cargarEsquemas]);
+
+  /*
+   * Los escenarios compartidos. Si la tabla todavia no existe, la carga no hace
+   * nada y el modulo sigue trabajando contra localStorage: la pantalla lo dice.
+   */
+  useEffect(() => {
+    if (idProyectoActivo) void cargarVersiones(idProyectoActivo);
+  }, [idProyectoActivo, cargarVersiones]);
 
   // Con el inventario en memoria se siembra el motor del proyecto. Es
   // idempotente: solo actúa la primera vez que se abre cada desarrollo.
@@ -124,7 +150,7 @@ function PreciosContenido() {
     // escribe en localStorage: si algo falla ahí, no debe impedir que la
     // pantalla se use. La lista de trabajo funciona igual sin la versión.
     try {
-      crearBorrador({
+      void crearBorrador({
         ...construirDatosVersion({
           idProyecto: idProyectoActivo,
           nombre: "",
