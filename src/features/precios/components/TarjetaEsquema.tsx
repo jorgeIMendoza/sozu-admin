@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { EsquemaFinanciamiento, ResultadoVPN } from "../types/dominio";
 import { claseBrecha, factor4, pct2, pctFirmado, puntos } from "../lib/formatoVpn";
+import { formatoMoneda } from "../lib/formato";
 import { GraficoCalendario } from "./GraficoCalendario";
 import { esInejecutable } from "../engine/npv";
 
@@ -52,6 +53,7 @@ export function TarjetaEsquema({
   detalleTorres,
   factorPonderadoProyecto,
   ponderadoParcial,
+  referencia,
 }: {
   esquema: EsquemaFinanciamiento;
   vpn: ResultadoVPN;
@@ -59,6 +61,14 @@ export function TarjetaEsquema({
   detalleTorres?: DetalleTorre[] | undefined;
   factorPonderadoProyecto?: number | undefined;
   ponderadoParcial?: boolean | undefined;
+  /**
+   * Precio contra el que traducir el esquema a pesos.
+   *
+   * Sin esto la tarjeta habla en porcentajes y factores, que sirven para comparar
+   * esquemas entre sí pero no para saber qué se le va a cobrar a alguien. Es
+   * opcional porque el proyecto puede no tener inventario disponible con precio.
+   */
+  referencia?: { etiqueta: string; precio: number; unidades: number } | undefined;
   onMarcarBase: () => void;
   onDuplicar: () => void;
   onAlternarActivo: () => void;
@@ -125,6 +135,63 @@ export function TarjetaEsquema({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {referencia && referencia.precio > 0 ? (
+        <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">
+            Con {referencia.etiqueta} · {formatoMoneda(referencia.precio)}
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Cifra
+              titulo="Precio final"
+              valor={formatoMoneda(referencia.precio * (1 + esquema.pct_ajuste_manual))}
+              nota={
+                esquema.pct_ajuste_manual === 0
+                  ? "igual al de lista"
+                  : `${pct2(esquema.pct_ajuste_manual)} sobre lista`
+              }
+            />
+            <Cifra
+              titulo="Enganche"
+              valor={formatoMoneda(
+                referencia.precio * (1 + esquema.pct_ajuste_manual) * esquema.pct_enganche,
+              )}
+              nota={`${pct2(esquema.pct_enganche)} en ${esquema.meses_enganche} exhibición${esquema.meses_enganche === 1 ? "" : "es"}`}
+            />
+            <Cifra
+              titulo="Mensualidad"
+              valor={
+                esquema.num_mensualidades > 0
+                  ? formatoMoneda(
+                      (referencia.precio *
+                        (1 + esquema.pct_ajuste_manual) *
+                        esquema.pct_mensualidades) /
+                        esquema.num_mensualidades,
+                    )
+                  : "—"
+              }
+              nota={
+                esquema.num_mensualidades > 0
+                  ? `${esquema.num_mensualidades} meses${esquema.escalonadas ? " · escalonadas" : ""}`
+                  : "sin mensualidades"
+              }
+            />
+            <Cifra
+              titulo="Pago a entrega"
+              valor={formatoMoneda(
+                referencia.precio * (1 + esquema.pct_ajuste_manual) * esquema.pct_entrega,
+              )}
+              nota={`${pct2(esquema.pct_entrega)} al escriturar`}
+            />
+          </div>
+          {esquema.escalonadas && esquema.num_mensualidades > 0 ? (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              La mensualidad mostrada es el promedio: al ser escalonadas, las primeras son
+              menores y las últimas mayores.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-6 md:grid-cols-3">
         <div>
@@ -324,6 +391,25 @@ function Chip({ children, clase }: { children: React.ReactNode; clase?: string }
     >
       {children}
     </span>
+  );
+}
+
+/** Un dato del bloque en pesos: monto grande, contexto abajo. */
+function Cifra({
+  titulo,
+  valor,
+  nota,
+}: {
+  titulo: string;
+  valor: string;
+  nota?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground">{titulo}</p>
+      <p className="text-base font-semibold tabular-nums text-foreground">{valor}</p>
+      {nota ? <p className="text-[11px] text-muted-foreground">{nota}</p> : null}
+    </div>
   );
 }
 
