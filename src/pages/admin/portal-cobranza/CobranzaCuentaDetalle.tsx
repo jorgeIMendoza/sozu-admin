@@ -18,8 +18,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  todayIso, isImage, fmtCurrency, fmtDate, SelectSearch,
+  todayIso,
+  isImage,
+  fmtCurrency,
+  fmtDate,
+  SelectSearch,
   type CuentaDetalleCtx,
+  UMBRAL_AVISO_CENTAVOS,
+  UMBRAL_SOBREPAGO_CENTAVOS,
 } from './cuentaDetalleShared';
 import { usePagePermissions } from '@/hooks/usePagePermissions';
 import { useEliminarPago, fetchPagoImpacto, type PagoImpacto } from '@/hooks/useEliminarPago';
@@ -29,7 +35,7 @@ import type { PagoRecord } from '@/hooks/useRelacionPagos';
 import { CuentaDetalleMantenimiento } from './CuentaDetalleMantenimiento';
 import { CuentaDetallePropiedad } from './CuentaDetallePropiedad';
 import { CuentaDetalleProducto } from './CuentaDetalleProducto';
-import { difiereEnDinero, sumarDinero, diferenciaDinero, aCentavos } from '@/utils/dinero';
+import { difiereEnDinero, sumarDinero, diferenciaDinero, aCentavos, aPesos } from '@/utils/dinero';
 import { calcularDesgloseDescuento } from '@/utils/descuentoEsquema';
 
 // ── fetch ───────────────────────────────────────────────────────────────────────
@@ -155,7 +161,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err?.message ?? 'No se pudo eliminar el pago');
+      console.error('[cobranza] eliminar pago', err);
+      toast.error('No se pudo eliminar el pago');
     }
   };
 
@@ -272,7 +279,7 @@ export default function CobranzaCuentaDetalle() {
 
   async function handlePagoSubmit() {
     if (!pagoForm.fecha || !pagoForm.monto || !pagoForm.id_metodo) {
-      toast.error('Completa fecha, monto y metodo');
+      toast.error('Faltan fecha, monto o método');
       return;
     }
     setPagoSaving(true);
@@ -310,7 +317,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al registrar');
+      console.error('[cobranza] registrar pago', err);
+      toast.error('No se pudo registrar el pago');
     } finally {
       setPagoSaving(false);
     }
@@ -338,7 +346,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error');
+      console.error('[cobranza] operacion de multa', err);
+      toast.error('No se pudo completar la operación');
     } finally {
       setMultaSaving(false);
     }
@@ -353,7 +362,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al eliminar');
+      console.error('[cobranza] eliminar multa', err);
+      toast.error('No se pudo eliminar la multa');
     } finally {
       setMultaGestionDeleting(null);
     }
@@ -377,7 +387,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al actualizar');
+      console.error('[cobranza] actualizar multa', err);
+      toast.error('No se pudo actualizar la multa');
     } finally {
       setMultaGestionSaving(false);
     }
@@ -404,7 +415,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al agregar');
+      console.error('[cobranza] agregar multa', err);
+      toast.error('No se pudo agregar la multa');
     } finally {
       setMultaGestionSaving(false);
     }
@@ -437,7 +449,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-docs', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['cuenta-expediente-docs', cuentaId] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error');
+      console.error('[cobranza] operacion de multa', err);
+      toast.error('No se pudo completar la operación');
     } finally {
       setUploadSaving(false);
     }
@@ -462,7 +475,7 @@ export default function CobranzaCuentaDetalle() {
         body: { id_cuenta_cobranza: cuentaId },
       });
       if (error) throw error;
-      toast.success('Dispersión recalculada; los pagos se redistribuyeron.');
+      toast.success('Dispersión recalculada');
       // La función corre async del lado servidor: refrescar tras un breve delay.
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
@@ -470,7 +483,8 @@ export default function CobranzaCuentaDetalle() {
         setRecalculandoAplic(false);
       }, 2000);
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al recalcular la dispersión');
+      console.error('[cobranza] recalcular dispersion', err);
+      toast.error('No se pudo recalcular la dispersión');
       setRecalculandoAplic(false);
     }
   }
@@ -488,7 +502,7 @@ export default function CobranzaCuentaDetalle() {
       if (error) {
         // DDL pendiente: la RPC aún no existe en este entorno.
         if (esRpcInexistente(error) || esSinPermiso(error)) {
-          toast.error('La reconciliación aún no está habilitada en este ambiente. Falta aplicar la migración de acuerdos.');
+          toast.error('La reconciliación no está disponible aquí');
           return;
         }
         throw error;
@@ -503,7 +517,7 @@ export default function CobranzaCuentaDetalle() {
           body: { id_cuenta_cobranza: Number(cuentaId) },
         });
         if (recalcError) {
-          avisoDispersion = ' Falta redistribuir los pagos: usa "Recalcular dispersión".';
+          avisoDispersion = ' Falta recalcular la dispersión.';
         }
       }
 
@@ -514,7 +528,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al reconciliar los acuerdos');
+      console.error('[cobranza] reconciliar acuerdos', err);
+      toast.error('No se pudo reconciliar el plan');
     } finally {
       setReconciliando(false);
     }
@@ -540,7 +555,8 @@ export default function CobranzaCuentaDetalle() {
       // página en pantalla quede consistente con lo que muestra el estado de cuenta.
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al generar estado de cuenta');
+      console.error('[cobranza] estado de cuenta', err);
+      toast.error('No se pudo generar el estado de cuenta');
     } finally {
       setGeneratingPDF(false);
     }
@@ -548,7 +564,7 @@ export default function CobranzaCuentaDetalle() {
 
   async function handleDemanda() {
     if (!data?.propiedadId) {
-      toast.error('No se encontro propiedad asociada');
+      toast.error('La cuenta no tiene propiedad');
       return;
     }
     setDemandaSaving(true);
@@ -563,7 +579,8 @@ export default function CobranzaCuentaDetalle() {
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error');
+      console.error('[cobranza] operacion de multa', err);
+      toast.error('No se pudo completar la operación');
     } finally {
       setDemandaSaving(false);
     }
@@ -571,7 +588,7 @@ export default function CobranzaCuentaDetalle() {
 
   async function handleQuitarDemanda() {
     if (!data?.propiedadId) {
-      toast.error('No se encontró propiedad asociada');
+      toast.error('La cuenta no tiene propiedad');
       return;
     }
     setQuitarDemandaSaving(true);
@@ -581,12 +598,13 @@ export default function CobranzaCuentaDetalle() {
         .update({ id_estatus_disponibilidad: 5 })
         .eq('id', data.propiedadId);
       if (e) throw e;
-      toast.success('Demanda removida - propiedad vuelve a Vendida');
+      toast.success('Demanda removida');
       setQuitarDemandaDialog(false);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-detalle', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['bandeja-operativa'] });
     } catch (err: any) {
-      toast.error(err.message ?? 'Error');
+      console.error('[cobranza] operacion de multa', err);
+      toast.error('No se pudo completar la operación');
     } finally {
       setQuitarDemandaSaving(false);
     }
@@ -613,12 +631,13 @@ export default function CobranzaCuentaDetalle() {
         .update({ activo: false, fecha_actualizacion: now }).in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
       await (supabase as any).from('bancos_solicitudes')
         .update({ activo: false, fecha_actualizacion: now }).in('id_cuenta_cobranza', cuentaIds).eq('activo', true);
-      toast.success('Financiamiento reiniciado. El cliente puede elegir de nuevo su método de pago.');
+      toast.success('Financiamiento reiniciado');
       setReiniciarFinDialog(false);
       queryClient.invalidateQueries({ queryKey: ['cobranza-cuenta-tipo-fin', cuentaId] });
       queryClient.invalidateQueries({ queryKey: ['portfolio-cliente'] });
     } catch (err: any) {
-      toast.error(err?.message ?? 'No se pudo reiniciar el financiamiento');
+      console.error('[cobranza] reiniciar financiamiento', err);
+      toast.error('No se pudo reiniciar el financiamiento');
     } finally {
       setReiniciarFinSaving(false);
     }
@@ -688,7 +707,10 @@ export default function CobranzaCuentaDetalle() {
   // El precio de contrato es la fuente de verdad y la suma de acuerdos debe seguirlo.
   // Las cuentas hijas de mantenimiento llevan precio_final = 0 por diseño (su plan es
   // recurrente, no se compara contra un precio): ahí el banner sería un falso positivo.
-  const hayDiscrepancia = precio_final > 0 && difiereEnDinero(precio_final, sumaAcuerdos);
+  // Con tolerancia cero esto encendia 127 banners, 88 de ellos por centavos de
+  // redondeo del plan. Ver UMBRAL_AVISO_CENTAVOS en cuentaDetalleShared.
+  const hayDiscrepancia = precio_final > 0
+    && difiereEnDinero(precio_final, sumaAcuerdos, UMBRAL_AVISO_CENTAVOS);
   // Discrepancia dinero-recibido vs dinero-dispersado: si hay pagos crudos cuyo
   // monto no está aplicado en aplicaciones_pago (ej. pago manual sin dispersar),
   // se ofrece "Recalcular dispersión" (edge function recalcular-aplicaciones).
@@ -696,7 +718,15 @@ export default function CobranzaCuentaDetalle() {
   // falta dispersar, no ruido de flotante. Con `> 0.01` sobre floats este banner se
   // quedaba encendido para siempre (CC-000847) — ver utils/dinero.ts.
   const sumaPagosReales = sumarDinero(pagos, (p: any) => p.monto);
-  const hayDiscrepanciaAplicaciones = pagos.length > 0 && difiereEnDinero(sumaPagosReales, totalAplicacionesAll);
+  const hayDiscrepanciaAplicaciones = pagos.length > 0
+    && difiereEnDinero(sumaPagosReales, totalAplicacionesAll, UMBRAL_AVISO_CENTAVOS);
+  // Sobrepago material: el cliente puso mas dinero del que costaba la cuenta. A
+  // diferencia del residuo de centavos, esto si hay que verlo — puede ser interes
+  // no registrado, pago duplicado, dinero por devolver o un asunto de PLD.
+  const excedenteSobrePrecio = aCentavos(sumaPagosReales) - aCentavos(precio_final);
+  const sobrepagoMaterial = excedenteSobrePrecio > UMBRAL_SOBREPAGO_CENTAVOS
+    ? aPesos(excedenteSobrePrecio)
+    : 0;
   // `saldoPendiente` se mide contra el PLAN (aplicaciones_pago), así que cuando el plan
   // nació corto por redondeo exhibe un saldo que el cliente no debe: la CC-000069 mostraba
   // $0.12 en rojo con los $2,673,946.20 ya cobrados. Lo que responde "¿me debe?" es el
@@ -745,9 +775,9 @@ export default function CobranzaCuentaDetalle() {
           setPdfPreviewModal({ url: existingUrl, title: `Oferta ${formatOfertaId(ofertaId)}` });
           return;
         }
-        toast.info('Regenerando PDF - los datos han cambiado...');
+        toast.info('Regenerando PDF…');
       } else {
-        toast.info('Generando PDF de oferta...');
+        toast.info('Generando PDF…');
       }
       const { generateOfferPDF } = await import('@/services/htmlToPdfService');
       const isProduct = tipo !== 'Propiedad';
@@ -772,7 +802,7 @@ export default function CobranzaCuentaDetalle() {
           creatorEmail: 'admin@system.com',
         });
       } else {
-        toast.error('La oferta no tiene propiedad ni producto asociado');
+        toast.error('La oferta no tiene propiedad ni producto');
         return;
       }
       const freshUrl = await offerPdfStorageService.getExistingUrl(ofertaId);
@@ -782,7 +812,8 @@ export default function CobranzaCuentaDetalle() {
         toast.success('PDF generado');
       }
     } catch (error: any) {
-      toast.error(`Error al generar oferta: ${error?.message ?? 'Error desconocido'}`);
+      console.error('[cobranza] generar oferta', error);
+      toast.error('No se pudo generar el PDF de la oferta');
     } finally {
       setDownloadingOferta(false);
     }
@@ -798,7 +829,7 @@ export default function CobranzaCuentaDetalle() {
     proyectoNombre, edificioNombre, modeloNombre, numero_propiedad, productoNombre, tipo,
     m2Interiores, m2Exteriores, precioM2, estatusPropiedad,
     totalPagado, saldoPendiente, montoVencido, parcialidadesVencidas, pagadoEfectivo,
-    deudaRealCliente, clientePagoTodo,
+    deudaRealCliente, clientePagoTodo, sobrepagoMaterial,
     acuerdos, pagos, aplicacionesList,
     docs, docsLoading,
     limiteEfectivo, aunPermitido, acuerdosPendientes,

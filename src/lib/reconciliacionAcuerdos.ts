@@ -50,22 +50,36 @@ export function primeraFilaReconciliacion(data: unknown): FilaReconciliacion | n
   return null;
 }
 
+// Son textos de TOAST: una línea, lo que hay que hacer. El detalle técnico va al
+// logger, no a la pantalla del usuario.
 const MOTIVOS_OMITIDO: Record<string, string> = {
-  cuenta_hija:
-    'Es una cuenta de mantenimiento: su plan es recurrente y no se compara contra un precio de contrato.',
-  precio_final_invalido:
-    'La cuenta no tiene un precio final válido, así que no hay contra qué reconciliar.',
+  cuenta_hija: 'Las cuentas de mantenimiento no se reconcilian.',
+  precio_final_invalido: 'Captura el precio de la cuenta primero.',
   cuenta_inactiva: 'La cuenta está inactiva.',
-  reentrada: 'La reconciliación ya venía corriendo.',
+  reentrada: 'Ya se está reconciliando.',
 };
 
 export function interpretarReconciliacion(fila: FilaReconciliacion | null): ResultadoReconciliacion {
   const accion = fila?.accion ?? 'sin_cambio';
 
-  if (!fila || accion === 'sin_cambio') {
+  // `fila === null` NO significa que ya cuadre. La RPC recorre solo cuentas con al
+  // menos un acuerdo activo, así que una cuenta SIN plan se salta y no devuelve fila:
+  // anunciar exito ahí era decirle al usuario que los acuerdos cuadran cuando no hay
+  // acuerdos y el banner de descuadre sigue encendido (CC-000906, $29,000 sin plan).
+  // Los dos casos se separan porque solo el explicito viene con fila.
+  if (!fila) {
     return {
-      titulo: 'Sin cambios',
-      descripcion: 'Los acuerdos ya cuadran con el precio final.',
+      titulo: 'Sin plan que reconciliar',
+      descripcion: 'Cobranza tiene que asignarle un plan de pagos.',
+      tono: 'aviso',
+      requiereRecalcularDispersion: false,
+    };
+  }
+
+  if (accion === 'sin_cambio') {
+    return {
+      titulo: 'El plan ya cuadra',
+      descripcion: '',
       tono: 'exito',
       requiereRecalcularDispersion: false,
     };
@@ -73,8 +87,8 @@ export function interpretarReconciliacion(fila: FilaReconciliacion | null): Resu
 
   if (accion === 'ajustado') {
     return {
-      titulo: 'Acuerdos reconciliados',
-      descripcion: 'La suma de acuerdos ya cuadra con el precio final.',
+      titulo: 'Plan reconciliado',
+      descripcion: 'Ya cuadra con el precio.',
       tono: 'exito',
       requiereRecalcularDispersion: true,
     };
@@ -83,7 +97,7 @@ export function interpretarReconciliacion(fila: FilaReconciliacion | null): Resu
   if (accion === 'ajustaria') {
     return {
       titulo: 'Simulación',
-      descripcion: 'Así quedaría el ajuste. No se guardó nada.',
+      descripcion: 'No se guardó nada.',
       tono: 'aviso',
       requiereRecalcularDispersion: false,
     };
@@ -91,17 +105,12 @@ export function interpretarReconciliacion(fila: FilaReconciliacion | null): Resu
 
   if (accion === 'requiere_revision') {
     return {
-      titulo: 'Requiere revisión',
+      titulo: 'No se pudo ajustar solo',
       descripcion: fila.motivo === 'sin_acuerdo_abierto'
-        // Una cuenta de producto (paquete amueblado, bodega, estacionamiento) no aparece
-        // en el contrato de compraventa —ese solo cubre la propiedad—, así que mandar a
-        // "revisar contra el contrato" no aplica ahí: su precio sale de la oferta.
-        // No se nombra la RPC: el usuario no ejecuta SQL. La salida es el botón
-        // "Sobrante sin acuerdo abierto", que abre el diálogo de cuadre.
-        ? 'La cuenta está liquidada: todos sus acuerdos ya están pagados, así que este ajuste no puede tocarlos. Usa «Sobrante sin acuerdo abierto» para revisar el cuadre del plan; ahí se resuelve el residuo de redondeo y, si la diferencia es un monto de negocio, se valida antes contra el documento que fija el precio (el contrato en una propiedad, la oferta en un producto).'
+        ? 'El plan ya está pagado. Revisa el cuadre.'
         : fila.motivo === 'quedaria_negativo'
-          ? 'El ajuste dejaría el último acuerdo en negativo. Hay que revisarlo a mano.'
-          : 'No se pudo ajustar automáticamente; revisar a mano.',
+          ? 'El último acuerdo quedaría en negativo.'
+          : 'Revísalo a mano.',
       tono: 'aviso',
       requiereRecalcularDispersion: false,
     };
@@ -110,16 +119,15 @@ export function interpretarReconciliacion(fila: FilaReconciliacion | null): Resu
   if (accion === 'omitido') {
     return {
       titulo: 'No aplica',
-      descripcion: MOTIVOS_OMITIDO[fila.motivo ?? ''] ?? 'Esta cuenta no entra en la reconciliación.',
+      descripcion: MOTIVOS_OMITIDO[fila.motivo ?? ''] ?? '',
       tono: 'aviso',
       requiereRecalcularDispersion: false,
     };
   }
 
-  // Acción desconocida: no afirmar que se reconcilió algo.
   return {
-    titulo: 'Sin confirmar',
-    descripcion: 'La reconciliación devolvió un resultado que no se pudo interpretar. Revisa la cuenta antes de continuar.',
+    titulo: 'Revisa la cuenta',
+    descripcion: 'No se pudo confirmar el resultado.',
     tono: 'aviso',
     requiereRecalcularDispersion: false,
   };

@@ -28,7 +28,7 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
   const [activityTab, setActivityTab] = useState<ActivityTab>('acuerdos');
 
   const {
-    cuentaId, precio_final, totalPagado, saldoPendiente, deudaRealCliente, clientePagoTodo, parcialidadesVencidas,
+    cuentaId, precio_final, totalPagado, saldoPendiente, deudaRealCliente, clientePagoTodo, sobrepagoMaterial, parcialidadesVencidas,
     montoVencido, pagadoEfectivo, limiteEfectivo, aunPermitido, acuerdosPendientes,
     porcentajePagado, montoValidado, montoSinValidar,
     acuerdos, aplicacionesList,
@@ -112,15 +112,31 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
           <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-semibold text-amber-800">Discrepancia detectada en acuerdos de pago</p>
+            {/* Tres problemas distintos con tres textos distintos. Antes los tres decian
+                "Discrepancia detectada", que no le dice a nadie que hacer. */}
+            <p className="text-[12px] font-semibold text-amber-800">
+              {acuerdos.length === 0
+                ? 'Esta cuenta no tiene plan de pagos'
+                : sumaAcuerdos > precio_final
+                  ? 'El plan de pagos cobra más de lo que cuesta la cuenta'
+                  : 'El plan de pagos no alcanza a cubrir el precio'}
+            </p>
             <p className="text-[11px] text-amber-700 mt-0.5">
               Precio final: <span className="font-semibold">{fmtCurrency(precio_final)}</span>
-              {' · '}Suma de acuerdos: <span className="font-semibold">{fmtCurrency(sumaAcuerdos)}</span>
+              {' · '}Suma del plan: <span className="font-semibold">{fmtCurrency(sumaAcuerdos)}</span>
               {' · '}Diferencia: <span className="font-semibold">{fmtCurrency(Math.abs(precio_final - sumaAcuerdos))}</span>
-              {sumaAcuerdos > precio_final ? ' (acuerdos exceden el precio)' : ' (acuerdos faltantes)'}
+            </p>
+            <p className="text-[11px] text-amber-700 mt-1">
+              {acuerdos.length === 0
+                ? 'No se generó ningún acuerdo al dar de alta la cuenta, así que no hay contra qué cobrarle al cliente ni nada que reconciliar. Cobranza tiene que asignarle el plan.'
+                : sumaAcuerdos > precio_final
+                  ? 'Al cliente se le está exigiendo más de lo que vale su cuenta. Revisa cuál de los dos está mal —el precio contra el contrato (propiedad) o la oferta (producto), o el plan— y corrige ese.'
+                  : 'Falta plan por cubrir: aunque el cliente pague todo lo que se le pide, quedaría debiendo esa diferencia. Verifica el precio contra el contrato u oferta y ajusta el plan.'}
             </p>
           </div>
-          {!isEnDemanda && (
+          {/* Sin acuerdos la RPC no devuelve fila y el front lo interpretaba como
+              "ya cuadran": un exito falso sobre un no-op. Mejor no ofrecer el boton. */}
+          {!isEnDemanda && acuerdos.length > 0 && (
             <button
               onClick={handleReconciliarAcuerdos}
               disabled={reconciliando}
@@ -129,6 +145,28 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
               {reconciliando ? 'Reconciliando…' : 'Reconciliar acuerdos'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Sobrepago material — el cliente puso MAS dinero del que costaba la cuenta.
+          No es el residuo de centavos del plan (ese ya no se avisa): es dinero que
+          alguien tiene que clasificar. Puede ser interes moratorio no registrado, un
+          descuento aplicado despues del pago, un pago duplicado o dinero por devolver,
+          y a partir del umbral es materia de prevencion de lavado. */}
+      {sobrepagoMaterial > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3">
+          <AlertTriangle className="size-4 text-orange-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-semibold text-orange-800">
+              El cliente pagó {fmtCurrency(sobrepagoMaterial)} más de lo que costaba la cuenta
+            </p>
+            <p className="text-[11px] text-orange-700 mt-0.5">
+              No es una deuda ni un error de cobranza: es dinero de más que sigue sin destino. Hay
+              que determinar qué es —interés moratorio que no se registró, descuento aplicado
+              después del pago, pago duplicado, o dinero por devolver— y dejarlo asentado. Por el
+              monto, también toca revisar el origen de los pagos.
+            </p>
+          </div>
         </div>
       )}
 
@@ -174,7 +212,12 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-semibold text-muted-foreground">Restante</span>
-              <span className={cn('text-[10px] font-bold tabular-nums', aunPermitido < 0 ? 'text-red-600' : 'text-foreground')}>{fmtCurrency(aunPermitido)}</span>
+              {/* Sin `valor_uma` el limite sale en 0 y el restante en negativo por todo lo
+                  pagado en efectivo (CC-001041 exhibia -$277,948.05). No es que se haya
+                  excedido: es que falta el dato de la UMA. */}
+              <span className={cn('text-[10px] font-bold tabular-nums', limiteEfectivo > 0 && aunPermitido < 0 ? 'text-red-600' : 'text-muted-foreground')}>
+                {limiteEfectivo > 0 ? fmtCurrency(aunPermitido) : 'Sin UMA registrada'}
+              </span>
             </div>
           </div>
         </KpiCard>
@@ -223,8 +266,15 @@ export function CuentaDetallePropiedad({ ctx }: { ctx: CuentaDetalleCtx }) {
         <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
         {/* Sin acuerdo abierto no hay dispersión que recalcular: el sobrante se
             resuelve cuadrando el plan. Va de este lado de la botonera porque no es
-            una acción de cobro sino de corrección del plan. */}
-        {!isEnDemanda && acuerdosPendientes === 0 && (
+            una acción de cobro sino de corrección del plan.
+
+            El cuadre solo sabe SUBIR el último acuerdo, así que únicamente sirve
+            cuando el plan quedó corto contra el precio. Si el plan ya cuadra —o pide
+            más— el sobrante es que el cliente pagó de más, y para eso está el aviso
+            de sobrepago: ofrecer el cuadre ahí abría un diálogo que solo podía
+            responder «la cuenta ya está cuadrada» (CC-000778, con $161,770.69 sin
+            aplicar y el plan perfecto). */}
+        {!isEnDemanda && acuerdosPendientes === 0 && precio_final > sumaAcuerdos && (
           <RecalcularDispersionButton
             show={hayDiscrepanciaAplicaciones}
             loading={false}
